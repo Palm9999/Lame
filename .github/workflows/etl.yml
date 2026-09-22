@@ -1,0 +1,91 @@
+name: Build stats database
+
+# Rebuilds stats.db from nflverse and publishes it as a GitHub Release asset,
+# which the app polls via a tiny manifest. Keep the repository public: public
+# repos get unmetered standard-runner minutes, private repos cap at 2,000/month.
+
+on:
+  schedule:
+    # nflverse refreshes rosters/injuries at 07:00 UTC and play-by-play nightly.
+    - cron: "30 8 * * *"
+    # Extra in-season runs on game days (Mon/Fri/Sun/Thu UTC) to catch
+    # snap counts, which refresh at 00/06/12/18 UTC.
+    - cron: "30 12 * 9-12,1-2 0,1,4,5"
+  workflow_dispatch:
+    inputs:
+      seasons:
+        description: "Space-separated seasons to build"
+        required: false
+        default: "2025 2026"
+  pull_request:
+    paths: ["etl/**", ".github/workflows/etl.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: etl
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: etl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: etl/requirements.txt
+      - run: pip install -r requirements.txt pytest
+      - run: python -m pytest tests/ -q
+
+  build:
+    needs: test
+    # Tests run on PRs; only scheduled/manual runs build and publish.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: etl
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: etl/requirements.txt
+      - run: pip install -r requirements.txt
+
+      # No download cache: scheduled runs exist to pick up fresh upstream data,
+      # so every run re-downloads (~200 MB, fast on hosted runners).
+      - name: Build
+        env:
+          SEASONS: ${{ github.event.inputs.seasons || '2025 2026' }}
+        run: python -m gridiron_etl.build --seasons $SEASONS --out build/stats.db
+
+      - name: Package
+        run: |
+          gzip -9 -k build/stats.db
+          SHA=$(sha256sum build/stats.db.gz | cut -d' ' -f1)
+          SIZE=$(stat -c%s build/stats.db.gz)
+          cat > build/manifest.json <<JSON
+          {
+            "schema_version": 1,
+            "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+            "stats_db": { "file": "stats.db.gz", "sha256": "$SHA", "bytes": $SIZE }
+          }
+          JSON
+          cat build/manifest.json
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # A single rolling release; the app reads manifest.json and compares sha256.
+        run: |
+          gh release view data >/dev/null 2>&1 || \
+            gh release create data --title "Stats data" --notes "Rolling nflverse-derived stats database." --latest=false
+          gh release upload data build/stats.db.gz build/manifest.json --clobber

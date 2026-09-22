@@ -1,0 +1,20 @@
+# ETL
+etl/build/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.db
+*.db.gz
+
+# Android (for later)
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.DS_Store
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
