@@ -1,62 +1,54 @@
 # Gridiron
 
-**A free, no-paywall NFL fantasy football analytics and prediction app for Android.**
-
-> The whole stat sheet, free.
+**A personal-use NFL fantasy football analytics and prediction app for Android.**
 
 Status: **pre-implementation.** This repository currently contains the product specification and supporting research. No application code yet.
+
+Target device: Samsung Galaxy S24 Ultra. Sideloaded, single user, not distributed.
 
 ---
 
 ## What this is
 
-A complete fantasy football toolkit today costs roughly **$337/yr stacked across five products** — rankings at FantasyPros, advanced metrics at PlayerProfiler, dynasty values at KeepTradeCut, ADP at Fantasy Football Calculator, and your roster at ESPN or Sleeper. Nobody joins that data, and the mobile experiences are uniformly poor.
+A private fantasy analytics tool. A complete commercial toolkit costs roughly **$337/yr stacked across five products** — rankings at FantasyPros, advanced metrics at PlayerProfiler, dynasty values at KeepTradeCut, ADP at Fantasy Football Calculator, and your roster at ESPN or Sleeper. Nobody joins that data, and the mobile experiences are uniformly poor.
 
-Roughly **85% of the metrics those products sell are computable from free, openly-licensed sources** — primarily [nflverse](https://github.com/nflverse/nflverse-data) (CC BY 4.0), which publishes play-by-play back to 1999, snap counts, depth charts, injuries, Next Gen Stats and more with no API key and no rate limit.
+Roughly **85% of what those products sell is computable from [nflverse](https://github.com/nflverse/nflverse-data)** — CC BY 4.0, play-by-play back to 1999, snap counts, depth charts, injuries, Next Gen Stats, with no API key and no rate limit.
 
-This app aims to unify them, compute the advanced metrics in-house, and ship it as a genuinely good phone experience with no paywall.
+## Core features
 
-## Core differentiators
+**The Grid** — a real mobile stat table. Frozen player column, 200+ sortable stats in packs, two-tier filtering, week-range recomputation with correct rate recalculation, saved presets, sparklines, CSV export. S Pen hover previews stat definitions.
 
-**The Grid** — a real mobile stat table. Frozen player column, 200+ sortable stats organized into packs, two-tier filtering, week-range recomputation, saved presets, sparklines, CSV export. Mobile stat tables are broken market-wide; this is the least-defended surface in the sector.
+**N-way comparison** — every commercial tool compares exactly two players. This compares up to four, across twenty columns, with percentile bars and an xFP-vs-actual scatter that identifies buy-low and sell-high candidates without words.
 
-**N-way comparison** — every competing tool compares exactly two players. This one compares up to four, across twenty columns, with percentile bars and an xFP-vs-actual scatter that explains regression without words.
+**Transparent projections** — opportunity-first, market-anchored, regression-heavy. Every projection ships a factor waterfall: baseline → matchup → game script → weather → injury.
 
-**Transparent projections** — opportunity-first, market-anchored, regression-heavy. Every projection ships a factor waterfall showing exactly why the number is what it is. No black box.
+**Scoring as configuration** — the pipeline ships stat components, never fantasy points. Your exact league settings are applied on-device, so every format works offline and switching leagues is instant.
 
-**Honest accuracy** — weekly fantasy projection R² is only 3–23%, and season-long industry projections carry a documented +21.6 point optimism bias. Every competitor hides this. We publish live accuracy tracking against naive baselines and consensus.
-
-**Scoring is configuration** — the server ships stat components, never fantasy points. Your exact league scoring is applied on-device, so half-PPR, TE-premium, superflex and IDP all work offline, for free.
+**Offline-first** — it has to work on Sunday morning with no signal.
 
 ## Stack
 
 Kotlin · Jetpack Compose · Room 3 · Hilt · Navigation 3 · WorkManager · Vico
-Backend: GitHub Actions ETL → GitHub Releases as CDN → Cloudflare Worker (odds proxy only). Target cost: $0.
+Pipeline: GitHub Actions ETL → GitHub Releases as CDN → prebuilt SQLite shipped to the device. Cost: $0.
 
 ## Documentation
 
 **[Product & Technical Specification](docs/PRODUCT_SPEC.md)** — start here.
 
-Supporting research:
-
 | Document | Contents |
 |---|---|
-| [Data sources](docs/research/research-data-sources.md) | Free NFL data catalog, licensing analysis, ingestion architecture. Endpoints live-tested. |
-| [Stat catalog](docs/research/research-stats-catalog.md) | ~450 metrics by position and category, with computability tiers and comparison UX patterns. |
-| [Prediction models](docs/research/research-prediction-models.md) | Projection methodology, distributions, correlation, on-device compute split, explainability. |
+| [Data sources](docs/research/research-data-sources.md) | Free NFL data catalog, licensing, ingestion architecture. Endpoints live-tested. |
+| [Stat catalog](docs/research/research-stats-catalog.md) | ~450 metrics by position and category, computability tiers, comparison UX patterns. |
+| [Prediction models](docs/research/research-prediction-models.md) | Projection methodology, distributions, correlation, compute split, explainability. |
 | [Android architecture](docs/research/research-android-architecture.md) | Module structure, the sticky-column table problem, charting, sync, accessibility. |
-| [Competitive analysis](docs/research/research-competitive.md) | 25 competitors, paywall map, feature gaps, league-sync legality, Play compliance. |
+| [Competitive analysis](docs/research/research-competitive.md) | Feature gaps worth stealing. Positioning and monetization sections now moot. |
 
-## Open risks
+## Where to start
 
-Three items in the spec are flagged red and need resolution before implementation — see [§3](docs/PRODUCT_SPEC.md#3-locked-decisions) and [§11](docs/PRODUCT_SPEC.md#11-compliance-checklist):
+Phase 1 is `:core:statquery` — a pure-Kotlin, Android-free query builder. Fully unit-testable before any UI exists, and everything else depends on it.
 
-1. Ad monetization combined with full odds display is a specifically-named Google Play violating pattern. Mitigations are concrete; verification is a launch blocker.
-2. The Sleeper API is non-commercial-only, and ad support plausibly makes this app commercial. One email resolves it.
-3. NFL trademarks — no logos, wordmarks or headshots; team colors and abbreviations only.
+Phase 2 is the ETL. At the end of it you have the dataset, which is most of the value.
 
 ## Attribution
 
-Player and team data derived from [nflverse](https://github.com/nflverse/nflverse-data), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). ADP data courtesy of [Fantasy Football Calculator](https://fantasyfootballcalculator.com/). Weather from the [US National Weather Service](https://www.weather.gov/documentation/services-web-api).
-
-Not affiliated with, endorsed by, or associated with the National Football League or any of its teams.
+Player and team data derived from [nflverse](https://github.com/nflverse/nflverse-data), licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). ADP from [Fantasy Football Calculator](https://fantasyfootballcalculator.com/). Weather from the [US National Weather Service](https://www.weather.gov/documentation/services-web-api).
