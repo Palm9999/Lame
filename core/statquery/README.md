@@ -18,7 +18,7 @@ val q = StatQueryBuilder.grid(
 // q.layout.valueIndex(StatColumn.WOPR), q.layout.percentileIndex(...)
 ```
 
-Also `StatQueryBuilder.count(spec)` for the filter sheet's live match count, and `StatQueryBuilder.search(text)` for player lookup.
+Also `CatalogQueries` (seasons, metric metadata), `StatQueryBuilder.count(spec)` for the filter sheet's live match count, and `StatQueryBuilder.search(text)` for player lookup.
 
 ## What it guarantees
 
@@ -28,7 +28,7 @@ Also `StatQueryBuilder.count(spec)` for the filter sheet's live match count, and
 
 **Deterministic.** Equal specs produce identical SQL and binds regardless of set ordering, so results can be cached by spec.
 
-**Percentiles don't move when you filter.** Positional percentiles (1.0 = best, inverted for lower-is-better stats) are computed after the games floor but before position, team, name and value filters. Narrowing the view never changes anyone's percentile. Players without a value get none, and don't dilute everyone else's.
+**Percentiles rank a meaningful population, and don't move when you filter.** Positional percentiles (1.0 = best, inverted for lower-is-better stats) are computed among players who meet the spec's *qualifiers* ("54+ targets"). Without that, a starter ranks against backups with one target, and every regular's cell is top-half. Qualifiers define who is ranked; *filters* narrow what you see, and run afterwards, so narrowing the view never changes anyone's percentile. `includeUnqualified` returns players below the bar, unranked, which is how name search finds anyone. Players without a value get no percentile and don't dilute everyone else's.
 
 **Stable paging.** NULLs sort last in both directions; ties break on name then id.
 

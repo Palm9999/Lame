@@ -338,6 +338,70 @@ class StatQueryBuilderTest {
     }
 
     @Nested
+    inner class Qualifiers {
+        private val qualified = listOf(Filter(TARGETS, Condition.AtLeast(20.0)))
+
+        private fun seed() {
+            // Three starters, plus two backups who'd otherwise top a rate stat.
+            listOf("s1" to 20, "s2" to 40, "s3" to 60).forEach { (id, t) ->
+                db.player(id, "Starter $id")
+                db.week(id, 1, C.TARGETS to t, C.RECEPTIONS to t / 2)
+            }
+            listOf("b1" to 1, "b2" to 2).forEach { (id, t) ->
+                db.player(id, "Backup $id")
+                db.week(id, 1, C.TARGETS to t, C.RECEPTIONS to t)
+            }
+        }
+
+        @Test
+        fun `unqualified players are left out`() {
+            seed()
+            val rows = db.grid(spec(TARGETS).copy(qualifiers = qualified))
+            assertEquals(listOf("s3", "s2", "s1"), rows.map { it.playerId })
+        }
+
+        @Test
+        fun `percentiles rank only qualified players`() {
+            seed()
+            val rows = db.grid(spec(TARGETS).copy(qualifiers = qualified, percentiles = true)).associateBy { it.playerId }
+
+            // Among the three starters: 0, 0.5, 1. Had the backups been ranked
+            // too, the weakest starter would sit at 0.5 rather than 0.
+            assertEquals(0.0, rows.getValue("s1").percentile(TARGETS)!!, EPS)
+            assertEquals(0.5, rows.getValue("s2").percentile(TARGETS)!!, EPS)
+            assertEquals(1.0, rows.getValue("s3").percentile(TARGETS)!!, EPS)
+        }
+
+        @Test
+        fun `a small sample can't top a rate stat's percentiles`() {
+            seed()
+            // Backups caught every target; starters caught half.
+            val rows = db.grid(spec(StatColumn.CATCH_RATE).copy(qualifiers = qualified, percentiles = true))
+            assertTrue(rows.none { it.playerId.startsWith("b") })
+            assertEquals(0.0, rows.first().percentile(StatColumn.CATCH_RATE)!!, EPS) // all tied at 0.5
+        }
+
+        @Test
+        fun `unqualified players can be included, unranked`() {
+            seed()
+            val rows = db.grid(
+                spec(TARGETS).copy(qualifiers = qualified, includeUnqualified = true, percentiles = true),
+            ).associateBy { it.playerId }
+
+            assertEquals(5, rows.size)
+            assertNull(rows.getValue("b1").percentile(TARGETS))
+            assertEquals(0.0, rows.getValue("s1").percentile(TARGETS)!!, EPS)
+        }
+
+        @Test
+        fun `count respects qualifiers`() {
+            seed()
+            assertEquals(3, db.count(spec(TARGETS).copy(qualifiers = qualified)))
+            assertEquals(5, db.count(spec(TARGETS).copy(qualifiers = qualified, includeUnqualified = true)))
+        }
+    }
+
+    @Nested
     inner class Search {
         @Test
         fun `full-name prefix matches rank ahead of word matches`() {

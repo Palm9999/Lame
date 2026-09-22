@@ -11,10 +11,13 @@ package dev.gridiron.core.statquery
  *     exactly the `idx_pws_metric_season_week` index.
  *  2. `base` computes each column from those sums, so rates are recomputed over
  *     the range rather than averaged, and applies the games floor.
- *  3. `ranked`, only when percentiles are requested, adds positional
- *     percentiles. It runs before the user's filters so that narrowing the
- *     view never changes anyone's percentile.
- *  4. The outer query filters, sorts with NULLs last, and pages.
+ *  3. `scored` flags each player as qualified or not (`q`), per the spec's
+ *     qualifiers.
+ *  4. `ranked`, only when percentiles are requested, adds positional
+ *     percentiles among qualified players. It runs before the user's filters
+ *     so that narrowing the view never changes anyone's percentile.
+ *  5. The outer query drops unqualified players (unless asked not to),
+ *     filters, sorts with NULLs last, and pages.
  *
  * Safety: identifiers in the SQL are only fixed text and index-derived aliases
  * (`k0`, `v3`, `p3`). Every value, including metric ids, is a bound `?`.
@@ -29,15 +32,19 @@ public object StatQueryBuilder {
 
     public fun grid(spec: StatQuerySpec): GridQuery {
         // Displayed columns first, so their alias index equals display order.
-        val plan = Plan(spec.columns + spec.sort.map { it.column } + spec.filters.map { it.column })
+        val plan = Plan(
+            spec.columns + spec.sort.map { it.column } + spec.filters.map { it.column } +
+                spec.qualifiers.map { it.column },
+        )
         val w = SqlWriter()
 
         w.aggregateAndBase(spec, plan)
+        w.scored(spec, plan)
         val source = if (spec.percentiles) {
             w.ranked(spec, plan)
             "ranked"
         } else {
-            "base"
+            "scored"
         }
 
         w.line("SELECT player_id, full_name, position, team, games")
@@ -59,11 +66,12 @@ public object StatQueryBuilder {
      * filters need are aggregated, so it is cheaper than [grid].
      */
     public fun count(spec: StatQuerySpec): SqlQuery {
-        val plan = Plan(spec.filters.map { it.column })
+        val plan = Plan(spec.filters.map { it.column } + spec.qualifiers.map { it.column })
         val w = SqlWriter()
         w.aggregateAndBase(spec, plan)
+        w.scored(spec, plan)
         w.line("SELECT COUNT(*)")
-        w.line("FROM base")
+        w.line("FROM scored")
         w.where(spec, plan)
         return w.build()
     }
@@ -175,25 +183,51 @@ private class SqlWriter {
         line(")")
     }
 
-    fun ranked(spec: StatQuerySpec, plan: Plan) {
-        line(", ranked AS (")
-        line("  SELECT base.*")
-        for (column in spec.columns) {
-            val i = plan.index(column)
-            // Best = 1.0. Partitioning on nullness keeps players without a value
-            // from diluting everyone else's rank.
-            val order = if (column.higherIsBetter) "ASC" else "DESC"
-            line(
-                "       , CASE WHEN v$i IS NULL THEN NULL ELSE PERCENT_RANK() OVER " +
-                    "(PARTITION BY position, v$i IS NULL ORDER BY v$i $order) END AS p$i",
-            )
+    /** Flags each player 1 if they meet every qualifier, else 0. */
+    fun scored(spec: StatQuerySpec, plan: Plan) {
+        val q = if (spec.qualifiers.isEmpty()) {
+            "1"
+        } else {
+            "CASE WHEN " + spec.qualifiers.joinToString(" AND ") { condition(it, plan) } + " THEN 1 ELSE 0 END"
         }
+        line(", scored AS (")
+        line("  SELECT base.*, $q AS q")
         line("  FROM base")
         line(")")
     }
 
+    fun ranked(spec: StatQuerySpec, plan: Plan) {
+        line(", ranked AS (")
+        line("  SELECT scored.*")
+        for (column in spec.columns) {
+            val i = plan.index(column)
+            // Best = 1.0, ranked only among qualified players with a value.
+            // Partitioning on that keeps everyone else from diluting the ranks.
+            val order = if (column.higherIsBetter) "ASC" else "DESC"
+            val unranked = "(v$i IS NULL OR q = 0)"
+            line(
+                "       , CASE WHEN $unranked THEN NULL ELSE PERCENT_RANK() OVER " +
+                    "(PARTITION BY position, $unranked ORDER BY v$i $order) END AS p$i",
+            )
+        }
+        line("  FROM scored")
+        line(")")
+    }
+
+    fun condition(filter: Filter, plan: Plan): String {
+        val v = "v${plan.index(filter.column)}"
+        return when (val c = filter.condition) {
+            is Condition.AtLeast -> "$v >= ${real(c.value)}"
+            is Condition.AtMost -> "$v <= ${real(c.value)}"
+            is Condition.GreaterThan -> "$v > ${real(c.value)}"
+            is Condition.LessThan -> "$v < ${real(c.value)}"
+            is Condition.Between -> "$v BETWEEN ${real(c.min)} AND ${real(c.max)}"
+        }
+    }
+
     fun where(spec: StatQuerySpec, plan: Plan) {
         val conditions = mutableListOf<String>()
+        if (!spec.includeUnqualified) conditions += "q = 1"
         if (spec.positions.isNotEmpty()) {
             val codes = spec.positions.sortedBy { it.ordinal }
             conditions += "position IN (${codes.joinToString(", ") { text(it.code) }})"
@@ -204,16 +238,7 @@ private class SqlWriter {
         spec.name?.let(::normalizeSearch)?.takeIf { it.isNotEmpty() }?.let { q ->
             conditions += nameMatch(q)
         }
-        for (filter in spec.filters) {
-            val v = "v${plan.index(filter.column)}"
-            conditions += when (val c = filter.condition) {
-                is Condition.AtLeast -> "$v >= ${real(c.value)}"
-                is Condition.AtMost -> "$v <= ${real(c.value)}"
-                is Condition.GreaterThan -> "$v > ${real(c.value)}"
-                is Condition.LessThan -> "$v < ${real(c.value)}"
-                is Condition.Between -> "$v BETWEEN ${real(c.min)} AND ${real(c.max)}"
-            }
-        }
+        for (filter in spec.filters) conditions += condition(filter, plan)
         if (conditions.isNotEmpty()) {
             line("WHERE ${conditions.joinToString("\n  AND ")}")
         }

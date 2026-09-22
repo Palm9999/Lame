@@ -12,7 +12,13 @@ import dev.gridiron.core.model.WeekRange
  * @property sort Sort keys in priority order. Empty means the first column, descending.
  * @property positions Empty means every position.
  * @property teams Team abbreviations. Empty means every team.
- * @property filters Applied to values as displayed, so per-game in [ValueMode.PER_GAME].
+ * @property filters Narrow the view. Applied to values as displayed, so per-game
+ *   in [ValueMode.PER_GAME], and after percentiles, so they never move one.
+ * @property qualifiers Define who is ranked: percentiles are computed among
+ *   players meeting every qualifier ("54+ targets"), so a starter isn't
+ *   flattered by comparison with a backup who saw one target.
+ * @property includeUnqualified Also return players who miss a qualifier, with
+ *   no percentile. For name search, which should find anyone.
  * @property minGames Population floor, applied before percentiles are computed.
  * @property percentiles Adds a 0..1 positional percentile beside each column, 1 = best.
  * @property name Free-text player name filter, matched on name and word prefixes.
@@ -25,6 +31,8 @@ public data class StatQuerySpec(
     val positions: Set<Position> = emptySet(),
     val teams: Set<String> = emptySet(),
     val filters: List<Filter> = emptyList(),
+    val qualifiers: List<Filter> = emptyList(),
+    val includeUnqualified: Boolean = false,
     val minGames: Int = 1,
     val mode: ValueMode = ValueMode.TOTAL,
     val percentiles: Boolean = false,
