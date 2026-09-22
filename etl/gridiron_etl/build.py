@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 
 import polars as pl
+import requests
 
 from . import sources, schema, transform, validate as validation
 from .metrics import METRICS, metric_rows
@@ -61,7 +62,19 @@ def build_players(players_csv: Path) -> pl.DataFrame:
     return out.with_columns(search_name=_search_name(pl.col("full_name")))
 
 
-def build(seasons: list[int], out: Path, cache: Path | None, force: bool) -> None:
+def _published(season: int, cache: Path | None, force: bool) -> Path | None:
+    """The season's play-by-play, or None if nflverse hasn't published it yet
+    (the days before a season kicks off)."""
+    try:
+        return sources.fetch("pbp", season, cache_dir=cache, force=force)
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            return None
+        raise
+
+
+def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
+          skip_missing: bool = False) -> None:
     players = build_players(sources.fetch("players", cache_dir=cache, force=force))
     log.info("players: %d", players.height)
 
@@ -74,9 +87,16 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool) -> Non
 
     metric_ids = list(METRICS.keys())
     frames: list[pl.DataFrame] = []
+    built: list[int] = []
 
     for season in seasons:
-        pbp_path = sources.fetch("pbp", season, cache_dir=cache, force=force)
+        pbp_path = _published(season, cache, force)
+        if pbp_path is None:
+            if not skip_missing:
+                raise RuntimeError(f"no play-by-play published for {season}")
+            log.warning("season %d: not published yet, skipping", season)
+            continue
+        built.append(season)
         lf = transform.load_pbp(pbp_path)
         weekly = transform.weekly_player_stats(lf)
         log.info("season %d: %d player-weeks from play-by-play", season, weekly.height)
@@ -93,6 +113,8 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool) -> Non
 
         frames.append(transform.to_long(weekly, metric_ids))
 
+    if not frames:
+        raise RuntimeError(f"none of the seasons {seasons} has published play-by-play")
     long = pl.concat(frames, how="vertical_relaxed")
     # Drop stat lines for ids that aren't in the player table (practice-squad
     # oddities, retired ids) so the foreign key relationship actually holds.
@@ -112,7 +134,7 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool) -> Non
     schema.load_metrics(conn, metric_rows())
     schema.load_players(conn, players)
     n = schema.load_facts(conn, long)
-    schema.finalize(conn, seasons)
+    schema.finalize(conn, built)
     validation.validate(conn)
     conn.close()
 
@@ -126,6 +148,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--out", type=Path, default=Path("build/stats.db"))
     ap.add_argument("--cache", type=Path, default=None)
     ap.add_argument("--force", action="store_true", help="ignore the download cache")
+    ap.add_argument("--skip-missing", action="store_true",
+                    help="skip seasons nflverse hasn't published yet instead of failing")
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args(argv)
 
@@ -133,7 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         level=logging.DEBUG if args.verbose else logging.INFO,
         format="%(levelname)-7s %(message)s",
     )
-    build(args.seasons, args.out, args.cache, args.force)
+    build(args.seasons, args.out, args.cache, args.force, args.skip_missing)
     return 0
 
 
