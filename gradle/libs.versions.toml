@@ -1,0 +1,19 @@
+# Only versions this build actually uses. Android entries (AGP, Compose BOM,
+# Room 3, Hilt, ...) are added with the first Android module, once they can be
+# resolved and compiled rather than guessed.
+[versions]
+kotlin = "2.4.20"
+junit = "6.1.3"
+sqliteJdbc = "3.53.4.0"
+
+[libraries]
+kotlin-gradlePlugin = { group = "org.jetbrains.kotlin", name = "kotlin-gradle-plugin", version.ref = "kotlin" }
+junit-bom = { group = "org.junit", name = "junit-bom", version.ref = "junit" }
+junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter" }
+junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher" }
+# Test-only: executes generated SQL against real SQLite on the JVM.
+sqlite-jdbc = { group = "org.xerial", name = "sqlite-jdbc", version.ref = "sqliteJdbc" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+gridiron-jvm-library = { id = "gridiron.jvm.library" }

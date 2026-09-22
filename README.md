@@ -43,11 +43,26 @@ Pipeline: GitHub Actions ETL → GitHub Releases as CDN → prebuilt SQLite ship
 | [Android architecture](docs/research/research-android-architecture.md) | Module structure, the sticky-column table problem, charting, sync, accessibility. |
 | [Competitive analysis](docs/research/research-competitive.md) | Feature gaps worth stealing. Positioning and monetization sections now moot. |
 
-## Where to start
+## Status
 
-Phase 1 is `:core:statquery` — a pure-Kotlin, Android-free query builder. Fully unit-testable before any UI exists, and everything else depends on it.
+| Phase | State |
+|---|---|
+| Spec and research | Done: [docs/](docs/PRODUCT_SPEC.md) |
+| **Data pipeline** | Done: [`etl/`](etl/README.md). nflverse → 6.3 MB pre-indexed SQLite, validated on every build. |
+| **Query builder** | Done: [`core/statquery/`](core/statquery/README.md). Verified against the real database: 413,179 values agree with the ETL. |
+| The Grid (first Android UI) | Next. Needs an environment with the Android SDK. |
 
-Phase 2 is the ETL. At the end of it you have the dataset, which is most of the value.
+## Building
+
+```bash
+# Data
+cd etl && pip install -r requirements.txt
+python -m gridiron_etl.build --seasons 2024 2025 --out build/stats.db
+
+# Kotlin modules (JDK 17+)
+./gradlew build
+GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew :core:statquery:test   # + contract tests
+```
 
 ## Attribution
 
