@@ -113,6 +113,10 @@ def _passing(lf: pl.LazyFrame) -> pl.LazyFrame:
     )
     if "cpoe" in names:
         aggs["cpoe"] = pl.col("cpoe").mean()
+        # Sum and count, so CPOE over a range is attempt-weighted rather than a
+        # mean of weekly means.
+        aggs["cpoe_sum"] = pl.col("cpoe").sum()
+        aggs["cpoe_n"] = pl.col("cpoe").is_not_null().sum()
 
     return (
         lf.filter(pl.col("passer_player_id").is_not_null())
@@ -149,7 +153,7 @@ def weekly_player_stats(lf: pl.LazyFrame) -> pl.DataFrame:
         "rz_targets", "ez_targets", "carries", "rushing_yards", "rushing_tds",
         "rz_carries", "gz_carries", "gl_carries", "qb_rush_inside_5", "attempts",
         "completions", "passing_yards", "passing_tds", "interceptions", "sacks_taken",
-        "dropbacks", "rush_successes",
+        "dropbacks", "rush_successes", "cpoe_n",
     ]
     present = [c for c in counting if c in df.columns]
     df = df.with_columns([pl.col(c).fill_null(0) for c in present])
@@ -163,6 +167,7 @@ def weekly_player_stats(lf: pl.LazyFrame) -> pl.DataFrame:
         )
 
     df = df.with_columns(
+        g=pl.lit(1, dtype=pl.Int64),
         target_share=ratio("targets", "team_targets"),
         air_yards_share=ratio("air_yards", "team_air_yards"),
         carry_share=ratio("carries", "team_carries"),
@@ -197,6 +202,45 @@ def weekly_player_stats(lf: pl.LazyFrame) -> pl.DataFrame:
     return df
 
 
+# Candidate offsets above the observed max when solving for team snaps.
+_SNAP_SEARCH = 25
+# Half of the published 0.01 rounding step, plus float slack.
+_PCT_TOLERANCE = 0.0051
+
+
+def team_offense_snaps(snaps: pl.DataFrame) -> pl.DataFrame:
+    """Solve for each team's offensive snaps in each game.
+
+    Not simply the max snaps any player logged: in some games nobody plays
+    every snap (2025 SF week 11 ran 55 plays; the most any player logged was
+    53). Nor a single back-solve of snaps / pct, which the two-decimal rounding
+    of the published percentage makes ambiguous.
+
+    Instead: the true total is the integer D, at or above the observed max,
+    that is consistent with every player's published percentage, i.e.
+    |snaps / D - pct| <= 0.005 for all players. Choose the D with the fewest
+    violations, then least squared error, then the smallest D.
+    """
+    played = snaps.filter(pl.col("offense_snaps") > 0)
+    cands = (
+        played.group_by(["game_id", "team"])
+        .agg(mx=pl.col("offense_snaps").max())
+        .join(pl.DataFrame({"k": list(range(_SNAP_SEARCH + 1))}), how="cross")
+        .with_columns(d=pl.col("mx") + pl.col("k"))
+        .select(["game_id", "team", "d"])
+    )
+    scored = (
+        played.join(cands, on=["game_id", "team"])
+        .with_columns(err=(pl.col("offense_snaps") / pl.col("d") - pl.col("offense_pct")).abs())
+        .group_by(["game_id", "team", "d"])
+        .agg(bad=(pl.col("err") > _PCT_TOLERANCE).sum(), sse=(pl.col("err") ** 2).sum())
+        .sort(["game_id", "team", "bad", "sse", "d"])
+        .group_by(["game_id", "team"], maintain_order=True)
+        .first()
+    )
+    return scored.select(["game_id", "team", pl.col("d").alias("team_offense_snaps")])
+
+
 def add_snap_share(df: pl.DataFrame, snaps: pl.DataFrame,
                    crosswalk: pl.DataFrame) -> pl.DataFrame:
     """Attach snap counts.
@@ -205,9 +249,11 @@ def add_snap_share(df: pl.DataFrame, snaps: pl.DataFrame,
     this has to route through the players crosswalk. Rows that fail to map keep
     null snap data rather than being dropped.
     """
+    snaps = snaps.join(team_offense_snaps(snaps), on=["game_id", "team"], how="left")
     mapped = (
         snaps.join(crosswalk, on="pfr_player_id", how="inner")
-        .select(["season", "week", "player_id", "offense_snaps", "offense_pct"])
+        .select(["season", "week", "player_id", "offense_snaps",
+                 "team_offense_snaps", "offense_pct"])
         .rename({"offense_pct": "snap_share"})
     )
     return df.join(mapped, on=["season", "week", "player_id"], how="left")

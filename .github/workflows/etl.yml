@@ -72,9 +72,11 @@ jobs:
           gzip -9 -k build/stats.db
           SHA=$(sha256sum build/stats.db.gz | cut -d' ' -f1)
           SIZE=$(stat -c%s build/stats.db.gz)
+          # Read from the database itself so the manifest can never disagree with it.
+          SCHEMA=$(python -c "import sqlite3; print(sqlite3.connect('build/stats.db').execute(\"SELECT value FROM schema_meta WHERE key = 'schema_version'\").fetchone()[0])")
           cat > build/manifest.json <<JSON
           {
-            "schema_version": 1,
+            "schema_version": $SCHEMA,
             "built_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
             "stats_db": { "file": "stats.db.gz", "sha256": "$SHA", "bytes": $SIZE }
           }

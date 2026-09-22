@@ -46,6 +46,41 @@ RANGE_CHECKS: tuple[RangeCheck, ...] = (
 )
 
 
+@dataclass(frozen=True)
+class CoherenceCheck:
+    """A per player-week relationship between two stored metrics.
+
+    Range checks can't see a denominator that has drifted from its numerator;
+    these can. `predicate` is a SQL expression over `a` and `b` that must hold.
+    """
+    name: str
+    a: str
+    b: str
+    predicate: str
+
+
+COHERENCE_CHECKS: tuple[CoherenceCheck, ...] = (
+    CoherenceCheck("targets within team targets", "targets", "team_targets", "a <= b"),
+    CoherenceCheck("carries within team carries", "carries", "team_carries", "a <= b"),
+    CoherenceCheck("snaps within team snaps", "offense_snaps", "team_offense_snaps", "a <= b"),
+    CoherenceCheck("cpoe attempts within attempts", "cpoe_n", "attempts", "a <= b"),
+    # Team snaps are solved to agree with the published percentages, so derived
+    # and published share may differ by at most one 0.01 rounding step.
+    #
+    # Why not tighter: the source is occasionally self-inconsistent. 2024 TB
+    # week 19 lists 44 snaps at 0.91, but 44/D rounds to 0.91 only for D in
+    # (48.09, 48.62], which contains no integer. A handful of player-weeks per
+    # season are irreconcilable upstream.
+    #
+    # Why not looser: the earlier max-snaps shortcut was off by 0.02-0.036, and
+    # this bound must keep catching that class of error.
+    CoherenceCheck("snap share matches its components", "offense_snaps", "team_offense_snaps",
+                   "b = 0 OR ABS(a / b - (SELECT value FROM player_week_stat x "
+                   "WHERE x.player_id = pw.player_id AND x.season = pw.season "
+                   "AND x.week = pw.week AND x.metric_id = 'snap_share')) <= 0.011"),
+)
+
+
 class ValidationError(RuntimeError):
     pass
 
@@ -69,6 +104,22 @@ def validate(conn: sqlite3.Connection, strict: bool = True) -> list[str]:
                 f"outside expected [{chk.lo}, {chk.hi}]"
                 + (f" ({chk.note})" if chk.note else "")
             )
+
+    for chk in COHERENCE_CHECKS:
+        bad = conn.execute(
+            f"""SELECT COUNT(*) FROM (
+                  SELECT player_id, season, week,
+                         MAX(CASE WHEN metric_id = ? THEN value END) AS a,
+                         MAX(CASE WHEN metric_id = ? THEN value END) AS b
+                  FROM player_week_stat
+                  WHERE metric_id IN (?, ?)
+                  GROUP BY player_id, season, week
+                ) pw
+                WHERE a IS NOT NULL AND b IS NOT NULL AND NOT ({chk.predicate})""",
+            (chk.a, chk.b, chk.a, chk.b),
+        ).fetchone()[0]
+        if bad:
+            problems.append(f"coherence: {chk.name} violated in {bad} player-weeks")
 
     # Every fact must reference a known player and a registered metric.
     orphan_players = conn.execute(
@@ -104,5 +155,6 @@ def validate(conn: sqlite3.Connection, strict: bool = True) -> list[str]:
     if problems and strict:
         raise ValidationError(f"{len(problems)} validation failure(s); first: {problems[0]}")
     if not problems:
-        log.info("validation passed — %d checks", len(RANGE_CHECKS) + 4)
+        log.info("validation passed — %d checks",
+                 len(RANGE_CHECKS) + len(COHERENCE_CHECKS) + 4)
     return problems

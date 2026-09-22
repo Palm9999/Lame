@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import argparse
 import logging
-import re
 import sys
 from pathlib import Path
 
@@ -18,13 +17,18 @@ from .metrics import METRICS, metric_rows
 
 log = logging.getLogger("gridiron.build")
 
-_PUNCT = re.compile(r"[^a-z0-9 ]")
 
 
 def _search_name(expr: pl.Expr) -> pl.Expr:
-    """Normalize for the indexed prefix-range search."""
+    """Normalize for the indexed prefix-range search.
+
+    Must stay identical to `normalizeSearch` in :core:statquery — a contract
+    test there checks every player's stored search_name against it. NFKD first
+    so accented letters fold to their base letter instead of being dropped.
+    """
     return (
-        expr.str.to_lowercase()
+        expr.str.normalize("NFKD")
+        .str.to_lowercase()
         .str.replace_all(r"[^a-z0-9 ]", "")
         .str.strip_chars()
     )

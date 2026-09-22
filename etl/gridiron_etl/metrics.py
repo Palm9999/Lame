@@ -36,6 +36,11 @@ class Metric:
     decimals: int = 1
     # Hot metrics become real indexed SQLite columns; the rest live in a JSON blob.
     hot: bool = False
+    # Internal components are never shown as columns. They exist so rate metrics
+    # can be recomputed correctly over a week range: target share over weeks
+    # 1-8 is sum(targets) / sum(team_targets), not the mean of eight weekly
+    # shares, and that requires the denominators to be stored.
+    internal: bool = False
 
 
 _M: list[Metric] = [
@@ -187,6 +192,30 @@ _M: list[Metric] = [
            stability=0.12, decimals=1),
     Metric("total_epa", "Total EPA", "EPA", "efficiency",
            "Expected points added across all touches.", decimals=2),
+
+    # ---------------- Internal range-aggregation components ----------------
+    *[
+        Metric(mid, name, mid.upper(), "context", definition,
+               positions=("QB", "RB", "WR", "TE"), decimals=dec, internal=True)
+        for mid, name, definition, dec in [
+            ("g", "Games", "1 for each week the player recorded a play. Summed "
+             "over a range it gives games played.", 0),
+            ("team_targets", "Team Targets",
+             "Team targets in games this player appeared in.", 0),
+            ("team_air_yards", "Team Air Yards",
+             "Team air yards in games this player appeared in.", 0),
+            ("team_carries", "Team Carries",
+             "Team carries in games this player appeared in.", 0),
+            ("team_offense_snaps", "Team Offensive Snaps",
+             "Team offensive snaps in games this player appeared in.", 0),
+            ("rush_successes", "Rush Successes", "Carries with positive EPA.", 0),
+            ("rush_epa", "Rush EPA", "Summed EPA on carries.", 3),
+            ("rec_epa", "Receiving EPA", "Summed EPA on targets.", 3),
+            ("pass_epa", "Pass EPA", "Summed EPA on dropbacks.", 3),
+            ("cpoe_sum", "CPOE Sum", "Summed per-attempt CPOE.", 3),
+            ("cpoe_n", "CPOE Attempts", "Attempts with a CPOE value.", 0),
+        ]
+    ],
 ]
 
 METRICS: dict[str, Metric] = {m.id: m for m in _M}
@@ -204,4 +233,4 @@ def metric_rows() -> list[dict]:
 
 def hot_metric_ids() -> list[str]:
     """Metrics that get real indexed columns in the wide view."""
-    return [m.id for m in METRICS.values() if m.hot]
+    return [m.id for m in METRICS.values() if m.hot and not m.internal]

@@ -197,8 +197,8 @@ def test_player_with_rushing_and_receiving_is_one_row():
 def test_snap_join_does_not_inflate_rows():
     weekly = run([target("WR1", 10), carry("RB1", 3)])
     snaps = pl.DataFrame({
-        "season": [2025, 2025], "week": [1, 1],
-        "pfr_player_id": ["pWR1", "pRB1"],
+        "season": [2025, 2025], "week": [1, 1], "game_id": ["g1", "g1"],
+        "team": ["AAA", "AAA"], "pfr_player_id": ["pWR1", "pRB1"],
         "offense_snaps": [50, 30], "offense_pct": [0.8, 0.5],
     })
     xwalk = pl.DataFrame({"player_id": ["WR1", "RB1"], "pfr_player_id": ["pWR1", "pRB1"]})
@@ -210,8 +210,8 @@ def test_snap_join_does_not_inflate_rows():
 def test_unmapped_snaps_leave_null_rather_than_dropping_the_player():
     weekly = run([target("WR1", 10)])
     snaps = pl.DataFrame({
-        "season": [2025], "week": [1], "pfr_player_id": ["unknown"],
-        "offense_snaps": [50], "offense_pct": [0.8],
+        "season": [2025], "week": [1], "game_id": ["g1"], "team": ["AAA"],
+        "pfr_player_id": ["unknown"], "offense_snaps": [50], "offense_pct": [0.8],
     })
     xwalk = pl.DataFrame({"player_id": ["WR1"], "pfr_player_id": ["pWR1"]})
     out = transform.add_snap_share(weekly, snaps, xwalk)
@@ -229,3 +229,59 @@ def test_to_long_drops_nulls_and_keeps_values():
     assert "carries" in metrics
     assert "adot" not in metrics   # null for a non-receiver, so filtered
     assert long["value"].null_count() == 0
+
+
+# ---------------------------------------------------------------- range components
+
+def test_every_player_week_gets_one_game():
+    df = run([target("WR1", 5), carry("RB1")])
+    assert row(df, "WR1")["g"] == 1
+    assert row(df, "RB1")["g"] == 1
+
+
+def test_team_denominators_are_stored_for_range_recomputation():
+    df = run([target("WR1", 10), target("WR1", 20), target("WR2", 30), carry("RB1")])
+    r = row(df, "WR1")
+    assert r["team_targets"] == 3
+    assert r["team_air_yards"] == pytest.approx(60)
+    assert r["team_carries"] == 1
+
+
+def test_cpoe_components_allow_attempt_weighting():
+    df = run([
+        target("WR1", 5, cpoe=10.0),
+        target("WR1", 5, cpoe=-4.0),
+        target("WR1", 5, cpoe=None),
+    ])
+    qb = row(df, "QB1")
+    assert qb["cpoe_sum"] == pytest.approx(6.0)
+    assert qb["cpoe_n"] == 2
+    assert qb["cpoe"] == pytest.approx(3.0)
+
+
+def test_team_offense_snaps_when_nobody_plays_every_snap():
+    # Real case: 2025 SF week 11 ran 55 offensive plays, but the most any
+    # player logged was 53. The max-snaps shortcut would say 53.
+    snaps = pl.DataFrame({
+        "game_id": ["g"] * 4, "team": ["SF"] * 4,
+        "offense_snaps": [53, 50, 48, 39],
+        "offense_pct": [0.96, 0.91, 0.87, 0.71],
+    })
+    solved = transform.team_offense_snaps(snaps)
+    assert solved["team_offense_snaps"].to_list() == [55]
+
+
+def test_team_offense_snaps_is_the_max_on_the_team_that_game():
+    weekly = run([target("WR1", 10), carry("RB1", 3)])
+    snaps = pl.DataFrame({
+        "season": [2025] * 4, "week": [1] * 4, "game_id": ["g1"] * 4,
+        "team": ["AAA", "AAA", "AAA", "BBB"],
+        "pfr_player_id": ["pWR1", "pRB1", "pOL1", "pOTHER"],
+        "offense_snaps": [50, 30, 64, 80],
+        "offense_pct": [0.78, 0.47, 1.0, 1.0],
+    })
+    xwalk = pl.DataFrame({"player_id": ["WR1", "RB1"], "pfr_player_id": ["pWR1", "pRB1"]})
+    out = transform.add_snap_share(weekly, snaps, xwalk)
+    # 64 from the lineman on AAA, not 80 from the other team.
+    assert row(out, "WR1")["team_offense_snaps"] == 64
+    assert row(out, "RB1")["team_offense_snaps"] == 64

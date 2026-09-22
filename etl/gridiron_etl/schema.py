@@ -21,7 +21,7 @@ import polars as pl
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 DDL = """
 PRAGMA journal_mode = OFF;
@@ -47,7 +47,9 @@ CREATE TABLE metric (
     stability        REAL,
     higher_is_better INTEGER NOT NULL DEFAULT 1,
     decimals         INTEGER NOT NULL DEFAULT 1,
-    hot              INTEGER NOT NULL DEFAULT 0
+    hot              INTEGER NOT NULL DEFAULT 0,
+    -- Range-aggregation components; never offered as a visible column.
+    internal         INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE player (
@@ -82,8 +84,12 @@ CREATE TABLE player_week_stat (
 #   * Player detail                              -> primary key (player_id, ...)
 # A standalone (season, week) index was measured at 29% of the file and serves
 # no query the app issues. Don't re-add it without a query that needs it.
+#
+# `value` is carried in the index so the Grid's aggregation is a covering-index
+# read and never touches the table. Measured on a full-season, 12-component
+# query: 139 ms -> 54 ms, for +1 MB gzipped.
 INDEXES = """
-CREATE INDEX idx_pws_metric_season_week ON player_week_stat (metric_id, season, week);
+CREATE INDEX idx_pws_metric_season_week ON player_week_stat (metric_id, season, week, value);
 CREATE INDEX idx_player_search          ON player (search_name);
 CREATE INDEX idx_player_position        ON player (position);
 """
@@ -102,11 +108,12 @@ def load_metrics(conn: sqlite3.Connection, rows: list[dict]) -> None:
     conn.executemany(
         """INSERT INTO metric (id, name, abbr, "group", definition, formula,
                                positions, tier, predicts, stability,
-                               higher_is_better, decimals, hot)
+                               higher_is_better, decimals, hot, internal)
            VALUES (:id, :name, :abbr, :group, :definition, :formula,
                    :positions, :tier, :predicts, :stability,
-                   :higher_is_better, :decimals, :hot)""",
-        [{**r, "higher_is_better": int(r["higher_is_better"]), "hot": int(r["hot"])}
+                   :higher_is_better, :decimals, :hot, :internal)""",
+        [{**r, "higher_is_better": int(r["higher_is_better"]), "hot": int(r["hot"]),
+          "internal": int(r["internal"])}
          for r in rows],
     )
     conn.commit()
