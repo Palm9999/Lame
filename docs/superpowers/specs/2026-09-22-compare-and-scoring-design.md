@@ -1,6 +1,6 @@
 # Compare and custom scoring: design
 
-Date: 2026-09-22 · Status: awaiting review · Implements PRODUCT_SPEC §6.2 (Comparison) and the scoring half of §4.1
+Date: 2026-09-22 · Status: approved; plan at `docs/superpowers/plans/2026-09-22-compare-and-scoring.md` · Implements PRODUCT_SPEC §6.2 (Comparison) and the scoring half of §4.1
 
 ## Intent
 
@@ -64,7 +64,8 @@ Reference profile, verified against ffopportunity 2026 data to machine precision
 ### Housekeeping
 
 - `SCHEMA_VERSION` 2 → 3. The database ships inside the APK built from the same commit, so the app and schema always match; a runtime version check arrives with in-app data updates (a later phase).
-- The unused `fpoe` metric (registered, never populated: 0 rows) is removed from `metrics.py`; FPOE becomes a computed column (B).
+- The unused `fpoe` metric (registered, never populated: 0 rows) stays in `metrics.py` but is flagged `computed`, beside two new computed rows `fantasy_points` and `expected_fantasy_points`: the app takes each column's name and definition from the registry, and a contract test requires every column to have a visible row. A new `metric.computed` column marks them; validation fails if a computed metric has stored facts.
+- Scoring inputs are stored sparse: zero values are omitted (absent means zero), because they are zero for most player-weeks and storing them would roughly double the database.
 - Report the database size change after the first full build.
 
 ## B. Scoring
@@ -136,7 +137,7 @@ List screen: profiles with the active one marked; actions Duplicate, Rename, Del
 
 - Long-press a Grid **row** adds that player; long-press on a **header** still explains the stat. Haptic confirmation; a full tray (4) shows a snackbar instead.
 - A `CompareSlot` is `(playerId, season, weekRange)`, taken from the Grid's current season and range when added. The same player may occupy several slots with different seasons or ranges (self-comparison).
-- The tray bar sits at the bottom of the Grid, above the system navigation bar: slot chips (tap to edit season/range, ✕ to remove) and a Compare button (enabled at 2+ slots).
+- The tray bar sits at the bottom of the Grid, above the system navigation bar (it lives in `:feature:players`; the sheets and profile chip that Grid and Compare share live in `:core:ui`, so no feature module depends on another): slot chips (tap to edit season/range, ✕ to remove) and a Compare button (enabled at 2+ slots).
 - Tray state is persisted in `:core:datastore` alongside profiles.
 
 ### Ranking
@@ -176,7 +177,7 @@ Compose Canvas implementations of `PercentileBars`, `RadarChart`, `ScatterChart`
 ## App structure
 
 - **Navigation 3** with destinations Grid (start), Compare, Scoring list, Scoring edit.
-- New modules: `:core:datastore`, `:core:charts`, `:feature:compare`, `:feature:scoring`.
+- New modules: `:core:datastore`, `:core:ui`, `:core:charts`, `:feature:compare`, `:feature:scoring`.
 - `:core:data` gains `ScoringRepository`, `CompareTrayRepository`, `CompareRepository` (one Grid query per slot, run concurrently on the single database dispatcher).
 - Manual DI in `GridironApplication` stays; no Hilt.
 - Library versions (Navigation 3, DataStore, kotlinx.serialization) are checked against the published artifacts at plan time, not assumed.
