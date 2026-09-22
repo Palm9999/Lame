@@ -31,7 +31,14 @@ enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 rootProject.name = "gridiron"
 
-// Pure-JVM modules. Android modules (:app, :feature:*, :core:table, ...) join
-// this list once a build environment with the Android SDK is available.
+
+
 include(":core:model")
 include(":core:statquery")
+include(":core:database")
+include(":core:testing")
+include(":core:data")
+include(":core:designsystem")
+include(":core:table")
+include(":feature:players")
+include(":app")

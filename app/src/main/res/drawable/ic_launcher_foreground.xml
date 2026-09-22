@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A stat table with a frozen first column, inside the adaptive icon safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M36,34 H72 A6,6 0 0 1 78,40 V68 A6,6 0 0 1 72,74 H36 A6,6 0 0 1 30,68 V40 A6,6 0 0 1 36,34 Z"
+        android:strokeWidth="4.5"
+        android:strokeColor="#FFFFFF"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M30,46 H78 M30,60 H78 M46,34 V74"
+        android:strokeWidth="4"
+        android:strokeLineCap="round"
+        android:strokeColor="#FFFFFF" />
+</vector>
