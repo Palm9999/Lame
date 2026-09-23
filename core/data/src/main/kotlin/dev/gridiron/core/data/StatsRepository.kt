@@ -3,6 +3,8 @@ package dev.gridiron.core.data
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.doubleOrNull
 import dev.gridiron.core.database.textOrNull
+import dev.gridiron.core.model.WeekRange
+import dev.gridiron.core.statquery.Aggregate
 import dev.gridiron.core.statquery.CatalogQueries
 import dev.gridiron.core.statquery.Condition
 import dev.gridiron.core.statquery.Filter
@@ -72,6 +74,45 @@ public class StatsRepository(
     }
 
     public suspend fun players(ids: Collection<String>): Map<String, PlayerHeader> = executor.playerHeaders(ids)
+
+    /**
+     * The sorted column's last six played weeks for every row on [page]. Each
+     * week reuses the Grid query itself, restricted to the page's players, so
+     * a week's rate or fantasy points are exactly what the Grid shows for that
+     * single week. The page already decided who is listed, so no filters apply.
+     */
+    public suspend fun sparklines(page: GridPage): Map<String, Sparkline> {
+        val r = page.request
+        val window = sparklineWeeks(r.season, r.weeks) ?: return emptyMap()
+        if (page.rows.isEmpty()) return emptyMap()
+        val ids = page.rows.mapTo(LinkedHashSet()) { it.playerId }
+        val column = r.sort
+        val byWeek = window.map { week ->
+            val q = StatQueryBuilder.grid(
+                StatQuerySpec(
+                    season = r.season.season,
+                    weeks = WeekRange.single(week),
+                    columns = listOf(column),
+                    playerIds = ids,
+                    includeUnqualified = true,
+                    minGames = 1,
+                    limit = StatQuerySpec.MAX_LIMIT,
+                    scoring = r.scoring,
+                ),
+            )
+            executor.query(q.query) { row ->
+                // Every returned row played that week. A total with no fact is a
+                // zero the database stores sparsely, not a missing week.
+                val v = row.doubleOrNull(q.layout.valueIndex(column))
+                    ?: if (column.aggregate is Aggregate.Total) 0.0 else null
+                row.text(GridLayout.PLAYER_ID) to v
+            }.toMap()
+        }
+        return ids.associateWith { id ->
+            val values = byWeek.map { it[id] }
+            Sparkline(window, values, values.map { format.format(column, it, perGame = false) })
+        }
+    }
 
     private fun spec(request: GridRequest, threshold: SampleThreshold?): StatQuerySpec {
         val searching = request.name.isNotBlank()
