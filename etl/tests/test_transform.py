@@ -48,6 +48,22 @@ def carry(rb: str, yds: float = 0, *, yl: int = 50, td: int = 0,
     )
 
 
+def kneel(qb: str, yds: float = -1, *, epa: float = -0.5, **kw) -> dict:
+    """A QB kneel: `rush_attempt=1`, always a loss, like a real clock-killer."""
+    return play(
+        play_type="qb_kneel", rush_attempt=1, rushing_yards=yds, rusher_player_id=qb,
+        success=0, epa=epa, **kw,
+    )
+
+
+def spike(qb: str, *, epa: float = -0.1, **kw) -> dict:
+    """A QB spike: `pass_attempt=1`, always an incompletion for 0 yards."""
+    return play(
+        play_type="qb_spike", pass_attempt=1, complete_pass=0,
+        passer_player_id=qb, epa=epa, **kw,
+    )
+
+
 def run(plays: list[dict]) -> pl.DataFrame:
     lf = pl.LazyFrame(plays, schema_overrides={
         "air_yards": pl.Float64, "yards_after_catch": pl.Float64,
@@ -57,10 +73,14 @@ def run(plays: list[dict]) -> pl.DataFrame:
         "passer_player_id": pl.String, "fumbled_1_player_id": pl.String,
         "two_point_conv_result": pl.String,
     })
+    # Mirrors `load_pbp`'s own filter and flag, so these synthetic frames
+    # exercise kneels/spikes exactly as the real pipeline does.
     lf = lf.filter(
         pl.col("season_type").is_in(["REG", "POST"])
-        & pl.col("play_type").is_in(["pass", "run"])
+        & pl.col("play_type").is_in(list(transform.SCRIMMAGE_PLAY_TYPES))
         & pl.col("posteam").is_not_null()
+    ).with_columns(
+        is_efficiency_play=~pl.col("play_type").is_in(list(transform._RATE_EXCLUDED_PLAY_TYPES))
     )
     return transform.weekly_player_stats(lf)
 
@@ -186,6 +206,43 @@ def test_non_scrimmage_plays_excluded():
 def test_preseason_excluded():
     df = run([target("WR1", 10), target("WR1", 10, season_type="PRE")])
     assert row(df, "WR1")["targets"] == 1
+
+
+# ---------------------------------------------------------------- kneels and spikes
+
+def test_kneel_counts_as_a_carry_and_its_yards_count():
+    df = run([carry("QB1", 5), kneel("QB1", -2)])
+    r = row(df, "QB1")
+    assert r["carries"] == 2
+    assert r["rushing_yards"] == 3  # 5 - 2, matching the box score
+
+
+def test_kneel_does_not_change_rush_success_rate_epa_per_carry_or_carry_share():
+    df = run([
+        carry("RB1", 10, success=1, epa=1.0),
+        carry("RB1", 5, success=0, epa=-0.2),
+        kneel("QB1", -2),  # same team, different player — must not dilute the below
+        carry("RB2", 3, success=1, epa=0.5),
+    ])
+    rb1 = row(df, "RB1")
+    # Rate over RB1's own 2 real carries only — the QB's kneel is a different
+    # player anyway, but pins that a kneel never enters a success/EPA rate.
+    assert rb1["rush_success_rate"] == pytest.approx(0.5)
+    assert rb1["rush_epa_per_carry"] == pytest.approx((1.0 - 0.2) / 2)
+    # carry_share: RB1's 2 real carries over the team's 3 real carries
+    # (RB1's 2 + RB2's 1) — the QB's kneel excluded from both sides.
+    assert rb1["carry_share"] == pytest.approx(2 / 3)
+
+
+def test_spike_counts_as_a_pass_attempt_but_not_a_dropback():
+    df = run([
+        target("WR1", 10, complete=True, yds=10, qb="QB1", epa=0.8),
+        spike("QB1", epa=-0.1),
+    ])
+    r = row(df, "QB1")
+    assert r["attempts"] == 2
+    assert r["dropbacks"] == 1
+    assert r["epa_per_dropback"] == pytest.approx(0.8)
 
 
 # ---------------------------------------------------------------- joins

@@ -63,13 +63,25 @@ def test_cross_check_passes_when_sources_agree_and_flags_a_mismatch():
 def test_cross_check_allows_our_extra_sack_fumbles_but_not_fewer():
     weekly = pl.DataFrame([weekly_row(fumbles_lost=2)])
     assert validate.cross_check(weekly, pl.DataFrame([ep_row(rush_fumble_lost=1.0)])) == []
-    # Real 2024 data has ffopportunity mis-attribute an isolated fumble to the
-    # wrong offensive player a handful of times (see validate.FUMBLE_TOLERANCE),
-    # so trailing by exactly one is allowed...
     weekly = pl.DataFrame([weekly_row(fumbles_lost=0)])
-    assert validate.cross_check(weekly, pl.DataFrame([ep_row(rec_fumble_lost=1.0)])) == []
-    # ...but trailing by more than that still flags.
-    problems = validate.cross_check(weekly, pl.DataFrame([ep_row(rec_fumble_lost=1.0, rush_fumble_lost=1.0)]))
+    problems = validate.cross_check(weekly, pl.DataFrame([ep_row(rec_fumble_lost=1.0)]))
+    assert any("fumbles_lost" in p for p in problems)
+
+
+def test_cross_check_fumble_exception_set_is_narrow():
+    # A player-week in FUMBLE_MISATTRIBUTION_EXCEPTIONS (a real, traced
+    # ffopportunity misattribution) is excused even though ours trails...
+    player_id, season, week = next(iter(validate.FUMBLE_MISATTRIBUTION_EXCEPTIONS))
+    weekly = pl.DataFrame([weekly_row(player_id=player_id, season=season, week=week, fumbles_lost=0)])
+    ep = pl.DataFrame([ep_row(player_id=player_id, season=str(season), week=float(week), rec_fumble_lost=1.0)])
+    assert validate.cross_check(weekly, ep) == []
+    # ...but the exact same trailing-fumble shape at a different, unlisted
+    # week for that same player still flags — the exception is keyed narrowly
+    # by (player_id, season, week), not blanket per player.
+    other_week = week + 1
+    weekly_other = pl.DataFrame([weekly_row(player_id=player_id, season=season, week=other_week, fumbles_lost=0)])
+    ep_other = pl.DataFrame([ep_row(player_id=player_id, season=str(season), week=float(other_week), rec_fumble_lost=1.0)])
+    problems = validate.cross_check(weekly_other, ep_other)
     assert any("fumbles_lost" in p for p in problems)
 
 

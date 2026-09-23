@@ -234,6 +234,66 @@ CROSS_CHECK_PAIRS: tuple[tuple[str, str, float], ...] = (
 )
 KEYS = ["player_id", "season", "week"]
 
+# (player_id, season, week) triples where ffopportunity attributes a fumble
+# to the wrong offensive player, each traced to one specific play. Excluded
+# individually from the strict "ours must not trail theirs" fumbles rule
+# below, rather than loosening that rule for every player-week.
+#
+# Two recurring patterns account for 9 of the 10 entries, each confirmed
+# against `fumbled_1_player_id` in that season's play-by-play:
+#
+#   Pattern A — interception-return fumble: the pass is intercepted (the
+#   named player never touches the ball) and the *defender* returning it
+#   fumbles; ffopportunity still charges the original intended receiver. Ours
+#   correctly excludes it (a defender's fumble isn't an offensive stat — see
+#   `_fumbles`'s docstring/tests in transform.py).
+#
+#   Pattern B — multi-lateral chain: a completed pass is laterally advanced
+#   one or more times; the fumble belongs to whichever player was carrying it
+#   at the end of the chain, but ffopportunity charges the play's *original*
+#   receiver instead.
+#
+# The 10th (ATL wk1 2024) is a distinct botched-snap case, noted inline.
+FUMBLE_MISATTRIBUTION_EXCEPTIONS: frozenset[tuple[str, int, int]] = frozenset({
+    # --- Pattern A: interception-return fumble ---
+    # ARI wk7 2024, 00-0033553/J.Conner: intercepted by 90-T.Tart, who
+    # fumbles the return.
+    ("00-0033553", 2024, 7),
+    # MIN wk13 2025, 00-0038994/J.Addison: intercepted by 27-T.Woolen, who
+    # fumbles the return (forced by 1-J.Nailor).
+    ("00-0038994", 2025, 13),
+    # TEN wk5 2025, 00-0034837/C.Ridley: intercepted by 42-D.Taylor-Demerson,
+    # who fumbles the return (recovered by the other team for a TD).
+    ("00-0034837", 2025, 5),
+    # ARI wk4 2025, 00-0039849/M.Harrison: intercepted by 8-C.Bryant, who
+    # fumbles the return (forced by 72-H.Froholdt).
+    ("00-0039849", 2025, 4),
+    # PHI wk14 2025, 00-0035676/A.Brown: intercepted by 91-D.Hand, who
+    # fumbles the return.
+    ("00-0035676", 2025, 14),
+    # --- Pattern B: multi-lateral chain ---
+    # PIT wk5 2024, 00-0037247/G.Pickens: chain ends with 88-P.Freiermuth
+    # fumbling; ffopportunity charges Pickens, the original receiver.
+    ("00-0037247", 2024, 5),
+    # CHI wk1 2025, 00-0039919/R.Odunze: chain ends with 2-D.Moore fumbling;
+    # ffopportunity charges Odunze, the original receiver.
+    ("00-0039919", 2025, 1),
+    # CAR wk18 2025, 00-0039491/J.Coker: chain ends with 4-T.McMillan
+    # fumbling; ffopportunity charges Coker, the original receiver.
+    ("00-0039491", 2025, 18),
+    # IND wk18 2025, 00-0038997/J.Downs: chain ends with the QB (15-R.Leonard)
+    # fumbling on the second lateral back to himself; ffopportunity charges
+    # Downs, the original receiver.
+    ("00-0038997", 2025, 18),
+    # --- Distinct case ---
+    # ATL wk1 2024, 00-0029604/K.Cousins: a botched shotgun snap ("Aborted")
+    # is fumbled by the center (fumbled_1_player_id=00-0036957/D.Dalman), but
+    # ffopportunity charges the QB, matching nflverse's own rusher_player_id
+    # for the play. Ours doesn't credit Cousins since the fumbler doesn't
+    # match any of the play's named skill-position ids.
+    ("00-0029604", 2024, 1),
+})
+
 
 def _join_sources(weekly: pl.DataFrame, ep: pl.DataFrame) -> pl.DataFrame:
     theirs = ep.filter(pl.col("player_id").is_not_null()).with_columns(
@@ -269,23 +329,20 @@ def cross_check(weekly: pl.DataFrame, ep: pl.DataFrame) -> list[str]:
                 f"cross-check {ours} vs ffopportunity {col}: {bad.height} player-weeks "
                 f"differ by more than {tolerance}, e.g. {_examples(bad, [ours, theirs])}"
             )
-    # Ours also counts sack fumbles, so it normally meets or exceeds theirs.
-    # Exception, observed in 2024: ffopportunity sometimes attributes a fumble
-    # to the wrong offensive player rather than the one play-by-play's
-    # fumbled_1_player_id names. ARI wk7: the pass to J.Conner is intercepted
-    # (never reaches him) and the *defender* fumbles the return (T.Tart) — ours
-    # correctly excludes it (a defender's fumble isn't an offensive stat), but
-    # ffopportunity still charges Conner. PIT wk5: a multi-lateral trick play's
-    # final fumble belongs to P.Freiermuth, but ffopportunity charges it to
-    # G.Pickens, the play's original receiver. ATL wk1: a botched shotgun snap
-    # is fumbled by the center (fumbled_1_player_id) but ffopportunity charges
-    # the QB (K.Cousins), matching nflverse's rusher_player_id for the play,
-    # which ours doesn't credit since the fumbler doesn't match any skill id.
-    # Each case is a single isolated fumble, so a player-week is allowed to
-    # trail by exactly one rather than loosening the check to uselessness.
-    FUMBLE_TOLERANCE = 1
+    # Ours also counts sack fumbles, so it must always meet or exceed theirs —
+    # strictly, except the isolated misattributions named in
+    # FUMBLE_MISATTRIBUTION_EXCEPTIONS above, each traced to a specific play
+    # where ffopportunity's own data, not ours, is wrong.
     theirs_fumbles = pl.col("rec_fumble_lost").fill_null(0) + pl.col("rush_fumble_lost").fill_null(0)
-    bad = joined.filter(pl.col("fumbles_lost").fill_null(0) < theirs_fumbles - FUMBLE_TOLERANCE)
+    exception_key = pl.concat_str(
+        [pl.col("player_id"), pl.col("season").cast(pl.Utf8), pl.col("week").cast(pl.Utf8)],
+        separator="|",
+    )
+    exception_keys = [f"{p}|{s}|{w}" for p, s, w in FUMBLE_MISATTRIBUTION_EXCEPTIONS]
+    bad = joined.filter(
+        (pl.col("fumbles_lost").fill_null(0) < theirs_fumbles)
+        & ~exception_key.is_in(exception_keys)
+    )
     if bad.height:
         problems.append(
             f"cross-check fumbles_lost below ffopportunity's rush + receiving fumbles in "
@@ -315,12 +372,18 @@ def _reference_points(receptions, rec_yds, rec_td, rec_2pt, rush_yds, rush_td, r
 # appears to have thrown off their parser. Ours (2) is what actually happened.
 # Observed max across 2024-2026, from either cause alone: 2.0 points.
 FANTASY_CONTRACT_TOLERANCE = 2.05
-# The file rounds every component (and the total) to two decimals
-# independently, so a sum of several components can be off from the reported
-# total by more than one 0.005 rounding step. Theoretical worst case for the
-# reference profile's 11 weighted components is ~0.13; observed max across
-# 2024-2026 is 0.213 (2025), so this carries some margin above that.
-EXPECTED_FANTASY_CONTRACT_TOLERANCE = 0.25
+# Traced, not a rounding bound: the file's per-category *_fantasy_points_exp
+# columns (pass/rec/rush) are each their own model output, not a recomputation
+# of our formula from the published x_* components — so the two don't have to
+# reconcile, and by a bit more than 2-decimal rounding could explain on its
+# own. Worst observed case, 2025 wk7, 00-0039910 (Jayden Daniels): the file's
+# rush_fantasy_points_exp is 9.42, but 0.1*42.44 + 6*0.70 + 2*0.39 = 9.224 from
+# its own x_rushing_yards/tds/2pt columns — a 0.196 residual on the rush leg
+# alone. The pass leg adds another 0.017 (file's pass_fantasy_points_exp 9.02
+# vs. 0.04*184.07 + 4*0.63 - 2*0.44 = 9.0028), summing to the observed
+# total_fantasy_points_exp residual of 0.2132 (18.44 file vs. 18.2268 computed;
+# rec leg is 0 here). Set to the traced max (0.2132) plus a small margin.
+EXPECTED_FANTASY_CONTRACT_TOLERANCE = 0.22
 
 
 def fantasy_contract(weekly: pl.DataFrame, ep: pl.DataFrame) -> list[str]:

@@ -39,7 +39,7 @@ Measured on 2024 + 2025 + 2026 (through week 2):
 
 Query performance is measured by the contract tests in [`:core:statquery`](../core/statquery/README.md), which run the app's actual generated SQL against this database.
 
-## Schema (version 2)
+## Schema (version 3)
 
 Long/narrow by design: **adding a metric is an `INSERT`, not a migration.**
 
