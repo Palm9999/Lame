@@ -1,6 +1,7 @@
 package dev.gridiron.app
 
 import android.app.Application
+import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatsRepository
@@ -13,23 +14,19 @@ import kotlinx.coroutines.SupervisorJob
 import java.io.File
 
 /**
- * The app's object graph, by hand. One screen doesn't justify Hilt yet; it
- * comes in once there are several features to wire.
+ * The app's object graph, by hand. Four repositories over one database
+ * connection and one preferences file still don't justify Hilt.
  */
 class GridironApplication : Application() {
-    val repository: StatsRepository by lazy {
-        StatsRepository(
-            DeferredQueryExecutor {
-                SqliteQueryExecutor.openReadOnly(StatsDbInstaller(this).install().path)
-            },
-        )
-    }
-
     // Outlives every screen; the preferences file is written on it.
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    private val executor by lazy {
+        DeferredQueryExecutor { SqliteQueryExecutor.openReadOnly(StatsDbInstaller(this).install().path) }
+    }
     private val prefs by lazy { UserPrefsStore.create(File(filesDir, "user_prefs.json"), appScope) }
 
-    val scoring: ScoringRepository by lazy { ScoringRepository(prefs) }
-    val tray: CompareTrayRepository by lazy { CompareTrayRepository(prefs) }
+    val deps: Deps by lazy {
+        Deps(StatsRepository(executor), CompareRepository(executor), ScoringRepository(prefs), CompareTrayRepository(prefs))
+    }
 }
