@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -48,15 +49,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.gridiron.core.charts.Sparkline
 import dev.gridiron.core.data.ColumnUi
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.GridPage
+import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.GridRowUi
 import dev.gridiron.core.data.MetricInfo
 import dev.gridiron.core.data.PositionFilter
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.Sparkline as SparklineData
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.describeFilter
 import dev.gridiron.core.data.weeksLabel
 import dev.gridiron.core.designsystem.HeaderStyle
 import dev.gridiron.core.designsystem.NumberStyle
@@ -68,6 +73,7 @@ import dev.gridiron.core.ui.MetricSheet
 import dev.gridiron.core.ui.ProfileChip
 import dev.gridiron.core.ui.SeasonWeeksSheet
 import dev.gridiron.core.ui.WeeksSheet
+import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.toImmutableList
 
 @Composable
@@ -121,6 +127,8 @@ fun GridScreen(
 private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, onCompare: () -> Unit, onEditProfiles: () -> Unit) {
     val r = state.request
     var showWeeks by remember { mutableStateOf(false) }
+    var showTeams by remember { mutableStateOf(false) }
+    var showFilters by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<MetricInfo?>(null) }
     val haptics = LocalHapticFeedback.current
     val snackbar = remember { SnackbarHostState() }
@@ -167,6 +175,22 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
                     )
                 }
             }
+            ChipRow {
+                val teams = r.teams
+                FilterChip(
+                    selected = teams.isNotEmpty(),
+                    onClick = { showTeams = true },
+                    label = { Text(when (teams.size) { 0 -> "All teams"; 1 -> teams.single(); else -> "${teams.size} teams" }) },
+                    modifier = Modifier.testTag("chip:teams"),
+                )
+                SnapChip(r.minSnapShare) { onEvent(GridEvent.MinSnapShareSelected(it)) }
+                FilterChip(
+                    selected = r.filters.isNotEmpty(),
+                    onClick = { showFilters = true },
+                    label = { Text(if (r.filters.isEmpty()) "Filters" else "Filters (${r.filters.size})") },
+                    modifier = Modifier.testTag("chip:filters"),
+                )
+            }
 
             Summary(state, onEvent)
 
@@ -182,6 +206,7 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
                     else -> PlayerTable(
                         page,
                         state.heat,
+                        state.sparklines,
                         onSort = { onEvent(GridEvent.SortBy(it.column)) },
                         onInfo = { info = it.info },
                         onRowLongClick = { row ->
@@ -213,6 +238,28 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
             original,
             onDismiss = { onEvent(GridEvent.TraySlotEditClosed) },
             onChange = { updated -> onEvent(GridEvent.ReplaceTraySlot(original, updated)) },
+        )
+    }
+    if (showTeams) {
+        TeamSheet(state.catalog.teams, r.teams, onChange = { onEvent(GridEvent.TeamsSelected(it)) }, onDismiss = { showTeams = false })
+    }
+    if (showFilters) {
+        FilterSheet(
+            catalog = state.catalog,
+            pack = r.pack,
+            sort = r.sort,
+            perGame = r.perGame,
+            applied = r.filters,
+            count = state.draftCount,
+            onDraftChanged = { onEvent(GridEvent.FilterDraftChanged(it)) },
+            onApply = {
+                onEvent(GridEvent.FiltersApplied(it))
+                showFilters = false
+            },
+            onDismiss = {
+                onEvent(GridEvent.FilterSheetClosed)
+                showFilters = false
+            },
         )
     }
 }
@@ -267,11 +314,26 @@ private fun ChipRow(content: @Composable () -> Unit) {
 }
 
 @Composable
+private fun SnapChip(share: Double?, onSelect: (Double?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    fun label(s: Double?) = if (s == null) "Any snaps" else "${(s * 100).toInt()}%+ snaps"
+    Box {
+        FilterChip(selected = share != null, onClick = { open = true }, label = { Text(label(share)) }, modifier = Modifier.testTag("chip:snaps"))
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            (listOf<Double?>(null) + GridRequest.SNAP_SHARE_CHOICES).forEach { s ->
+                DropdownMenuItem(text = { Text(label(s)) }, onClick = { open = false; onSelect(s) })
+            }
+        }
+    }
+}
+
+@Composable
 private fun Summary(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit) {
     val page = state.page
     val parts = buildList {
         if (page != null) add("${page.rows.size} players")
         page?.threshold?.let(::add)
+        state.request.filters.forEach { add(describeFilter(it, state.catalog)) }
         state.error?.let { add("Error: $it") }
     }
     Column {
@@ -307,6 +369,7 @@ private val HeaderHeight = 44.sp
 private fun PlayerTable(
     page: GridPage,
     heat: Boolean,
+    sparklines: ImmutableMap<String, SparklineData>,
     onSort: (ColumnUi) -> Unit,
     onInfo: (ColumnUi) -> Unit,
     onRowLongClick: (GridRowUi) -> Unit,
@@ -362,7 +425,17 @@ private fun PlayerTable(
                 )
                 Column {
                     Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(row.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(row.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        sparklines[row.playerId]?.takeIf { it.drawable }?.let { line ->
+                            val values = remember(line) { line.values.map { it?.toFloat() }.toImmutableList() }
+                            Sparkline(
+                                values,
+                                MaterialTheme.colorScheme.onSurfaceVariant,
+                                Modifier.padding(start = 6.dp).size(44.dp, 14.dp).testTag("spark:${row.playerId}"),
+                            )
+                        }
+                    }
                 }
             }
         },
@@ -387,6 +460,9 @@ private fun PlayerTable(
                 page.columns.forEachIndexed { i, col ->
                     append(col.info?.name ?: col.header).append(' ').append(row.cells[i].text)
                     if (i < page.columns.lastIndex) append(", ")
+                }
+                sparklines[row.playerId]?.takeIf { it.drawable }?.let { line ->
+                    append(". Last ${line.values.size} weeks: ").append(line.labels.joinToString(", "))
                 }
             }
         },

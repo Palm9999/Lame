@@ -5,11 +5,14 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
@@ -23,10 +26,13 @@ import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TraySlotUi
 import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.core.model.CompareSlot
+import dev.gridiron.core.statquery.Condition
+import dev.gridiron.core.statquery.Filter
 import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -106,7 +112,10 @@ class GridScreenTest {
     fun everyControlIsOnScreenWithoutScrolling() {
         val season = catalog.season(2025)
         show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)))
-        for (label in listOf("2025 ▾", "Wk 1–18 ▾", "PPR ▾", "Per game", "Heat", "All", "FLEX", "Opportunity", "Fantasy")) {
+        for (label in listOf(
+            "2025 ▾", "Wk 1–18 ▾", "PPR ▾", "Per game", "Heat", "All", "FLEX", "Opportunity", "Fantasy",
+            "All teams", "Any snaps", "Filters",
+        )) {
             compose.onNodeWithText(label).assertIsDisplayed()
         }
     }
@@ -183,5 +192,70 @@ class GridScreenTest {
         )
         show(ready(request).copy(tray = tray.toImmutableList()), dark = true)
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/6_fantasy_tray_dark.png")
+    }
+
+    @Test
+    fun filtersInTheChipsAndSummary() {
+        val season = catalog.season(2025)
+        val request = GridRequest(
+            season, season.defaultWeeks, StatPack.RECEIVING, positions = PositionFilter.WR,
+            teams = setOf("KC"), minSnapShare = 0.5,
+            filters = listOf(Filter(StatColumn.TARGETS, Condition.AtLeast(40.0))),
+        )
+        show(ready(request))
+        compose.onNodeWithText("KC").assertIsDisplayed()
+        compose.onNodeWithText("50%+ snaps").assertIsDisplayed()
+        compose.onNodeWithText("Filters (1)").assertIsDisplayed()
+        compose.onNodeWithText("TGT ≥ 40", substring = true).assertExists()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/7_filters_chips.png")
+    }
+
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test
+    fun teamSheetTogglesATeam() {
+        val season = catalog.season(2025)
+        val events = mutableListOf<GridEvent>()
+        show(ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING)), onEvent = { events += it })
+        compose.onNodeWithTag("chip:teams").performClick()
+        compose.waitForIdle()
+        captureScreenRoboImage("build/outputs/roborazzi/8_team_sheet.png")
+        compose.onNodeWithTag("team:KC").performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.TeamsSelected(setOf("KC"))), events)
+    }
+
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test
+    fun filterSheetMarksBadRowsAndAppliesOnlyCompleteOnes() {
+        val season = catalog.season(2025)
+        val events = mutableListOf<GridEvent>()
+        val applied = listOf(Filter(StatColumn.TARGETS, Condition.AtLeast(40.0)))
+        show(
+            ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING, filters = applied))
+                .copy(draftCount = DraftCount.Matches(57)),
+            onEvent = { events += it },
+        )
+        compose.onNodeWithTag("chip:filters").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("filter:add").performClick()
+        compose.onNodeWithTag("filter:value:1").performTextInput("abc") // incomplete: shown in error, skipped
+        compose.onNodeWithText("57 players match").assertExists()
+        captureScreenRoboImage("build/outputs/roborazzi/9_filter_sheet.png")
+        compose.onNodeWithTag("filter:apply").performClick()
+        assertEquals(GridEvent.FiltersApplied(applied), events.last())
+    }
+
+    @Test
+    fun sparklinesDrawInRowsDark() {
+        val season = catalog.season(2025)
+        val request = GridRequest(season, season.defaultWeeks, StatPack.FANTASY, positions = PositionFilter.WR)
+        val state = ready(request)
+        val lines = runBlocking { repo.sparklines(state.page!!) }
+        show(state.copy(sparklines = lines.toImmutableMap()), dark = true)
+        // Grid rows use clearAndSetSemantics, which drops descendant semantics
+        // (including the spark: testTag), and every row's content description
+        // matches this substring, so we check the first match exists rather
+        // than a single tagged node.
+        compose.onAllNodesWithContentDescription("Last 6 weeks:", substring = true).onFirst().assertExists()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/10_sparklines_dark.png")
     }
 }
