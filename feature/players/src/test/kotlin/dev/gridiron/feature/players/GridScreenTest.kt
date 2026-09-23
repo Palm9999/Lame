@@ -245,6 +245,21 @@ class GridScreenTest {
     }
 
     @Test
+    fun errorStaysVisibleAlongsideFilters() {
+        val season = catalog.season(2025)
+        val request = GridRequest(
+            season, season.defaultWeeks, StatPack.RECEIVING,
+            filters = listOf(
+                Filter(StatColumn.TARGETS, Condition.AtLeast(40.0)),
+                Filter(StatColumn.CATCH_RATE, Condition.AtLeast(0.5)),
+                Filter(StatColumn.SNAP_SHARE, Condition.AtLeast(0.3)),
+            ),
+        )
+        show(ready(request).copy(error = "boom"))
+        compose.onNodeWithText("Error: boom", substring = true).assertExists()
+    }
+
+    @Test
     fun sparklinesDrawInRowsDark() {
         val season = catalog.season(2025)
         val request = GridRequest(season, season.defaultWeeks, StatPack.FANTASY, positions = PositionFilter.WR)

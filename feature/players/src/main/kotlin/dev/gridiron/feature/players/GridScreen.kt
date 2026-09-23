@@ -331,10 +331,10 @@ private fun SnapChip(share: Double?, onSelect: (Double?) -> Unit) {
 private fun Summary(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit) {
     val page = state.page
     val parts = buildList {
+        state.error?.let { add("Error: $it") }
         if (page != null) add("${page.rows.size} players")
         page?.threshold?.let(::add)
         state.request.filters.forEach { add(describeFilter(it, state.catalog)) }
-        state.error?.let { add("Error: $it") }
     }
     Column {
         Row(
@@ -348,6 +348,7 @@ private fun Summary(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit) {
                 style = MaterialTheme.typography.labelMedium,
                 color = if (state.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             FilterChip(selected = state.request.perGame, onClick = { onEvent(GridEvent.PerGameToggled) }, label = { Text("Per game") })
             FilterChip(selected = state.heat, onClick = { onEvent(GridEvent.HeatToggled) }, label = { Text("Heat") })

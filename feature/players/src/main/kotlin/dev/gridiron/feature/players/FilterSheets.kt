@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -25,6 +24,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -101,7 +101,9 @@ internal fun FilterSheet(
                 Text("Values are per game.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             draft.rows.forEachIndexed { index, row ->
-                FilterRow(index, row, columns, ::name, onChange = { draft = draft.update(it) }, onRemove = { draft = draft.remove(row.id) })
+                key(row.id) {
+                    FilterRow(index, row, columns, ::name, onChange = { draft = draft.update(it) }, onRemove = { draft = draft.remove(row.id) })
+                }
             }
             TextButton(
                 onClick = { draft = draft.add(sort) },
