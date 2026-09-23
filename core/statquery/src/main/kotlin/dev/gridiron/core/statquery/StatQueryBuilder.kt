@@ -5,6 +5,20 @@ import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.ScoringRule
 
 /**
+ * [SCORING_COMPONENTS] split by whether a rule input is actual or expected
+ * (disjoint: every id is `x_`-prefixed in one set and not in the other). The
+ * `scoring()` CTEs pivot each separately, so a row only ever pays for the
+ * branches of the set it belongs to, not all of [SCORING_COMPONENTS].
+ */
+private val ACTUAL_COMPONENTS: List<Component> =
+    (RULE_INPUTS.values.flatMap { it.actual }.map { it.component } + BONUS_INPUTS.values.flatten())
+        .distinct()
+        .sortedBy { it.id }
+
+private val EXPECTED_COMPONENTS: List<Component> =
+    RULE_INPUTS.values.flatMap { it.expected }.map { it.component }.distinct().sortedBy { it.id }
+
+/**
  * Turns a [StatQuerySpec] into SQL over the ETL's long/narrow fact table.
  *
  * Query shape:
@@ -219,29 +233,69 @@ private class SqlWriter {
         line(")")
     }
 
-    /** Per-week points under [profile]: `wk` pivots, `fw` scores each week, `fsum` totals. */
+    /**
+     * Points under [profile]: `wk` pivots actual components per week (bonuses
+     * are per-game, so they need weekly granularity), `we` pivots expected
+     * components as one range-total per player (no bonus has an expectation,
+     * so xFP is just a linear sum and never needs a weekly breakdown). `fw`
+     * scores each actual week; `xf` scores each player's expected total
+     * directly. `fsum` combines both sides for every player either touched,
+     * zero-filling whichever side (if either) a player has no facts for.
+     *
+     * Split rather than one shared pivot: every scoring component together is
+     * wide enough (~40 columns) that a single scan paid for every column's
+     * branch on every one of its rows, which dominated this step's cost on a
+     * full season (measured ~190ms). Actual and expected ids are disjoint, so
+     * splitting the pivot in two — 25 actual columns over actual-only rows,
+     * 15 expected columns over expected-only rows — roughly halves the total
+     * row×column work (measured ~100ms combined).
+     */
     fun scoring(spec: StatQuerySpec, profile: ScoringProfile) {
-        val w = { c: Component -> "COALESCE(wk.w${SCORING_COMPONENTS.indexOf(c)}, 0)" }
+        val wActual = { c: Component -> "COALESCE(wk.w${ACTUAL_COMPONENTS.indexOf(c)}, 0)" }
+        val wExpected = { c: Component -> "COALESCE(we.e${EXPECTED_COMPONENTS.indexOf(c)}, 0)" }
         line("WITH wk AS (")
-        line("  SELECT s.player_id")
-        SCORING_COMPONENTS.forEachIndexed { i, c ->
-            line("       , SUM(CASE WHEN s.metric_id = ${text(c.id)} THEN s.value END) AS w$i")
+        line("  SELECT s.player_id, s.week")
+        ACTUAL_COMPONENTS.forEachIndexed { i, c ->
+            line("       , SUM(s.value) FILTER (WHERE s.metric_id = ${text(c.id)}) AS w$i")
         }
         line("  FROM player_week_stat s")
-        line("  WHERE s.metric_id IN (${SCORING_COMPONENTS.joinToString(", ") { text(it.id) }})")
+        line("  WHERE s.metric_id IN (${ACTUAL_COMPONENTS.joinToString(", ") { text(it.id) }})")
         line("    AND s.season = ${int(spec.season)}")
         line("    AND s.week BETWEEN ${int(spec.weeks.first)} AND ${int(spec.weeks.last)}")
         line("  GROUP BY s.player_id, s.week")
+        line("), we AS (")
+        line("  SELECT s.player_id")
+        EXPECTED_COMPONENTS.forEachIndexed { i, c ->
+            line("       , SUM(s.value) FILTER (WHERE s.metric_id = ${text(c.id)}) AS e$i")
+        }
+        line("  FROM player_week_stat s")
+        line("  WHERE s.metric_id IN (${EXPECTED_COMPONENTS.joinToString(", ") { text(it.id) }})")
+        line("    AND s.season = ${int(spec.season)}")
+        line("    AND s.week BETWEEN ${int(spec.weeks.first)} AND ${int(spec.weeks.last)}")
+        line("  GROUP BY s.player_id")
         line("), fw AS (")
         line("  SELECT wk.player_id")
-        line("       , ${points(profile, expected = false, w)} AS fp")
-        line("       , ${points(profile, expected = true, w)} AS xfp")
+        line("       , ${points(profile, expected = false, wActual)} AS fp")
         line("  FROM wk")
         line("  JOIN player p ON p.player_id = wk.player_id")
+        line("), xf AS (")
+        line("  SELECT we.player_id")
+        line("       , ${points(profile, expected = true, wExpected)} AS xfp")
+        line("  FROM we")
+        line("  JOIN player p ON p.player_id = we.player_id")
+        line("), players_scored AS (")
+        line("  SELECT player_id FROM wk")
+        line("  UNION")
+        line("  SELECT player_id FROM we")
         line("), fsum AS (")
-        line("  SELECT player_id, SUM(fp) AS fp, SUM(xfp) AS xfp, SUM(fp - xfp) AS oe")
-        line("  FROM fw")
-        line("  GROUP BY player_id")
+        line("  SELECT players_scored.player_id")
+        line("       , COALESCE(fp_agg.fp, 0) AS fp")
+        line("       , COALESCE(xf.xfp, 0) AS xfp")
+        line("       , COALESCE(fp_agg.fp, 0) - COALESCE(xf.xfp, 0) AS oe")
+        line("  FROM players_scored")
+        line("  LEFT JOIN (SELECT player_id, SUM(fp) AS fp FROM fw GROUP BY player_id) fp_agg")
+        line("    ON fp_agg.player_id = players_scored.player_id")
+        line("  LEFT JOIN xf ON xf.player_id = players_scored.player_id")
         line(")")
     }
 
