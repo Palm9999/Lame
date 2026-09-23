@@ -344,7 +344,7 @@ private fun Summary(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit) {
         ) {
             Text(
                 parts.joinToString(" · "),
-                Modifier.weight(1f),
+                Modifier.weight(1f).testTag("summary"),
                 style = MaterialTheme.typography.labelMedium,
                 color = if (state.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,

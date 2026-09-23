@@ -1,5 +1,6 @@
 package dev.gridiron.feature.players
 
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertWidthIsAtLeast
@@ -36,6 +37,7 @@ import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -256,7 +258,14 @@ class GridScreenTest {
             ),
         )
         show(ready(request).copy(error = "boom"))
-        compose.onNodeWithText("Error: boom", substring = true).assertExists()
+        // Existence alone isn't enough: Compose's semantics text holds the full,
+        // untruncated string regardless of maxLines/overflow, so a substring
+        // match would pass even if the error sat after the filters and got
+        // clipped off the visible two lines. Check order instead.
+        val summary = compose.onNodeWithTag("summary").fetchSemanticsNode().config[SemanticsProperties.Text].joinToString { it.text }
+        val errorIndex = summary.indexOf("Error: boom")
+        val filterIndex = summary.indexOf("TGT ≥")
+        assertTrue("expected \"Error: boom\" before \"TGT ≥\" in \"$summary\"", errorIndex in 0 until filterIndex)
     }
 
     @Test
