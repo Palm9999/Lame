@@ -73,7 +73,7 @@ A modal bottom sheet that edits a **draft** copy of the filters. The Grid doesn'
 
 **Rows.** Each filter row has four parts:
 
-- **Stat:** a picker listing every `StatColumn` with its catalog name. Columns in the current pack come first; the rest are grouped as the catalog groups them.
+- **Stat:** a picker listing every `StatColumn` with its catalog name. Columns in the current pack come first, then the other packs' columns in pack order, then any column no pack shows.
 - **Operator:** `≥`, `≤` or `between`. That covers every use found so far; strict `>` and `<` add nothing for continuous stats.
 - **Value (one or two):** a number field.
 - **Remove button.**
@@ -90,7 +90,7 @@ A modal bottom sheet that edits a **draft** copy of the filters. The Grid doesn'
 - Incomplete rows are shown in the error color and skipped by Apply.
 - For `between`, `min > max` counts as incomplete. The values are never silently swapped.
 
-Parsing logic is shared by extracting the scoring editor's `DecimalInput` (`:feature:scoring`) into `:core:data` as `DecimalInput`.
+Parsing logic is shared by moving the scoring editor's `DecimalInput` (`:feature:scoring`) into `:core:data`. It gains a `limit` parameter: filters allow up to 100,000, since season totals exceed the editor's 1,000.
 
 **Live count.**
 
@@ -146,7 +146,7 @@ This adds no new SQL paths, so per-week rates and scoring are exactly right by c
 - It uses `onSurfaceVariant` in both themes, with no heat color.
 - The row's accessibility description appends "last 6 weeks: 5, 7, –, 9, 4, 8".
 
-**Speed budget:** six week queries for a 1,000-row page (the Grid's limit) finish within 300ms on the CI machine against the real database. The budget is enforced by a test in `:core:data`, using the same CI-aware budget as the scoring speed test in `RealDatabaseContractTest`.
+**Speed budget:** six week queries for a full page (the Fantasy pack, every position) finish with a median under 300ms locally, or under 1,200ms when `CI` is set, against the real database. It's enforced by a test in `:core:data`, following the CI-aware pattern of the scoring speed test in `RealDatabaseContractTest`.
 
 ## 5. CSV export
 
@@ -162,7 +162,7 @@ This adds no new SQL paths, so per-week rates and scoring are exactly right by c
 
 **Sharing.**
 
-- An export action in the Grid's top bar writes the CSV to `cacheDir/exports/gridiron-<season>-<pack>.csv`.
+- An **Export** chip at the end of the filter chip row (the title bar has no room at 412dp) writes the CSV to `cacheDir/exports/gridiron-<season>-<pack>.csv`.
 - It shares the file with `ACTION_SEND`, type `text/csv`, through an `androidx.core.content.FileProvider`.
 - The FileProvider is declared in `:app` with authority `${applicationId}.exports`, limited to `cache/exports/`.
 - Each export overwrites the previous file of the same name.
