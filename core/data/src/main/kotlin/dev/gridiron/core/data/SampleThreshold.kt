@@ -39,8 +39,10 @@ public data class SampleThreshold(
             StatColumn.OFFENSE_SNAPS to "snaps",
         )
 
-        public fun forRequest(sort: StatColumn, pack: StatPack, playedWeeks: Int, perGame: Boolean): SampleThreshold? {
-            val sample = sort.sample ?: pack.population ?: return null
+        public fun forRequest(sort: StatColumn, pack: StatPack, playedWeeks: Int, perGame: Boolean): SampleThreshold? =
+            forSample(sort.sample ?: pack.population ?: return null, playedWeeks, perGame)
+
+        public fun forSample(sample: StatColumn, playedWeeks: Int, perGame: Boolean): SampleThreshold? {
             val perWeek = PER_WEEK[sample] ?: return null
             val noun = NOUN.getValue(sample)
             val weeks = playedWeeks.coerceAtLeast(1)
