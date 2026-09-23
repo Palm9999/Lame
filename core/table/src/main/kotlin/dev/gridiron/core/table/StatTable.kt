@@ -2,6 +2,7 @@ package dev.gridiron.core.table
 
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -28,9 +29,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
@@ -70,6 +73,9 @@ public fun <R> StatTable(
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
     horizontalState: ScrollState = rememberScrollState(),
+    /** Long-press on a row. Also exposed to TalkBack as a custom long-click action. */
+    onRowLongClick: ((R) -> Unit)? = null,
+    rowLongClickLabel: String? = null,
 ) {
     val density = LocalDensity.current
     val frozen = with(density) { frozenWidth.toDp() }
@@ -111,7 +117,16 @@ public fun <R> StatTable(
                     Modifier
                         .height(rowH)
                         .background(background)
-                        .clearAndSetSemantics { contentDescription = rowDescription(row) },
+                        .then(
+                            if (onRowLongClick == null) Modifier
+                            else Modifier.pointerInput(row) { detectTapGestures(onLongPress = { onRowLongClick(row) }) },
+                        )
+                        .clearAndSetSemantics {
+                            contentDescription = rowDescription(row)
+                            if (onRowLongClick != null) {
+                                onLongClick(label = rowLongClickLabel) { onRowLongClick(row); true }
+                            }
+                        },
                 ) {
                     Box(Modifier.width(frozen).fillMaxHeight().background(background).then(frozenEdge)) {
                         frozenCell(index, row)

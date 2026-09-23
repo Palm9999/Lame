@@ -3,6 +3,7 @@ package dev.gridiron.feature.players
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -16,10 +17,13 @@ import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PositionFilter
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.TraySlotUi
 import dev.gridiron.core.designsystem.GridironTheme
+import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -99,7 +103,7 @@ class GridScreenTest {
     fun everyControlIsOnScreenWithoutScrolling() {
         val season = catalog.season(2025)
         show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)))
-        for (label in listOf("2025 ▾", "Wk 1–18 ▾", "Per game", "Heat", "All", "FLEX", "Opportunity")) {
+        for (label in listOf("2025 ▾", "Wk 1–18 ▾", "PPR ▾", "Per game", "Heat", "All", "FLEX", "Opportunity", "Fantasy")) {
             compose.onNodeWithText(label).assertIsDisplayed()
         }
     }
@@ -127,5 +131,40 @@ class GridScreenTest {
         compose.onNodeWithText("Weighted Opportunity Rating").assertExists()
         compose.onNodeWithText("1.5 * target_share + 0.7 * air_yards_share").assertExists()
         captureScreenRoboImage("build/outputs/roborazzi/4_wopr_definition.png")
+    }
+
+    @Test
+    fun holdingARowAsksToAddThePlayer() {
+        val season = catalog.season(2025)
+        val events = mutableListOf<GridEvent>()
+        val state = ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY))
+        show(state, onEvent = { events += it })
+        val first = state.page!!.rows.first()
+        compose.onNodeWithContentDescription(first.name, substring = true).performTouchInput { longClick() }
+        assertEquals(listOf<GridEvent>(GridEvent.AddToCompare(first.playerId, first.name)), events)
+    }
+
+    @Test
+    fun fantasyPackWithTray2025() {
+        val season = catalog.season(2025)
+        val request = GridRequest(season, season.defaultWeeks, StatPack.FANTASY, positions = PositionFilter.FLEX)
+        val page = runBlocking { repo.grid(request, catalog) }
+        val tray = page.rows.take(2).map { TraySlotUi(CompareSlot(it.playerId, 2025, season.defaultWeeks), it.name, "2025 · Wk 1–18") }
+        show(ready(request).copy(tray = tray.toImmutableList()))
+        compose.onNodeWithTag("compareButton").assertIsDisplayed()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/5_fantasy_tray_2025.png")
+    }
+
+    @Test
+    fun fantasyPackWithTrayDark() {
+        val season = catalog.latest
+        val request = GridRequest(season, season.defaultWeeks, StatPack.FANTASY)
+        val page = runBlocking { repo.grid(request, catalog) }
+        val row = page.rows.first()
+        val tray = listOf(
+            TraySlotUi(CompareSlot(row.playerId, season.season, season.defaultWeeks), row.name, "${season.season} · Wk 1–${season.lastWeek}"),
+        )
+        show(ready(request).copy(tray = tray.toImmutableList()), dark = true)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/6_fantasy_tray_dark.png")
     }
 }

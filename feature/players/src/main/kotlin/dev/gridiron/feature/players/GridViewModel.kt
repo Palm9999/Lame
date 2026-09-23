@@ -6,23 +6,36 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.gridiron.core.data.Catalog
+import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.GridPage
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PositionFilter
+import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.TraySlotUi
+import dev.gridiron.core.data.describeSlot
+import dev.gridiron.core.model.CompareSlot
+import dev.gridiron.core.model.ScoringPresets
+import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.statquery.Direction
 import dev.gridiron.core.statquery.StatColumn
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.stateIn
@@ -39,6 +52,11 @@ sealed interface GridEvent {
     data class NameChanged(val name: String) : GridEvent
     data object PerGameToggled : GridEvent
     data object HeatToggled : GridEvent
+    data class ProfileSelected(val id: String) : GridEvent
+    data class AddToCompare(val playerId: String, val name: String) : GridEvent
+    data class RemoveFromTray(val slot: CompareSlot) : GridEvent
+    data class ReplaceTraySlot(val old: CompareSlot, val new: CompareSlot) : GridEvent
+    data object MessageShown : GridEvent
 }
 
 sealed interface GridUiState {
@@ -56,6 +74,10 @@ sealed interface GridUiState {
         val heat: Boolean,
         val page: GridPage?,
         val error: String?,
+        val profiles: ImmutableList<ScoringProfile> = ScoringPresets.all.toImmutableList(),
+        val tray: ImmutableList<TraySlotUi> = persistentListOf(),
+        /** A one-off message for the snackbar; the screen sends [GridEvent.MessageShown] after showing it. */
+        val message: String? = null,
     ) : GridUiState {
         val refreshing: Boolean get() = page?.request != request && error == null
     }
@@ -64,6 +86,8 @@ sealed interface GridUiState {
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class GridViewModel(
     private val repository: StatsRepository,
+    private val scoring: ScoringRepository,
+    private val tray: CompareTrayRepository,
     /** Coalesces bursts (typing, dragging the week slider) into one query. */
     debounceMillis: Long = 150,
 ) : ViewModel() {
@@ -84,6 +108,22 @@ class GridViewModel(
     private val catalog: Catalog?
         get() = (catalogLoad.value as? CatalogLoad.Loaded)?.catalog
 
+    private val message = MutableStateFlow<String?>(null)
+
+    private val trayUi: Flow<ImmutableList<TraySlotUi>> =
+        combine(tray.slots, catalogLoad) { slots, load -> slots to (load as? CatalogLoad.Loaded)?.catalog }
+            .mapLatest { (slots, catalog) ->
+                if (catalog == null) return@mapLatest persistentListOf()
+                val names = try {
+                    repository.players(slots.map { it.playerId })
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyMap()
+                }
+                slots.map { TraySlotUi(it, names[it.playerId]?.name ?: it.playerId, describeSlot(it, catalog)) }.toImmutableList()
+            }
+
     val state: StateFlow<GridUiState> =
         combine(catalogLoad, request, heat, lastPage, pageError) { load, r, h, page, err ->
             when (load) {
@@ -93,6 +133,8 @@ class GridViewModel(
                     if (r == null) GridUiState.Loading
                     else GridUiState.Ready(load.catalog, r, h, page, err?.takeIf { it.first == r }?.second)
             }
+        }.combine(combine(scoring.profiles, trayUi, message, ::Triple)) { base, (profiles, slots, msg) ->
+            if (base is GridUiState.Ready) base.copy(profiles = profiles, tray = slots, message = msg) else base
         }.stateIn(viewModelScope, SharingStarted.Eagerly, GridUiState.Loading)
 
     init {
@@ -106,7 +148,7 @@ class GridViewModel(
                 return@launch
             }
             catalogLoad.value = CatalogLoad.Loaded(c)
-            request.value = GridRequest(c.latest, c.latest.defaultWeeks, StatPack.OPPORTUNITY)
+            request.value = GridRequest(c.latest, c.latest.defaultWeeks, StatPack.OPPORTUNITY, scoring = scoring.active.first())
         }
         viewModelScope.launch {
             request.filterNotNull()
@@ -123,12 +165,53 @@ class GridViewModel(
                 }
                 .collect()
         }
+        viewModelScope.launch {
+            scoring.active.collect { profile -> request.update { it?.copy(scoring = profile) } }
+        }
+        viewModelScope.launch {
+            scoring.resetNotice.filter { it }.collect {
+                message.value = "Saved scoring profiles couldn't be read, so they were reset."
+                scoring.dismissResetNotice()
+            }
+        }
     }
 
     fun onEvent(event: GridEvent) {
-        if (event == GridEvent.HeatToggled) {
-            heat.update { !it }
-            return
+        when (event) {
+            GridEvent.HeatToggled -> {
+                heat.update { !it }
+                return
+            }
+            is GridEvent.ProfileSelected -> {
+                viewModelScope.launch { scoring.setActive(event.id) }
+                return
+            }
+            is GridEvent.AddToCompare -> {
+                val r = request.value ?: return
+                viewModelScope.launch {
+                    message.value = when (tray.add(CompareSlot(event.playerId, r.season.season, r.weeks))) {
+                        CompareTrayRepository.AddResult.ADDED -> "${event.name} added to compare"
+                        CompareTrayRepository.AddResult.ALREADY_THERE -> "${event.name} is already in compare"
+                        CompareTrayRepository.AddResult.FULL -> "Compare holds ${CompareTrayRepository.CAPACITY} players. Remove one first."
+                    }
+                }
+                return
+            }
+            is GridEvent.RemoveFromTray -> {
+                viewModelScope.launch { tray.remove(event.slot) }
+                return
+            }
+            is GridEvent.ReplaceTraySlot -> {
+                viewModelScope.launch {
+                    if (!tray.replace(event.old, event.new)) message.value = "That player and range is already in compare"
+                }
+                return
+            }
+            GridEvent.MessageShown -> {
+                message.value = null
+                return
+            }
+            else -> Unit
         }
         val c = catalog ?: return
         request.update { current -> current?.let { reduce(it, event, c) } }
@@ -158,10 +241,16 @@ class GridViewModel(
             is GridEvent.NameChanged -> r.copy(name = event.name)
             GridEvent.PerGameToggled -> r.copy(perGame = !r.perGame)
             GridEvent.HeatToggled -> r
+            is GridEvent.ProfileSelected -> r
+            is GridEvent.AddToCompare -> r
+            is GridEvent.RemoveFromTray -> r
+            is GridEvent.ReplaceTraySlot -> r
+            GridEvent.MessageShown -> r
         }
 
-        fun factory(repository: StatsRepository): ViewModelProvider.Factory = viewModelFactory {
-            initializer { GridViewModel(repository) }
-        }
+        fun factory(repository: StatsRepository, scoring: ScoringRepository, tray: CompareTrayRepository): ViewModelProvider.Factory =
+            viewModelFactory {
+                initializer { GridViewModel(repository, scoring, tray) }
+            }
     }
 }
