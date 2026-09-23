@@ -44,6 +44,7 @@ RANGE_CHECKS: tuple[RangeCheck, ...] = (
     RangeCheck("receptions", 0.0, 30.0),
     RangeCheck("targets", 0.0, 35.0),
     RangeCheck("carries", 0.0, 50.0),
+    RangeCheck("carries_eff", 0.0, 50.0),
     RangeCheck("passing_yards", -50.0, 800.0),
     RangeCheck("receiving_yards", -50.0, 400.0),
     RangeCheck("rushing_yards", -50.0, 400.0),
@@ -73,6 +74,11 @@ class CoherenceCheck:
 COHERENCE_CHECKS: tuple[CoherenceCheck, ...] = (
     CoherenceCheck("targets within team targets", "targets", "team_targets", "a <= b"),
     CoherenceCheck("carries within team carries", "carries", "team_carries", "a <= b"),
+    # `carries_eff` (kneels excluded) is a subset of `carries` (kneels
+    # included) for the same player, and — filtered the same way as
+    # `team_carries` — never exceeds the team's own kneel-excluded total.
+    CoherenceCheck("efficiency carries within carries", "carries_eff", "carries", "a <= b"),
+    CoherenceCheck("efficiency carries within team carries", "carries_eff", "team_carries", "a <= b"),
     CoherenceCheck("snaps within team snaps", "offense_snaps", "team_offense_snaps", "a <= b"),
     CoherenceCheck("cpoe attempts within attempts", "cpoe_n", "attempts", "a <= b"),
     # Team snaps are solved to agree with the published percentages, so derived

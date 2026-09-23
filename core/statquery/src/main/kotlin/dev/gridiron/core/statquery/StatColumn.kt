@@ -51,10 +51,14 @@ public enum class StatColumn(
     RZ_CARRIES("rz_carries", Total(C.RZ_CARRIES)),
     GZ_CARRIES("gz_carries", Total(C.GZ_CARRIES)),
     GL_CARRIES("gl_carries", Total(C.GL_CARRIES)),
-    CARRY_SHARE("carry_share", Ratio(C.CARRIES, C.TEAM_CARRIES)),
+    // `carries_eff` (kneels/spikes excluded) is these three ratios' true
+    // denominator, matching the ETL: `carries` itself (the visible column,
+    // box-score-complete) now includes kneels, so it no longer agrees with
+    // the stored weekly carry_share/rush_success_rate/rush_epa_per_carry.
+    CARRY_SHARE("carry_share", Ratio(C.CARRIES_EFF, C.TEAM_CARRIES)),
     WEIGHTED_OPPORTUNITIES("weighted_opportunities", Total(C.WEIGHTED_OPPORTUNITIES)),
-    RUSH_SUCCESS_RATE("rush_success_rate", Ratio(C.RUSH_SUCCESSES, C.CARRIES)),
-    RUSH_EPA_PER_CARRY("rush_epa_per_carry", Ratio(C.RUSH_EPA, C.CARRIES)),
+    RUSH_SUCCESS_RATE("rush_success_rate", Ratio(C.RUSH_SUCCESSES, C.CARRIES_EFF)),
+    RUSH_EPA_PER_CARRY("rush_epa_per_carry", Ratio(C.RUSH_EPA, C.CARRIES_EFF)),
 
     // Passing
     ATTEMPTS("attempts", Total(C.ATTEMPTS)),

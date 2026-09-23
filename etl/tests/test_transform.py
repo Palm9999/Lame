@@ -234,6 +234,23 @@ def test_kneel_does_not_change_rush_success_rate_epa_per_carry_or_carry_share():
     assert rb1["carry_share"] == pytest.approx(2 / 3)
 
 
+def test_carries_eff_is_stored_and_excludes_kneels_from_the_long_facts():
+    from gridiron_etl.metrics import METRICS
+
+    df = run([carry("RB1", 5), kneel("QB1", -2)])
+    long = transform.to_long(df, list(METRICS.keys()))
+
+    def value(pid: str, metric_id: str) -> float | None:
+        hit = long.filter((pl.col("player_id") == pid) & (pl.col("metric_id") == metric_id))
+        return hit["value"].item() if hit.height else None
+
+    # The box-score fact counts the kneel; the efficiency denominator doesn't.
+    assert value("QB1", "carries") == 1
+    assert value("QB1", "carries_eff") == 0
+    assert value("RB1", "carries") == 1
+    assert value("RB1", "carries_eff") == 1
+
+
 def test_spike_counts_as_a_pass_attempt_but_not_a_dropback():
     df = run([
         target("WR1", 10, complete=True, yds=10, qb="QB1", epa=0.8),
