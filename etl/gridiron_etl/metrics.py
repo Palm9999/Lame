@@ -47,6 +47,10 @@ class Metric:
     # Zero values are not stored: absent means zero. For scoring inputs, which
     # are zero for most player-weeks. An ETL concern only; not in the schema.
     sparse: bool = False
+    # Distribution family for on-device Monte Carlo: 'negbinom' | 'binomial' |
+    # 'gamma' | 'poisson'. None for metrics that aren't projected.
+    dist_family: str | None = None
+    zero_inflated: bool = False
 
 
 _M: list[Metric] = [

@@ -21,7 +21,7 @@ import polars as pl
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 DDL = """
 PRAGMA journal_mode = OFF;
@@ -51,7 +51,11 @@ CREATE TABLE metric (
     -- Range-aggregation components; never offered as a visible column.
     internal         INTEGER NOT NULL DEFAULT 0,
     -- Computed on the device (fantasy points); display metadata only, no facts.
-    computed         INTEGER NOT NULL DEFAULT 0
+    computed         INTEGER NOT NULL DEFAULT 0,
+    -- Distribution family for Monte Carlo / percentile reconstruction on-device:
+    -- 'negbinom' | 'binomial' | 'gamma' | 'poisson'. Null for non-projected metrics.
+    dist_family      TEXT,
+    zero_inflated    INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE player (
@@ -74,6 +78,70 @@ CREATE TABLE player_week_stat (
     metric_id TEXT NOT NULL,
     value     REAL NOT NULL,
     PRIMARY KEY (player_id, season, week, metric_id)
+) WITHOUT ROWID;
+
+-- One row per player/week/component/stage: the projected mean of a raw stat component.
+-- 'baseline' = post volume-cascade + shrinkage, before matchup/script/market.
+-- 'final'    = fully adjusted. See PRODUCT_SPEC-adjacent design doc §3 for why both ship.
+CREATE TABLE player_week_projection (
+    player_id TEXT NOT NULL,
+    season    INTEGER NOT NULL,
+    week      INTEGER NOT NULL,
+    metric_id TEXT NOT NULL,
+    stage     TEXT NOT NULL,
+    mean      REAL NOT NULL,
+    variance  REAL NOT NULL,
+    PRIMARY KEY (player_id, season, week, metric_id, stage)
+) WITHOUT ROWID;
+
+-- One row per player/week/factor: log-space attribution multiplier for one stage's
+-- adjustment. Scoring-profile-independent by construction.
+CREATE TABLE player_week_projection_factor (
+    player_id      TEXT NOT NULL,
+    season         INTEGER NOT NULL,
+    week           INTEGER NOT NULL,
+    factor         TEXT NOT NULL,
+    log_multiplier REAL NOT NULL,
+    note           TEXT,
+    PRIMARY KEY (player_id, season, week, factor)
+) WITHOUT ROWID;
+
+-- Rest-of-season aggregate: summed weekly means/variances, no per-week detail.
+CREATE TABLE player_ros_projection (
+    player_id  TEXT NOT NULL,
+    season     INTEGER NOT NULL,
+    as_of_week INTEGER NOT NULL,
+    metric_id  TEXT NOT NULL,
+    mean       REAL NOT NULL,
+    variance   REAL NOT NULL,
+    PRIMARY KEY (player_id, season, as_of_week, metric_id)
+) WITHOUT ROWID;
+
+-- Frozen at projection time; never overwritten. Joined against player_week_stat
+-- once actuals land to compute accuracy.
+CREATE TABLE projection_snapshot (
+    player_id          TEXT NOT NULL,
+    season              INTEGER NOT NULL,
+    week                INTEGER NOT NULL,
+    metric_id           TEXT NOT NULL,
+    projected_mean      REAL NOT NULL,
+    projected_variance  REAL NOT NULL,
+    snapshot_at         TEXT NOT NULL,
+    PRIMARY KEY (player_id, season, week, metric_id, snapshot_at)
+) WITHOUT ROWID;
+
+-- Precomputed accuracy, refreshed each ETL run.
+CREATE TABLE accuracy_summary (
+    position  TEXT NOT NULL,
+    season    INTEGER NOT NULL,
+    metric_id TEXT NOT NULL,
+    baseline  TEXT NOT NULL,
+    sample_n  INTEGER NOT NULL,
+    mae       REAL NOT NULL,
+    rmse      REAL NOT NULL,
+    bias      REAL NOT NULL,
+    r2        REAL,
+    PRIMARY KEY (position, season, metric_id, baseline)
 ) WITHOUT ROWID;
 """
 
@@ -110,12 +178,15 @@ def load_metrics(conn: sqlite3.Connection, rows: list[dict]) -> None:
     conn.executemany(
         """INSERT INTO metric (id, name, abbr, "group", definition, formula,
                                positions, tier, predicts, stability,
-                               higher_is_better, decimals, hot, internal, computed)
+                               higher_is_better, decimals, hot, internal, computed,
+                               dist_family, zero_inflated)
            VALUES (:id, :name, :abbr, :group, :definition, :formula,
                    :positions, :tier, :predicts, :stability,
-                   :higher_is_better, :decimals, :hot, :internal, :computed)""",
+                   :higher_is_better, :decimals, :hot, :internal, :computed,
+                   :dist_family, :zero_inflated)""",
         [{**r, "higher_is_better": int(r["higher_is_better"]), "hot": int(r["hot"]),
-          "internal": int(r["internal"]), "computed": int(r["computed"])}
+          "internal": int(r["internal"]), "computed": int(r["computed"]),
+          "zero_inflated": int(r.get("zero_inflated", False))}
          for r in rows],
     )
     conn.commit()
@@ -164,3 +235,44 @@ def finalize(conn: sqlite3.Connection, seasons: list[int],
     conn.execute("ANALYZE")
     conn.execute("VACUUM")
     conn.commit()
+
+
+def _load_chunked(conn: sqlite3.Connection, table: str, cols: list[str],
+                   df: pl.DataFrame, chunk: int = 100_000) -> int:
+    placeholders = ", ".join("?" for _ in cols)
+    stmt = f"INSERT OR REPLACE INTO {table} ({', '.join(cols)}) VALUES ({placeholders})"
+    rows = df.select(cols).rows()
+    for i in range(0, len(rows), chunk):
+        conn.executemany(stmt, rows[i:i + chunk])
+    conn.commit()
+    return len(rows)
+
+
+def load_projections(conn: sqlite3.Connection, df: pl.DataFrame) -> int:
+    return _load_chunked(conn, "player_week_projection",
+                          ["player_id", "season", "week", "metric_id", "stage",
+                           "mean", "variance"], df)
+
+
+def load_projection_factors(conn: sqlite3.Connection, df: pl.DataFrame) -> int:
+    return _load_chunked(conn, "player_week_projection_factor",
+                          ["player_id", "season", "week", "factor",
+                           "log_multiplier", "note"], df)
+
+
+def load_ros_projections(conn: sqlite3.Connection, df: pl.DataFrame) -> int:
+    return _load_chunked(conn, "player_ros_projection",
+                          ["player_id", "season", "as_of_week", "metric_id",
+                           "mean", "variance"], df)
+
+
+def load_snapshots(conn: sqlite3.Connection, df: pl.DataFrame) -> int:
+    return _load_chunked(conn, "projection_snapshot",
+                          ["player_id", "season", "week", "metric_id",
+                           "projected_mean", "projected_variance", "snapshot_at"], df)
+
+
+def load_accuracy_summary(conn: sqlite3.Connection, df: pl.DataFrame) -> int:
+    return _load_chunked(conn, "accuracy_summary",
+                          ["position", "season", "metric_id", "baseline", "sample_n",
+                           "mae", "rmse", "bias", "r2"], df)
