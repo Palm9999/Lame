@@ -143,7 +143,8 @@ class GridViewModel(
     /** Sparklines tagged with the page they were computed for, so a stale set is never shown. */
     private val sparklines = MutableStateFlow<Pair<GridPage, Map<String, Sparkline>>?>(null)
     private val draft = MutableStateFlow<List<Filter>?>(null)
-    private val draftCount = MutableStateFlow<DraftCount?>(null)
+    /** Count results tagged with the draft they were computed for, so a stale count never resurfaces after the sheet closes or a newer draft supersedes it. */
+    private val draftCount = MutableStateFlow<Pair<List<Filter>, DraftCount>?>(null)
 
     private val trayUi: Flow<ImmutableList<TraySlotUi>> =
         combine(tray.slots, catalogLoad) { slots, load -> slots to (load as? CatalogLoad.Loaded)?.catalog }
@@ -169,17 +170,25 @@ class GridViewModel(
                     else GridUiState.Ready(load.catalog, r, h, page, err?.takeIf { it.first == r }?.second)
             }
         }.combine(
-            combine(scoring.profiles, trayUi, message, editingSlot, combine(sparklines, draftCount, ::Pair), ::Extras),
+            combine(scoring.profiles, trayUi, message, editingSlot, combine(sparklines, draft, draftCount, ::Lines), ::Extras),
         ) { base, extras ->
             if (base is GridUiState.Ready) {
-                val lines = extras.lines.first?.takeIf { (page, _) -> page == base.page }?.second.orEmpty()
+                val lines = extras.lines.sparklines?.takeIf { (page, _) -> page == base.page }?.second.orEmpty()
+                // A count is only shown when it was computed for the draft the sheet
+                // currently holds; a stale in-flight or completed count is ignored
+                // rather than resurrecting after the draft moved on or the sheet closed.
+                val draftCount = when {
+                    extras.lines.draft == null -> null
+                    extras.lines.count?.first == extras.lines.draft -> extras.lines.count.second
+                    else -> DraftCount.Counting
+                }
                 base.copy(
                     profiles = extras.profiles,
                     tray = extras.tray,
                     message = extras.message,
                     editingSlot = extras.editingSlot,
                     sparklines = lines.toImmutableMap(),
-                    draftCount = extras.lines.second,
+                    draftCount = draftCount,
                 )
             } else {
                 base
@@ -191,7 +200,14 @@ class GridViewModel(
         val tray: ImmutableList<TraySlotUi>,
         val message: String?,
         val editingSlot: CompareSlot?,
-        val lines: Pair<Pair<GridPage, Map<String, Sparkline>>?, DraftCount?>,
+        val lines: Lines,
+    )
+
+    /** The sparkline and draft-count sources, combined once so each carries its own staleness tag. */
+    private data class Lines(
+        val sparklines: Pair<GridPage, Map<String, Sparkline>>?,
+        val draft: List<Filter>?,
+        val count: Pair<List<Filter>, DraftCount>?,
     )
 
     init {
@@ -242,13 +258,18 @@ class GridViewModel(
                 .mapLatest { filters ->
                     val r = request.value
                     if (filters == null || r == null) return@mapLatest
-                    draftCount.value = try {
+                    val result = try {
                         DraftCount.Matches(repository.count(r.copy(filters = filters)))
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         DraftCount.Unavailable
                     }
+                    // Tagged with the draft it was computed for: if this coroutine is slow
+                    // to cancel (debounce itself delays the cancelling emission) and the
+                    // draft has since moved on or the sheet closed, the state combine
+                    // above ignores this write instead of showing a stale count.
+                    draftCount.value = filters to result
                 }
                 .collect()
         }
@@ -320,17 +341,14 @@ class GridViewModel(
             }
             is GridEvent.FilterDraftChanged -> {
                 draft.value = event.filters
-                draftCount.value = DraftCount.Counting
                 return
             }
             GridEvent.FilterSheetClosed -> {
                 draft.value = null
-                draftCount.value = null
                 return
             }
             is GridEvent.FiltersApplied -> {
                 draft.value = null
-                draftCount.value = null
             }
             else -> Unit
         }

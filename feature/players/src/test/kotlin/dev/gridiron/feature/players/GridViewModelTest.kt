@@ -21,6 +21,7 @@ import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.testing.FakePrefsSource
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -150,6 +151,71 @@ class GridViewModelTest {
         val s = ready(vm)
         assertEquals(DraftCount.Unavailable, s.draftCount)
         assertNull(s.error)
+    }
+
+    @Test
+    fun `a stale count never resurrects after the sheet closes`() = runTest(dispatcher) {
+        // Gates the count query so it stays in flight past the sheet closing.
+        val gate = CompletableDeferred<Unit>()
+        val gated = object : QueryExecutor {
+            override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
+                if (query.sql.contains("SELECT COUNT(*)")) gate.await()
+                return executor.query(query, map)
+            }
+        }
+        val vm = GridViewModel(StatsRepository(gated, Locale.US), ScoringRepository(prefs), CompareTrayRepository(prefs))
+        ready(vm)
+
+        vm.onEvent(GridEvent.FilterDraftChanged(listOf(Filter(StatColumn.TARGETS, Condition.AtLeast(10.0)))))
+        // The debounce settles and the count query starts, then suspends on the gate.
+        advanceTimeBy(300)
+        runCurrent()
+
+        vm.onEvent(GridEvent.FilterSheetClosed)
+
+        // The stale query finally completes after the sheet is already closed.
+        gate.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull((vm.state.value as GridUiState.Ready).draftCount)
+    }
+
+    @Test
+    fun `an old draft's count never overwrites a newer draft's state`() = runTest(dispatcher) {
+        // Only the first COUNT query is gated, so it can finish late, after a newer draft was sent.
+        val gateA = CompletableDeferred<Unit>()
+        var countCalls = 0
+        val gated = object : QueryExecutor {
+            override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
+                if (query.sql.contains("SELECT COUNT(*)") && ++countCalls == 1) gateA.await()
+                return executor.query(query, map)
+            }
+        }
+        val vm = GridViewModel(StatsRepository(gated, Locale.US), ScoringRepository(prefs), CompareTrayRepository(prefs))
+        ready(vm)
+
+        val a = listOf(Filter(StatColumn.TARGETS, Condition.AtLeast(10.0)))
+        val b = listOf(Filter(StatColumn.TARGETS, Condition.AtLeast(20.0)))
+        vm.onEvent(GridEvent.FilterDraftChanged(a))
+        advanceTimeBy(300)
+        runCurrent()
+        // Draft A's count query is now running, suspended on gateA.
+
+        vm.onEvent(GridEvent.FilterDraftChanged(b))
+        // A's query finally completes while B is the current draft, but B's own
+        // debounce hasn't settled yet, so mapLatest hasn't cancelled A's block.
+        gateA.complete(Unit)
+        runCurrent()
+
+        assertEquals(
+            "A's stale result must not be shown once B is the draft",
+            DraftCount.Counting,
+            (vm.state.value as GridUiState.Ready).draftCount,
+        )
+
+        val s = ready(vm)
+        val applied = s.request.copy(filters = b)
+        assertEquals(DraftCount.Matches(repo.count(applied)), s.draftCount)
     }
 
     @Test
