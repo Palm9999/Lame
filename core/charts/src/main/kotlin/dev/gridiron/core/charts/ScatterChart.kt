@@ -137,8 +137,19 @@ public fun ScatterChart(
             val o = toScreen(p)
             drawCircle(p.color!!, 6.dp.toPx(), o)
             // Cleared of the 9dp+2dp selection ring drawn below, so a selected
-            // point's label doesn't get sliced by the ring's outline.
-            p.label?.let { drawText(measurer.measure(it, labelStyle), topLeft = o + Offset(14.dp.toPx(), -9.dp.toPx())) }
+            // point's label doesn't get sliced by the ring's outline. Flips to
+            // the point's left when the label would run off the right edge,
+            // and clamps top/bottom so it never draws off-canvas either way.
+            p.label?.let { text ->
+                val layout = measurer.measure(text, labelStyle)
+                val gap = 14.dp.toPx()
+                val lift = 9.dp.toPx()
+                var x = o.x + gap
+                if (x + layout.size.width > size.width) x = o.x - gap - layout.size.width
+                x = x.coerceIn(0f, (size.width - layout.size.width).coerceAtLeast(0f))
+                val y = (o.y - lift).coerceIn(0f, (size.height - gutter - layout.size.height).coerceAtLeast(0f))
+                drawText(layout, topLeft = Offset(x, y))
+            }
         }
         points.firstOrNull { it.id == selectedId }?.let { drawCircle(colors.primary, 9.dp.toPx(), toScreen(it), style = Stroke(2.dp.toPx())) }
     }

@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.SnackbarHost
@@ -144,6 +146,12 @@ private fun CompareContent(
                         text = { Text(if (landscape && t == CompareTab.BARS) "Bars + Table" else t.label) },
                     )
                 }
+            }
+            // Reserves the bar's height so tab content doesn't jump when a
+            // re-query (per-game, profile switch, add/remove a slot) starts;
+            // the old page stays on screen underneath while it runs.
+            Box(Modifier.fillMaxWidth().height(2.dp)) {
+                if (state.refreshing) LinearProgressIndicator(Modifier.fillMaxWidth().testTag("compareRefreshing"))
             }
 
             Box(Modifier.weight(1f)) {

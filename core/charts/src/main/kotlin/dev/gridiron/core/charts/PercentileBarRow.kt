@@ -48,7 +48,7 @@ public fun PercentileBarRow(
             .padding(horizontal = 16.dp, vertical = 6.dp)
             .semantics(mergeDescendants = true) {
                 contentDescription = "$label: " + bars.joinToString(", ") { b ->
-                    b.text + (b.fraction?.let { ", ${(it * 100).toInt()}th percentile" } ?: ", not ranked")
+                    b.text + (b.fraction?.let { ", ${ordinal((it * 100).toInt())} percentile" } ?: ", not ranked")
                 }
             },
     ) {

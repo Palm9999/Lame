@@ -18,14 +18,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.charts.Bar
 import dev.gridiron.core.charts.PercentileBarRow
+import dev.gridiron.core.charts.ordinal
 import dev.gridiron.core.data.CompareGroupUi
 import dev.gridiron.core.data.CompareRowUi
 import dev.gridiron.core.designsystem.SlotColors
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 
-/** "78th", or "—" for a slot with no ranked value at all. */
-internal fun percentileText(percentile: Float?): String = percentile?.let { "${(it * 100).toInt()}th" } ?: "—"
+/** "78th"/"92nd"/"83rd", or "—" for a slot with no ranked value at all. */
+internal fun percentileText(percentile: Float?): String = percentile?.let { ordinal((it * 100).toInt()) } ?: "—"
 
 /**
  * Every group as a composite row plus one bar row per stat. Long-press or

@@ -3,6 +3,7 @@ package dev.gridiron.feature.compare
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performTouchInput
@@ -188,5 +189,27 @@ class CompareScreenTest {
         compose.waitForIdle()
 
         compose.onNodeWithText(catalog.metrics.getValue("targets").definition).assertExists()
+    }
+
+    @Test
+    fun noRefreshingIndicatorOnAFreshLoad() {
+        val (a, b) = topIds(StatPack.RECEIVING, PositionFilter.WR, 2)
+        show(ready(CompareSlot(a, 2025, season2025), CompareSlot(b, 2025, season2025)))
+        compose.onNodeWithTag("compareRefreshing").assertDoesNotExist()
+    }
+
+    @Test
+    fun refreshingIndicatorShowsWhileARequeryIsInFlight() {
+        // The view model marks Ready.refreshing while a per-game toggle, profile
+        // switch, or tray change re-runs compare.compare(...) with the old page
+        // still on screen (CompareViewModel.recompute()); asserted here directly
+        // against the state -> UI mapping, since the real ~1 s DB query doesn't
+        // pause at a point a virtual-time test dispatcher could catch.
+        val (a, b) = topIds(StatPack.RECEIVING, PositionFilter.WR, 2)
+        val refreshing = ready(CompareSlot(a, 2025, season2025), CompareSlot(b, 2025, season2025)).copy(refreshing = true)
+        show(refreshing)
+        compose.onNodeWithTag("compareRefreshing").assertExists()
+        // The old page's data is still the one on screen, not a blank/loading page.
+        compose.onNodeWithText(refreshing.page.slots[0].name).assertExists()
     }
 }
