@@ -40,6 +40,7 @@ android {
 dependencies {
     implementation(projects.feature.players)
     implementation(projects.core.data)
+    implementation(projects.core.datastore)
     implementation(projects.core.designsystem)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)

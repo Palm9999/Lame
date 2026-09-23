@@ -11,9 +11,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        val repository = (application as GridironApplication).repository
+        val app = application as GridironApplication
         setContent {
-            GridironTheme { GridRoute(repository) }
+            GridironTheme {
+                // Task 13's navigation wires these callbacks to the Compare and scoring-editor screens.
+                GridRoute(app.repository, app.scoring, app.tray, onCompare = {}, onEditProfiles = {})
+            }
         }
     }
 }
