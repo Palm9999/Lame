@@ -1,6 +1,8 @@
 package dev.gridiron.feature.players
 
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -9,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
@@ -153,6 +156,20 @@ class GridScreenTest {
         show(ready(request).copy(tray = tray.toImmutableList()))
         compose.onNodeWithTag("compareButton").assertIsDisplayed()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/5_fantasy_tray_2025.png")
+    }
+
+    @Test
+    fun aTrayChipsRemoveButtonIsAFullSizeTouchTarget() {
+        val season = catalog.season(2025)
+        val request = GridRequest(season, season.defaultWeeks, StatPack.FANTASY)
+        val row = runBlocking { repo.grid(request, catalog) }.rows.first()
+        val slot = CompareSlot(row.playerId, 2025, season.defaultWeeks)
+        val events = mutableListOf<GridEvent>()
+        show(ready(request).copy(tray = listOf(TraySlotUi(slot, row.name, "2025 · Wk 1–18")).toImmutableList()), onEvent = { events += it })
+        val remove = compose.onNodeWithContentDescription("Remove ${row.name}")
+        remove.assertWidthIsAtLeast(48.dp).assertHeightIsAtLeast(48.dp)
+        remove.performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.RemoveFromTray(slot)), events)
     }
 
     @Test

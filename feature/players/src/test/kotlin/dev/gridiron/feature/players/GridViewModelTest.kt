@@ -27,6 +27,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
@@ -134,7 +135,7 @@ class GridViewModelTest {
     }
 
     @Test
-    fun longPressAddsToTheTrayAndSaysSo() = runTest(dispatcher) {
+    fun longPressAddsToTheTrayQuietlyAndExplainsARepeat() = runTest(dispatcher) {
         val vm = viewModel()
         advanceUntilIdle()
         val first = (vm.state.value as GridUiState.Ready).page!!.rows.first()
@@ -143,10 +144,44 @@ class GridViewModelTest {
         val ready = vm.state.value as GridUiState.Ready
         assertEquals(first.playerId, ready.tray.single().slot.playerId)
         assertEquals(first.name, ready.tray.single().name)
-        assertEquals("${first.name} added to compare", ready.message)
+        // The haptic and the new chip confirm an add; a snackbar would cover the tray's Compare button.
+        assertNull(ready.message)
         vm.onEvent(GridEvent.AddToCompare(first.playerId, first.name))
         advanceUntilIdle()
         assertEquals("${first.name} is already in compare", (vm.state.value as GridUiState.Ready).message)
+    }
+
+    @Test
+    fun editingATraySlotFollowsAcceptedChangesAndClosesOnARejectedOne() = runTest(dispatcher) {
+        val vm = viewModel()
+        advanceUntilIdle()
+        val (a, b) = (vm.state.value as GridUiState.Ready).page!!.rows.take(2)
+        vm.onEvent(GridEvent.AddToCompare(a.playerId, a.name))
+        vm.onEvent(GridEvent.AddToCompare(b.playerId, b.name))
+        advanceUntilIdle()
+        val (slotA, slotB) = (vm.state.value as GridUiState.Ready).tray.map { it.slot }
+
+        vm.onEvent(GridEvent.EditTraySlot(slotA))
+        advanceUntilIdle()
+        assertEquals(slotA, (vm.state.value as GridUiState.Ready).editingSlot)
+
+        val narrowed = slotA.copy(weeks = WeekRange(1, 4))
+        vm.onEvent(GridEvent.ReplaceTraySlot(slotA, narrowed))
+        advanceUntilIdle()
+        assertEquals(narrowed, (vm.state.value as GridUiState.Ready).editingSlot)
+
+        // Same player and range as slot B: rejected, so the sheet mustn't keep editing a slot that isn't in the tray.
+        vm.onEvent(GridEvent.ReplaceTraySlot(narrowed, slotB))
+        advanceUntilIdle()
+        val rejected = (vm.state.value as GridUiState.Ready)
+        assertEquals(listOf(narrowed, slotB), rejected.tray.map { it.slot })
+        assertNull(rejected.editingSlot)
+        assertEquals("That player and range is already in compare", rejected.message)
+
+        vm.onEvent(GridEvent.EditTraySlot(slotB))
+        vm.onEvent(GridEvent.TraySlotEditClosed)
+        advanceUntilIdle()
+        assertNull((vm.state.value as GridUiState.Ready).editingSlot)
     }
 
     @Test

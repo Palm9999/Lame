@@ -3,11 +3,14 @@ package dev.gridiron.feature.players
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
@@ -17,7 +20,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.key
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
@@ -57,12 +62,18 @@ internal fun TrayBar(
                                 }
                             },
                             trailingIcon = {
-                                Text(
-                                    "✕",
-                                    Modifier.clickable { onRemove(t.slot) }
-                                        .padding(4.dp)
+                                // A full 48 dp touch target, not just the glyph: easy to hit on a
+                                // phone. Sized explicitly because a chip's icon slot doesn't grant
+                                // an IconButton its minimum interactive size.
+                                Box(
+                                    Modifier.size(48.dp)
+                                        .clip(CircleShape)
+                                        .clickable(role = Role.Button) { onRemove(t.slot) }
                                         .semantics { contentDescription = "Remove ${t.name}" },
-                                )
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Text("✕")
+                                }
                             },
                         )
                     }

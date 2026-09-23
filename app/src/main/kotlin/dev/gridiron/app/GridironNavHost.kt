@@ -23,6 +23,15 @@ data class Deps(
     val tray: CompareTrayRepository,
 )
 
+/**
+ * Pushes [key] unless it is already on top, so a double tap (Compare, Edit
+ * profiles, a profile row) opens one screen, not two stacked copies that Back
+ * would then have to peel off one by one.
+ */
+internal fun <T> MutableList<T>.push(key: T) {
+    if (lastOrNull() != key) add(key)
+}
+
 @Composable
 fun GridironNavHost(deps: Deps) {
     val backStack = rememberNavBackStack(GridKey)
@@ -37,15 +46,15 @@ fun GridironNavHost(deps: Deps) {
             entry<GridKey> {
                 GridRoute(
                     deps.stats, deps.scoring, deps.tray,
-                    onCompare = { backStack.add(CompareKey) },
-                    onEditProfiles = { backStack.add(ScoringListKey) },
+                    onCompare = { backStack.push(CompareKey) },
+                    onEditProfiles = { backStack.push(ScoringListKey) },
                 )
             }
             entry<CompareKey> {
-                CompareRoute(deps.stats, deps.compare, deps.scoring, deps.tray, onBack = back, onEditProfiles = { backStack.add(ScoringListKey) })
+                CompareRoute(deps.stats, deps.compare, deps.scoring, deps.tray, onBack = back, onEditProfiles = { backStack.push(ScoringListKey) })
             }
             entry<ScoringListKey> {
-                ScoringListRoute(deps.scoring, onEdit = { backStack.add(ScoringEditKey(it)) }, onBack = back)
+                ScoringListRoute(deps.scoring, onEdit = { backStack.push(ScoringEditKey(it)) }, onBack = back)
             }
             entry<ScoringEditKey> { key -> ScoringEditRoute(key.profileId, deps.scoring, onDone = back) }
         },

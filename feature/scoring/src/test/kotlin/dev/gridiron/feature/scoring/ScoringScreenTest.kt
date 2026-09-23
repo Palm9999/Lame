@@ -1,11 +1,14 @@
 package dev.gridiron.feature.scoring
 
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.core.model.BonusStat
@@ -15,6 +18,7 @@ import dev.gridiron.core.model.ScoringRule
 import dev.gridiron.core.model.YardageBonus
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -65,6 +69,41 @@ class ScoringScreenTest {
         compose.onNodeWithText("Enter a number").assertIsDisplayed()
         compose.onNodeWithText("Save").assertIsNotEnabled()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/scoring_3_error.png")
+    }
+
+    @Test
+    fun systemBackWithUnsavedEditsAsksBeforeDiscarding() {
+        val editing = custom.toEditing(readOnly = false)
+        val dirty = editing.copy(weights = (editing.weights + (ScoringRule.PASS_TD to "6")).toImmutableMap())
+        var backs = 0
+        var dispatcher: OnBackPressedDispatcher? = null
+        compose.setContent {
+            dispatcher = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            GridironTheme(darkTheme = false) { ScoringEditScreen(dirty, {}, { backs++ }) }
+        }
+
+        // The back gesture, not the on-screen "← Back".
+        compose.runOnIdle { dispatcher!!.onBackPressed() }
+        compose.onNodeWithText("Discard changes?").assertIsDisplayed()
+        assertEquals(0, backs)
+
+        compose.onNodeWithText("Discard").performClick()
+        compose.runOnIdle { assertEquals(1, backs) }
+    }
+
+    @Test
+    fun systemBackWithNoEditsJustGoesBack() {
+        val clean = custom.toEditing(readOnly = false)
+        var backs = 0
+        var dispatcher: OnBackPressedDispatcher? = null
+        compose.setContent {
+            dispatcher = LocalOnBackPressedDispatcherOwner.current!!.onBackPressedDispatcher
+            GridironTheme(darkTheme = false) { ScoringEditScreen(clean, {}, { backs++ }) }
+        }
+        // No handler of ours is enabled, so the press falls through to the host (navigation, on the phone).
+        compose.runOnIdle { assertEquals(false, dispatcher!!.hasEnabledCallbacks()) }
+        compose.onNodeWithText("Discard changes?").assertDoesNotExist()
+        assertEquals(0, backs)
     }
 
     @Test

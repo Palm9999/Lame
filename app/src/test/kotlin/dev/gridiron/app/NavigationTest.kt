@@ -1,8 +1,6 @@
 package dev.gridiron.app
 
 import android.os.Looper
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -89,22 +87,6 @@ class NavigationTest {
         compose.waitForIdle()
     }
 
-    /**
-     * Invokes a node's semantics click action directly instead of
-     * [SemanticsNodeInteraction.performClick], which injects a touch at the
-     * node's on-screen center. Robolectric's window never reports real system
-     * bar insets, so a control flush against the bottom of the screen (the
-     * tray's Compare button) can compute a center that the real touch
-     * dispatcher silently drops. The semantics action is what an accessibility
-     * service invokes and exercises the same click handler.
-     */
-    private fun SemanticsNodeInteraction.clickViaAccessibilityAction() {
-        val node = fetchSemanticsNode()
-        compose.runOnUiThread {
-            node.config[SemanticsActions.OnClick].action?.invoke()
-        }
-    }
-
     @Test
     fun gridToCompareAndBackKeepsTheTray() {
         val (first, second) = firstTwoPlayerNames()
@@ -116,7 +98,9 @@ class NavigationTest {
         compose.onNodeWithContentDescription(second, substring = true).performTouchInput { longClick() }
         compose.waitForIdle()
 
-        compose.onNodeWithTag("compareButton").clickViaAccessibilityAction()
+        // A real touch, straight after the second long-press: nothing (such as
+        // a snackbar) may sit over the tray's Compare button.
+        compose.onNodeWithTag("compareButton").performClick()
         settle()
 
         compose.onNodeWithText("Compare").assertExists()
@@ -128,6 +112,10 @@ class NavigationTest {
 
         compose.onNodeWithTag("compareButton").assertExists()
         compose.onNodeWithText("Compare 2").assertExists()
+
+        compose.onNodeWithContentDescription("Remove $first").performClick()
+        settle()
+        compose.onNodeWithText("Compare 1").assertExists()
     }
 
     @Test
