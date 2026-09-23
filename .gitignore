@@ -27,4 +27,3 @@ captures/
 
 # Personal Claude Code settings (not shared)
 .claude/settings.local.json
-.claude/output-styles/
