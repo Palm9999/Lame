@@ -6,11 +6,17 @@ import dev.gridiron.core.data.PositionFilter
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.sparklineWeeks
 import dev.gridiron.core.data.weeksLabel
+import dev.gridiron.core.database.QueryExecutor
+import dev.gridiron.core.database.ResultRow
 import dev.gridiron.core.datastore.UserPrefs
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.WeekRange
+import dev.gridiron.core.statquery.Condition
 import dev.gridiron.core.statquery.Direction
+import dev.gridiron.core.statquery.Filter
+import dev.gridiron.core.statquery.SqlQuery
 import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.testing.FakePrefsSource
 import dev.gridiron.core.testing.JdbcQueryExecutor
@@ -19,8 +25,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.resetMain
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import org.junit.After
@@ -65,6 +73,85 @@ class GridViewModelTest {
         return s as GridUiState.Ready
     }
 
+    private fun trackingExecutor(onQuery: (SqlQuery) -> Unit): QueryExecutor = object : QueryExecutor {
+        override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
+            onQuery(query)
+            return executor.query(query, map)
+        }
+    }
+
+    @Test
+    fun `sparklines load for the current page`() = runTest(dispatcher) {
+        val vm = viewModel()
+        val s = ready(vm)
+        val page = s.page!!
+        assertEquals(page.rows.map { it.playerId }.toSet(), s.sparklines.keys)
+        val window = sparklineWeeks(page.request.season, page.request.weeks)
+        assertTrue(s.sparklines.values.all { it.weeks == window })
+    }
+
+    @Test
+    fun `a sparkline failure leaves the Grid alone`() = runTest(dispatcher) {
+        // Only the sparkline queries restrict to a player list.
+        val failing = trackingExecutor { if ("player_id IN (" in it.sql) error("boom") }
+        val vm = GridViewModel(StatsRepository(failing, Locale.US), ScoringRepository(prefs), CompareTrayRepository(prefs))
+        val s = ready(vm)
+        assertTrue(s.page!!.rows.isNotEmpty())
+        assertNull(s.error)
+        assertTrue(s.sparklines.isEmpty())
+    }
+
+    @Test
+    fun `the draft count is debounced, counts the draft and clears when the sheet closes`() = runTest(dispatcher) {
+        var counts = 0
+        val counting = trackingExecutor { if (it.sql.contains("SELECT COUNT(*)")) counts++ }
+        val vm = GridViewModel(StatsRepository(counting, Locale.US), ScoringRepository(prefs), CompareTrayRepository(prefs))
+        ready(vm)
+        val before = counts
+
+        listOf(10.0, 30.0, 60.0).forEach {
+            vm.onEvent(GridEvent.FilterDraftChanged(listOf(Filter(StatColumn.TARGETS, Condition.AtLeast(it)))))
+        }
+        runCurrent()
+        assertEquals(DraftCount.Counting, (vm.state.value as GridUiState.Ready).draftCount)
+        val s = ready(vm)
+        assertEquals("one count for three quick edits", before + 1, counts)
+        val applied = s.request.copy(filters = listOf(Filter(StatColumn.TARGETS, Condition.AtLeast(60.0))))
+        assertEquals(DraftCount.Matches(repo.count(applied)), s.draftCount)
+        assertTrue("the draft must not reach the Grid", s.request.filters.isEmpty())
+
+        vm.onEvent(GridEvent.FilterSheetClosed)
+        assertNull(ready(vm).draftCount)
+    }
+
+    @Test
+    fun `applying filters narrows the page and clears the draft`() = runTest(dispatcher) {
+        val vm = viewModel()
+        // The catalog must be loaded before a season change can take effect.
+        ready(vm)
+        vm.onEvent(GridEvent.SeasonSelected(2025))
+        val before = ready(vm).page!!.rows.size
+        val f = Filter(StatColumn.TARGETS, Condition.AtLeast(100.0))
+        vm.onEvent(GridEvent.FilterDraftChanged(listOf(f)))
+        vm.onEvent(GridEvent.FiltersApplied(listOf(f)))
+        val s = ready(vm)
+        val page = s.page!!
+        assertEquals(listOf(f), page.request.filters)
+        assertTrue(page.rows.size in 1 until before)
+        assertNull(s.draftCount)
+    }
+
+    @Test
+    fun `a failed count says so without blocking`() = runTest(dispatcher) {
+        val failing = trackingExecutor { if (it.sql.contains("SELECT COUNT(*)")) error("boom") }
+        val vm = GridViewModel(StatsRepository(failing, Locale.US), ScoringRepository(prefs), CompareTrayRepository(prefs))
+        ready(vm)
+        vm.onEvent(GridEvent.FilterDraftChanged(listOf(Filter(StatColumn.TARGETS, Condition.AtLeast(10.0)))))
+        val s = ready(vm)
+        assertEquals(DraftCount.Unavailable, s.draftCount)
+        assertNull(s.error)
+    }
+
     @Test
     fun `opens on the latest season's opportunity leaders`() = runTest(dispatcher) {
         val vm = viewModel()
@@ -96,15 +183,8 @@ class GridViewModelTest {
     @Test
     fun `a burst of events runs one query for the final state`() = runTest(dispatcher) {
         var queries = 0
-        val counting = object : dev.gridiron.core.database.QueryExecutor {
-            override suspend fun <T> query(
-                query: dev.gridiron.core.statquery.SqlQuery,
-                map: (dev.gridiron.core.database.ResultRow) -> T,
-            ): List<T> {
-                queries++
-                return executor.query(query, map)
-            }
-        }
+        // Sparklines run their own queries after each page, so only count grid queries.
+        val counting = trackingExecutor { if (!("player_id IN (" in it.sql)) queries++ }
         val vm = GridViewModel(StatsRepository(counting, Locale.US), ScoringRepository(prefs), CompareTrayRepository(prefs), debounceMillis = 150)
         ready(vm)
         val before = queries
@@ -250,5 +330,26 @@ class GridReduceTest {
         assertEquals("Wk 1–2", weeksLabel(inProgress.season, inProgress.weeks))
         val single = start.copy(weeks = WeekRange(7, 7))
         assertEquals("Week 7", weeksLabel(single.season, single.weeks))
+    }
+
+    @Test
+    fun `team, snap and advanced filters survive pack and season changes`() {
+        val f = Filter(StatColumn.TARGETS, Condition.AtLeast(50.0))
+        val r = reduce(
+            GridEvent.TeamsSelected(setOf("KC")),
+            GridEvent.MinSnapShareSelected(0.5),
+            GridEvent.FiltersApplied(listOf(f)),
+            GridEvent.PackSelected(StatPack.RUSHING),
+            GridEvent.SeasonSelected(2024),
+        )
+        assertEquals(setOf("KC"), r.teams)
+        assertEquals(0.5, r.minSnapShare)
+        assertEquals(listOf(f), r.filters)
+    }
+
+    @Test
+    fun `draft edits and closing the sheet never touch the request`() {
+        val f = Filter(StatColumn.TARGETS, Condition.AtLeast(50.0))
+        assertEquals(start, reduce(GridEvent.FilterDraftChanged(listOf(f)), GridEvent.FilterSheetClosed))
     }
 }
