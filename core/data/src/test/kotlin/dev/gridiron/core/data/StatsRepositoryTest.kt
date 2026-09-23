@@ -1,5 +1,6 @@
 package dev.gridiron.core.data
 
+import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.statquery.Direction
 import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.testing.JdbcQueryExecutor
@@ -115,5 +116,27 @@ class StatsRepositoryTest {
 
         val found = repo.grid(base.copy(name = below.name), catalog).rows.first { it.playerId == below.playerId }
         assertTrue(found.cells.all { it.heat == null }, "an unqualified player shouldn't be ranked")
+    }
+
+    @Test
+    fun `the fantasy pack ranks by points under the requested profile`() = runTest {
+        val season = catalog.season(2025)
+        val ppr = repo.grid(GridRequest(season, season.defaultWeeks, StatPack.FANTASY, scoring = ScoringPresets.PPR), catalog)
+        val std = repo.grid(GridRequest(season, season.defaultWeeks, StatPack.FANTASY, scoring = ScoringPresets.STANDARD), catalog)
+        assertEquals(StatColumn.FANTASY_POINTS, ppr.columns.first().column)
+        assertEquals("FPTS", ppr.columns.first().header)
+        val points = ppr.rows.map { it.cells.first().text.replace(",", "").toDouble() }
+        assertEquals(points.sortedDescending(), points)
+        assertTrue(ppr.rows.first().cells.first().text.matches(Regex("""\d+\.\d""")))
+        // Receptions are worth a point in PPR and nothing in Standard.
+        assertTrue(points.first() > std.rows.first().cells.first().text.replace(",", "").toDouble())
+    }
+
+    @Test
+    fun `players are looked up by id`() = runTest {
+        val some = repo.grid(GridRequest(catalog.latest, catalog.latest.defaultWeeks, StatPack.OPPORTUNITY), catalog).rows.take(3)
+        val found = repo.players(some.map { it.playerId } + "missing")
+        assertEquals(some.map { it.playerId }.toSet(), found.keys)
+        assertEquals(some.first().name, found.getValue(some.first().playerId).name)
     }
 }

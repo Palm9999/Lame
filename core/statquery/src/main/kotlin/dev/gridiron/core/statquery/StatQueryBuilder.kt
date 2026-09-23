@@ -107,6 +107,21 @@ public object StatQueryBuilder {
         w.line("LIMIT ${w.int(limit)}")
         return w.build()
     }
+
+    /**
+     * Name, position and team for [ids], in no particular order. Null when
+     * [ids] is empty. Result columns: player_id, full_name, position, team.
+     */
+    public fun players(ids: Collection<String>): SqlQuery? {
+        val distinct = ids.distinct().sorted()
+        if (distinct.isEmpty()) return null
+        require(distinct.size <= StatQuerySpec.MAX_LIMIT) { "at most ${StatQuerySpec.MAX_LIMIT} ids" }
+        val w = SqlWriter()
+        w.line("SELECT player_id, full_name, position, team")
+        w.line("FROM player")
+        w.line("WHERE player_id IN (${distinct.joinToString(", ") { w.text(it) }})")
+        return w.build()
+    }
 }
 
 /** The columns a query computes and the components they need, with stable aliases. */

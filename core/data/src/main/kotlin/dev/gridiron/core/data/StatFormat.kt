@@ -7,6 +7,9 @@ import dev.gridiron.core.statquery.StatColumn.CARRY_SHARE
 import dev.gridiron.core.statquery.StatColumn.CATCH_RATE
 import dev.gridiron.core.statquery.StatColumn.CPOE
 import dev.gridiron.core.statquery.StatColumn.EPA_PER_DROPBACK
+import dev.gridiron.core.statquery.StatColumn.EXPECTED_FANTASY_POINTS
+import dev.gridiron.core.statquery.StatColumn.FANTASY_POINTS
+import dev.gridiron.core.statquery.StatColumn.FPOE
 import dev.gridiron.core.statquery.StatColumn.RACR
 import dev.gridiron.core.statquery.StatColumn.RUSH_EPA_PER_CARRY
 import dev.gridiron.core.statquery.StatColumn.RUSH_SUCCESS_RATE
@@ -58,6 +61,9 @@ public class StatFormat(private val locale: Locale = Locale.getDefault()) {
             // Already in percentage points.
             CPOE to 1,
             TOTAL_EPA to 1,
+            FANTASY_POINTS to 1,
+            EXPECTED_FANTASY_POINTS to 1,
+            FPOE to 1,
         )
     }
 }

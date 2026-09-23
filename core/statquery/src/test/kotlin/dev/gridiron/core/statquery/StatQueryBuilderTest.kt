@@ -445,4 +445,18 @@ class StatQueryBuilderTest {
             assertEquals(1, (db.scalar("SELECT COUNT(*) FROM player") as Number).toInt())
         }
     }
+
+    @Nested
+    inner class Players {
+        @Test
+        fun `players looks up ids with every id bound`() {
+            db.player("a", "Alpha One")
+            db.player("b", "Beta Two", position = "RB")
+            val q = StatQueryBuilder.players(listOf("b", "a", "zzz"))!!
+            val rows = db.rows(q).map { it[0] as String to it[2] as String }
+            assertEquals(listOf("a" to "WR", "b" to "RB"), rows.sortedBy { it.first })
+            assertTrue(q.binds.containsAll(listOf(Bind.Text("a"), Bind.Text("b"), Bind.Text("zzz"))))
+            assertNull(StatQueryBuilder.players(emptyList()))
+        }
+    }
 }
