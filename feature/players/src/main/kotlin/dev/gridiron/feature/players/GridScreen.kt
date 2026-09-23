@@ -199,15 +199,22 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
                 )
                 val context = LocalContext.current
                 val scope = rememberCoroutineScope()
+                var exporting by remember { mutableStateOf(false) }
                 AssistChip(
                     onClick = {
+                        if (exporting) return@AssistChip
                         val page = state.page ?: return@AssistChip
+                        exporting = true
                         scope.launch {
-                            val csv = withContext(Dispatchers.Default) { CsvExport.build(page, state.catalog) }
-                            if (!CsvShare.share(context, CsvExport.fileName(page.request), csv)) snackbar.showSnackbar("Couldn't export")
+                            try {
+                                val csv = withContext(Dispatchers.Default) { CsvExport.build(page, state.catalog) }
+                                if (!CsvShare.share(context, CsvExport.fileName(page.request), csv)) snackbar.showSnackbar("Couldn't export")
+                            } finally {
+                                exporting = false
+                            }
                         }
                     },
-                    enabled = state.page != null,
+                    enabled = state.page != null && !exporting,
                     label = { Text("Export") },
                     modifier = Modifier.testTag("chip:export"),
                 )

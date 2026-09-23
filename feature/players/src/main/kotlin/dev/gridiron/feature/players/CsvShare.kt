@@ -20,13 +20,18 @@ public object CsvShare {
             withContext(Dispatchers.IO) {
                 val dir = File(context.cacheDir, "exports").apply { mkdirs() }
                 val tmp = File(dir, "$fileName.tmp")
-                tmp.writeText(csv)
-                val out = File(dir, fileName)
-                if (!tmp.renameTo(out)) {
-                    out.delete()
-                    if (!tmp.renameTo(out)) throw IOException("couldn't move $tmp to $out")
+                try {
+                    tmp.writeText(csv)
+                    val out = File(dir, fileName)
+                    if (!tmp.renameTo(out)) {
+                        out.delete()
+                        if (!tmp.renameTo(out)) throw IOException("couldn't move $tmp to $out")
+                    }
+                    out
+                } catch (e: IOException) {
+                    tmp.delete()
+                    throw e
                 }
-                out
             }
         } catch (e: IOException) {
             return false
