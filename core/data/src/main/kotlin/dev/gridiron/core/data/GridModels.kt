@@ -96,6 +96,9 @@ public data class GridRowUi(
     val name: String,
     /** "WR · KC · 17 g" */
     val detail: String,
+    val position: String?,
+    val team: String?,
+    val games: Int,
     val cells: ImmutableList<CellUi>,
 )
 

@@ -4,7 +4,7 @@ import dev.gridiron.core.model.WeekRange
 
 /**
  * One row's trend: the sorted stat for each week of [weeks], null where the
- * player didn't play. [labels] are the same values formatted for a screen reader.
+ * player didn't play or the stat has no value that week (a rate with no attempts). [labels] are the same values formatted for a screen reader.
  */
 public data class Sparkline(val weeks: IntRange, val values: List<Double?>, val labels: List<String>) {
     public val drawable: Boolean get() = values.count { it != null } >= 2

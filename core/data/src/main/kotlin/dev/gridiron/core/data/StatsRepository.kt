@@ -49,13 +49,16 @@ public class StatsRepository(
         val layout = q.layout
 
         val rows = executor.query(q.query) { r ->
-            val games = r.long(GridLayout.GAMES)
-            val position = r.textOrNull(GridLayout.POSITION) ?: "–"
-            val team = r.textOrNull(GridLayout.TEAM) ?: "FA"
+            val games = r.long(GridLayout.GAMES).toInt()
+            val position = r.textOrNull(GridLayout.POSITION)
+            val team = r.textOrNull(GridLayout.TEAM)
             GridRowUi(
                 playerId = r.text(GridLayout.PLAYER_ID),
                 name = r.text(GridLayout.FULL_NAME),
-                detail = "$position · $team · $games g",
+                detail = "${position ?: "–"} · ${team ?: "FA"} · $games g",
+                position = position,
+                team = team,
+                games = games,
                 cells = spec.columns.map { column ->
                     val pct = r.doubleOrNull(layout.percentileIndex(column))
                     CellUi(
