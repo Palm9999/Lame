@@ -21,3 +21,6 @@ captures/
 
 # Kotlin 2.x session data
 .kotlin/
+
+# Agent worktrees (temporary checkouts used while building in parallel)
+.claude/worktrees/
