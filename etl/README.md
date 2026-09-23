@@ -2,7 +2,7 @@
 
 Turns [nflverse](https://github.com/nflverse/nflverse-data) releases into a compact, pre-indexed SQLite database for the Android app. Expected-points components come from [ffopportunity](https://github.com/ffverse/ffopportunity), an ffverse project.
 
-The app never touches upstream sources. A single season of play-by-play is ~98 MB of CSV; this pipeline reduces three full seasons (two complete, one in progress) to **7.9 MB gzipped**.
+The app never touches upstream sources. A single season of play-by-play is ~98 MB of CSV; this pipeline reduces three full seasons (two complete, one in progress) to **8.0 MB gzipped**.
 
 ## Usage
 
@@ -30,11 +30,11 @@ Measured on 2024 + 2025 + 2026 (through week 2):
 
 | | |
 |---|---|
-| Facts | 565,807 |
+| Facts | 577,407 |
 | Players | 832 |
-| Metrics | 80 (41 visible, 39 internal, including 15 `x_*` expected components) |
-| On disk | 43.3 MB |
-| Shipped (gzip -9) | 7.9 MB |
+| Metrics | 81 (41 visible, 40 internal, including 15 `x_*` expected components) |
+| On disk | 44.1 MB |
+| Shipped (gzip -9) | 8.0 MB |
 | Build time (cached) | ~11 s |
 
 Query performance is measured by the contract tests in [`:core:statquery`](../core/statquery/README.md), which run the app's actual generated SQL against this database.

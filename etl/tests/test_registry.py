@@ -38,3 +38,12 @@ def test_existing_metrics_are_not_sparse():
     # Zeros stay stored for everything the Grid already shows.
     for mid in ("targets", "carries", "interceptions", "g", "team_targets"):
         assert mid not in sparse_metric_ids()
+
+
+def test_carries_eff_is_an_internal_denominator_like_its_peers():
+    # Same treatment as team_carries: internal (never a column), not sparse
+    # (zeros stay stored, matching `carries` itself).
+    m = METRICS["carries_eff"]
+    assert m.internal
+    assert not m.computed
+    assert "carries_eff" not in sparse_metric_ids()

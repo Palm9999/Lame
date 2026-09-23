@@ -51,6 +51,7 @@ public object Components {
     public val TEAM_TARGETS: Component = Component("team_targets")
     public val TEAM_AIR_YARDS: Component = Component("team_air_yards")
     public val TEAM_CARRIES: Component = Component("team_carries")
+    public val CARRIES_EFF: Component = Component("carries_eff")
     public val TEAM_OFFENSE_SNAPS: Component = Component("team_offense_snaps")
     public val RUSH_SUCCESSES: Component = Component("rush_successes")
     public val RUSH_EPA: Component = Component("rush_epa")

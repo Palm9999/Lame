@@ -259,6 +259,11 @@ _M: list[Metric] = [
              "Team air yards in games this player appeared in.", 0),
             ("team_carries", "Team Carries",
              "Team carries in games this player appeared in.", 0),
+            ("carries_eff", "Efficiency Carries",
+             "Carries excluding QB kneels and spikes — the denominator behind "
+             "carry_share, rush_success_rate and rush_epa_per_carry, so those "
+             "rates recompute correctly over a range instead of drifting once "
+             "a kneel enters the box-score carries total.", 0),
             ("team_offense_snaps", "Team Offensive Snaps",
              "Team offensive snaps in games this player appeared in.", 0),
             ("rush_successes", "Rush Successes", "Carries with positive EPA.", 0),
