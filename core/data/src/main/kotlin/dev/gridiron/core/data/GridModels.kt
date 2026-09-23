@@ -1,5 +1,8 @@
 package dev.gridiron.core.data
 
+import dev.gridiron.core.model.CompareSlot
+import dev.gridiron.core.model.ScoringPresets
+import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.statquery.Direction
 import dev.gridiron.core.statquery.StatColumn
@@ -43,6 +46,7 @@ public data class GridRequest(
     val direction: Direction = defaultDirection(sort),
     val perGame: Boolean = false,
     val name: String = "",
+    val scoring: ScoringProfile = ScoringPresets.PPR,
 ) {
     /** Weeks in the range that have actually been played. */
     public val playedWeeks: Int
@@ -78,3 +82,8 @@ public data class GridRowUi(
  *   position, -1 worst, null when there's no value to rank.
  */
 public data class CellUi(val text: String, val heat: Float?)
+
+public data class PlayerHeader(val playerId: String, val name: String, val position: String?, val team: String?)
+
+/** A tray chip: the player's name and a short "2025 · Wk 1–8". */
+public data class TraySlotUi(val slot: CompareSlot, val name: String, val detail: String)

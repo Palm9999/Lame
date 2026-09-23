@@ -4,6 +4,7 @@ plugins {
 
 dependencies {
     api(projects.core.database)
+    api(projects.core.datastore)
     api(libs.kotlinx.collections.immutable)
 
     testImplementation(projects.core.testing)

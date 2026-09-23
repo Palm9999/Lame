@@ -53,6 +53,7 @@ public class StatsRepository(
             percentiles = true,
             name = request.name.takeIf { searching },
             limit = StatQuerySpec.MAX_LIMIT,
+            scoring = request.scoring,
         )
         val q = StatQueryBuilder.grid(spec)
         val layout = q.layout
@@ -80,5 +81,12 @@ public class StatsRepository(
             ColumnUi(column, info?.abbr ?: column.metricId, info)
         }
         return GridPage(request, columns.toImmutableList(), rows.toImmutableList(), threshold?.description)
+    }
+
+    public suspend fun players(ids: Collection<String>): Map<String, PlayerHeader> {
+        val q = StatQueryBuilder.players(ids) ?: return emptyMap()
+        return executor.query(q) { r ->
+            PlayerHeader(r.text(0), r.text(1), r.textOrNull(2), r.textOrNull(3))
+        }.associateBy { it.playerId }
     }
 }
