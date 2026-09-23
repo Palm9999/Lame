@@ -54,7 +54,7 @@ public class CompareRepository(
             }
 
         val slots = request.slots.mapIndexed { i, s -> header(s, headers[s.playerId], found[i]!!, positions[i], catalog) }
-        val usable = request.slots.indices.filter { found[it]!!.status in setOf(SlotStatus.OK, SlotStatus.SMALL_SAMPLE) }
+        val usable = request.slots.indices.filter { found[it]!!.status.charted }
         val groups = CompareMetricSets.union(usable.map { positions[it] }).map { (group, columns) ->
             val rows = columns.map { column -> row(column, request, positions, found.map { it!! }, catalog) }
             CompareGroupUi(
@@ -162,6 +162,7 @@ public class CompareRepository(
         val detail = when (found.status) {
             SlotStatus.NO_SEASON -> "No ${slot.season} data"
             SlotStatus.MISSING -> "Not in the database"
+            SlotStatus.NO_GAMES -> "No games in this range"
             else -> buildString {
                 append(position?.code ?: "–")
                 append(" · ")
@@ -170,7 +171,6 @@ public class CompareRepository(
                 append(describeSlot(slot, catalog))
                 if (found.games > 0) append(" · ${found.games} g")
                 if (found.status == SlotStatus.SMALL_SAMPLE) append(" · small sample")
-                if (found.status == SlotStatus.NO_GAMES) append(" · no games")
             }
         }
         return SlotHeader(slot, name, detail, found.status, position)
@@ -184,7 +184,7 @@ public class CompareRepository(
         catalog: Catalog,
     ): CompareRowUi {
         val cells = found.mapIndexed { i, f ->
-            val applicable = f.status in USABLE && column in CompareMetricSets.groupsFor(positions[i]).values.flatten()
+            val applicable = f.status.charted && column in CompareMetricSets.groupsFor(positions[i]).values.flatten()
             if (!applicable) {
                 CompareCellUi(NOT_APPLICABLE, null, null)
             } else {
@@ -251,22 +251,22 @@ public class CompareRepository(
         val popLayout = popQuery.layout
         val population = executor.query(popQuery.query) { r -> scatterPoint(r, popLayout, r.text(GridLayout.FULL_NAME)) }
 
+        // Each slot's own point comes from the values its ranked row already
+        // holds (every position's Scoring group carries both columns), put on
+        // the population's per-game scale: no query per slot.
         val points = request.slots.mapIndexed { i, s ->
-            if (found[i].status !in USABLE) return@mapIndexed null
-            val spec = StatQuerySpec(
-                season = s.season,
-                weeks = s.weeks,
-                columns = SCATTER_COLUMNS,
-                includeUnqualified = true,
-                minGames = 1,
-                mode = ValueMode.PER_GAME,
-                playerIds = setOf(s.playerId),
-                limit = 1,
-                scoring = request.scoring,
+            val f = found[i]
+            if (!f.status.charted || f.games <= 0) return@mapIndexed null
+            fun perGame(column: StatColumn): Double {
+                val value = f.values[column] ?: 0.0
+                return if (request.perGame) value else value / f.games
+            }
+            ScatterPointUi(
+                playerId = s.playerId,
+                name = headers[s.playerId]?.name ?: s.playerId,
+                xfpPerGame = perGame(StatColumn.EXPECTED_FANTASY_POINTS),
+                fpPerGame = perGame(StatColumn.FANTASY_POINTS),
             )
-            val q = StatQueryBuilder.grid(spec)
-            val layout = q.layout
-            executor.query(q.query) { r -> scatterPoint(r, layout, headers[s.playerId]?.name ?: s.playerId) }.singleOrNull()
         }
 
         return ScatterUi(position, slot.season, slot.weeks, population.toImmutableList(), points.toImmutableList())
@@ -281,7 +281,6 @@ public class CompareRepository(
         )
 
     private companion object {
-        val USABLE = setOf(SlotStatus.OK, SlotStatus.SMALL_SAMPLE)
         val SCATTER_COLUMNS = listOf(StatColumn.FANTASY_POINTS, StatColumn.EXPECTED_FANTASY_POINTS)
 
         /** Distinct from [StatFormat.MISSING]: a stat that doesn't apply to this slot's position at all. */

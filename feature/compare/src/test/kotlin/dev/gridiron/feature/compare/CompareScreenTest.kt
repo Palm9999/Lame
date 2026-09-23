@@ -1,8 +1,11 @@
 package dev.gridiron.feature.compare
 
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -19,12 +22,16 @@ import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.WeekRange
+import dev.gridiron.core.statquery.Bind
+import dev.gridiron.core.statquery.SqlQuery
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -177,7 +184,39 @@ class CompareScreenTest {
         val id = topIds(StatPack.RECEIVING, PositionFilter.WR, 1).single()
         show(ready(CompareSlot(id, 2025, season2025), CompareSlot(id, 2003, WeekRange(1, 17))))
         compose.onNodeWithText("No 2003 data").assertExists()
+        // The slot with no data is excluded from the bars: one bar per row, no "—, not ranked" one beside it.
+        val rows = compose.onAllNodes(hasContentDescription("percentile", substring = true)).fetchSemanticsNodes()
+            .map { it.config[SemanticsProperties.ContentDescription].single() }
+        assertTrue(rows.isNotEmpty())
+        assertFalse(rows.joinToString("\n"), rows.any { it.contains("—, not ranked") })
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/compare_8_missing_season.png")
+    }
+
+    @Test
+    fun noGamesSlotSaysSoAndIsLeftOffTheRadar() {
+        // A 2025 receiver with no 2024 rows at all, compared in 2024.
+        val rookie = runBlocking {
+            executor.query(
+                SqlQuery(
+                    "SELECT s.player_id FROM player_week_stat s JOIN player p USING (player_id) " +
+                        "WHERE s.metric_id = ? AND s.season = ? AND p.position = ? AND s.player_id NOT IN " +
+                        "(SELECT player_id FROM player_week_stat WHERE season = ?) " +
+                        "GROUP BY s.player_id ORDER BY SUM(s.value) DESC LIMIT 1",
+                    listOf(Bind.Text("targets"), Bind.Integer(2025), Bind.Text("WR"), Bind.Integer(2024)),
+                ),
+            ) { it.text(0) }.single()
+        }
+        val star = topIds(StatPack.RECEIVING, PositionFilter.WR, 1).single()
+        val state = ready(
+            CompareSlot(star, 2025, season2025),
+            CompareSlot(rookie, 2024, catalog.season(2024).defaultWeeks),
+            tab = CompareTab.RADAR,
+        )
+        show(state)
+        compose.onNodeWithText("No games in this range").assertExists()
+        // Header only for the rookie; header plus radar legend for the star.
+        assertEquals(1, compose.onAllNodesWithText(state.page.slots[1].name).fetchSemanticsNodes().size)
+        assertEquals(2, compose.onAllNodesWithText(state.page.slots[0].name).fetchSemanticsNodes().size)
     }
 
     @Test

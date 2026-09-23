@@ -30,10 +30,12 @@ internal fun percentileText(percentile: Float?): String = percentile?.let { ordi
 
 /**
  * Every group as a composite row plus one bar row per stat. Long-press or
- * hover a stat's label (S Pen or mouse) for its definition.
+ * hover a stat's label (S Pen or mouse) for its definition. Only [charted]
+ * slots get a bar: a slot with no data (no games, no season) is excluded from
+ * charts, and the rest keep their slot colors so they still match the header.
  */
 @Composable
-internal fun BarsTab(groups: ImmutableList<CompareGroupUi>, modifier: Modifier = Modifier) {
+internal fun BarsTab(groups: ImmutableList<CompareGroupUi>, charted: List<Int>, modifier: Modifier = Modifier) {
     LazyColumn(modifier) {
         groups.forEach { group ->
             stickyHeader(key = "header:${group.group}") {
@@ -49,18 +51,19 @@ internal fun BarsTab(groups: ImmutableList<CompareGroupUi>, modifier: Modifier =
             item(key = "composite:${group.group}") {
                 PercentileBarRow(
                     label = "Overall ${group.group.label}",
-                    bars = group.composite.mapIndexed { i, c -> Bar(c, percentileText(c), SlotColors.color(i)) }.toImmutableList(),
+                    bars = charted.map { i -> Bar(group.composite[i], percentileText(group.composite[i]), SlotColors.color(i)) }
+                        .toImmutableList(),
                 )
             }
-            items(group.rows, key = { "row:${group.group}:${it.column}" }) { row -> StatBarRow(row) }
+            items(group.rows, key = { "row:${group.group}:${it.column}" }) { row -> StatBarRow(row, charted) }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun StatBarRow(row: CompareRowUi) {
-    val bars = row.cells.mapIndexed { i, cell -> Bar(cell.percentile, cell.text, SlotColors.color(i)) }.toImmutableList()
+private fun StatBarRow(row: CompareRowUi, charted: List<Int>) {
+    val bars = charted.map { i -> Bar(row.cells[i].percentile, row.cells[i].text, SlotColors.color(i)) }.toImmutableList()
     val info = row.info
     PercentileBarRow(
         label = row.label,
