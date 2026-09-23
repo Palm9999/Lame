@@ -3,6 +3,7 @@ package dev.gridiron.core.statquery
 import dev.gridiron.core.statquery.Aggregate.ClampedWeightedSum
 import dev.gridiron.core.statquery.Aggregate.ClampedWeightedSum.Term
 import dev.gridiron.core.statquery.Aggregate.Ratio
+import dev.gridiron.core.statquery.Aggregate.Scored
 import dev.gridiron.core.statquery.Aggregate.Total
 import dev.gridiron.core.statquery.Components as C
 
@@ -71,6 +72,11 @@ public enum class StatColumn(
     OFFENSE_SNAPS("offense_snaps", Total(C.OFFENSE_SNAPS)),
     SNAP_SHARE("snap_share", Ratio(C.OFFENSE_SNAPS, C.TEAM_OFFENSE_SNAPS)),
     TOTAL_EPA("total_epa", Total(C.TOTAL_EPA)),
+
+    // Fantasy: scored per player-week from the spec's profile.
+    FANTASY_POINTS("fantasy_points", Scored(ScoredOutput.FANTASY_POINTS)),
+    EXPECTED_FANTASY_POINTS("expected_fantasy_points", Scored(ScoredOutput.EXPECTED_FANTASY_POINTS)),
+    FPOE("fpoe", Scored(ScoredOutput.OVER_EXPECTED)),
     ;
 
     /**
@@ -87,6 +93,9 @@ public enum class StatColumn(
             SNAP_SHARE -> OFFENSE_SNAPS
             else -> null
         }
+
+    /** Computed from the spec's scoring profile rather than stored components. */
+    public val isFantasy: Boolean get() = aggregate is Scored
 
     public companion object {
         public fun fromMetricId(id: String): StatColumn? = entries.firstOrNull { it.metricId == id }

@@ -1,16 +1,27 @@
 package dev.gridiron.core.statquery
 
+import dev.gridiron.core.model.Position
+import dev.gridiron.core.model.ScoringProfile
+import dev.gridiron.core.model.ScoringRule
+
 /**
  * Turns a [StatQuerySpec] into SQL over the ETL's long/narrow fact table.
  *
  * Query shape:
  *
+ *  0. When a fantasy column is planned, `wk` pivots `player_week_stat` to one
+ *     row per player-week for every scoring component, `fw` applies the
+ *     spec's scoring profile to each week (so per-game bonuses see single
+ *     games), and `fsum` totals `fw` per player into fantasy points, expected
+ *     fantasy points and FPOE.
  *  1. `agg` pivots `player_week_stat` to one row per player, summing only the
  *     components the requested columns need. Its predicate is
  *     `metric_id IN (...) AND season = ? AND week BETWEEN ? AND ?`, which is
  *     exactly the `idx_pws_metric_season_week` index.
  *  2. `base` computes each column from those sums, so rates are recomputed over
- *     the range rather than averaged, and applies the games floor.
+ *     the range rather than averaged, and applies the games floor. When
+ *     scored, it left-joins `fsum` so a player with games but no scoring
+ *     stats gets zero points rather than null.
  *  3. `scored` flags each player as qualified or not (`q`), per the spec's
  *     qualifiers.
  *  4. `ranked`, only when percentiles are requested, adds positional
@@ -20,7 +31,8 @@ package dev.gridiron.core.statquery
  *     filters, sorts with NULLs last, and pages.
  *
  * Safety: identifiers in the SQL are only fixed text and index-derived aliases
- * (`k0`, `v3`, `p3`). Every value, including metric ids, is a bound `?`.
+ * (`k0`, `v3`, `p3`). Every value, including metric ids and scoring weights, is
+ * a bound `?`.
  *
  * Percentiles use `PERCENT_RANK`, which needs SQLite 3.25+. That's satisfied by
  * both `androidx.sqlite:sqlite-bundled` and the platform SQLite on the target
@@ -101,6 +113,9 @@ public object StatQueryBuilder {
 private class Plan(columns: List<StatColumn>) {
     val columns: List<StatColumn> = columns.distinct()
 
+    /** Whether the scoring step (`wk`, `fw`, `fsum`) runs. */
+    val scored: Boolean = this.columns.any { it.isFantasy }
+
     // Sorted so identical specs produce identical SQL.
     val components: List<Component> =
         (this.columns.flatMap { it.aggregate.components } + Components.GAMES)
@@ -116,6 +131,10 @@ private class Plan(columns: List<StatColumn>) {
     }
 
     fun ref(component: Component): String {
+        ScoredOutput.entries.firstOrNull { it.pseudo == component }?.let {
+            // Played but scored nothing: zero points, not unknown.
+            return "COALESCE(fsum.${it.alias}, 0)"
+        }
         val i = components.indexOf(component)
         check(i >= 0) { "$component is not planned" }
         return "agg.k$i"
@@ -162,7 +181,8 @@ private class SqlWriter {
     fun build(): SqlQuery = SqlQuery(sql.toString().trimEnd(), binds.toList())
 
     fun aggregateAndBase(spec: StatQuerySpec, plan: Plan) {
-        line("WITH agg AS (")
+        if (plan.scored) scoring(spec, checkNotNull(spec.scoring))
+        line(if (plan.scored) ", agg AS (" else "WITH agg AS (")
         line("  SELECT s.player_id")
         plan.components.forEachIndexed { i, c ->
             line("       , SUM(CASE WHEN s.metric_id = ${text(c.id)} THEN s.value END) AS k$i")
@@ -179,8 +199,78 @@ private class SqlWriter {
         }
         line("  FROM agg")
         line("  JOIN player p ON p.player_id = agg.player_id")
+        if (plan.scored) line("  LEFT JOIN fsum ON fsum.player_id = agg.player_id")
         line("  WHERE ${plan.games} >= ${int(spec.minGames)}")
         line(")")
+    }
+
+    /** Per-week points under [profile]: `wk` pivots, `fw` scores each week, `fsum` totals. */
+    fun scoring(spec: StatQuerySpec, profile: ScoringProfile) {
+        val w = { c: Component -> "COALESCE(wk.w${SCORING_COMPONENTS.indexOf(c)}, 0)" }
+        line("WITH wk AS (")
+        line("  SELECT s.player_id")
+        SCORING_COMPONENTS.forEachIndexed { i, c ->
+            line("       , SUM(CASE WHEN s.metric_id = ${text(c.id)} THEN s.value END) AS w$i")
+        }
+        line("  FROM player_week_stat s")
+        line("  WHERE s.metric_id IN (${SCORING_COMPONENTS.joinToString(", ") { text(it.id) }})")
+        line("    AND s.season = ${int(spec.season)}")
+        line("    AND s.week BETWEEN ${int(spec.weeks.first)} AND ${int(spec.weeks.last)}")
+        line("  GROUP BY s.player_id, s.week")
+        line("), fw AS (")
+        line("  SELECT wk.player_id")
+        line("       , ${points(profile, expected = false, w)} AS fp")
+        line("       , ${points(profile, expected = true, w)} AS xfp")
+        line("  FROM wk")
+        line("  JOIN player p ON p.player_id = wk.player_id")
+        line("), fsum AS (")
+        line("  SELECT player_id, SUM(fp) AS fp, SUM(xfp) AS xfp, SUM(fp - xfp) AS oe")
+        line("  FROM fw")
+        line("  GROUP BY player_id")
+        line(")")
+    }
+
+    /**
+     * One week's points. Every weight is bound, including zeros, so the SQL
+     * shape depends only on the number of bonuses.
+     */
+    private fun points(profile: ScoringProfile, expected: Boolean, w: (Component) -> String): String {
+        val terms = mutableListOf<String>()
+        for (rule in ScoringRule.entries) {
+            val inputs = RULE_INPUTS.getValue(rule)
+            for (term in if (expected) inputs.expected else inputs.actual) {
+                val weight = if (rule == ScoringRule.RECEPTION) {
+                    receptionWeight(profile)
+                } else {
+                    real(profile.weight(rule) * term.sign)
+                }
+                terms += "$weight * ${w(term.component)}"
+            }
+        }
+        if (!expected) {
+            // Bonuses have no expectation; they only ever add to actual points.
+            for (bonus in profile.yardageBonuses) {
+                val yards = BONUS_INPUTS.getValue(bonus.stat).joinToString(" + ", "(", ")") { w(it) }
+                val lower = int(bonus.min)
+                val upper = bonus.maxExclusive?.let { " AND $yards < ${int(it)}" }.orEmpty()
+                val points = real(bonus.points)
+                terms += "CASE WHEN $yards >= $lower$upper THEN $points ELSE 0 END"
+            }
+        }
+        return terms.joinToString(" + ", "(", ")")
+    }
+
+    /** Reception points by position: the TE-premium case. */
+    private fun receptionWeight(profile: ScoringProfile): String {
+        val rb = text(Position.RB.code)
+        val rbPoints = real(profile.receptionWeight(Position.RB))
+        val wr = text(Position.WR.code)
+        val wrPoints = real(profile.receptionWeight(Position.WR))
+        val te = text(Position.TE.code)
+        val tePoints = real(profile.receptionWeight(Position.TE))
+        val otherPoints = real(profile.weight(ScoringRule.RECEPTION))
+        return "(CASE p.position WHEN $rb THEN $rbPoints WHEN $wr THEN $wrPoints " +
+            "WHEN $te THEN $tePoints ELSE $otherPoints END)"
     }
 
     /** Flags each player 1 if they meet every qualifier, else 0. */
