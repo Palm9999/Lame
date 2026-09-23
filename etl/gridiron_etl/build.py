@@ -73,6 +73,17 @@ def _published(season: int, cache: Path | None, force: bool) -> Path | None:
         raise
 
 
+def _expected(season: int, cache: Path | None, force: bool) -> pl.DataFrame | None:
+    """ffopportunity's weekly expectations, or None if not published for the season."""
+    try:
+        path = sources.fetch("ep_weekly", season, cache_dir=cache, force=force)
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            return None
+        raise
+    return pl.read_parquet(path)
+
+
 def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
           skip_missing: bool = False) -> None:
     players = build_players(sources.fetch("players", cache_dir=cache, force=force))
@@ -110,6 +121,21 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
             log.info("season %d: snap data attached to %d/%d rows", season, matched, before)
         except Exception as exc:  # snap counts are a nice-to-have, not a blocker
             log.warning("season %d: snap counts unavailable (%s)", season, exc)
+
+        ep = _expected(season, cache, force)
+        if ep is None:
+            if not skip_missing:
+                raise RuntimeError(f"no ffopportunity data published for {season}")
+            log.warning("season %d: no expected-points data yet; xFP will be missing", season)
+        else:
+            problems = validation.cross_check(weekly, ep) + validation.fantasy_contract(weekly, ep)
+            for p in problems:
+                log.error("VALIDATION: season %d: %s", season, p)
+            if problems:
+                raise validation.ValidationError(f"{len(problems)} ffopportunity check(s) failed; first: {problems[0]}")
+            expected = transform.expected_components(ep)
+            log.info("season %d: %d expected player-weeks", season, expected.height)
+            frames.append(transform.to_long(expected, metric_ids, sparse_metric_ids()))
 
         frames.append(transform.to_long(weekly, metric_ids, sparse_metric_ids()))
 
