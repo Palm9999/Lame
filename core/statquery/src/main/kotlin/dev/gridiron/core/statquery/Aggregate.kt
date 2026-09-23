@@ -63,4 +63,29 @@ public sealed interface Aggregate {
                 "${it.weight} * MIN(MAX(COALESCE(${it.ratio.toSql(ref)}, 0.0), 0.0), 1.0)"
             }
     }
+
+    /**
+     * A total from the scoring step, which applies the spec's scoring profile
+     * to each player-week before summing, so per-game bonuses see single games
+     * rather than range totals. Reads no stored components directly.
+     */
+    public data class Scored(val output: ScoredOutput) : Aggregate {
+        override val components: Set<Component> get() = emptySet()
+        override val scalesWithGames: Boolean get() = true
+        override fun toSql(ref: (Component) -> String): String = ref(output.pseudo)
+    }
+}
+
+/** The scoring step's outputs, summed per player over the range. */
+public enum class ScoredOutput(internal val alias: String) {
+    FANTASY_POINTS("fp"),
+    EXPECTED_FANTASY_POINTS("xfp"),
+    OVER_EXPECTED("oe"),
+    ;
+
+    /**
+     * Stands in for this output where [Aggregate.toSql] expects a component.
+     * `@` never appears in a metric id, so it can't collide with a stored one.
+     */
+    internal val pseudo: Component get() = Component("@$alias")
 }

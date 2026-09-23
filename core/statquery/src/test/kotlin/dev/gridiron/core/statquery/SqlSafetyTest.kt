@@ -1,7 +1,12 @@
 package dev.gridiron.core.statquery
 
+import dev.gridiron.core.model.BonusStat
 import dev.gridiron.core.model.Position
+import dev.gridiron.core.model.ScoringPresets
+import dev.gridiron.core.model.ScoringProfile
+import dev.gridiron.core.model.ScoringRule
 import dev.gridiron.core.model.WeekRange
+import dev.gridiron.core.model.YardageBonus
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
@@ -51,6 +56,22 @@ class SqlSafetyTest {
             name = if (nextBoolean()) hostile() else null,
             limit = nextInt(1, StatQuerySpec.MAX_LIMIT + 1),
             offset = nextInt(0, 5000),
+            scoring = ScoringProfile(
+                id = "u${nextInt(1000)}",
+                // ScoringProfile requires a non-blank name; hostile() can draw an
+                // all-whitespace string, so fall back rather than crash the generator.
+                name = hostile().ifBlank { "x" },
+                weights = ScoringRule.entries.shuffled(this).take(nextInt(0, 8)).associateWith { nextDouble(-10.0, 10.0) },
+                receptionByPosition = ScoringProfile.RECEPTION_POSITIONS.shuffled(this).take(nextInt(0, 3))
+                    .associateWith { nextDouble(-2.0, 2.0) },
+                yardageBonuses = List(nextInt(0, 4)) {
+                    val min = nextInt(0, 400)
+                    YardageBonus(
+                        BonusStat.entries.random(this), min,
+                        if (nextBoolean()) min + nextInt(1, 200) else null, nextDouble(-5.0, 5.0),
+                    )
+                },
+            ),
         )
     }
 
@@ -82,9 +103,9 @@ class SqlSafetyTest {
 
     @Test
     fun `metric ids are bound, never written into SQL text`() {
-        val spec = StatQuerySpec(2025, WeekRange(1, 18), StatColumn.entries, percentiles = true)
+        val spec = StatQuerySpec(2025, WeekRange(1, 18), StatColumn.entries, percentiles = true, scoring = ScoringPresets.PPR)
         val q = StatQueryBuilder.grid(spec).query
-        val ids = StatColumn.entries.flatMap { it.aggregate.components }.map { it.id }.toSet()
+        val ids = (StatColumn.entries.flatMap { it.aggregate.components } + SCORING_COMPONENTS).map { it.id }.toSet()
 
         // "g" is too short to search for meaningfully; every other id is checked.
         for (id in ids.filter { it.length > 1 }) {
@@ -101,6 +122,7 @@ class SqlSafetyTest {
             filters = StatColumn.entries.map { Filter(it, Condition.AtLeast(0.0)) },
             percentiles = true,
             mode = ValueMode.PER_GAME,
+            scoring = ScoringPresets.PPR,
         )
         val q = StatQueryBuilder.grid(spec)
         assertEquals(GridLayout.FIRST_STAT + StatColumn.entries.size * 2, q.layout.width)
@@ -121,7 +143,7 @@ class SqlSafetyTest {
 
     @Test
     fun `count only aggregates the components its filters need`() {
-        val spec = StatQuerySpec(2025, WeekRange(1, 18), StatColumn.entries)
+        val spec = StatQuerySpec(2025, WeekRange(1, 18), StatColumn.entries, scoring = ScoringPresets.PPR)
         val count = StatQueryBuilder.count(spec)
         // Only the games component: no filters, so nothing else is summed.
         assertEquals(1, Regex("SUM\\(").findAll(count.sql).count())

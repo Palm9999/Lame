@@ -1,6 +1,7 @@
 package dev.gridiron.core.statquery
 
 import dev.gridiron.core.model.Position
+import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.WeekRange
 
 /**
@@ -22,6 +23,8 @@ import dev.gridiron.core.model.WeekRange
  * @property minGames Population floor, applied before percentiles are computed.
  * @property percentiles Adds a 0..1 positional percentile beside each column, 1 = best.
  * @property name Free-text player name filter, matched on name and word prefixes.
+ * @property scoring The profile fantasy columns are scored with. Required when
+ *   any column, sort, filter or qualifier is a fantasy column.
  */
 public data class StatQuerySpec(
     val season: Int,
@@ -39,6 +42,7 @@ public data class StatQuerySpec(
     val name: String? = null,
     val limit: Int = DEFAULT_LIMIT,
     val offset: Int = 0,
+    val scoring: ScoringProfile? = null,
 ) {
     init {
         require(season in MIN_SEASON..MAX_SEASON) { "season $season outside $MIN_SEASON..$MAX_SEASON" }
@@ -48,6 +52,9 @@ public data class StatQuerySpec(
         require(limit in 1..MAX_LIMIT) { "limit $limit outside 1..$MAX_LIMIT" }
         require(offset >= 0) { "offset must not be negative" }
         require(minGames >= 0) { "minGames must not be negative" }
+        val usesFantasy = (columns + sort.map { it.column } + filters.map { it.column } + qualifiers.map { it.column })
+            .any { it.isFantasy }
+        require(!usesFantasy || scoring != null) { "fantasy columns need a scoring profile" }
     }
 
     public companion object {

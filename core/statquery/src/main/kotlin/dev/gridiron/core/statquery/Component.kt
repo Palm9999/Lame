@@ -57,4 +57,37 @@ public object Components {
     public val PASS_EPA: Component = Component("pass_epa")
     public val CPOE_SUM: Component = Component("cpoe_sum")
     public val CPOE_N: Component = Component("cpoe_n")
+
+    // Scoring inputs. Internal and sparse (absent means zero); read only by
+    // the scoring step, which applies the spec's profile per player-week.
+    public val PASSING_FIRST_DOWNS: Component = Component("passing_first_downs")
+    public val RUSHING_FIRST_DOWNS: Component = Component("rushing_first_downs")
+    public val RECEIVING_FIRST_DOWNS: Component = Component("receiving_first_downs")
+    public val PASSING_2PT: Component = Component("passing_2pt")
+    public val RUSHING_2PT: Component = Component("rushing_2pt")
+    public val RECEIVING_2PT: Component = Component("receiving_2pt")
+    public val FUMBLES_LOST: Component = Component("fumbles_lost")
+    public val PASSING_TDS_40: Component = Component("passing_tds_40")
+    public val PASSING_TDS_50: Component = Component("passing_tds_50")
+    public val RUSHING_TDS_40: Component = Component("rushing_tds_40")
+    public val RUSHING_TDS_50: Component = Component("rushing_tds_50")
+    public val RECEIVING_TDS_40: Component = Component("receiving_tds_40")
+    public val RECEIVING_TDS_50: Component = Component("receiving_tds_50")
+
+    // The opportunity model's expectations for the same player-week.
+    public val X_COMPLETIONS: Component = Component("x_completions")
+    public val X_RECEPTIONS: Component = Component("x_receptions")
+    public val X_PASSING_YARDS: Component = Component("x_passing_yards")
+    public val X_RUSHING_YARDS: Component = Component("x_rushing_yards")
+    public val X_RECEIVING_YARDS: Component = Component("x_receiving_yards")
+    public val X_PASSING_TDS: Component = Component("x_passing_tds")
+    public val X_RUSHING_TDS: Component = Component("x_rushing_tds")
+    public val X_RECEIVING_TDS: Component = Component("x_receiving_tds")
+    public val X_PASSING_2PT: Component = Component("x_passing_2pt")
+    public val X_RUSHING_2PT: Component = Component("x_rushing_2pt")
+    public val X_RECEIVING_2PT: Component = Component("x_receiving_2pt")
+    public val X_PASSING_FIRST_DOWNS: Component = Component("x_passing_first_downs")
+    public val X_RUSHING_FIRST_DOWNS: Component = Component("x_rushing_first_downs")
+    public val X_RECEIVING_FIRST_DOWNS: Component = Component("x_receiving_first_downs")
+    public val X_INTERCEPTIONS: Component = Component("x_interceptions")
 }
