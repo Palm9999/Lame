@@ -23,6 +23,8 @@ def play(**kw) -> dict:
         pass_touchdown=0, rush_touchdown=0, interception=0, sack=0, qb_scramble=0,
         receiver_player_id=None, rusher_player_id=None, passer_player_id=None,
         yardline_100=50, epa=0.0, success=0, cpoe=None, two_point_attempt=0,
+        first_down_pass=0, first_down_rush=0, fumble_lost=0,
+        fumbled_1_player_id=None, two_point_conv_result=None,
     )
     base.update(kw)
     return base
@@ -52,13 +54,13 @@ def run(plays: list[dict]) -> pl.DataFrame:
         "passing_yards": pl.Float64, "receiving_yards": pl.Float64,
         "rushing_yards": pl.Float64, "cpoe": pl.Float64,
         "receiver_player_id": pl.String, "rusher_player_id": pl.String,
-        "passer_player_id": pl.String,
+        "passer_player_id": pl.String, "fumbled_1_player_id": pl.String,
+        "two_point_conv_result": pl.String,
     })
     lf = lf.filter(
         pl.col("season_type").is_in(["REG", "POST"])
         & pl.col("play_type").is_in(["pass", "run"])
         & pl.col("posteam").is_not_null()
-        & (pl.col("two_point_attempt").fill_null(0) == 0)
     )
     return transform.weekly_player_stats(lf)
 
@@ -285,3 +287,77 @@ def test_team_offense_snaps_is_the_max_on_the_team_that_game():
     # 64 from the lineman on AAA, not 80 from the other team.
     assert row(out, "WR1")["team_offense_snaps"] == 64
     assert row(out, "RB1")["team_offense_snaps"] == 64
+
+
+# ---------------------------------------------------------------- scoring inputs
+
+def test_first_downs_credit_passer_receiver_and_rusher():
+    df = run([
+        target("WR1", 8, complete=True, yds=12, first_down_pass=1),
+        target("WR1", 3, complete=True, yds=4),
+        carry("RB1", 11, first_down_rush=1),
+    ])
+    assert row(df, "WR1")["receiving_first_downs"] == 1
+    assert row(df, "QB1")["passing_first_downs"] == 1
+    assert row(df, "RB1")["rushing_first_downs"] == 1
+
+
+def test_long_touchdowns_count_at_40_and_50_and_nest():
+    df = run([
+        target("WR1", 30, complete=True, yds=55, td=1),
+        target("WR1", 20, complete=True, yds=42, td=1),
+        target("WR1", 5, complete=True, yds=39, td=1),
+        target("WR1", 45, complete=True, yds=60),  # long, but not a touchdown
+        carry("RB1", 61, td=1),
+    ])
+    wr, qb, rb = row(df, "WR1"), row(df, "QB1"), row(df, "RB1")
+    assert (wr["receiving_tds_40"], wr["receiving_tds_50"]) == (2, 1)
+    assert (qb["passing_tds_40"], qb["passing_tds_50"]) == (2, 1)
+    assert (rb["rushing_tds_40"], rb["rushing_tds_50"]) == (1, 1)
+
+
+def test_fumbles_lost_are_credited_to_the_ball_carrier():
+    df = run([
+        carry("RB1", 3, fumble_lost=1, fumbled_1_player_id="RB1"),
+        target("WR1", 5, complete=True, yds=9, fumble_lost=1, fumbled_1_player_id="WR1"),
+        # A sack fumble belongs to the passer.
+        play(play_type="pass", sack=1, passer_player_id="QB1",
+             fumble_lost=1, fumbled_1_player_id="QB1"),
+    ])
+    assert row(df, "RB1")["fumbles_lost"] == 1
+    assert row(df, "WR1")["fumbles_lost"] == 1
+    assert row(df, "QB1")["fumbles_lost"] == 1
+
+
+def test_recovered_fumbles_and_defender_fumbles_do_not_count():
+    df = run([
+        carry("RB1", 3, fumble_lost=0, fumbled_1_player_id="RB1"),
+        # A defender fumbling on the return is not an offensive player's fumble.
+        target("WR1", 5, complete=True, yds=9, fumble_lost=1, fumbled_1_player_id="CB9"),
+    ])
+    assert row(df, "RB1")["fumbles_lost"] == 0
+    assert row(df, "WR1")["fumbles_lost"] == 0
+    assert df.filter(pl.col("player_id") == "CB9").height == 0
+
+
+def test_successful_two_point_conversions_are_credited_and_add_no_targets():
+    df = run([
+        target("WR1", 10),
+        target("WR1", 2, complete=True, yds=2,
+               two_point_attempt=1, two_point_conv_result="success"),
+        target("WR1", 2, two_point_attempt=1, two_point_conv_result="failure"),
+        carry("RB1", 2, two_point_attempt=1, two_point_conv_result="success"),
+    ])
+    wr = row(df, "WR1")
+    assert wr["receiving_2pt"] == 1
+    assert wr["targets"] == 1
+    assert row(df, "QB1")["passing_2pt"] == 1
+    assert row(df, "RB1")["rushing_2pt"] == 1
+
+
+def test_sparse_metrics_drop_zeros_in_long_format():
+    df = run([target("WR1", 10), carry("RB1", 3)])
+    long = transform.to_long(df, ["targets", "fumbles_lost"], sparse=frozenset({"fumbles_lost"}))
+    assert long.filter(pl.col("metric_id") == "fumbles_lost").height == 0
+    # Non-sparse metrics keep their zeros, as before.
+    assert long.filter((pl.col("metric_id") == "targets") & (pl.col("player_id") == "RB1")).height == 1
