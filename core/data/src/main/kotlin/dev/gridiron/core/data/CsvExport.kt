@@ -12,11 +12,11 @@ public object CsvExport {
             fields.joinTo(out, ",") { field(it) }
             out.append("\r\n")
         }
-        line(listOf("# " + describeView(page.request, catalog)))
+        out.append("# ").append(viewLine(page, catalog)).append("\r\n")
         line(listOf("Rank", "Player", "Pos", "Team", "Games") + page.columns.map { it.header })
         page.rows.forEachIndexed { i, row ->
             line(
-                listOf((i + 1).toString(), row.name, row.position.orEmpty(), row.team.orEmpty(), row.games.toString()) +
+                listOf((i + 1).toString(), row.name, row.position.orEmpty(), row.team ?: "FA", row.games.toString()) +
                     row.cells.map { if (it.text == StatFormat.MISSING) "" else it.text },
             )
         }
@@ -26,6 +26,14 @@ public object CsvExport {
 
     public fun fileName(request: GridRequest): String =
         "gridiron-${request.season.season}-${request.pack.name.lowercase()}.csv"
+
+    private fun viewLine(page: GridPage, catalog: Catalog): String {
+        val parts = mutableListOf(describeView(page.request, catalog))
+        val name = page.request.name.trim()
+        if (name.isNotBlank()) parts += "name \"$name\""
+        page.threshold?.let { parts += it }
+        return parts.joinToString(" · ")
+    }
 
     private fun field(s: String): String =
         if (s.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + s.replace("\"", "\"\"") + "\"" else s

@@ -59,7 +59,7 @@ Every build is signed with the same key (`app/gridiron.keystore`, committed on p
 
 Hold a player row in the Grid to add him to compare (up to four). Tap **Compare** in the tray that appears to see bars, a head-to-head table, a radar (two of the players at a time) and an xFP-vs-actual scatter. The chip at the top of the Grid and Compare picks the active scoring profile; choose **Edit profiles…** to duplicate a preset and enter your own league's settings.
 
-The third chip row filters by team, minimum snap share and any stat (**Filters** opens a sheet with a live match count), and **Export** shares the current table as a CSV. Each row's small line is the sorted stat over the last six weeks played; a gap is a week he didn't play.
+The third chip row filters by team, minimum snap share and any stat (**Filters** opens a sheet with a live match count), and **Export** shares the current table as a CSV. Each row's small line is the sorted stat over the last six weeks played; a gap is a week he didn't play, or a rate with no attempts that week.
 
 ## Status
 

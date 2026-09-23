@@ -34,10 +34,23 @@ class CsvExportTest {
         assertEquals("# Gridiron · 2025 · Wk 1–8 · Receiving · All · PPR", lines[0])
         assertEquals("Rank,Player,Pos,Team,Games,TGT,CTCH%", lines[1])
         assertEquals("1,Amon-Ra St. Brown,WR,DET,8,88,71.6%", lines[2])
-        assertEquals("2,\"Smith, Jr. \"\"Deuce\"\"\",,,8,12,", lines[3])
+        assertEquals("2,\"Smith, Jr. \"\"Deuce\"\"\",,FA,8,12,", lines[3])
         assertEquals("# Data: nflverse (CC BY 4.0)", lines[4])
         assertEquals("", lines[5]) // trailing CRLF
         assertEquals(6, lines.size)
+    }
+
+    @Test
+    fun `view line names an active search and the sample qualifier`() {
+        val filteredPage = page.copy(
+            request = request.copy(name = "chase"),
+            threshold = "min 54 targets",
+        )
+        val lines = CsvExport.build(filteredPage, catalog).split("\r\n")
+        assertEquals(
+            "# Gridiron · 2025 · Wk 1–8 · Receiving · All · PPR · name \"chase\" · min 54 targets",
+            lines[0],
+        )
     }
 
     @Test

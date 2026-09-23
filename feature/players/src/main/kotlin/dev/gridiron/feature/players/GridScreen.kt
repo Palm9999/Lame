@@ -208,7 +208,9 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
                         scope.launch {
                             try {
                                 val csv = withContext(Dispatchers.Default) { CsvExport.build(page, state.catalog) }
-                                if (!CsvShare.share(context, CsvExport.fileName(page.request), csv)) snackbar.showSnackbar("Couldn't export")
+                                val ok = CsvShare.share(context, CsvExport.fileName(page.request), csv)
+                                exporting = false
+                                if (!ok) snackbar.showSnackbar("Couldn't export")
                             } finally {
                                 exporting = false
                             }

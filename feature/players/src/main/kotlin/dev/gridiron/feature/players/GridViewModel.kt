@@ -345,10 +345,12 @@ class GridViewModel(
             }
             GridEvent.FilterSheetClosed -> {
                 draft.value = null
+                draftCount.value = null
                 return
             }
             is GridEvent.FiltersApplied -> {
                 draft.value = null
+                draftCount.value = null
             }
             else -> Unit
         }

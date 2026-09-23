@@ -31,7 +31,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -48,7 +51,7 @@ import dev.gridiron.core.statquery.StatColumn
 internal fun TeamSheet(teams: List<String>, selected: Set<String>, onChange: (Set<String>) -> Unit, onDismiss: () -> Unit) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
-            Text("Teams", style = MaterialTheme.typography.titleMedium)
+            Text("Teams", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
             Text(
                 "By current team: a traded player counts for his new team in every week.",
                 style = MaterialTheme.typography.bodySmall,
@@ -94,7 +97,7 @@ internal fun FilterSheet(
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Filters", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                Text("Filters", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleMedium)
                 TextButton(onClick = { draft = draft.clear() }, enabled = draft.rows.isNotEmpty()) { Text("Clear all") }
             }
             if (perGame) {
@@ -117,7 +120,7 @@ internal fun FilterSheet(
                         is DraftCount.Matches -> if (count.count == 1) "1 player matches" else "${count.count} players match"
                         DraftCount.Unavailable -> "Count unavailable"
                     },
-                    Modifier.weight(1f),
+                    Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
                     style = MaterialTheme.typography.labelLarge,
                 )
                 TextButton(onClick = onDismiss) { Text("Cancel") }
