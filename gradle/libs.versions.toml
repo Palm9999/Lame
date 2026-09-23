@@ -16,6 +16,7 @@ junit4 = "4.13.2"
 sqliteJdbc = "3.53.4.0"
 robolectric = "4.17"
 roborazzi = "1.75.0"
+navigation3 = "1.1.7"
 
 [libraries]
 # Build logic
@@ -40,6 +41,9 @@ androidx-sqlite = { group = "androidx.sqlite", name = "sqlite", version.ref = "a
 androidx-sqlite-bundled = { group = "androidx.sqlite", name = "sqlite-bundled", version.ref = "androidxSqlite" }
 androidx-datastore-core = { group = "androidx.datastore", name = "datastore-core", version.ref = "datastore" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "serialization" }
+androidx-navigation3-runtime = { group = "androidx.navigation3", name = "navigation3-runtime", version.ref = "navigation3" }
+androidx-navigation3-ui = { group = "androidx.navigation3", name = "navigation3-ui", version.ref = "navigation3" }
+androidx-lifecycle-viewmodel-navigation3 = { group = "androidx.lifecycle", name = "lifecycle-viewmodel-navigation3", version.ref = "lifecycle" }
 
 # Compose (versions from the BOM)
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }

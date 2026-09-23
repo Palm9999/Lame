@@ -1,6 +1,6 @@
 # Compare and custom scoring: design
 
-Date: 2026-09-22 · Status: approved; plan at `docs/superpowers/plans/2026-09-22-compare-and-scoring.md` · Implements PRODUCT_SPEC §6.2 (Comparison) and the scoring half of §4.1
+Date: 2026-09-22 · Status: implemented (see plan docs/superpowers/plans/2026-09-22-compare-and-scoring.md) · Implements PRODUCT_SPEC §6.2 (Comparison) and the scoring half of §4.1
 
 ## Intent
 
