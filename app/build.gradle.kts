@@ -8,8 +8,8 @@ android {
     namespace = "dev.gridiron.app"
     defaultConfig {
         applicationId = "dev.gridiron.app"
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     // A personal, sideloaded app. Android only installs an update signed with

@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -37,10 +38,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +55,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.gridiron.core.charts.Sparkline
 import dev.gridiron.core.data.ColumnUi
 import dev.gridiron.core.data.CompareTrayRepository
+import dev.gridiron.core.data.CsvExport
 import dev.gridiron.core.data.GridPage
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.GridRowUi
@@ -75,6 +79,9 @@ import dev.gridiron.core.ui.SeasonWeeksSheet
 import dev.gridiron.core.ui.WeeksSheet
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun GridRoute(
@@ -189,6 +196,20 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
                     onClick = { showFilters = true },
                     label = { Text(if (r.filters.isEmpty()) "Filters" else "Filters (${r.filters.size})") },
                     modifier = Modifier.testTag("chip:filters"),
+                )
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
+                AssistChip(
+                    onClick = {
+                        val page = state.page ?: return@AssistChip
+                        scope.launch {
+                            val csv = withContext(Dispatchers.Default) { CsvExport.build(page, state.catalog) }
+                            if (!CsvShare.share(context, CsvExport.fileName(page.request), csv)) snackbar.showSnackbar("Couldn't export")
+                        }
+                    },
+                    enabled = state.page != null,
+                    label = { Text("Export") },
+                    modifier = Modifier.testTag("chip:export"),
                 )
             }
 

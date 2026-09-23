@@ -1,6 +1,6 @@
 # Grid finish: design
 
-Date: 2026-09-23 · Status: approved design, not yet planned · Completes PRODUCT_SPEC §6.1 (The Grid) for this phase
+Date: 2026-09-23 · Status: implemented (see plan docs/superpowers/plans/2026-09-23-grid-finish.md) · Completes PRODUCT_SPEC §6.1 (The Grid) for this phase
 
 ## Intent
 

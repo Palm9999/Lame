@@ -59,6 +59,8 @@ Every build is signed with the same key (`app/gridiron.keystore`, committed on p
 
 Hold a player row in the Grid to add him to compare (up to four). Tap **Compare** in the tray that appears to see bars, a head-to-head table, a radar (two of the players at a time) and an xFP-vs-actual scatter. The chip at the top of the Grid and Compare picks the active scoring profile; choose **Edit profiles…** to duplicate a preset and enter your own league's settings.
 
+The third chip row filters by team, minimum snap share and any stat (**Filters** opens a sheet with a live match count), and **Export** shares the current table as a CSV. Each row's small line is the sorted stat over the last six weeks played; a gap is a week he didn't play.
+
 ## Status
 
 | Phase | State |
@@ -66,7 +68,7 @@ Hold a player row in the Grid to add him to compare (up to four). Tap **Compare*
 | Spec and research | Done: [docs/](docs/PRODUCT_SPEC.md) |
 | Data pipeline | Done: [`etl/`](etl/README.md). nflverse, plus ffopportunity for expected-points components → pre-indexed SQLite, validated on every build. |
 | Query builder | Done: [`core/statquery/`](core/statquery/README.md). 413k+ values checked against the ETL. |
-| The Grid | Done. Six stat packs, position filters, week ranges, per-game mode, positional heat map, tap-to-sort, hold-for-definition, name search. |
+| The Grid | Done. Six stat packs, position filters, week ranges, per-game mode, positional heat map, tap-to-sort, hold-for-definition, name search, team and snap-share filters, advanced filters with a live count, last-6-week sparklines, CSV export. |
 | **Compare** | **Done.** Hold up to four players in the Grid, then a tray, percentile bars, a head-to-head table, a two-player radar and an xFP-vs-actual scatter. |
 | **Custom scoring** | **Done.** PPR/Half/Standard presets plus your own profiles, edited on-device; FPTS, xFP and FPOE flow into the Grid and Compare under whichever profile is active. |
 

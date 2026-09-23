@@ -116,7 +116,7 @@ class GridScreenTest {
         show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)))
         for (label in listOf(
             "2025 ▾", "Wk 1–18 ▾", "PPR ▾", "Per game", "Heat", "All", "FLEX", "Opportunity", "Fantasy",
-            "All teams", "Any snaps", "Filters",
+            "All teams", "Any snaps", "Filters", "Export",
         )) {
             compose.onNodeWithText(label).assertIsDisplayed()
         }
