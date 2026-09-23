@@ -50,42 +50,57 @@ def test_expected_components_are_renamed_cast_and_keyed():
     assert out.schema["season"] == pl.Int64 and out.schema["week"] == pl.Int64
 
 
-def test_cross_check_passes_when_sources_agree_and_flags_a_mismatch():
+def test_cross_check_passes_when_sources_agree():
     weekly = pl.DataFrame([weekly_row(receptions=5, receiving_yards=61)])
     good = pl.DataFrame([ep_row(receptions=5.0, rec_yards_gained=61.0)])
     assert validate.cross_check(weekly, good) == []
 
+
+def test_cross_check_flags_a_mismatch_as_a_warning_not_a_failure(caplog):
+    # A single mismatch, well under ComparisonPolicy's hard cap and season
+    # budget, is an outlier: logged as a warning (with the player-week key
+    # and both sides' values), but must not fail the build by itself — a
+    # scheduled build (`.github/workflows/etl.yml`) can't stop over one
+    # isolated ffopportunity quirk.
+    weekly = pl.DataFrame([weekly_row(receptions=5, receiving_yards=61)])
     bad = pl.DataFrame([ep_row(receptions=5.0, rec_yards_gained=75.0)])
-    problems = validate.cross_check(weekly, bad)
-    assert len(problems) == 1 and "receiving_yards" in problems[0]
+    with caplog.at_level("WARNING"):
+        problems = validate.cross_check(weekly, bad)
+    assert problems == []
+    assert any("receiving_yards" in r.message and "WR1" in r.message for r in caplog.records)
 
 
-def test_cross_check_allows_our_extra_sack_fumbles_but_not_fewer():
+def test_cross_check_allows_our_extra_sack_fumbles():
     weekly = pl.DataFrame([weekly_row(fumbles_lost=2)])
     assert validate.cross_check(weekly, pl.DataFrame([ep_row(rush_fumble_lost=1.0)])) == []
+
+
+def test_cross_check_fumbles_trailing_by_one_is_reported(caplog):
+    # The brief's original strict case: ours trailing ffopportunity's fumble
+    # count must never be silently swallowed. Under the shared policy (see
+    # ComparisonPolicy) a single such row is an outlier — reported as a
+    # warning, not a build failure — but it must still be visible.
     weekly = pl.DataFrame([weekly_row(fumbles_lost=0)])
-    problems = validate.cross_check(weekly, pl.DataFrame([ep_row(rec_fumble_lost=1.0)]))
-    assert any("fumbles_lost" in p for p in problems)
+    with caplog.at_level("WARNING"):
+        problems = validate.cross_check(weekly, pl.DataFrame([ep_row(rec_fumble_lost=1.0)]))
+    assert problems == []
+    assert any("fumbles_lost" in r.message for r in caplog.records)
 
 
-def test_cross_check_fumble_exception_set_is_narrow():
-    # A player-week in FUMBLE_MISATTRIBUTION_EXCEPTIONS (a real, traced
-    # ffopportunity misattribution) is excused even though ours trails...
-    player_id, season, week = next(iter(validate.FUMBLE_MISATTRIBUTION_EXCEPTIONS))
-    weekly = pl.DataFrame([weekly_row(player_id=player_id, season=season, week=week, fumbles_lost=0)])
-    ep = pl.DataFrame([ep_row(player_id=player_id, season=str(season), week=float(week), rec_fumble_lost=1.0)])
-    assert validate.cross_check(weekly, ep) == []
-    # ...but the exact same trailing-fumble shape at a different, unlisted
-    # week for that same player still flags — the exception is keyed narrowly
-    # by (player_id, season, week), not blanket per player.
-    other_week = week + 1
-    weekly_other = pl.DataFrame([weekly_row(player_id=player_id, season=season, week=other_week, fumbles_lost=0)])
-    ep_other = pl.DataFrame([ep_row(player_id=player_id, season=str(season), week=float(other_week), rec_fumble_lost=1.0)])
-    problems = validate.cross_check(weekly_other, ep_other)
-    assert any("fumbles_lost" in p for p in problems)
+def test_cross_check_fumbles_systematic_regression_fails():
+    # The reviewer's case: ours reports 0 fumbles everywhere theirs has 1+,
+    # across many player-weeks. Each row's own magnitude (trailing by 1) is
+    # nowhere near FUMBLE_POLICY's hard cap, so only the season budget can
+    # catch this — and must, since it's a real regression, not isolated
+    # per-play upstream misattribution.
+    n = validate.FUMBLE_POLICY.season_budget + 5
+    weekly = pl.DataFrame([weekly_row(week=w, fumbles_lost=0) for w in range(1, n + 1)])
+    ep = pl.DataFrame([ep_row(week=float(w), rec_fumble_lost=1.0) for w in range(1, n + 1)])
+    problems = validate.cross_check(weekly, ep)
+    assert any("fumbles_lost" in p and "budget" in p for p in problems)
 
 
-def test_fantasy_contract_matches_the_reference_profile():
+def test_fantasy_contract_matches_the_reference_profile(caplog):
     # 5 rec, 61 yds, 1 TD, 1 fumble: 5 + 6.1 + 6 - 2 = 15.1 in the file.
     weekly = pl.DataFrame([weekly_row(receptions=5, receiving_yards=61, receiving_tds=1, fumbles_lost=1)])
     ep = pl.DataFrame([ep_row(
@@ -96,7 +111,55 @@ def test_fantasy_contract_matches_the_reference_profile():
     )])
     assert validate.fantasy_contract(weekly, ep) == []
 
-    # Beyond FANTASY_CONTRACT_TOLERANCE (documented alongside a couple of
-    # real, isolated ffopportunity mismatches this small a swing would hide).
+    # Beyond FANTASY_CONTRACT_TOLERANCE, but under FANTASY_CONTRACT_HARD_CAP:
+    # an outlier, reported as a warning — detection still works, but a single
+    # such row doesn't fail the build (see ComparisonPolicy).
     off = ep.with_columns(total_fantasy_points=pl.lit(10.1))
-    assert any("total_fantasy_points" in p for p in validate.fantasy_contract(weekly, off))
+    with caplog.at_level("WARNING"):
+        problems = validate.fantasy_contract(weekly, off)
+    assert problems == []
+    assert any("total_fantasy_points" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------- ComparisonPolicy
+
+
+def _policy_rows(magnitudes: list[float], season: int = 2025) -> pl.DataFrame:
+    """A minimal frame shaped like `_join_sources`'s output: keys + `m`."""
+    return pl.DataFrame({
+        "player_id": [f"P{i}" for i in range(len(magnitudes))],
+        "season": [season] * len(magnitudes),
+        "week": list(range(1, len(magnitudes) + 1)),
+        "m": magnitudes,
+    })
+
+
+def test_policy_outlier_within_budget_passes_and_warns(caplog):
+    policy = validate.ComparisonPolicy("test", tight=1.0, hard_cap=10.0, season_budget=3)
+    joined = _policy_rows([2.0])  # beyond tight (1.0), well under cap and budget
+    with caplog.at_level("WARNING"):
+        problems = validate._apply_policy(joined, pl.col("m"), policy, ["m"])
+    assert problems == []
+    assert any("test" in r.message for r in caplog.records)
+
+
+def test_policy_budget_plus_one_outliers_in_one_season_fails():
+    policy = validate.ComparisonPolicy("test", tight=1.0, hard_cap=10.0, season_budget=3)
+    joined = _policy_rows([2.0] * (policy.season_budget + 1))
+    problems = validate._apply_policy(joined, pl.col("m"), policy, ["m"])
+    assert any("budget" in p for p in problems)
+
+
+def test_policy_budget_respects_season_boundaries():
+    # The same outlier count split across two seasons stays within budget for
+    # each — the budget is a per-season limit, not a limit on the whole call.
+    policy = validate.ComparisonPolicy("test", tight=1.0, hard_cap=10.0, season_budget=3)
+    joined = pl.concat([_policy_rows([2.0] * 3, season=2024), _policy_rows([2.0] * 3, season=2025)])
+    assert validate._apply_policy(joined, pl.col("m"), policy, ["m"]) == []
+
+
+def test_policy_single_row_beyond_hard_cap_fails():
+    policy = validate.ComparisonPolicy("test", tight=1.0, hard_cap=5.0, season_budget=10)
+    joined = _policy_rows([6.0])
+    problems = validate._apply_policy(joined, pl.col("m"), policy, ["m"])
+    assert any("hard cap" in p for p in problems)
