@@ -29,6 +29,17 @@ PBP_COLUMNS = [
 ]
 
 
+# Scrimmage play types that carry official rushing/passing stats. Kneels and
+# spikes are excluded by nflverse's own play-by-play convention from the
+# `["pass", "run"]` shorthand elsewhere in this module, but they are real
+# attempts: nflverse marks qb_kneel with rush_attempt=1 (always negative
+# yardage, correctly deflating a QB's rushing total — cross-checked against
+# ffopportunity, which includes them) and qb_spike with pass_attempt=1,
+# complete_pass=0 (a zero-yard incompletion). Both must stay in the base scan
+# so every downstream aggregation sees them.
+SCRIMMAGE_PLAY_TYPES = ("pass", "run", "qb_kneel", "qb_spike")
+
+
 def load_pbp(path: Path, season_types: tuple[str, ...] = ("REG", "POST")) -> pl.LazyFrame:
     """Scan play-by-play, keeping scrimmage and two-point plays that count for stats."""
     lf = pl.scan_csv(path, infer_schema_length=20_000)
@@ -40,7 +51,7 @@ def load_pbp(path: Path, season_types: tuple[str, ...] = ("REG", "POST")) -> pl.
 
     lf = lf.select(cols).filter(
         pl.col("season_type").is_in(season_types)
-        & pl.col("play_type").is_in(["pass", "run"])
+        & pl.col("play_type").is_in(list(SCRIMMAGE_PLAY_TYPES))
         & pl.col("posteam").is_not_null()
     )
     return lf
@@ -356,3 +367,42 @@ def to_long(df: pl.DataFrame, metric_ids: list[str],
         .with_columns(pl.col("value").cast(pl.Float64))
     )
     return long
+
+
+# ffopportunity column -> our expected component. Actual counterparts come from
+# play-by-play; only the model's expectations are taken from this source.
+# rec_interception_exp (targets intercepted) is deliberately not charged to
+# receivers, which matches every mainstream scoring system.
+EXPECTED_COLUMNS: dict[str, str] = {
+    "pass_completions_exp": "x_completions",
+    "receptions_exp": "x_receptions",
+    "pass_yards_gained_exp": "x_passing_yards",
+    "rush_yards_gained_exp": "x_rushing_yards",
+    "rec_yards_gained_exp": "x_receiving_yards",
+    "pass_touchdown_exp": "x_passing_tds",
+    "rush_touchdown_exp": "x_rushing_tds",
+    "rec_touchdown_exp": "x_receiving_tds",
+    "pass_two_point_conv_exp": "x_passing_2pt",
+    "rush_two_point_conv_exp": "x_rushing_2pt",
+    "rec_two_point_conv_exp": "x_receiving_2pt",
+    "pass_first_down_exp": "x_passing_first_downs",
+    "rush_first_down_exp": "x_rushing_first_downs",
+    "rec_first_down_exp": "x_receiving_first_downs",
+    "pass_interception_exp": "x_interceptions",
+}
+
+
+def expected_components(ep: pl.DataFrame) -> pl.DataFrame:
+    """ffopportunity's weekly expectations in our key shape.
+
+    The file stores season as text and week as a float, and has rows with no
+    player id (unidentified ball carriers), which are dropped.
+    """
+    return ep.filter(pl.col("player_id").is_not_null()).select(
+        pl.col("player_id"),
+        pl.col("season").cast(pl.Int64),
+        pl.col("week").cast(pl.Int64),
+        pl.col("posteam").alias("team"),
+        *[pl.col(src).fill_null(0.0).cast(pl.Float64).alias(dst)
+          for src, dst in EXPECTED_COLUMNS.items()],
+    )

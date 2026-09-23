@@ -22,6 +22,9 @@ log = logging.getLogger(__name__)
 
 BASE = "https://github.com/nflverse/nflverse-data/releases/download"
 
+# ffverse's expected-points model, keyed on the same gsis ids as nflverse.
+FFOPPORTUNITY = "https://github.com/ffverse/ffopportunity/releases/download"
+
 # Cache lives outside the repo by default; override for CI.
 DEFAULT_CACHE = Path(os.environ.get("GRIDIRON_CACHE", Path.home() / ".cache" / "gridiron"))
 
@@ -39,10 +42,11 @@ class Source:
     release: str
     filename: str
     partitioned: bool = True
+    base: str = BASE
 
     def url(self, season: int | None = None) -> str:
         name = self.filename.format(season=season) if self.partitioned else self.filename
-        return f"{BASE}/{self.release}/{name}"
+        return f"{self.base}/{self.release}/{name}"
 
     def cache_path(self, cache_dir: Path, season: int | None = None) -> Path:
         name = self.filename.format(season=season) if self.partitioned else self.filename
@@ -59,6 +63,7 @@ SOURCES: dict[str, Source] = {
     "ngs_receiving": Source("ngs_receiving", "nextgen_stats", "ngs_receiving.csv.gz", partitioned=False),
     "ngs_rushing": Source("ngs_rushing", "nextgen_stats", "ngs_rushing.csv.gz", partitioned=False),
     "ngs_passing": Source("ngs_passing", "nextgen_stats", "ngs_passing.csv.gz", partitioned=False),
+    "ep_weekly": Source("ep_weekly", "latest-data", "ep_weekly_{season}.parquet", base=FFOPPORTUNITY),
 }
 
 
