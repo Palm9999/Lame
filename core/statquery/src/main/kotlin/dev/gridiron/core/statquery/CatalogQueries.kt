@@ -20,4 +20,10 @@ public object CatalogQueries {
         "SELECT season, MAX(week) FROM player_week_stat WHERE metric_id = ? GROUP BY season ORDER BY season",
         listOf(Bind.Text(Components.GAMES.id)),
     )
+
+    /** Every team a player is currently on, alphabetically: team. */
+    public val teams: SqlQuery = SqlQuery(
+        "SELECT DISTINCT team FROM player WHERE team IS NOT NULL ORDER BY team",
+        emptyList(),
+    )
 }

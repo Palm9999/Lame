@@ -1,13 +1,16 @@
 package dev.gridiron.core.data
 
 import dev.gridiron.core.model.ScoringPresets
+import dev.gridiron.core.statquery.Condition
 import dev.gridiron.core.statquery.Direction
+import dev.gridiron.core.statquery.Filter
 import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -138,5 +141,48 @@ class StatsRepositoryTest {
         val found = repo.players(some.map { it.playerId } + "missing")
         assertEquals(some.map { it.playerId }.toSet(), found.keys)
         assertEquals(some.first().name, found.getValue(some.first().playerId).name)
+    }
+
+    @Test
+    fun `catalog lists every current team`() {
+        assertEquals(32, catalog.teams.size)
+        assertEquals(catalog.teams.sorted(), catalog.teams)
+        assertTrue("KC" in catalog.teams)
+    }
+
+    @Test
+    fun `a team filter keeps only that team's players`() = runTest {
+        val season = catalog.season(2025)
+        val page = repo.grid(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING, teams = setOf("KC")), catalog)
+        assertTrue(page.rows.isNotEmpty())
+        assertTrue(page.rows.all { it.detail.contains(" · KC · ") }, page.rows.map { it.detail }.toString())
+    }
+
+    @Test
+    fun `snap share and advanced filters narrow the page and the count agrees`() = runTest {
+        val season = catalog.season(2025)
+        val base = GridRequest(season, season.defaultWeeks, StatPack.RECEIVING, positions = PositionFilter.WR)
+        val all = repo.grid(base, catalog).rows.size
+        val snap = base.copy(minSnapShare = 0.75)
+        val snapRows = repo.grid(snap, catalog).rows.size
+        assertTrue(snapRows in 1 until all, "snap filter kept $snapRows of $all")
+        assertEquals(snapRows, repo.count(snap))
+
+        // A filter on a column the pack doesn't show.
+        val carries = base.copy(filters = listOf(Filter(StatColumn.CARRIES, Condition.AtLeast(5.0))))
+        val carryRows = repo.grid(carries, catalog).rows.size
+        assertTrue(carryRows in 1 until all, "carries filter kept $carryRows of $all")
+        assertEquals(carryRows, repo.count(carries))
+    }
+
+    @Test
+    fun `filters still apply while searching by name`() = runTest {
+        // "ma" matches Mahomes, a KC player who has played in 2025; the name search and
+        // the team filter must both hold.
+        val season = catalog.season(2025)
+        val r = GridRequest(season, season.defaultWeeks, StatPack.RECEIVING, name = "ma", teams = setOf("KC"))
+        val rows = repo.grid(r, catalog).rows
+        assertTrue(rows.isNotEmpty())
+        assertTrue(rows.all { it.detail.contains(" · KC · ") })
     }
 }

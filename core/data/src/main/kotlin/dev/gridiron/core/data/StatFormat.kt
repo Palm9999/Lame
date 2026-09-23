@@ -49,6 +49,9 @@ public class StatFormat(private val locale: Locale = Locale.getDefault()) {
     public companion object {
         public const val MISSING: String = "–"
 
+        /** Shares and rates shown as percentages, which filters take as percentages too. */
+        public fun isPercent(column: StatColumn): Boolean = column in PERCENT
+
         private val PERCENT: Set<StatColumn> =
             setOf(TARGET_SHARE, AIR_YARDS_SHARE, CARRY_SHARE, SNAP_SHARE, CATCH_RATE, RUSH_SUCCESS_RATE)
 

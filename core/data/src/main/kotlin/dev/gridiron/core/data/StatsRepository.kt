@@ -4,8 +4,11 @@ import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.doubleOrNull
 import dev.gridiron.core.database.textOrNull
 import dev.gridiron.core.statquery.CatalogQueries
+import dev.gridiron.core.statquery.Condition
+import dev.gridiron.core.statquery.Filter
 import dev.gridiron.core.statquery.GridLayout
 import dev.gridiron.core.statquery.Sort
+import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.statquery.StatQueryBuilder
 import dev.gridiron.core.statquery.StatQuerySpec
 import dev.gridiron.core.statquery.ValueMode
@@ -33,28 +36,13 @@ public class StatsRepository(
                 stability = it.doubleOrNull(6),
             )
         }
-        return Catalog(seasons.toImmutableList(), metrics.associateBy { it.id }.toImmutableMap())
+        val teams = executor.query(CatalogQueries.teams) { it.text(0) }
+        return Catalog(seasons.toImmutableList(), metrics.associateBy { it.id }.toImmutableMap(), teams.toImmutableList())
     }
 
     public suspend fun grid(request: GridRequest, catalog: Catalog): GridPage {
-        val threshold = SampleThreshold.forRequest(request.sort, request.pack, request.playedWeeks, request.perGame)
-        val searching = request.name.isNotBlank()
-        val spec = StatQuerySpec(
-            season = request.season.season,
-            weeks = request.weeks,
-            columns = request.pack.columns,
-            sort = listOf(Sort(request.sort, request.direction)),
-            positions = request.positions.positions,
-            qualifiers = listOfNotNull(threshold?.qualifier),
-            // A search should find anyone; players below the bar come back unranked.
-            includeUnqualified = searching,
-            minGames = if (searching) 1 else threshold?.minGames ?: 1,
-            mode = if (request.perGame) ValueMode.PER_GAME else ValueMode.TOTAL,
-            percentiles = true,
-            name = request.name.takeIf { searching },
-            limit = StatQuerySpec.MAX_LIMIT,
-            scoring = request.scoring,
-        )
+        val threshold = threshold(request)
+        val spec = spec(request, threshold)
         val q = StatQueryBuilder.grid(spec)
         val layout = q.layout
 
@@ -84,4 +72,35 @@ public class StatsRepository(
     }
 
     public suspend fun players(ids: Collection<String>): Map<String, PlayerHeader> = executor.playerHeaders(ids)
+
+    private fun spec(request: GridRequest, threshold: SampleThreshold?): StatQuerySpec {
+        val searching = request.name.isNotBlank()
+        val snap = request.minSnapShare?.let { Filter(StatColumn.SNAP_SHARE, Condition.AtLeast(it)) }
+        return StatQuerySpec(
+            season = request.season.season,
+            weeks = request.weeks,
+            columns = request.pack.columns,
+            sort = listOf(Sort(request.sort, request.direction)),
+            positions = request.positions.positions,
+            teams = request.teams,
+            // Unlike the sample qualifier, these are the user's own choices, so a search keeps them.
+            filters = listOfNotNull(snap) + request.filters,
+            qualifiers = listOfNotNull(threshold?.qualifier),
+            // A search should find anyone; players below the bar come back unranked.
+            includeUnqualified = searching,
+            minGames = if (searching) 1 else threshold?.minGames ?: 1,
+            mode = if (request.perGame) ValueMode.PER_GAME else ValueMode.TOTAL,
+            percentiles = true,
+            name = request.name.takeIf { searching },
+            limit = StatQuerySpec.MAX_LIMIT,
+            scoring = request.scoring,
+        )
+    }
+
+    private fun threshold(request: GridRequest): SampleThreshold? =
+        SampleThreshold.forRequest(request.sort, request.pack, request.playedWeeks, request.perGame)
+
+    /** How many players [request] matches, ignoring the page limit. Backs the filter sheet's live count. */
+    public suspend fun count(request: GridRequest): Int =
+        executor.query(StatQueryBuilder.count(spec(request, threshold(request)))) { it.long(0).toInt() }.single()
 }
