@@ -344,7 +344,10 @@ class RealDatabaseContractTest {
 
     /** The spec both the speed test and its index-plan sibling below run. */
     private fun scoredSpec(): StatQuerySpec {
-        val season = seasons.last()
+        // A complete season, not seasons.last(): the season in progress has far
+        // fewer weeks and players, so it wouldn't exercise the full-season
+        // volume these tests exist to measure.
+        val season = lastCompleteSeason
         return StatQuerySpec(
             season, WeekRange.regularSeason(season),
             listOf(
