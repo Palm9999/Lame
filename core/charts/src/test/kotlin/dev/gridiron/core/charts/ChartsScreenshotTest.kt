@@ -1,7 +1,10 @@
 package dev.gridiron.core.charts
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -158,5 +161,32 @@ class ChartsScreenshotTest {
         compose.onRoot().performTouchInput { click(Offset(outer / 2, outer / 2)) }
         compose.waitForIdle()
         assertNull(selected.last())
+    }
+
+    @Composable
+    private fun SparklinesContent() {
+        val color = MaterialTheme.colorScheme.onSurfaceVariant
+        Column(Modifier.padding(16.dp)) {
+            listOf(
+                listOf(5f, 7f, null, 9f, 4f, 8f),   // a bye in the middle
+                listOf(0f, 0f, 0f, 0f, 0f, 0f),     // flat
+                listOf(null, 3f, null, null, 6f, null), // isolated points
+                listOf(12f, null, null, null, null, null), // one point: draws nothing
+            ).forEach { values ->
+                Sparkline(values.toImmutableList(), color, Modifier.padding(vertical = 6.dp).size(44.dp, 14.dp))
+            }
+        }
+    }
+
+    @Test
+    fun sparklinesLightAndDark() {
+        compose.setContent { GridironTheme(darkTheme = false) { SparklinesContent() } }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/charts_7_sparklines.png")
+    }
+
+    @Test
+    fun sparklinesDark() {
+        compose.setContent { GridironTheme(darkTheme = true) { SparklinesContent() } }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/charts_8_sparklines_dark.png")
     }
 }
