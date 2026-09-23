@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import dev.gridiron.core.data.DecimalInput
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.model.BonusStat
 import dev.gridiron.core.model.Position
