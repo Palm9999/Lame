@@ -157,10 +157,10 @@ private fun CompareContent(
             Box(Modifier.weight(1f)) {
                 when {
                     combinedLandscapeBars -> Row(Modifier.fillMaxSize()) {
-                        BarsTab(state.page.groups, Modifier.weight(1f))
+                        BarsTab(state.page.groups, state.page.chartedSlots, Modifier.weight(1f))
                         TablePane(state, onEvent, Modifier.weight(1f))
                     }
-                    state.tab == CompareTab.BARS -> BarsTab(state.page.groups, Modifier.fillMaxSize())
+                    state.tab == CompareTab.BARS -> BarsTab(state.page.groups, state.page.chartedSlots, Modifier.fillMaxSize())
                     state.tab == CompareTab.TABLE -> TablePane(state, onEvent, Modifier.fillMaxSize())
                     state.tab == CompareTab.RADAR -> RadarTab(
                         state.page,

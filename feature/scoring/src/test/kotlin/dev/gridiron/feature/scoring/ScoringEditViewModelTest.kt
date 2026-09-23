@@ -97,6 +97,24 @@ class ScoringEditViewModelTest {
     }
 
     @Test
+    fun aBonusMinimumStartsAtOneYard() = runTest(dispatcher) {
+        // A 0-yard minimum would match every player with any scoring stat that
+        // week but not one with none, so the editor asks for at least 1.
+        repo.duplicate(ScoringPresets.PPR.id, "Mine")
+        val vm = ScoringEditViewModel("u1", repo)
+        advanceUntilIdle()
+        vm.onEvent(EditEvent.BonusAdded)
+        val key = (vm.state.value as EditState.Editing).bonuses.single().key
+        vm.onEvent(EditEvent.BonusChanged(key, BonusDraft(key, BonusStat.RUSHING_YARDS, "0", "50", "1")))
+        val zero = vm.state.value as EditState.Editing
+        assertNull(zero.profile)
+        assertEquals("Whole yards, 1–1000", zero.errors[FieldKey.BonusMin(key)])
+        vm.onEvent(EditEvent.BonusChanged(key, BonusDraft(key, BonusStat.RUSHING_YARDS, "1", "50", "1")))
+        val one = vm.state.value as EditState.Editing
+        assertEquals(listOf(YardageBonus(BonusStat.RUSHING_YARDS, 1, 50, 1.0)), one.profile!!.yardageBonuses)
+    }
+
+    @Test
     fun presetsOpenReadOnly() = runTest(dispatcher) {
         val vm = ScoringEditViewModel(ScoringPresets.PPR.id, repo)
         advanceUntilIdle()

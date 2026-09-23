@@ -1,5 +1,6 @@
 package dev.gridiron.feature.scoring
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -79,6 +80,9 @@ private fun EditingContent(state: EditState.Editing, onEvent: (EditEvent) -> Uni
     var confirmDiscard by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.saved) { if (state.saved) onBack() }
+    // The back gesture asks too, exactly like "← Back"; with nothing unsaved it
+    // stays disabled and back goes straight to the previous screen.
+    BackHandler(enabled = state.dirty && !state.saved) { confirmDiscard = true }
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {

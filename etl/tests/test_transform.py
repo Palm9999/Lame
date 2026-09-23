@@ -251,6 +251,24 @@ def test_carries_eff_is_stored_and_excludes_kneels_from_the_long_facts():
     assert value("RB1", "carries_eff") == 1
 
 
+def test_kneel_at_the_3_is_a_carry_but_not_goal_line_usage():
+    # A kneel inside the 5 is a box-score carry with its yards, but not a
+    # designed goal-line run, a red/green-zone carry or a weighted
+    # opportunity: those are usage signals, and a kneel never scores.
+    df = run([
+        carry("QB1", 2, yl=3),
+        kneel("QB1", -1, yardline_100=3),
+        target("QB1", 2, qb="QB2"),
+    ])
+    r = row(df, "QB1")
+    assert r["carries"] == 2
+    assert r["rushing_yards"] == 1
+    assert r["carries_eff"] == 1
+    assert (r["rz_carries"], r["gz_carries"], r["gl_carries"]) == (1, 1, 1)
+    assert r["qb_rush_inside_5"] == 1
+    assert r["weighted_opportunities"] == pytest.approx(1 + 2.6 * 1)
+
+
 def test_spike_counts_as_a_pass_attempt_but_not_a_dropback():
     df = run([
         target("WR1", 10, complete=True, yds=10, qb="QB1", epa=0.8),

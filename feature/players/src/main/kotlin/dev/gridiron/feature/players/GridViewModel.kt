@@ -55,7 +55,10 @@ sealed interface GridEvent {
     data class ProfileSelected(val id: String) : GridEvent
     data class AddToCompare(val playerId: String, val name: String) : GridEvent
     data class RemoveFromTray(val slot: CompareSlot) : GridEvent
+    /** Opens the season/weeks sheet for a tray chip. */
+    data class EditTraySlot(val slot: CompareSlot) : GridEvent
     data class ReplaceTraySlot(val old: CompareSlot, val new: CompareSlot) : GridEvent
+    data object TraySlotEditClosed : GridEvent
     data object MessageShown : GridEvent
 }
 
@@ -78,6 +81,8 @@ sealed interface GridUiState {
         val tray: ImmutableList<TraySlotUi> = persistentListOf(),
         /** A one-off message for the snackbar; the screen sends [GridEvent.MessageShown] after showing it. */
         val message: String? = null,
+        /** The tray slot the season/weeks sheet is editing, or null when the sheet is closed. */
+        val editingSlot: CompareSlot? = null,
     ) : GridUiState {
         val refreshing: Boolean get() = page?.request != request && error == null
     }
@@ -109,6 +114,7 @@ class GridViewModel(
         get() = (catalogLoad.value as? CatalogLoad.Loaded)?.catalog
 
     private val message = MutableStateFlow<String?>(null)
+    private val editingSlot = MutableStateFlow<CompareSlot?>(null)
 
     private val trayUi: Flow<ImmutableList<TraySlotUi>> =
         combine(tray.slots, catalogLoad) { slots, load -> slots to (load as? CatalogLoad.Loaded)?.catalog }
@@ -133,9 +139,20 @@ class GridViewModel(
                     if (r == null) GridUiState.Loading
                     else GridUiState.Ready(load.catalog, r, h, page, err?.takeIf { it.first == r }?.second)
             }
-        }.combine(combine(scoring.profiles, trayUi, message, ::Triple)) { base, (profiles, slots, msg) ->
-            if (base is GridUiState.Ready) base.copy(profiles = profiles, tray = slots, message = msg) else base
+        }.combine(combine(scoring.profiles, trayUi, message, editingSlot, ::Extras)) { base, extras ->
+            if (base is GridUiState.Ready) {
+                base.copy(profiles = extras.profiles, tray = extras.tray, message = extras.message, editingSlot = extras.editingSlot)
+            } else {
+                base
+            }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, GridUiState.Loading)
+
+    private data class Extras(
+        val profiles: ImmutableList<ScoringProfile>,
+        val tray: ImmutableList<TraySlotUi>,
+        val message: String?,
+        val editingSlot: CompareSlot?,
+    )
 
     init {
         viewModelScope.launch {
@@ -189,10 +206,14 @@ class GridViewModel(
             is GridEvent.AddToCompare -> {
                 val r = request.value ?: return
                 viewModelScope.launch {
-                    message.value = when (tray.add(CompareSlot(event.playerId, r.season.season, r.weeks))) {
-                        CompareTrayRepository.AddResult.ADDED -> "${event.name} added to compare"
-                        CompareTrayRepository.AddResult.ALREADY_THERE -> "${event.name} is already in compare"
-                        CompareTrayRepository.AddResult.FULL -> "Compare holds ${CompareTrayRepository.CAPACITY} players. Remove one first."
+                    // No snackbar on a successful add: the screen's haptic and the
+                    // new tray chip confirm it, and a snackbar would sit over the
+                    // tray's Compare button for its whole duration.
+                    when (tray.add(CompareSlot(event.playerId, r.season.season, r.weeks))) {
+                        CompareTrayRepository.AddResult.ADDED -> Unit
+                        CompareTrayRepository.AddResult.ALREADY_THERE -> message.value = "${event.name} is already in compare"
+                        CompareTrayRepository.AddResult.FULL ->
+                            message.value = "Compare holds ${CompareTrayRepository.CAPACITY} players. Remove one first."
                     }
                 }
                 return
@@ -201,10 +222,26 @@ class GridViewModel(
                 viewModelScope.launch { tray.remove(event.slot) }
                 return
             }
+            is GridEvent.EditTraySlot -> {
+                editingSlot.value = event.slot
+                return
+            }
             is GridEvent.ReplaceTraySlot -> {
+                // The sheet follows the change straight away, so a quick second
+                // change replaces the new slot rather than the old one...
+                editingSlot.value = event.new
                 viewModelScope.launch {
-                    if (!tray.replace(event.old, event.new)) message.value = "That player and range is already in compare"
+                    if (!tray.replace(event.old, event.new)) {
+                        message.value = "That player and range is already in compare"
+                        // ...and on a rejection it closes rather than keep editing
+                        // a slot that never made it into the tray.
+                        editingSlot.update { if (it == event.new) null else it }
+                    }
                 }
+                return
+            }
+            GridEvent.TraySlotEditClosed -> {
+                editingSlot.value = null
                 return
             }
             GridEvent.MessageShown -> {
@@ -244,7 +281,9 @@ class GridViewModel(
             is GridEvent.ProfileSelected -> r
             is GridEvent.AddToCompare -> r
             is GridEvent.RemoveFromTray -> r
+            is GridEvent.EditTraySlot -> r
             is GridEvent.ReplaceTraySlot -> r
+            GridEvent.TraySlotEditClosed -> r
             GridEvent.MessageShown -> r
         }
 

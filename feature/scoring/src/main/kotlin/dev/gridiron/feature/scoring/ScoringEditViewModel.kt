@@ -91,8 +91,8 @@ private fun EditState.Editing.validate(): Pair<Map<FieldKey, String>, ScoringPro
         }
     }
     val bonuses = bonuses.mapNotNull { b ->
-        val min = b.min.trim().toIntOrNull()?.takeIf { it in 0..1000 }
-        if (min == null) errors[FieldKey.BonusMin(b.key)] = "Whole yards, 0–1000"
+        val min = b.min.trim().toIntOrNull()?.takeIf { it in 1..1000 }
+        if (min == null) errors[FieldKey.BonusMin(b.key)] = "Whole yards, 1–1000"
         val max = if (b.max.isBlank()) null else b.max.trim().toIntOrNull()
         if (b.max.isNotBlank() && max == null) errors[FieldKey.BonusMax(b.key)] = "Whole yards, or leave blank"
         if (min != null && max != null && max <= min) errors[FieldKey.BonusMax(b.key)] = "Must be above the minimum"

@@ -24,9 +24,14 @@ import dev.gridiron.core.charts.RadarChart
 import dev.gridiron.core.charts.RadarSeries
 import dev.gridiron.core.data.ComparePage
 import dev.gridiron.core.designsystem.SlotColors
-import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 
-/** Percentile "shape" for exactly two slots; a selector appears above three or four. */
+/**
+ * Percentile "shape" for exactly two slots; a selector appears above three or
+ * four. Only charted slots are offered or drawn: a slot with no data (no
+ * games, no season) is excluded from charts, so with one charted slot the
+ * radar draws that one shape.
+ */
 @Composable
 internal fun RadarTab(
     page: ComparePage,
@@ -35,30 +40,33 @@ internal fun RadarTab(
     modifier: Modifier = Modifier,
 ) {
     val radar = page.radar
+    val charted = page.chartedSlots
     Column(modifier.padding(16.dp)) {
-        if (radar == null) {
+        if (radar == null || charted.isEmpty()) {
             Text("Not enough ranked players for a radar.", style = MaterialTheme.typography.bodyMedium)
             return@Column
         }
 
-        if (page.slots.size > 2) {
-            RadarSelector(page, radarPair, onRadarPairChanged)
+        if (charted.size > 2) {
+            RadarSelector(page, charted, radarPair, onRadarPairChanged)
         }
 
         val a = radarPair.first
         val b = radarPair.second
+        val shown = listOf(a, b).distinct().filter { it in charted }
         val names = page.slots.map { it.name }
         RadarChart(
             axes = radar.axes,
-            series = persistentListOf(
-                RadarSeries(names[a], radar.values[a], SlotColors.color(a)),
-                RadarSeries(names[b], radar.values[b], SlotColors.color(b)),
-            ),
-            contentDescription = radarSummary(radar, names, a, b),
+            series = shown.map { i -> RadarSeries(names[i], radar.values[i], SlotColors.color(i)) }.toImmutableList(),
+            contentDescription = if (shown.size == 2) {
+                radarSummary(radar, names, a, b)
+            } else {
+                "Radar: ${names[shown.single()]}, percentile within position"
+            },
             modifier = Modifier.fillMaxWidth(),
         )
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-            listOf(a, b).forEach { i ->
+            shown.forEach { i ->
                 Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(10.dp).background(SlotColors.color(i), CircleShape))
                     Spacer(Modifier.width(4.dp))
@@ -76,7 +84,7 @@ internal fun RadarTab(
 }
 
 @Composable
-private fun RadarSelector(page: ComparePage, radarPair: Pair<Int, Int>, onRadarPairChanged: (Int, Int) -> Unit) {
+private fun RadarSelector(page: ComparePage, charted: List<Int>, radarPair: Pair<Int, Int>, onRadarPairChanged: (Int, Int) -> Unit) {
     fun choose(pickFirst: Boolean, i: Int) {
         val (a0, b0) = radarPair
         val next = if (pickFirst) i to (if (i == b0) a0 else b0) else (if (i == a0) b0 else a0) to i
@@ -89,7 +97,8 @@ private fun RadarSelector(page: ComparePage, radarPair: Pair<Int, Int>, onRadarP
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(bottom = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                page.slots.forEachIndexed { i, slot ->
+                charted.forEach { i ->
+                    val slot = page.slots[i]
                     val selected = if (pickFirst) radarPair.first == i else radarPair.second == i
                     FilterChip(
                         selected = selected,

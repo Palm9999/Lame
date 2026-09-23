@@ -395,6 +395,39 @@ CROSS_CHECK_PAIRS: tuple[tuple[str, str, ComparisonPolicy], ...] = (
 FUMBLE_POLICY = ComparisonPolicy("cross-check fumbles_lost vs ffopportunity", 0.0, 3.0, 20)
 
 
+def expected_coverage(season: int, weekly: pl.DataFrame, ep: pl.DataFrame | None) -> int:
+    """The week through which ffopportunity covers the season's play-by-play.
+
+    The cross-checks inner-join the two sources, so a play-by-play week with
+    no ffopportunity rows is neither checked nor reported — and every player's
+    xFP for it silently becomes 0 (FPOE = FP). That is the expected state for
+    a few hours after Monday Night Football when the scheduled build runs
+    before ffopportunity has processed the week, so it is a WARNING, not a
+    failure. Returns the last play-by-play week W such that every week up to
+    W has expected rows (0 when the first week already lacks them); `build`
+    records it in `schema_meta` as `expected_through_week:<season>`.
+    """
+    played = sorted(set(weekly["week"].cast(pl.Int64).to_list()))
+    covered: set[int] = set()
+    if ep is not None and ep.height:
+        covered = set(ep["week"].cast(pl.Int64).to_list())
+    missing = [w for w in played if w not in covered]
+    if missing:
+        label = "week" if len(missing) == 1 else "weeks"
+        log.warning(
+            "season %d: play-by-play %s %s ha%s games but no ffopportunity expected "
+            "rows; xFP is 0 (FPOE = FP) there until ffopportunity catches up",
+            season, label, ", ".join(str(w) for w in missing),
+            "s" if len(missing) == 1 else "ve",
+        )
+    through = 0
+    for w in played:
+        if w not in covered:
+            break
+        through = w
+    return through
+
+
 def cross_check(weekly: pl.DataFrame, ep: pl.DataFrame) -> list[str]:
     """Our play-by-play actuals against ffopportunity's, per player-week.
 

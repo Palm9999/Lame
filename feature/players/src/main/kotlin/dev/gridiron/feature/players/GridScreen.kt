@@ -61,7 +61,6 @@ import dev.gridiron.core.data.weeksLabel
 import dev.gridiron.core.designsystem.HeaderStyle
 import dev.gridiron.core.designsystem.NumberStyle
 import dev.gridiron.core.designsystem.heatColor
-import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.statquery.Direction
 import dev.gridiron.core.table.StatTable
 import dev.gridiron.core.table.TableColumn
@@ -123,7 +122,6 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
     val r = state.request
     var showWeeks by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<MetricInfo?>(null) }
-    var editingSlot by remember { mutableStateOf<CompareSlot?>(null) }
     val haptics = LocalHapticFeedback.current
     val snackbar = remember { SnackbarHostState() }
 
@@ -197,7 +195,7 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
             if (state.tray.isNotEmpty()) {
                 TrayBar(
                     tray = state.tray,
-                    onEdit = { editingSlot = it.slot },
+                    onEdit = { onEvent(GridEvent.EditTraySlot(it.slot)) },
                     onRemove = { onEvent(GridEvent.RemoveFromTray(it)) },
                     onCompare = onCompare,
                 )
@@ -209,15 +207,12 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
 
     if (showWeeks) WeeksSheet(r.season, r.weeks, onDismiss = { showWeeks = false }, onChange = { onEvent(GridEvent.WeeksChanged(it)) })
     info?.let { MetricSheet(it, onDismiss = { info = null }) }
-    editingSlot?.let { original ->
+    state.editingSlot?.let { original ->
         SeasonWeeksSheet(
             state.catalog,
             original,
-            onDismiss = { editingSlot = null },
-            onChange = { updated ->
-                onEvent(GridEvent.ReplaceTraySlot(original, updated))
-                editingSlot = updated
-            },
+            onDismiss = { onEvent(GridEvent.TraySlotEditClosed) },
+            onChange = { updated -> onEvent(GridEvent.ReplaceTraySlot(original, updated)) },
         )
     }
 }

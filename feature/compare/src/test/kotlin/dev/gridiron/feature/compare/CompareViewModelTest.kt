@@ -11,6 +11,7 @@ import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.datastore.UserPrefs
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.ScoringPresets
+import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.testing.FakePrefsSource
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
@@ -119,13 +120,26 @@ class CompareViewModelTest {
     }
 
     @Test
-    fun addingAScatterPointUsesTheFirstSlotsSeasonAndRange() = runTest(dispatcher) {
-        val slots = twoReceivers()
-        val vm = viewModel(tray = slots)
+    fun radarPairSkipsSlotsExcludedFromCharts() = runTest(dispatcher) {
+        val (a, b) = twoReceivers()
+        // Slot 0 is for a season that isn't in the database: nothing to chart.
+        val vm = viewModel(tray = listOf(CompareSlot(a.playerId, 2003, WeekRange(1, 17)), a, b))
         advanceUntilIdle()
-        val other = (vm.state.value as CompareUiState.Ready).page.scatter!!.population.first { p -> slots.none { it.playerId == p.playerId } }
+        assertEquals(1 to 2, (vm.state.value as CompareUiState.Ready).radarPair)
+    }
+
+    @Test
+    fun addingAScatterPointUsesTheScattersSeasonAndRange() = runTest(dispatcher) {
+        val slots = twoReceivers()
+        // The scatter is drawn for the first slot with data (slot 1), not slot 0's dead season.
+        val tray = listOf(CompareSlot(slots[0].playerId, 2003, WeekRange(1, 17))) + slots
+        val vm = viewModel(tray = tray)
+        advanceUntilIdle()
+        val scatter = (vm.state.value as CompareUiState.Ready).page.scatter!!
+        assertEquals(slots[0].season, scatter.season)
+        val other = scatter.population.first { p -> slots.none { it.playerId == p.playerId } }
         vm.onEvent(CompareEvent.AddPointToCompare(other.playerId, other.name))
         advanceUntilIdle()
-        assertEquals(CompareSlot(other.playerId, slots[0].season, slots[0].weeks), prefs.current.tray.last())
+        assertEquals(CompareSlot(other.playerId, scatter.season, scatter.weeks), prefs.current.tray.last())
     }
 }

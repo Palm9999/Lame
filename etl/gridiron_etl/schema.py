@@ -142,16 +142,22 @@ def load_facts(conn: sqlite3.Connection, long: pl.DataFrame, chunk: int = 100_00
     return len(rows)
 
 
-def finalize(conn: sqlite3.Connection, seasons: list[int]) -> None:
+def finalize(conn: sqlite3.Connection, seasons: list[int],
+             extra_meta: dict[str, str] | None = None) -> None:
     """Index, record provenance, then ANALYZE and VACUUM so the shipped file is
-    already optimized and the planner has statistics on first query."""
+    already optimized and the planner has statistics on first query.
+
+    `extra_meta` adds build-specific provenance, such as
+    `expected_through_week:<season>`."""
     conn.executescript(INDEXES)
     conn.executemany(
         "INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)",
         [
             ("schema_version", str(SCHEMA_VERSION)),
             ("seasons", ",".join(str(s) for s in sorted(seasons))),
-            ("source", "nflverse-data (CC BY 4.0)"),
+            ("source", "nflverse-data (CC BY 4.0); "
+                       "ffopportunity expected points (GPL >= 3)"),
+            *sorted((extra_meta or {}).items()),
         ],
     )
     conn.commit()

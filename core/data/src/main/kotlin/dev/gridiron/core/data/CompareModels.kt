@@ -17,13 +17,26 @@ public data class ComparePage(
     val groups: ImmutableList<CompareGroupUi>,
     val radar: RadarUi?,
     val scatter: ScatterUi?,
-)
+) {
+    /** Indexes of the slots with a row to chart; the rest are excluded from charts. */
+    public val chartedSlots: List<Int> get() = slots.indices.filter { slots[it].status.charted }
+}
 
 /** One tray slot's identity and how it fared. */
 public data class SlotHeader(val slot: CompareSlot, val name: String, val detail: String, val status: SlotStatus, val position: Position?)
 
 /** Why a slot does or doesn't have a full ranked row. */
-public enum class SlotStatus { OK, SMALL_SAMPLE, NO_GAMES, NO_SEASON, MISSING }
+public enum class SlotStatus {
+    OK,
+    SMALL_SAMPLE,
+    NO_GAMES,
+    NO_SEASON,
+    MISSING,
+    ;
+
+    /** Whether the slot has values to show; a slot without them is excluded from charts. */
+    public val charted: Boolean get() = this == OK || this == SMALL_SAMPLE
+}
 
 /** One group of rows (Opportunity, Efficiency, Scoring, Context), with a composite score per slot. */
 public data class CompareGroupUi(val group: CompareGroup, val composite: ImmutableList<Float?>, val rows: ImmutableList<CompareRowUi>)

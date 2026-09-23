@@ -23,7 +23,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.launch
 
@@ -171,7 +170,7 @@ internal class CompareViewModel(
                     profiles = profiles,
                     tab = tab,
                     onlyDifferences = onlyDifferences,
-                    radarPair = clampRadarPair(radarPair, page!!.slots.size),
+                    radarPair = clampRadarPair(radarPair, page!!.chartedSlots),
                     selectedPoint = selectedPoint,
                     refreshing = computing,
                     message = message,
@@ -201,8 +200,11 @@ internal class CompareViewModel(
                 recompute()
             }
             is CompareEvent.AddPointToCompare -> viewModelScope.launch {
-                val first = tray.slots.first().firstOrNull() ?: return@launch
-                val slot = CompareSlot(event.playerId, first.season, first.weeks)
+                // The point came from the scatter's population, so it joins in
+                // that population's season and range (the first slot with data,
+                // which need not be tray slot 0).
+                val scatter = page?.scatter ?: return@launch
+                val slot = CompareSlot(event.playerId, scatter.season, scatter.weeks)
                 message = when (tray.add(slot)) {
                     CompareTrayRepository.AddResult.ADDED -> "${event.name} added to compare"
                     CompareTrayRepository.AddResult.ALREADY_THERE -> "${event.name} is already in compare"
@@ -220,9 +222,17 @@ internal class CompareViewModel(
     }
 
     companion object {
-        /** A radar pair is only valid while both indices still point at a slot. */
-        private fun clampRadarPair(pair: Pair<Int, Int>, slotCount: Int): Pair<Int, Int> =
-            if (pair.first in 0 until slotCount && pair.second in 0 until slotCount && pair.first != pair.second) pair else 0 to 1
+        /**
+         * A radar pair is only valid while both indices point at distinct slots
+         * that are charted; otherwise the first two charted slots (a slot with
+         * no data is excluded from charts). With fewer than two charted slots
+         * the pair repeats the one there is, and the radar draws one shape.
+         */
+        private fun clampRadarPair(pair: Pair<Int, Int>, charted: List<Int>): Pair<Int, Int> {
+            if (pair.first in charted && pair.second in charted && pair.first != pair.second) return pair
+            val first = charted.getOrElse(0) { 0 }
+            return first to charted.getOrElse(1) { first }
+        }
 
         fun factory(
             stats: StatsRepository,
