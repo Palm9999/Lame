@@ -83,10 +83,5 @@ public class StatsRepository(
         return GridPage(request, columns.toImmutableList(), rows.toImmutableList(), threshold?.description)
     }
 
-    public suspend fun players(ids: Collection<String>): Map<String, PlayerHeader> {
-        val q = StatQueryBuilder.players(ids) ?: return emptyMap()
-        return executor.query(q) { r ->
-            PlayerHeader(r.text(0), r.text(1), r.textOrNull(2), r.textOrNull(3))
-        }.associateBy { it.playerId }
-    }
+    public suspend fun players(ids: Collection<String>): Map<String, PlayerHeader> = executor.playerHeaders(ids)
 }

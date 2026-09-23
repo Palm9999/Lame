@@ -254,6 +254,18 @@ class StatQueryBuilderTest {
 
             assertEquals(setOf("c1", "c2"), rows.map { it.playerId }.toSet())
         }
+
+        @Test
+        fun `filtering to players happens after percentiles`() {
+            for ((i, id) in listOf("a", "b", "c", "d").withIndex()) {
+                db.player(id, "Player $id")
+                db.week(id, 1, C.TARGETS to (i + 1) * 3)
+            }
+            val all = db.grid(spec(TARGETS).copy(percentiles = true)).associateBy { it.playerId }
+            val two = db.grid(spec(TARGETS).copy(percentiles = true, playerIds = setOf("b", "d")))
+            assertEquals(listOf("d", "b"), two.map { it.playerId })
+            for (r in two) assertEquals(all.getValue(r.playerId).percentile(TARGETS)!!, r.percentile(TARGETS)!!, EPS)
+        }
     }
 
     @Nested
