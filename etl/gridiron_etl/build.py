@@ -14,7 +14,7 @@ import polars as pl
 import requests
 
 from . import sources, schema, transform, validate as validation
-from .metrics import METRICS, metric_rows
+from .metrics import METRICS, metric_rows, sparse_metric_ids
 
 log = logging.getLogger("gridiron.build")
 
@@ -111,7 +111,7 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
         except Exception as exc:  # snap counts are a nice-to-have, not a blocker
             log.warning("season %d: snap counts unavailable (%s)", season, exc)
 
-        frames.append(transform.to_long(weekly, metric_ids))
+        frames.append(transform.to_long(weekly, metric_ids, sparse_metric_ids()))
 
     if not frames:
         raise RuntimeError(f"none of the seasons {seasons} has published play-by-play")

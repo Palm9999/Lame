@@ -21,7 +21,7 @@ import polars as pl
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 DDL = """
 PRAGMA journal_mode = OFF;
@@ -49,7 +49,9 @@ CREATE TABLE metric (
     decimals         INTEGER NOT NULL DEFAULT 1,
     hot              INTEGER NOT NULL DEFAULT 0,
     -- Range-aggregation components; never offered as a visible column.
-    internal         INTEGER NOT NULL DEFAULT 0
+    internal         INTEGER NOT NULL DEFAULT 0,
+    -- Computed on the device (fantasy points); display metadata only, no facts.
+    computed         INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE player (
@@ -108,12 +110,12 @@ def load_metrics(conn: sqlite3.Connection, rows: list[dict]) -> None:
     conn.executemany(
         """INSERT INTO metric (id, name, abbr, "group", definition, formula,
                                positions, tier, predicts, stability,
-                               higher_is_better, decimals, hot, internal)
+                               higher_is_better, decimals, hot, internal, computed)
            VALUES (:id, :name, :abbr, :group, :definition, :formula,
                    :positions, :tier, :predicts, :stability,
-                   :higher_is_better, :decimals, :hot, :internal)""",
+                   :higher_is_better, :decimals, :hot, :internal, :computed)""",
         [{**r, "higher_is_better": int(r["higher_is_better"]), "hot": int(r["hot"]),
-          "internal": int(r["internal"])}
+          "internal": int(r["internal"]), "computed": int(r["computed"])}
          for r in rows],
     )
     conn.commit()

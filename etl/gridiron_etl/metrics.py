@@ -41,6 +41,12 @@ class Metric:
     # 1-8 is sum(targets) / sum(team_targets), not the mean of eight weekly
     # shares, and that requires the denominators to be stored.
     internal: bool = False
+    # Computed on the device from other components and the user's scoring
+    # profile. Registered for display metadata only; never stored as facts.
+    computed: bool = False
+    # Zero values are not stored: absent means zero. For scoring inputs, which
+    # are zero for most player-weeks. An ETL concern only; not in the schema.
+    sparse: bool = False
 
 
 _M: list[Metric] = [
@@ -184,14 +190,61 @@ _M: list[Metric] = [
            predicts="Role change before box score reflects it",
            stability=0.79, decimals=3, hot=True),
 
-    # ---------------- Derived fantasy ----------------
+    # ---------------- Fantasy (computed on the device) ----------------
+    Metric("fantasy_points", "Fantasy Points", "FPTS", "fantasy",
+           "Points under the active scoring profile, scored game by game so "
+           "per-game bonuses apply to single games.", decimals=1, computed=True),
+    Metric("expected_fantasy_points", "Expected Fantasy Points", "xFP", "fantasy",
+           "Points an average player would score from the same opportunities: "
+           "the active profile applied to the opportunity model's expected "
+           "receptions, yards, touchdowns and first downs.",
+           predicts="Future fantasy points, better than past points do",
+           decimals=1, computed=True),
     Metric("fpoe", "Fantasy Points Over Expected", "FPOE", "fantasy",
-           "Actual fantasy points minus opportunity-expected points. Positive is "
-           "a sell-high signal, negative a buy-low signal.",
-           formula="actual_fp - expected_fp", predicts="Negative regression when high",
-           stability=0.12, decimals=1),
+           "Actual fantasy points minus expected. Positive is a sell-high "
+           "signal, negative a buy-low signal. Long plays and fumbles have no "
+           "expectation, so they land here.",
+           formula="fantasy_points - expected_fantasy_points",
+           predicts="Negative regression when high", stability=0.12,
+           decimals=1, computed=True),
     Metric("total_epa", "Total EPA", "EPA", "efficiency",
            "Expected points added across all touches.", decimals=2),
+
+    # ---------------- Scoring inputs (internal, sparse) ----------------
+    *[
+        Metric(mid, name, mid.upper(), "fantasy", definition,
+               decimals=dec, internal=True, sparse=True)
+        for mid, name, definition, dec in [
+            ("passing_first_downs", "Passing First Downs", "First downs gained by completions, credited to the passer.", 0),
+            ("rushing_first_downs", "Rushing First Downs", "First downs gained on carries.", 0),
+            ("receiving_first_downs", "Receiving First Downs", "First downs gained on receptions.", 0),
+            ("passing_2pt", "Passing 2-pt Conversions", "Successful two-point passes.", 0),
+            ("rushing_2pt", "Rushing 2-pt Conversions", "Successful two-point runs.", 0),
+            ("receiving_2pt", "Receiving 2-pt Conversions", "Successful two-point catches.", 0),
+            ("fumbles_lost", "Fumbles Lost", "Fumbles lost by the ball carrier, including sack fumbles.", 0),
+            ("passing_tds_40", "40+ Yd Passing TDs", "Passing touchdowns of at least 40 yards.", 0),
+            ("passing_tds_50", "50+ Yd Passing TDs", "Passing touchdowns of at least 50 yards.", 0),
+            ("rushing_tds_40", "40+ Yd Rushing TDs", "Rushing touchdowns of at least 40 yards.", 0),
+            ("rushing_tds_50", "50+ Yd Rushing TDs", "Rushing touchdowns of at least 50 yards.", 0),
+            ("receiving_tds_40", "40+ Yd Receiving TDs", "Receiving touchdowns of at least 40 yards.", 0),
+            ("receiving_tds_50", "50+ Yd Receiving TDs", "Receiving touchdowns of at least 50 yards.", 0),
+            ("x_completions", "Expected Completions", "Opportunity-model expected completions.", 2),
+            ("x_receptions", "Expected Receptions", "Opportunity-model expected receptions.", 2),
+            ("x_passing_yards", "Expected Passing Yards", "Opportunity-model expected passing yards.", 2),
+            ("x_rushing_yards", "Expected Rushing Yards", "Opportunity-model expected rushing yards.", 2),
+            ("x_receiving_yards", "Expected Receiving Yards", "Opportunity-model expected receiving yards.", 2),
+            ("x_passing_tds", "Expected Passing TDs", "Opportunity-model expected passing touchdowns.", 2),
+            ("x_rushing_tds", "Expected Rushing TDs", "Opportunity-model expected rushing touchdowns.", 2),
+            ("x_receiving_tds", "Expected Receiving TDs", "Opportunity-model expected receiving touchdowns.", 2),
+            ("x_passing_2pt", "Expected Passing 2-pt", "Opportunity-model expected two-point passes.", 2),
+            ("x_rushing_2pt", "Expected Rushing 2-pt", "Opportunity-model expected two-point runs.", 2),
+            ("x_receiving_2pt", "Expected Receiving 2-pt", "Opportunity-model expected two-point catches.", 2),
+            ("x_passing_first_downs", "Expected Passing First Downs", "Opportunity-model expected passing first downs.", 2),
+            ("x_rushing_first_downs", "Expected Rushing First Downs", "Opportunity-model expected rushing first downs.", 2),
+            ("x_receiving_first_downs", "Expected Receiving First Downs", "Opportunity-model expected receiving first downs.", 2),
+            ("x_interceptions", "Expected Interceptions", "Opportunity-model expected interceptions thrown.", 2),
+        ]
+    ],
 
     # ---------------- Internal range-aggregation components ----------------
     *[
@@ -234,3 +287,8 @@ def metric_rows() -> list[dict]:
 def hot_metric_ids() -> list[str]:
     """Metrics that get real indexed columns in the wide view."""
     return [m.id for m in METRICS.values() if m.hot and not m.internal]
+
+
+def sparse_metric_ids() -> frozenset[str]:
+    """Metrics whose zero values are not stored."""
+    return frozenset(m.id for m in METRICS.values() if m.sparse)
