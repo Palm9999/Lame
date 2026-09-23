@@ -99,6 +99,7 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
     metric_ids = list(METRICS.keys())
     frames: list[pl.DataFrame] = []
     built: list[int] = []
+    meta: dict[str, str] = {}
 
     for season in seasons:
         pbp_path = _published(season, cache, force)
@@ -123,6 +124,9 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
             log.warning("season %d: snap counts unavailable (%s)", season, exc)
 
         ep = _expected(season, cache, force)
+        through = validation.expected_coverage(season, weekly, ep)
+        meta[f"expected_through_week:{season}"] = str(through)
+        log.info("season %d: expected points through week %d", season, through)
         if ep is None:
             if not skip_missing:
                 raise RuntimeError(f"no ffopportunity data published for {season}")
@@ -160,7 +164,7 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
     schema.load_metrics(conn, metric_rows())
     schema.load_players(conn, players)
     n = schema.load_facts(conn, long)
-    schema.finalize(conn, built)
+    schema.finalize(conn, built, meta)
     validation.validate(conn)
     conn.close()
 

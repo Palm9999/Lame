@@ -48,7 +48,7 @@ Long/narrow by design: **adding a metric is an `INSERT`, not a migration.**
 | `player_week_stat` | `(player_id, season, week, team, metric_id, value)`. `WITHOUT ROWID`. |
 | `metric` | Registry: name, definition, formula, tier, what it predicts, stability, and whether it is `internal`. Drives info sheets and column search in the app. |
 | `player` | Players with at least one stat in the built seasons. |
-| `schema_meta` | Schema version, seasons, source attribution. |
+| `schema_meta` | Schema version, seasons, source attribution (nflverse and ffopportunity), and `expected_through_week:<season>`: the last week through which ffopportunity's expected components cover the season's play-by-play. |
 
 Two rules are enforced structurally: **no table or column name contains a year**, so a new season is data rather than schema; and this builds only `stats.db`, the reconstructible database. User state lives in a separate `user.db` on the device.
 
@@ -70,16 +70,21 @@ The database ships pre-indexed, `ANALYZE`d and `VACUUM`ed, so the query planner 
 
 **Index budget.** The fact table has a four-column text primary key, so every secondary index carries that whole key. There is exactly one: `(metric_id, season, week, value)`. Including `value` makes the Grid's aggregation a covering-index read, which measured 139 ms → 54 ms for a full-season 12-component query. A `(season, week)` index measured 29% of the file and served no query the app issues, so it was removed.
 
-**Expected components are cross-checked against play-by-play, twice.** `validate.cross_check` compares our play-by-play actuals against ffopportunity's own actual columns, stat by stat — two independent derivations of the same plays, so a mismatch usually means one of them is wrong. `validate.fantasy_contract` separately confirms that both our actuals *and* ffopportunity's expected components reproduce the file's own fantasy-point totals under the reference scoring profile, catching component/total drift that a per-stat comparison alone can't see. Both run on every build and fail it loudly; see `validate.py` for the couple of narrow, documented exceptions (lateral-play yardage, one Super Bowl LIX two-point conversion, and a handful of misattributed fumbles) each traced to a specific real play before the check was widened for it.
+**Expected components are cross-checked against play-by-play, twice.** `validate.cross_check` compares our play-by-play actuals against ffopportunity's own actual columns, stat by stat — two independent derivations of the same plays, so a mismatch usually means one of them is wrong. `validate.fantasy_contract` separately confirms that both our actuals *and* ffopportunity's expected components reproduce the file's own fantasy-point totals under the reference scoring profile, catching component/total drift that a per-stat comparison alone can't see. Both run on every build under one three-tier `ComparisonPolicy` (see `validate.py`): a mismatch within a per-stat tolerance is agreement; a larger one is logged as a WARNING with the player-week and both values, but doesn't fail the build; the build fails only when a single row exceeds the check's hard cap or one season collects more outliers than its budget. The scheduled build must not stop over one upstream quirk, but many small mismatches, or one wildly wrong row, still fail it. Each tolerance is traced to specific real plays (lateral-play yardage, one Super Bowl LIX two-point conversion, a handful of misattributed fumbles).
+
+**Expected coverage is checked per week.** The cross-checks inner-join the two sources, so a play-by-play week that ffopportunity hasn't processed yet would otherwise go unnoticed, with every player's xFP for it silently 0. The build logs a WARNING naming any such week and records `expected_through_week:<season>` in `schema_meta`.
+
+**Kneels and spikes: box score versus signal.** A QB kneel is a carry in the box score (and in ffopportunity's totals), and a spike is a pass attempt, so box-score counts and every scoring input include them. Rates (success rate, EPA per carry or dropback, CPOE, every share) and usage signals (red-zone, green-zone and goal-line carries, designed QB runs inside the 5, weighted opportunities) exclude them: a kneel inside the 5 is a clock-killer, not a scoring opportunity.
 
 ## Validation
 
-Every build runs [`validate.py`](gridiron_etl/validate.py) and fails loudly. Wrong numbers are otherwise silent: a bad share still inserts cleanly and still renders in a table.
+Every build runs [`validate.py`](gridiron_etl/validate.py). The database checks below fail the build loudly. Wrong numbers are otherwise silent: a bad share still inserts cleanly and still renders in a table.
 
 - **Range checks** encode real football rather than convenient assumptions. The first version asserted aDOT ≥ −10; live data produced −12, because a player whose only target was a deep screen inherits that play's air yards. The bound now derives from the observed play-level range (−19 to 64).
 - **Coherence checks** test relationships range checks can't see: targets within team targets, snaps within team snaps, and derived snap share agreeing with the published one to within one 0.01 rounding step. That last check caught the max-snaps shortcut. It tolerates exactly one step because the source is occasionally self-inconsistent: 2024 TB week 19 lists 44 snaps at 0.91, and no integer team total produces that.
 - **Referential checks**: no orphaned player or metric ids, no nulls, no week without share data.
-- **Cross-source checks** (`cross_check`, `fantasy_contract`) compare our play-by-play actuals and ffopportunity's expected components against ffopportunity's own actual and expected fantasy-point totals; see the note above.
+- **Cross-source checks** (`cross_check`, `fantasy_contract`) compare our play-by-play actuals and ffopportunity's expected components against ffopportunity's own actual and expected fantasy-point totals. Unlike the checks above, these warn on isolated mismatches and fail only past a hard cap or a season budget; see the note above.
+- **Expected coverage** (`expected_coverage`) warns when a play-by-play week has no ffopportunity rows.
 
 ## Known gaps
 

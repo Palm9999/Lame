@@ -36,18 +36,24 @@ PBP_COLUMNS = [
 # yardage, correctly deflating a QB's rushing total — cross-checked against
 # ffopportunity, which includes them) and qb_spike with pass_attempt=1,
 # complete_pass=0 (a zero-yard incompletion). Both must stay in the base scan
-# so counting stats and scoring inputs (carries, rushing yards, pass
-# attempts, ...) see them, matching official box scores and ffopportunity.
+# so box-score counting stats and scoring inputs (carries, rushing yards,
+# pass attempts, ...) see them, matching official box scores and ffopportunity.
 SCRIMMAGE_PLAY_TYPES = ("pass", "run", "qb_kneel", "qb_spike")
 
-# Play types counted above for volume but excluded from anything rate-shaped:
-# EPA per play/carry, success rate, CPOE, dropbacks, and every share metric's
-# numerator and denominator (team_carries included). A kneel is a scripted,
-# always-negative-EPA clock-killer, not a competitive rushing attempt, and a
-# spike is a zero-yard, always-incomplete clock stop, not a competitive
-# dropback — mixing either into a rate distorts it without adding signal.
-# `load_pbp` flags every play with `is_efficiency_play`; aggregations that
-# must reproduce their pre-kneel/spike values filter on it.
+# Play types counted above for box-score volume but excluded from anything
+# rate-shaped or usage-shaped:
+# - rates: EPA per play/carry, success rate, CPOE, dropbacks, and every share
+#   metric's numerator and denominator (team_carries included);
+# - usage signals: red-zone, green-zone and goal-line carries, designed QB
+#   runs inside the 5 and weighted opportunities (built on `carries_eff`).
+# A kneel is a scripted, always-negative-EPA clock-killer, not a competitive
+# rushing attempt or a scoring opportunity, and a spike is a zero-yard,
+# always-incomplete clock stop, not a competitive dropback — mixing either
+# into a rate or a usage count distorts it without adding signal.
+# The split, then: box-score counts (carries, rushing yards, pass attempts,
+# ...) and every scoring input include kneels and spikes; rates and usage
+# signals don't. `load_pbp` flags every play with `is_efficiency_play`;
+# aggregations that must exclude them filter on it.
 _RATE_EXCLUDED_PLAY_TYPES = ("qb_kneel", "qb_spike")
 
 
@@ -135,17 +141,20 @@ def _rushing(lf: pl.LazyFrame) -> pl.LazyFrame:
         lf.filter(pl.col("rusher_player_id").is_not_null())
         .group_by(["season", "week", "posteam", "rusher_player_id"])
         .agg(
-            # Counting stats: every carry, kneels included, matching the box score.
+            # Box-score counting stats: every carry, kneels included, matching
+            # the box score and the scoring inputs.
             carries=pl.len(),
             rushing_yards=pl.col("rushing_yards").fill_null(0).sum(),
             rushing_tds=pl.col("rush_touchdown").fill_null(0).sum(),
-            rz_carries=(pl.col("yardline_100") <= 20).sum(),
-            gz_carries=(pl.col("yardline_100") <= 10).sum(),
-            gl_carries=(pl.col("yardline_100") <= 5).sum(),
-            qb_rush_inside_5=((pl.col("yardline_100") <= 5) & designed).sum(),
             rushing_first_downs=pl.col("first_down_rush").fill_null(0).sum(),
             rushing_tds_40=_long_td("rush_touchdown", "rushing_yards", 40),
             rushing_tds_50=_long_td("rush_touchdown", "rushing_yards", 50),
+            # Usage signals: kneels excluded. A kneel inside the 5 is a
+            # clock-killer, not a scoring opportunity, and never scores.
+            rz_carries=((pl.col("yardline_100") <= 20) & eff).sum(),
+            gz_carries=((pl.col("yardline_100") <= 10) & eff).sum(),
+            gl_carries=((pl.col("yardline_100") <= 5) & eff).sum(),
+            qb_rush_inside_5=((pl.col("yardline_100") <= 5) & designed & eff).sum(),
             # Rate/efficiency inputs: kneels excluded, so rush_success_rate,
             # rush_epa_per_carry and carry_share (via `carries_eff` below)
             # reproduce their pre-kneel values exactly.
@@ -318,7 +327,8 @@ def weekly_player_stats(lf: pl.LazyFrame) -> pl.DataFrame:
         rush_success_rate=ratio("rush_successes", "carries_eff"),
         rush_epa_per_carry=ratio("rush_epa", "carries_eff"),
         epa_per_dropback=ratio("pass_epa", "dropbacks"),
-        weighted_opportunities=pl.col("carries") + 2.6 * pl.col("targets"),
+        # A usage signal, so kneel-excluded carries (see `_RATE_EXCLUDED_PLAY_TYPES`).
+        weighted_opportunities=pl.col("carries_eff") + 2.6 * pl.col("targets"),
         total_epa=(
             pl.col("rec_epa").fill_null(0) + pl.col("rush_epa").fill_null(0)
         ),

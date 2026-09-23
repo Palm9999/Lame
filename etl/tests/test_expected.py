@@ -163,3 +163,54 @@ def test_policy_single_row_beyond_hard_cap_fails():
     joined = _policy_rows([6.0])
     problems = validate._apply_policy(joined, pl.col("m"), policy, ["m"])
     assert any("hard cap" in p for p in problems)
+
+
+# ---------------------------------------------------------------- expected coverage
+
+def _weeks(*weeks: int) -> pl.DataFrame:
+    return pl.DataFrame([weekly_row(week=w) for w in weeks])
+
+
+def _ep_weeks(*weeks: int) -> pl.DataFrame:
+    return pl.DataFrame([ep_row(week=float(w)) for w in weeks])
+
+
+def test_expected_coverage_is_complete_when_every_week_has_expected_rows(caplog):
+    with caplog.at_level("WARNING"):
+        through = validate.expected_coverage(2025, _weeks(1, 2, 3), _ep_weeks(1, 2, 3))
+    assert through == 3
+    assert not [r for r in caplog.records if r.levelname == "WARNING"]
+
+
+def test_expected_coverage_warns_when_ffopportunity_lags_the_newest_week(caplog):
+    # Play-by-play has week 3 (MNF just ended); ffopportunity hasn't processed it.
+    with caplog.at_level("WARNING"):
+        through = validate.expected_coverage(2026, _weeks(1, 2, 3), _ep_weeks(1, 2))
+    assert through == 2
+    warnings = [r.message for r in caplog.records if r.levelname == "WARNING"]
+    assert len(warnings) == 1
+    assert "2026" in warnings[0] and "week 3" in warnings[0]
+
+
+def test_expected_coverage_stops_at_the_first_gap(caplog):
+    with caplog.at_level("WARNING"):
+        through = validate.expected_coverage(2025, _weeks(1, 2, 3, 4), _ep_weeks(1, 3, 4))
+    assert through == 1
+    assert any("week 2" in r.message for r in caplog.records)
+
+
+def test_expected_coverage_without_any_expected_data_is_week_zero(caplog):
+    with caplog.at_level("WARNING"):
+        through = validate.expected_coverage(2026, _weeks(1, 2), None)
+    assert through == 0
+    assert any("weeks 1, 2" in r.message for r in caplog.records)
+
+
+def test_finalize_records_extra_provenance(tmp_path):
+    from gridiron_etl import schema
+
+    conn = schema.create(tmp_path / "t.db")
+    schema.finalize(conn, [2025, 2026], {"expected_through_week:2026": "2"})
+    meta = dict(conn.execute("SELECT key, value FROM schema_meta").fetchall())
+    assert meta["expected_through_week:2026"] == "2"
+    assert "ffopportunity" in meta["source"]

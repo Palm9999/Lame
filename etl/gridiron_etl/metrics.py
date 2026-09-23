@@ -114,7 +114,8 @@ _M: list[Metric] = [
 
     # ---------------- Rushing ----------------
     Metric("carries", "Carries", "CAR", "volume",
-           "Rushing attempts.", positions=("QB", "RB", "WR"), decimals=0, hot=True),
+           "Rushing attempts, QB kneels included, matching the box score.",
+           positions=("QB", "RB", "WR"), decimals=0, hot=True),
     Metric("rushing_yards", "Rushing Yards", "RUSH YDS", "volume",
            "Total rushing yards.", positions=("QB", "RB", "WR"), decimals=0, hot=True),
     Metric("rushing_tds", "Rushing TDs", "RUSH TD", "volume",
@@ -125,23 +126,24 @@ _M: list[Metric] = [
            formula="player_carries / team_carries", positions=("RB",),
            stability=0.68, decimals=3, hot=True),
     Metric("weighted_opportunities", "Weighted Opportunities", "WO", "volume",
-           "Carries plus targets weighted by their relative PPR value.",
-           formula="carries + 2.6 * targets", positions=("RB",),
+           "Carries plus targets weighted by their relative PPR value. QB kneels "
+           "are not opportunities and are excluded.",
+           formula="carries (kneels excluded) + 2.6 * targets", positions=("RB",),
            predicts="PPR fantasy points", decimals=1, hot=True),
     Metric("opportunity_share", "Opportunity Share", "OPP%", "volume",
            "Share of the team's backfield carries and targets. Above 70% is a bellcow.",
            formula="(carries + targets) / (team_rb_carries + team_rb_targets)",
            positions=("RB",), stability=0.66, decimals=3),
     Metric("rz_carries", "Red Zone Carries", "RZ CAR", "usage",
-           "Carries starting inside the opponent 20.",
+           "Carries starting inside the opponent 20, QB kneels excluded.",
            positions=("QB", "RB"), decimals=0, hot=True),
     Metric("gz_carries", "Green Zone Carries", "GZ CAR", "usage",
-           "Carries starting inside the opponent 10. Roughly 74% of rushing "
-           "touchdowns originate here.",
+           "Carries starting inside the opponent 10, QB kneels excluded. Roughly "
+           "74% of rushing touchdowns originate here.",
            positions=("QB", "RB"), predicts="Rushing touchdowns", decimals=0, hot=True),
     Metric("gl_carries", "Goal Line Carries", "GL CAR", "usage",
-           "Carries starting inside the opponent 5. Roughly 68% of rushing "
-           "touchdowns originate here.",
+           "Carries starting inside the opponent 5, QB kneels excluded. Roughly "
+           "68% of rushing touchdowns originate here.",
            positions=("QB", "RB"), predicts="Rushing touchdowns", decimals=0),
     Metric("rush_success_rate", "Rush Success Rate", "RSR", "efficiency",
            "Share of carries producing positive EPA. Far more stable than yards "
@@ -176,8 +178,8 @@ _M: list[Metric] = [
            "Completion percentage above what the throw's difficulty predicts.",
            positions=("QB",), stability=0.47, decimals=2, hot=True),
     Metric("qb_rush_inside_5", "QB Carries Inside 5", "QB GL", "usage",
-           "Designed QB runs inside the opponent 5. The biggest single source of "
-           "QB fantasy separation.",
+           "Designed QB runs inside the opponent 5 (no scrambles or kneels). The "
+           "biggest single source of QB fantasy separation.",
            positions=("QB",), predicts="QB rushing touchdowns", decimals=0),
 
     # ---------------- Snaps (tier B — auxiliary feed) ----------------
@@ -263,7 +265,8 @@ _M: list[Metric] = [
              "Carries excluding QB kneels and spikes — the denominator behind "
              "carry_share, rush_success_rate and rush_epa_per_carry, so those "
              "rates recompute correctly over a range instead of drifting once "
-             "a kneel enters the box-score carries total.", 0),
+             "a kneel enters the box-score carries total. Weighted "
+             "opportunities are built on it too.", 0),
             ("team_offense_snaps", "Team Offensive Snaps",
              "Team offensive snaps in games this player appeared in.", 0),
             ("rush_successes", "Rush Successes", "Carries with positive EPA.", 0),
