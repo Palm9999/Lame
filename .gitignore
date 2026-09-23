@@ -24,3 +24,7 @@ captures/
 
 # Agent worktrees (temporary checkouts used while building in parallel)
 .claude/worktrees/
+
+# Personal Claude Code settings (not shared)
+.claude/settings.local.json
+.claude/output-styles/
