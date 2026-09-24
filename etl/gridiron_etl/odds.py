@@ -94,8 +94,12 @@ def fetch_events(sport_key: str, api_key: str | None = None, cache_dir: Path | N
 
 
 def fetch_player_props(event_id: str, sport_key: str, markets: list[str],
-                        api_key: str | None = None, timeout: int = 30) -> dict:
+                        api_key: str | None = None, cache_dir: Path | None = None,
+                        force: bool = False, timeout: int = 30) -> dict:
     key = api_key or os.environ.get(API_KEY_ENV)
+    if not key:
+        log.warning("no odds API key set (%s); market stage will be skipped", API_KEY_ENV)
+        return {}
     resp = requests.get(
         f"{BASE}/sports/{sport_key}/events/{event_id}/odds",
         params={"apiKey": key, "regions": "us", "markets": ",".join(markets),
