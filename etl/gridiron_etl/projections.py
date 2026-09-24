@@ -38,7 +38,16 @@ def apply_cross_season_carryover(current: pl.DataFrame, prior_season_final: pl.D
     team, new OC, new starting QB)."""
     prior_col = f"{signal_col}_ewma_final"
     ewma_col = f"{signal_col}_ewma"
-    joined = current.join(prior_season_final, on="player_id", how="left")
+    # Join only the one column this call needs (plus the join key), not the
+    # whole `prior_season_final` frame. build_projections (Task 11) calls
+    # this once per signal against the same multi-column prior_season_final
+    # frame; joining the whole frame each time leaves the other signals'
+    # `*_ewma_final` columns in `current` after `.drop(prior_col)` only drops
+    # this call's own column, and the next call's join then collides with
+    # that leftover, compounding into a polars DuplicateError by the third
+    # signal. Selecting down to just what this call uses keeps each call
+    # self-contained regardless of how many signals share one prior frame.
+    joined = current.join(prior_season_final.select("player_id", prior_col), on="player_id", how="left")
     w = pl.when(pl.col(regime_break_col)).then(0.0).otherwise(carryover_weight(pl.col("week")))
     prior_value = pl.col(prior_col).fill_null(pl.col(ewma_col))
     return joined.with_columns(
@@ -305,6 +314,103 @@ def dst_projection(df: pl.DataFrame) -> pl.DataFrame:
         (base - pl.col("opponent_off_rating") * 1.5 + pl.col("pressure_rate") * 10.0)
         .alias("mean")
     )
+
+
+def build_projections(weekly: pl.DataFrame, context: dict) -> tuple[pl.DataFrame,
+                                                                     pl.DataFrame,
+                                                                     pl.DataFrame]:
+    """Run all six stages in order and shape the output for schema.py's loaders.
+
+    `weekly` must be sorted by (player_id, season, week) on entry.
+    `context` keys used: 'odds_props', 'prior_season_final', 'xtd_baseline'.
+    """
+    sorted_weekly = weekly.sort(["player_id", "season", "week"])
+
+    # Stage 1: volume cascade.
+    cascaded = volume_cascade(sorted_weekly)
+    for signal in ("target_share", "carry_share", "snap_share"):
+        cascaded = apply_cross_season_carryover(
+            cascaded, context["prior_season_final"], signal
+        )
+    # volume_cascade already computed proj_targets/proj_carries above, but it
+    # did so from the current-season-only *_ewma columns, BEFORE the
+    # carryover loop blended in context["prior_season_final"]. Recompute both
+    # from the now-carryover-adjusted *_ewma columns so cross-season
+    # carryover actually reaches the projection output, using the same
+    # null-guarded multiplication volume_cascade itself uses.
+    cascaded = cascaded.with_columns(
+        (pl.col("team_targets_ewma").fill_null(0.0) * pl.col("target_share_ewma").fill_null(0.0)).alias("proj_targets"),
+        (pl.col("team_carries_ewma").fill_null(0.0) * pl.col("carry_share_ewma").fill_null(0.0)).alias("proj_carries"),
+    )
+
+    # Stage 2: shrunk efficiency + xTD.
+    with_tds = project_xtd(cascaded, context["xtd_baseline"], "x_receiving_tds", "targets")
+
+    # `receiving_tds` only ever gets this "baseline" stage row in this pass —
+    # it is not carried through the matchup/game-script/market stages below
+    # the way `targets` is (see final_targets). Extending TDs through those
+    # adjustment stages is an intentional follow-up, not an omission here.
+    baseline_mean = with_tds.select(
+        "player_id", "season", "week",
+        pl.col("proj_targets").alias("targets"),
+        pl.col("proj_tds").alias("receiving_tds"),
+    ).unpivot(
+        index=["player_id", "season", "week"], variable_name="metric_id", value_name="mean"
+    ).with_columns(stage=pl.lit("baseline"), variance=pl.lit(0.0))
+
+    # Stages 3-4: matchup + game script. Kept as `.with_columns` on the one
+    # `with_tds` frame (never split into a separate frame variable) so every
+    # later stage's row order and length is guaranteed to still line up —
+    # multiplying bare Series pulled from two independently-derived frames
+    # is a correctness trap this pipeline avoids by construction.
+    adjusted = implied_totals(with_tds).with_columns(
+        wind_mult=wind_multiplier(pl.col("wind"), pl.col("is_outdoor")),
+    )
+
+    # Stage 5: market blend, applied on top of the wind-adjusted mean, still
+    # the same frame (receptions only in this pass; other markets follow the
+    # same apply_market_blend call with a different market filter).
+    with_market_input = adjusted.with_columns(
+        (pl.col("proj_targets") * pl.col("wind_mult")).alias("mean"),
+        component_variance(pl.col("proj_targets"), cv=0.5).alias("variance"),
+    )
+    blended = apply_market_blend(with_market_input, context["odds_props"])
+
+    # final_targets carries metric_id="targets" through the matchup/game-script/
+    # market stages to a "final" stage row; receiving_tds stays baseline-only
+    # in this pass (see the comment on baseline_mean above).
+    # `stage` is built here in the same `select()`, ahead of `mean`/`variance`,
+    # rather than appended afterward via `.with_columns` — that would put it
+    # after `mean`/`variance` in column order, which doesn't match
+    # `baseline_mean`'s order and makes the `pl.concat` below fail even under
+    # `vertical_relaxed` (that only relaxes dtypes, not column order).
+    final_targets = blended.select(
+        "player_id", "season", "week",
+        pl.lit("targets").alias("metric_id"),
+        pl.lit("final").alias("stage"),
+        "mean", "variance",
+    )
+
+    proj = pl.concat([
+        baseline_mean.select("player_id", "season", "week", "metric_id", "stage", "mean", "variance"),
+        final_targets,
+    ], how="vertical_relaxed")
+
+    factors = blended.select(
+        "player_id", "season", "week",
+        pl.lit("weather").alias("factor"),
+        pl.col("wind_mult").log().alias("log_multiplier"),
+        pl.lit(None, dtype=pl.String).alias("note"),
+    )
+
+    ros = rest_of_season(
+        proj.filter(pl.col("stage") == "final").select("player_id", "metric_id", "week", "mean", "variance")
+    ).with_columns(
+        season=pl.lit(sorted_weekly["season"].max()),
+        as_of_week=pl.lit(sorted_weekly["week"].max()),
+    ).select("player_id", "season", "as_of_week", "metric_id", "mean", "variance")
+
+    return proj, factors, ros
 
 
 def rest_of_season(weekly: pl.DataFrame) -> pl.DataFrame:

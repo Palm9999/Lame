@@ -164,6 +164,34 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
     schema.load_metrics(conn, metric_rows())
     schema.load_players(conn, players)
     n = schema.load_facts(conn, long)
+
+    from . import projections as proj_module
+    projection_context = {
+        "odds_props": pl.DataFrame(
+            {"player_name": [], "market": [], "line": [], "fair_prob": []},
+            schema={"player_name": pl.String, "market": pl.String,
+                    "line": pl.Float64, "fair_prob": pl.Float64},
+        ),
+        "prior_season_final": pl.DataFrame(
+            {"player_id": [], "target_share_ewma_final": [],
+             "carry_share_ewma_final": [], "snap_share_ewma_final": []},
+            schema={"player_id": pl.String, "target_share_ewma_final": pl.Float64,
+                    "carry_share_ewma_final": pl.Float64,
+                    "snap_share_ewma_final": pl.Float64},
+        ),
+        "xtd_baseline": pl.DataFrame({"position": [], "xtd_rate_baseline": []},
+                                      schema={"position": pl.String,
+                                              "xtd_rate_baseline": pl.Float64}),
+    }
+    # Real odds/prior-season/xTD-baseline wiring (live odds fetch, cross-season
+    # history) is deferred to a follow-up: this call proves the pipeline shape
+    # end-to-end against the real weekly frame with empty/neutral context, so
+    # `build_projections` never sees a frame it wasn't tested against.
+    proj_rows, factor_rows, ros_rows = proj_module.build_projections(weekly, projection_context)
+    schema.load_projections(conn, proj_rows)
+    schema.load_projection_factors(conn, factor_rows)
+    schema.load_ros_projections(conn, ros_rows)
+
     schema.finalize(conn, built, meta)
     validation.validate(conn)
     conn.close()
