@@ -7,19 +7,19 @@ import dev.gridiron.core.model.ScoringRule
 import dev.gridiron.core.statquery.Components as C
 
 /** A component and the sign it enters a rule with: incompletions are attempts minus completions. */
-internal data class Term(val component: Component, val sign: Double = 1.0)
+public data class Term(public val component: Component, public val sign: Double = 1.0)
 
 /**
  * What a rule is scored on. [expected] is empty when the opportunity model has
  * no counterpart (sacks, fumbles, carries, incompletions, long-TD bonuses);
  * those rules add nothing to xFP, so FPOE credits big plays and charges fumbles.
  */
-internal data class RuleInputs(val actual: List<Term>, val expected: List<Term>)
+public data class RuleInputs(public val actual: List<Term>, public val expected: List<Term>)
 
 private fun on(actual: Component, expected: Component? = null) =
     RuleInputs(listOf(Term(actual)), listOfNotNull(expected?.let { Term(it) }))
 
-internal val RULE_INPUTS: Map<ScoringRule, RuleInputs> = mapOf(
+public val RULE_INPUTS: Map<ScoringRule, RuleInputs> = mapOf(
     ScoringRule.PASS_YARD to on(C.PASSING_YARDS, C.X_PASSING_YARDS),
     ScoringRule.PASS_TD to on(C.PASSING_TDS, C.X_PASSING_TDS),
     ScoringRule.INTERCEPTION to on(C.INTERCEPTIONS, C.X_INTERCEPTIONS),
@@ -47,7 +47,7 @@ internal val RULE_INPUTS: Map<ScoringRule, RuleInputs> = mapOf(
     ScoringRule.FUMBLE_LOST to on(C.FUMBLES_LOST),
 )
 
-internal val BONUS_INPUTS: Map<BonusStat, List<Component>> = mapOf(
+public val BONUS_INPUTS: Map<BonusStat, List<Component>> = mapOf(
     BonusStat.PASSING_YARDS to listOf(C.PASSING_YARDS),
     BonusStat.RUSHING_YARDS to listOf(C.RUSHING_YARDS),
     BonusStat.RECEIVING_YARDS to listOf(C.RECEIVING_YARDS),
