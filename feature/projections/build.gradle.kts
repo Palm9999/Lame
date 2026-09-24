@@ -13,6 +13,7 @@ dependencies {
     implementation(projects.core.projections)
     implementation(projects.core.data)
     implementation(projects.core.designsystem)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
 
     testImplementation(projects.core.testing)
     testImplementation(libs.kotlinx.coroutines.test)
