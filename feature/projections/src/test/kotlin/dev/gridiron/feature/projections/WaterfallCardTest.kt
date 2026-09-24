@@ -55,4 +55,21 @@ class WaterfallCardTest {
 
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/projections_1_waterfall.png")
     }
+
+    @Test
+    fun `a near-zero negative factor never renders as negative zero`() {
+        compose.setContent {
+            GridironTheme {
+                WaterfallCard(
+                    baseline = 10.3,
+                    factors = listOf(AttributedFactor("noise", -0.04, null)),
+                    final = 10.3,
+                    floorCeiling = SimulationResult(p10 = 8.1, p25 = 9.2, p50 = 10.3, p90 = 12.4),
+                )
+            }
+        }
+
+        compose.onNodeWithText("0.0", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("-0.0", substring = true).assertDoesNotExist()
+    }
 }

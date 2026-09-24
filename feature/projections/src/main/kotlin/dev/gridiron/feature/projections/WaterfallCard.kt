@@ -10,7 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.projections.AttributedFactor
 import dev.gridiron.core.projections.SimulationResult
-import kotlin.math.round
+import java.util.Locale
+import kotlin.math.abs
 
 /**
  * The one-screen projection card from design spec §3 / research doc §6.2:
@@ -41,4 +42,13 @@ public fun WaterfallCard(
     }
 }
 
-private fun oneDecimal(value: Double): String = "%.1f".format(round(value * 10) / 10)
+/**
+ * Mirrors `StatFormat.fixed(value, decimals = 1)`: rounds first so a value
+ * like -0.04 never renders as "-0.0", and formats with an explicit Locale so
+ * output doesn't vary with the device's comma-decimal locale settings.
+ */
+private fun oneDecimal(value: Double): String {
+    val rounded = Math.round(value * 10) / 10.0
+    val clean = if (abs(rounded) < 0.05) 0.0 else rounded
+    return String.format(Locale.getDefault(), "%.1f", clean)
+}
