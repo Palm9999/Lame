@@ -132,3 +132,34 @@ def matchup_multiplier(rating: pl.Expr, league_mean: float, cap: float) -> pl.Ex
     caps in research-prediction-models.md §1.5 (efficiency ±15%, volume ±5%,
     TD ±20% — `cap` is passed per-use)."""
     return (1.0 + (rating - league_mean)).clip(1.0 - cap, 1.0 + cap)
+
+
+def implied_totals(df: pl.DataFrame, total_col: str = "total",
+                    spread_home_col: str = "spread_home") -> pl.DataFrame:
+    """Vegas total + home spread -> each side's implied points.
+    `spread_home` is negative when the home team is favored (standard convention)."""
+    return df.with_columns(
+        (pl.col(total_col) / 2 - pl.col(spread_home_col) / 2).alias("implied_total_home"),
+        (pl.col(total_col) / 2 + pl.col(spread_home_col) / 2).alias("implied_total_away"),
+    )
+
+
+def pass_rate_shift(spread_team: pl.Expr, kappa: float = 0.6) -> pl.Expr:
+    """Percentage-point shift in pass rate. `spread_team` positive = underdog
+    (trailing teams pass more). kappa in [0.4, 0.8] per the research doc."""
+    return kappa * spread_team
+
+
+# Quadratic wind penalty above ~12mph, clamped at a 20% floor.
+_WIND_THRESHOLD = 12.0
+_WIND_COEF = 0.00035
+_WIND_FLOOR = 0.80
+
+
+def wind_multiplier(wind_mph: pl.Expr, is_outdoor: pl.Expr) -> pl.Expr:
+    """Pass-volume multiplier from wind. Domes (is_outdoor=False) are a hard
+    gate: the multiplier is always exactly 1.0 regardless of the wind value,
+    which prevents an outdoor-city forecast from leaking into a dome game."""
+    excess = (wind_mph - _WIND_THRESHOLD).clip(lower_bound=0.0)
+    raw = (1.0 - excess.pow(2) * _WIND_COEF).clip(_WIND_FLOOR, 1.0)
+    return pl.when(is_outdoor).then(raw).otherwise(1.0)
