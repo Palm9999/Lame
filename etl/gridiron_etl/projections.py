@@ -445,6 +445,13 @@ def compute_accuracy(snapshots: pl.DataFrame, actuals: pl.DataFrame,
     joined = (
         snapshots.join(actuals, on=["player_id", "season", "week", "metric_id"], how="inner")
         .join(position_lookup, on="player_id", how="left")
+        # A player missing from position_lookup would otherwise get a null
+        # position, and every group-by below keys on "position" with
+        # polars' default nulls_equal=False — that silently drops the row
+        # from sample_n and every rollup instead of surfacing it. Coalesce
+        # to an explicit sentinel bucket so a lookup gap is visible in the
+        # output, not silently invisible.
+        .with_columns(pl.col("position").fill_null("UNK"))
     )
     err = pl.col("value") - pl.col("projected_mean")
     with_err = joined.with_columns(err.alias("_err"))
