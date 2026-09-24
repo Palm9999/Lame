@@ -63,3 +63,30 @@ def volume_cascade(weekly: pl.DataFrame) -> pl.DataFrame:
         (pl.col("team_carries_ewma").fill_null(0.0) * pl.col("carry_share_ewma").fill_null(0.0)).alias("proj_carries"),
     )
     return df
+
+
+def xtd_baseline(history: pl.DataFrame, xtd_col: str, opportunities_col: str,
+                 position_col: str = "position") -> pl.DataFrame:
+    """Positional xTD-rate baseline, sample-weighted over `history` (a caller-
+    supplied walk-forward window — only weeks before the one being projected;
+    see build_projections, Task 11, for how the window is chosen)."""
+    rate = pl.when(pl.col(opportunities_col) > 0).then(
+        pl.col(xtd_col) / pl.col(opportunities_col)
+    ).otherwise(None)
+    per_row = history.with_columns(rate.alias("_rate")).filter(pl.col("_rate").is_not_null())
+    return shrinkage.positional_baseline(per_row, position_col, "_rate", opportunities_col) \
+        .rename({"_rate_baseline": "xtd_rate_baseline"})
+
+
+def project_xtd(df: pl.DataFrame, baseline: pl.DataFrame, xtd_col: str,
+                opportunities_col: str, position_col: str = "position") -> pl.DataFrame:
+    """Shrink each player's own xTD rate toward the positional baseline, then
+    scale by their *projected* (not historical) opportunity volume — the
+    output of volume_cascade — to get projected touchdowns."""
+    shrunk = shrinkage.shrink_td_rate(df, baseline, xtd_col, opportunities_col, position_col)
+    proj_col = f"proj_{opportunities_col.replace('team_', '')}" \
+        if f"proj_{opportunities_col}" not in shrunk.columns else f"proj_{opportunities_col}"
+    proj_col = "proj_targets" if opportunities_col == "targets" else "proj_carries"
+    return shrunk.with_columns(
+        (pl.col("xtd_rate_shrunk") * pl.col(proj_col)).alias("proj_tds")
+    )
