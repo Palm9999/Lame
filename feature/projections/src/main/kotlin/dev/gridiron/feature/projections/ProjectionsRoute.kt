@@ -50,11 +50,18 @@ public fun ProjectionsRoute(
                 ProjectionsUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
+                ProjectionsUiState.Empty -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No projection available")
+                }
+                is ProjectionsUiState.Failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(s.message)
+                }
                 is ProjectionsUiState.Loaded -> WaterfallCard(
                     baseline = s.baseline,
                     factors = s.factors,
                     final = s.final,
                     floorCeiling = s.floorCeiling,
+                    tdDependenceValue = s.tdDependence,
                     modifier = Modifier.padding(top = 48.dp),
                 )
             }

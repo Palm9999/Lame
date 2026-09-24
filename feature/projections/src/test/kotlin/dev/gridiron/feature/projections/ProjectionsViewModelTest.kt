@@ -72,7 +72,7 @@ class ProjectionsViewModelTest {
                 return rows.map(map)
             }
         }
-        val viewModel = ProjectionsViewModel(ProjectionsRepository(gatedExecutor))
+        val viewModel = ProjectionsViewModel(ProjectionsRepository(gatedExecutor), dispatcher)
 
         viewModel.load("P1", season = 2026, week = 3, ScoringPresets.PPR, Position.WR)
         viewModel.load("P2", season = 2026, week = 3, ScoringPresets.PPR, Position.WR)
@@ -87,5 +87,74 @@ class ProjectionsViewModelTest {
         assertEquals("a stale, later-resolving request must not overwrite state", afterP2, afterStaleP1Resolves)
         val loaded = afterStaleP1Resolves as ProjectionsUiState.Loaded
         assertEquals("P2", loaded.playerId)
+    }
+
+    @Test
+    fun `a component with no final-stage row still counts toward the final score, driving td dependence`() = runTest(dispatcher) {
+        // `receiving_tds` only ever ships a baseline-stage row from today's
+        // ETL (no final-stage override yet), same as most non-`targets`
+        // metrics. It must still be merged forward into the final score --
+        // and, being a TD-scoring component, it should drive TD dependence
+        // toward 1.0 when it is the only thing contributing fantasy points.
+        val executor = object : QueryExecutor {
+            override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
+                val rows: List<ResultRow> = if (query.sql.contains("player_week_projection_factor")) {
+                    emptyList()
+                } else {
+                    listOf(
+                        // `targets` isn't read directly by any scoring rule,
+                        // so it contributes nothing to fantasy points -- it's
+                        // here only to prove a *scored* baseline-only metric
+                        // (receiving_tds, below) is the one driving the result.
+                        FakeResultRow(listOf("P1", "targets", "baseline", 6.0, 0.0)),
+                        FakeResultRow(listOf("P1", "targets", "final", 7.2, 4.0)),
+                        FakeResultRow(listOf("P1", "receiving_tds", "baseline", 0.5, 0.1)),
+                    )
+                }
+                return rows.map(map)
+            }
+        }
+        val viewModel = ProjectionsViewModel(ProjectionsRepository(executor), dispatcher)
+
+        viewModel.load("P1", season = 2026, week = 3, ScoringPresets.PPR, Position.WR)
+        advanceUntilIdle()
+
+        val loaded = viewModel.state.value as ProjectionsUiState.Loaded
+        // PPR REC_TD is worth 6.0 pts; 0.5 baseline receiving_tds carried
+        // forward into the final map is 3.0 points, and it's the only
+        // scoring component present, so it must equal both baseline and
+        // final totals and fully explain TD dependence.
+        assertEquals(3.0, loaded.baseline, 1e-9)
+        assertEquals(3.0, loaded.final, 1e-9)
+        assertEquals(1.0, loaded.tdDependence, 1e-9)
+    }
+
+    @Test
+    fun `an empty result set surfaces Empty instead of spinning forever`() = runTest(dispatcher) {
+        val executor = object : QueryExecutor {
+            override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> = emptyList()
+        }
+        val viewModel = ProjectionsViewModel(ProjectionsRepository(executor), dispatcher)
+
+        viewModel.load("P1", season = 2026, week = 3, ScoringPresets.PPR, Position.WR)
+        advanceUntilIdle()
+
+        assertEquals(ProjectionsUiState.Empty, viewModel.state.value)
+    }
+
+    @Test
+    fun `a repository failure surfaces Failed instead of crashing`() = runTest(dispatcher) {
+        val executor = object : QueryExecutor {
+            override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> =
+                throw IllegalStateException("no such table: player_week_projection")
+        }
+        val viewModel = ProjectionsViewModel(ProjectionsRepository(executor), dispatcher)
+
+        viewModel.load("P1", season = 2026, week = 3, ScoringPresets.PPR, Position.WR)
+        advanceUntilIdle()
+
+        val state = viewModel.state.value
+        assertEquals(true, state is ProjectionsUiState.Failed)
+        assertEquals("no such table: player_week_projection", (state as ProjectionsUiState.Failed).message)
     }
 }
