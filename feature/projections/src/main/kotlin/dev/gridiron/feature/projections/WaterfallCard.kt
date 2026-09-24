@@ -25,6 +25,7 @@ public fun WaterfallCard(
     factors: List<AttributedFactor>,
     final: Double,
     floorCeiling: SimulationResult,
+    tdDependenceValue: Double = 0.0,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier.fillMaxWidth().padding(16.dp)) {
@@ -39,6 +40,7 @@ public fun WaterfallCard(
             Text(text = "  ·  ")
             Text(text = "Ceiling ${oneDecimal(floorCeiling.p90)}")
         }
+        Text(text = "TD dependence: ${(tdDependenceValue * 100).toInt()}%")
     }
 }
 
