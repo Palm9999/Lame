@@ -64,7 +64,7 @@ fun GridironNavHost(deps: Deps) {
             }
             entry<ScoringEditKey> { key -> ScoringEditRoute(key.profileId, deps.scoring, onDone = back) }
             entry<ProjectionsKey> { key -> ProjectionsRoute(key.playerId, key.season, key.week, deps.projections, onBack = back) }
-            entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy) }
+            entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, onBack = back) }
         },
     )
 }
