@@ -48,11 +48,24 @@ public class ProjectionsViewModel(private val repository: ProjectionsRepository)
 
     // The most recent request's identity -- a request whose result arrives after
     // a newer one has already been issued is stale and must not update `_state`,
-    // mirroring GridViewModel's `page == base.page` sparkline guard.
-    private var currentRequestKey: String? = null
+    // mirroring GridViewModel's `page == base.page` sparkline guard. Includes
+    // profile and position, not just playerId/season/week: a scoring-format
+    // toggle while a projection screen is already open re-issues load() for the
+    // same player, and that must count as a new request too, or the guard
+    // becomes a no-op (both in-flight coroutines would share one key and
+    // whichever finishes last would win, even if it's the stale one).
+    private data class RequestKey(
+        val playerId: String,
+        val season: Int,
+        val week: Int,
+        val profile: ScoringProfile,
+        val position: Position?,
+    )
+
+    private var currentRequestKey: RequestKey? = null
 
     public fun load(playerId: String, season: Int, week: Int, profile: ScoringProfile, position: Position?) {
-        val requestKey = "$playerId:$season:$week"
+        val requestKey = RequestKey(playerId, season, week, profile, position)
         currentRequestKey = requestKey
         _state.value = ProjectionsUiState.Loading
 
