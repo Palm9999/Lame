@@ -256,3 +256,62 @@ def apply_market_blend(df: pl.DataFrame, props: pl.DataFrame,
         .alias("mean"),
         has_prop.alias("market_blended"),
     ).drop(["fair_prob", "line"])
+
+
+# Weekly CV of total fantasy points by position (research doc §2.1), used as
+# the reference point for the sigma = a*mu^b sub-linear variance model.
+EMPIRICAL_CV: dict[str, float] = {
+    "QB": 0.40, "RB": 0.57, "WR": 0.70, "TE": 0.77, "K": 0.52, "DST": 0.85,
+}
+
+
+def component_variance(mean: pl.Expr, cv: float, b: float = 0.75) -> pl.Expr:
+    """sigma = a * mu^b, sub-linear (b in [0.7, 0.85], research doc §2.1),
+    calibrated so that at mu=10 the CV equals the given reference `cv`."""
+    a = cv * 10.0 ** (1 - b)
+    sigma = a * mean.pow(b)
+    return sigma.pow(2)
+
+
+def assemble_distributions(df: pl.DataFrame, dist_families: dict[str, str]) -> pl.DataFrame:
+    """Attach `variance` to each (player, metric) row from EMPIRICAL_CV by
+    position, and `dist_family` from the caller-supplied metric->family map
+    (mirrors the `metric.dist_family` registry column added in Task 1)."""
+    cv_expr = pl.col("position").replace(EMPIRICAL_CV, default=0.65)
+    return df.with_columns(
+        (cv_expr * 10.0 ** 0.25 * pl.col("mean").pow(0.75)).pow(2).alias("variance"),
+        pl.col("metric_id").replace(dist_families, default="gamma").alias("dist_family"),
+    )
+
+
+def kicker_projection(df: pl.DataFrame) -> pl.DataFrame:
+    """FG points scale with the team's implied scoring environment (more
+    red-zone-adjacent drives that stall into a FG try) and are suppressed by
+    wind on long attempts, per research-prediction-models.md §1.7."""
+    base_points_per_implied_point = 0.32  # empirical rule of thumb: ~1 FG per ~9-10 implied pts
+    return df.with_columns(
+        (pl.col("team_implied_total") * base_points_per_implied_point * pl.col("wind_mult"))
+        .alias("mean")
+    )
+
+
+def dst_projection(df: pl.DataFrame) -> pl.DataFrame:
+    """DST points scale inversely with the opponent's offensive rating (a
+    weaker opposing offense means more turnovers/stops/sacks) and with the
+    defense's own pressure rate, reusing the matchup stage's opponent
+    ratings (Task 7) rather than a separate model."""
+    base = 7.0
+    return df.with_columns(
+        (base - pl.col("opponent_off_rating") * 1.5 + pl.col("pressure_rate") * 10.0)
+        .alias("mean")
+    )
+
+
+def rest_of_season(weekly: pl.DataFrame) -> pl.DataFrame:
+    """Sum weekly means and variances per (player, metric) across the given
+    remaining-weeks frame. No cross-week correlation modeled — see the design
+    spec's Known Gaps."""
+    return (
+        weekly.group_by(["player_id", "metric_id"])
+        .agg(mean=pl.col("mean").sum(), variance=pl.col("variance").sum())
+    )
