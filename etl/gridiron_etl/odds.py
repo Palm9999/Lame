@@ -44,11 +44,22 @@ def devig(price_over: int, price_under: int) -> float:
 
 def parse_player_props(event: dict) -> pl.DataFrame:
     """One row per (player, market) with a two-sided line, fair-probability of the
-    Over. One-sided or malformed markets are skipped, not raised."""
+    Over. One-sided or malformed markets are skipped, not raised.
+
+    Loops markets on the outside and bookmakers on the inside so that every
+    market in PLAYER_PROP_MARKETS is checked, not just the first one a
+    bookmaker happens to list data for — an event can have both
+    `player_reception_yds` and `player_receptions`, and both belong in the
+    output.
+    """
     rows: list[dict] = []
-    for book in event.get("bookmakers", []):
-        for market in book.get("markets", []):
-            if market["key"] not in PLAYER_PROP_MARKETS:
+    bookmakers = event.get("bookmakers", [])
+    for market_key in PLAYER_PROP_MARKETS:
+        for book in bookmakers:
+            market = next(
+                (m for m in book.get("markets", []) if m["key"] == market_key), None
+            )
+            if market is None:
                 continue
             by_player: dict[str, dict[str, dict]] = {}
             for outcome in market.get("outcomes", []):
@@ -57,24 +68,26 @@ def parse_player_props(event: dict) -> pl.DataFrame:
                 if name is None or side not in ("Over", "Under"):
                     continue
                 by_player.setdefault(name, {})[side] = outcome
+            market_rows = []
             for player_name, sides in by_player.items():
                 if "Over" not in sides or "Under" not in sides:
                     continue
                 over, under = sides["Over"], sides["Under"]
                 if over.get("point") != under.get("point"):
                     continue
-                rows.append({
+                market_rows.append({
                     "player_name": player_name,
-                    "market": market["key"],
+                    "market": market_key,
                     "line": float(over["point"]),
                     "fair_prob": devig(int(over["price"]), int(under["price"])),
                 })
-            # Only the first bookmaker with usable data for this market — a future
-            # improvement could average across books, not needed for v1.
-            if rows:
+            # Only the first bookmaker with usable data for THIS market — a
+            # future improvement could average across books, not needed for
+            # v1. Once found, move on to the next market rather than
+            # continuing to scan bookmakers for this one.
+            if market_rows:
+                rows.extend(market_rows)
                 break
-        if rows:
-            break
     return pl.DataFrame(rows, schema={"player_name": pl.String, "market": pl.String,
                                        "line": pl.Float64, "fair_prob": pl.Float64})
 

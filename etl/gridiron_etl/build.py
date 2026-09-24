@@ -20,6 +20,23 @@ log = logging.getLogger("gridiron.build")
 
 
 
+def _drop_nonfinite(df: pl.DataFrame, cols: list[str], label: str) -> pl.DataFrame:
+    """Filter out any row whose given columns aren't finite (NaN or +/-inf)
+    before it reaches SQLite, which either rejects a NaN with a NOT NULL
+    constraint failure or accepts it silently depending on column affinity —
+    neither of which a build should ship. A zero-variance market blend (see
+    projections.blend_inverse_variance) is the known source of this today,
+    but this filter is a defensive backstop, not a substitute for that guard.
+    Logs how many rows were dropped, if any."""
+    mask = pl.all_horizontal([pl.col(c).is_finite() for c in cols])
+    filtered = df.filter(mask)
+    dropped = df.height - filtered.height
+    if dropped:
+        log.warning("projections: dropped %d %s row(s) with non-finite value(s) in %s",
+                    dropped, label, cols)
+    return filtered
+
+
 def _search_name(expr: pl.Expr) -> pl.Expr:
     """Normalize for the indexed prefix-range search.
 
@@ -192,9 +209,27 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
     # additive, not a blocker for the stats the rest of the app already ships.
     try:
         proj_rows, factor_rows, ros_rows = proj_module.build_projections(weekly, projection_context)
-        schema.load_projections(conn, proj_rows)
-        schema.load_projection_factors(conn, factor_rows)
-        schema.load_ros_projections(conn, ros_rows)
+
+        # Defensive filter: a data problem (e.g. a zero-variance blend) must
+        # never reach SQLite as a NaN/inf, even though the blend itself is
+        # now guarded at the source (projections.blend_inverse_variance).
+        proj_rows = _drop_nonfinite(proj_rows, ["mean", "variance"], "player_week_projection")
+        factor_rows = _drop_nonfinite(factor_rows, ["log_multiplier"], "player_week_projection_factor")
+        ros_rows = _drop_nonfinite(ros_rows, ["mean", "variance"], "player_ros_projection")
+
+        # All three loads succeed together or none of them persist: each
+        # load defers its own commit, and a failure partway through rolls
+        # back everything written so far in this transaction rather than
+        # leaving a partial, inconsistent set of projection rows for
+        # schema.finalize()'s later commit to lock in.
+        try:
+            schema.load_projections(conn, proj_rows, commit=False)
+            schema.load_projection_factors(conn, factor_rows, commit=False)
+            schema.load_ros_projections(conn, ros_rows, commit=False)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
     except Exception as exc:  # projections are additive, not a blocker
         log.warning("projections stage skipped (%s)", exc)
 

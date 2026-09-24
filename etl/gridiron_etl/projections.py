@@ -1,10 +1,11 @@
-"""The six-layer projections pipeline: volume cascade, shrinkage, matchup,
-game script, market blend, distribution assembly. See
+"""Stage functions for the six-layer projections design: volume cascade,
+shrinkage, matchup, game script, market blend, distribution assembly. See
 docs/superpowers/specs/2026-09-23-projections-design.md for the architecture
 and docs/research/research-prediction-models.md for the methodology.
 
-Each stage is a pure function; `build_projections()` (added in Task 11) wires
-them in order.
+Each stage below is a pure function and is unit-tested standalone, but
+`build_projections()` (added in Task 11) currently wires only a subset of
+them into its output — see that function's docstring for exactly which.
 """
 
 from __future__ import annotations
@@ -207,7 +208,14 @@ def prop_to_mean(fair_prob: pl.Expr, line: pl.Expr, cv: float) -> pl.Expr:
 
 def _norm_ppf(p: float) -> float:
     """Standard normal inverse CDF via Acklam's rational approximation —
-    accurate to ~1e-9, no scipy dependency for one function."""
+    accurate to ~1e-9, no scipy dependency for one function.
+
+    `p` is clamped a hair away from 0.0/1.0: a de-vigged `fair_prob` of
+    exactly 0 or 1 (unlikely, but not impossible with rounding) would
+    otherwise hit `math.log(0)` below and crash the whole market-blend
+    stage. Clamping degrades to an extreme-but-finite quantile instead.
+    """
+    p = min(max(p, 1e-9), 1 - 1e-9)
     a = [-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
          1.383577518672690e+02, -3.066479806614716e+01, 2.506628277459239e+00]
     b = [-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
@@ -233,10 +241,19 @@ def _norm_ppf(p: float) -> float:
 
 def blend_inverse_variance(model_mean: pl.Expr, model_var: pl.Expr,
                             market_mean: pl.Expr, market_var: pl.Expr) -> pl.Expr:
-    """Precision-weighted average, per research doc §1.8 step 4."""
+    """Precision-weighted average, per research doc §1.8 step 4.
+
+    Guards against a zero (or negative) model-side variance: a rookie or a
+    leading-null EWMA row can have `proj_targets == 0`, so
+    `component_variance(0) == 0`, and `1.0 / model_var` would be `inf` —
+    which turns the whole blend into NaN. When that happens, skip the
+    blend for that row and keep the model-only mean instead of dividing
+    by zero.
+    """
     w_model = 1.0 / model_var
     w_market = 1.0 / market_var
-    return (model_mean * w_model + market_mean * w_market) / (w_model + w_market)
+    blended = (model_mean * w_model + market_mean * w_market) / (w_model + w_market)
+    return pl.when(model_var > 0.0).then(blended).otherwise(model_mean)
 
 
 def apply_market_blend(df: pl.DataFrame, props: pl.DataFrame,
@@ -319,7 +336,28 @@ def dst_projection(df: pl.DataFrame) -> pl.DataFrame:
 def build_projections(weekly: pl.DataFrame, context: dict) -> tuple[pl.DataFrame,
                                                                      pl.DataFrame,
                                                                      pl.DataFrame]:
-    """Run all six stages in order and shape the output for schema.py's loaders.
+    """Wire the parts of the six-layer design that are actually connected
+    to the output today, and shape the result for schema.py's loaders.
+
+    What actually runs, in order: volume cascade (`volume_cascade` +
+    `apply_cross_season_carryover`) projects `targets`/`carries`; xTD
+    shrinkage (`project_xtd`) projects `receiving_tds` from that volume as a
+    one-off "baseline" row (it is not carried through any later stage); a
+    weather multiplier (`wind_multiplier`, fed by `implied_totals`'
+    Vegas-total/spread math) is applied to the `targets` mean; and a market
+    blend (`apply_market_blend`) blends a `player_receptions` prop mean into
+    that same `targets` mean — a known unit mismatch kept only because
+    receptions isn't projected as its own metric yet.
+
+    What the six-layer design specifies but this function does NOT wire into
+    the output: `fit_ridge_ratings`/`matchup_multiplier` (matchup) is never
+    called at all; `implied_totals`' game-script effect (as opposed to
+    `wind_multiplier`'s weather effect) is computed but discarded;
+    `shrink_efficiency` and `assemble_distributions` are unused; receptions
+    is never projected as its own metric. Those stage functions exist and
+    are unit-tested standalone, but are not part of this pipeline's output —
+    see the plan document's Post-plan note for the follow-up work this
+    implies.
 
     `weekly` must be sorted by (player_id, season, week) on entry.
     `context` keys used: 'odds_props', 'prior_season_final', 'xtd_baseline'.
@@ -347,9 +385,9 @@ def build_projections(weekly: pl.DataFrame, context: dict) -> tuple[pl.DataFrame
     with_tds = project_xtd(cascaded, context["xtd_baseline"], "x_receiving_tds", "targets")
 
     # `receiving_tds` only ever gets this "baseline" stage row in this pass —
-    # it is not carried through the matchup/game-script/market stages below
-    # the way `targets` is (see final_targets). Extending TDs through those
-    # adjustment stages is an intentional follow-up, not an omission here.
+    # it is not carried through the weather/market adjustment below the way
+    # `targets` is (see final_targets). Extending TDs through that
+    # adjustment is an intentional follow-up, not an omission here.
     baseline_mean = with_tds.select(
         "player_id", "season", "week",
         pl.col("proj_targets").alias("targets"),
@@ -358,26 +396,33 @@ def build_projections(weekly: pl.DataFrame, context: dict) -> tuple[pl.DataFrame
         index=["player_id", "season", "week"], variable_name="metric_id", value_name="mean"
     ).with_columns(stage=pl.lit("baseline"), variance=pl.lit(0.0))
 
-    # Stages 3-4: matchup + game script. Kept as `.with_columns` on the one
-    # `with_tds` frame (never split into a separate frame variable) so every
-    # later stage's row order and length is guaranteed to still line up —
-    # multiplying bare Series pulled from two independently-derived frames
-    # is a correctness trap this pipeline avoids by construction.
+    # Weather multiplier only — NOT "matchup + game script". implied_totals()
+    # is called here purely to feed wind_multiplier's is_outdoor/context
+    # columns through; matchup (fit_ridge_ratings/matchup_multiplier) is
+    # never called anywhere in this function, and implied_totals' actual
+    # game-script signal (the home/away point-total split) is computed but
+    # its result is discarded below — only wind_mult reaches `mean`. Kept as
+    # `.with_columns` on the one `with_tds` frame (never split into a
+    # separate frame variable) so every later stage's row order and length
+    # is guaranteed to still line up — multiplying bare Series pulled from
+    # two independently-derived frames is a correctness trap this pipeline
+    # avoids by construction.
     adjusted = implied_totals(with_tds).with_columns(
         wind_mult=wind_multiplier(pl.col("wind"), pl.col("is_outdoor")),
     )
 
-    # Stage 5: market blend, applied on top of the wind-adjusted mean, still
-    # the same frame (receptions only in this pass; other markets follow the
-    # same apply_market_blend call with a different market filter).
+    # Market blend, applied on top of the wind-adjusted mean, still the same
+    # frame (player_receptions props blended into the `targets` mean — a
+    # unit mismatch kept only because receptions isn't projected as its own
+    # metric yet; see the docstring above and the plan's Post-plan note).
     with_market_input = adjusted.with_columns(
         (pl.col("proj_targets") * pl.col("wind_mult")).alias("mean"),
         component_variance(pl.col("proj_targets"), cv=0.5).alias("variance"),
     )
     blended = apply_market_blend(with_market_input, context["odds_props"])
 
-    # final_targets carries metric_id="targets" through the matchup/game-script/
-    # market stages to a "final" stage row; receiving_tds stays baseline-only
+    # final_targets carries metric_id="targets" through the weather/market
+    # adjustment to a "final" stage row; receiving_tds stays baseline-only
     # in this pass (see the comment on baseline_mean above).
     # `stage` is built here in the same `select()`, ahead of `mean`/`variance`,
     # rather than appended afterward via `.with_columns` — that would put it
