@@ -421,3 +421,58 @@ def rest_of_season(weekly: pl.DataFrame) -> pl.DataFrame:
         weekly.group_by(["player_id", "metric_id"])
         .agg(mean=pl.col("mean").sum(), variance=pl.col("variance").sum())
     )
+
+
+def snapshot_projections(proj: pl.DataFrame, snapshot_at: str) -> pl.DataFrame:
+    """Reshape final-stage player_week_projection rows into projection_snapshot
+    rows, frozen at `snapshot_at` — never overwritten by a later build."""
+    return (
+        proj.filter(pl.col("stage") == "final")
+        .select(
+            "player_id", "season", "week", "metric_id",
+            pl.col("mean").alias("projected_mean"),
+            pl.col("variance").alias("projected_variance"),
+        )
+        .with_columns(pl.lit(snapshot_at).alias("snapshot_at"))
+    )
+
+
+def compute_accuracy(snapshots: pl.DataFrame, actuals: pl.DataFrame,
+                      position_lookup: pl.DataFrame,
+                      baseline_label: str = "model") -> pl.DataFrame:
+    """MAE/RMSE/bias/R² per (position, season, metric_id), joining each
+    snapshot to the real outcome once it exists in player_week_stat."""
+    joined = (
+        snapshots.join(actuals, on=["player_id", "season", "week", "metric_id"], how="inner")
+        .join(position_lookup, on="player_id", how="left")
+    )
+    err = pl.col("value") - pl.col("projected_mean")
+    with_err = joined.with_columns(err.alias("_err"))
+
+    grouped = with_err.group_by(["position", "season", "metric_id"]).agg(
+        sample_n=pl.len(),
+        mae=pl.col("_err").abs().mean(),
+        rmse=(pl.col("_err") ** 2).mean().sqrt(),
+        bias=pl.col("_err").mean(),
+        _ss_res=(pl.col("_err") ** 2).sum(),
+        _mean_actual=pl.col("value").mean(),
+    )
+    # R^2 needs the total sum of squares, which needs the per-group mean —
+    # a second pass keyed the same way, then a join, is simpler than a window
+    # function across a group-by-agg result.
+    ss_tot = (
+        with_err.join(
+            grouped.select("position", "season", "metric_id", "_mean_actual"),
+            on=["position", "season", "metric_id"],
+        )
+        .group_by(["position", "season", "metric_id"])
+        .agg(_ss_tot=((pl.col("value") - pl.col("_mean_actual")) ** 2).sum())
+    )
+    out = grouped.join(ss_tot, on=["position", "season", "metric_id"]).with_columns(
+        r2=pl.when(pl.col("_ss_tot") > 0)
+        .then(1 - pl.col("_ss_res") / pl.col("_ss_tot"))
+        .otherwise(None),
+        baseline=pl.lit(baseline_label),
+    ).select("position", "season", "metric_id", "baseline", "sample_n", "mae", "rmse",
+              "bias", "r2")
+    return out
