@@ -5,5 +5,4 @@ plugins {
 dependencies {
     api(projects.core.model)
     api(projects.core.statquery)
-    testImplementation(kotlin("test"))
 }
