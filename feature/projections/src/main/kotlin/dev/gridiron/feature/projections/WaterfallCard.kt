@@ -31,7 +31,7 @@ public fun WaterfallCard(
     Column(modifier = modifier.fillMaxWidth().padding(16.dp)) {
         Text(text = "Baseline (role + recent form)  ${oneDecimal(baseline)}")
         factors.forEach { f ->
-            val sign = if (f.points >= 0) "+" else ""
+            val sign = if (Math.round(f.points * 10) / 10.0 >= 0.0) "+" else ""
             Text(text = "$sign${oneDecimal(f.points)}  ${f.factor}${f.note?.let { " — $it" } ?: ""}")
         }
         Text(text = "Projection  ${oneDecimal(final)}")
@@ -46,8 +46,10 @@ public fun WaterfallCard(
 
 /**
  * Mirrors `StatFormat.fixed(value, decimals = 1)`: rounds first so a value
- * like -0.04 never renders as "-0.0", and formats with an explicit Locale so
- * output doesn't vary with the device's comma-decimal locale settings.
+ * like -0.04 never renders as "-0.0". Uses `Locale.getDefault()`, same as
+ * `StatFormat.fixed()` -- output still varies with the device's own
+ * decimal-separator convention (e.g. a comma-decimal locale), it just stays
+ * consistent with the rest of the app's number formatting.
  */
 private fun oneDecimal(value: Double): String {
     val rounded = Math.round(value * 10) / 10.0
