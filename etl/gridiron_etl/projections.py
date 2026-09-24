@@ -84,9 +84,7 @@ def project_xtd(df: pl.DataFrame, baseline: pl.DataFrame, xtd_col: str,
     scale by their *projected* (not historical) opportunity volume — the
     output of volume_cascade — to get projected touchdowns."""
     shrunk = shrinkage.shrink_td_rate(df, baseline, xtd_col, opportunities_col, position_col)
-    proj_col = f"proj_{opportunities_col.replace('team_', '')}" \
-        if f"proj_{opportunities_col}" not in shrunk.columns else f"proj_{opportunities_col}"
     proj_col = "proj_targets" if opportunities_col == "targets" else "proj_carries"
     return shrunk.with_columns(
-        (pl.col("xtd_rate_shrunk") * pl.col(proj_col)).alias("proj_tds")
+        (pl.col("xtd_rate_shrunk").fill_null(0.0) * pl.col(proj_col)).alias("proj_tds")
     )
