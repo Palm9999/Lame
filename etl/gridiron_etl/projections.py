@@ -9,6 +9,7 @@ them in order.
 
 from __future__ import annotations
 
+import numpy as np
 import polars as pl
 
 from . import shrinkage
@@ -88,3 +89,46 @@ def project_xtd(df: pl.DataFrame, baseline: pl.DataFrame, xtd_col: str,
     return shrunk.with_columns(
         (pl.col("xtd_rate_shrunk").fill_null(0.0) * pl.col(proj_col)).alias("proj_tds")
     )
+
+
+def fit_ridge_ratings(df: pl.DataFrame, outcome_col: str, offense_col: str = "offense",
+                       defense_col: str = "defense", home_col: str = "home",
+                       lam: float = 5.0) -> pl.DataFrame:
+    """Two-way ridge opponent adjustment: y = mu + off_o + def_d + home*h + eps,
+    L2-penalized. Closed-form solve, per research-prediction-models.md §1.5.
+
+    `lam` should be large early in a season (thin data -> ratings near zero,
+    i.e. near league-average) and can shrink as more weeks accumulate — the
+    caller (Task 11's build_projections) passes a lam schedule by week.
+    """
+    teams = sorted(set(df[offense_col].to_list()) | set(df[defense_col].to_list()))
+    idx = {t: i for i, t in enumerate(teams)}
+    p = len(teams)
+    n = df.height
+    # Columns: p offense dummies, p defense dummies, 1 home column.
+    X = np.zeros((n, 2 * p + 1))
+    offense = df[offense_col].to_list()
+    defense = df[defense_col].to_list()
+    home = df[home_col].to_numpy()
+    y = df[outcome_col].to_numpy()
+    for i in range(n):
+        X[i, idx[offense[i]]] = 1.0
+        X[i, p + idx[defense[i]]] = 1.0
+        X[i, 2 * p] = home[i]
+
+    penalty = lam * np.eye(2 * p + 1)
+    penalty[2 * p, 2 * p] = 0.0  # never penalize the home-field coefficient
+    beta = np.linalg.lstsq(X.T @ X + penalty, X.T @ y, rcond=None)[0]
+
+    return pl.DataFrame({
+        "team": teams,
+        "off_rating": beta[:p].tolist(),
+        "def_rating": beta[p:2 * p].tolist(),
+    })
+
+
+def matchup_multiplier(rating: pl.Expr, league_mean: float, cap: float) -> pl.Expr:
+    """Convert a fitted rating to a bounded multiplier around 1.0, per the
+    caps in research-prediction-models.md §1.5 (efficiency ±15%, volume ±5%,
+    TD ±20% — `cap` is passed per-use)."""
+    return (1.0 + (rating - league_mean)).clip(1.0 - cap, 1.0 + cap)
