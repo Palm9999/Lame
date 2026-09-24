@@ -6,12 +6,16 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
+import dev.gridiron.core.data.AccuracyRepository
 import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
+import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.feature.compare.CompareRoute
 import dev.gridiron.feature.players.GridRoute
+import dev.gridiron.feature.projections.AccuracyRoute
+import dev.gridiron.feature.projections.ProjectionsRoute
 import dev.gridiron.feature.scoring.ScoringEditRoute
 import dev.gridiron.feature.scoring.ScoringListRoute
 
@@ -21,6 +25,8 @@ data class Deps(
     val compare: CompareRepository,
     val scoring: ScoringRepository,
     val tray: CompareTrayRepository,
+    val projections: ProjectionsRepository,
+    val accuracy: AccuracyRepository,
 )
 
 /**
@@ -57,6 +63,8 @@ fun GridironNavHost(deps: Deps) {
                 ScoringListRoute(deps.scoring, onEdit = { backStack.push(ScoringEditKey(it)) }, onBack = back)
             }
             entry<ScoringEditKey> { key -> ScoringEditRoute(key.profileId, deps.scoring, onDone = back) }
+            entry<ProjectionsKey> { key -> ProjectionsRoute(key.playerId, key.season, key.week, deps.projections, onBack = back) }
+            entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy) }
         },
     )
 }

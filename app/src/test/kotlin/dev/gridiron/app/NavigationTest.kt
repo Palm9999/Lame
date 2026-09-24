@@ -9,9 +9,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.espresso.Espresso
+import dev.gridiron.core.data.AccuracyRepository
 import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.GridRequest
+import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
@@ -59,6 +61,8 @@ class NavigationTest {
             compare = CompareRepository(executor),
             scoring = ScoringRepository(prefs),
             tray = CompareTrayRepository(prefs),
+            projections = ProjectionsRepository(executor),
+            accuracy = AccuracyRepository(executor),
         )
     }
 

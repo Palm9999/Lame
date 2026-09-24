@@ -1,7 +1,10 @@
 package dev.gridiron.feature.projections
 
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
@@ -92,5 +95,12 @@ public class ProjectionsViewModel(private val repository: ProjectionsRepository)
             if (currentRequestKey != requestKey) return@launch // re-check after the CPU-bound simulate() call
             _state.value = ProjectionsUiState.Loaded(playerId, baselinePoints, finalPoints, attributed, floorCeiling)
         }
+    }
+
+    public companion object {
+        public fun factory(repository: ProjectionsRepository): ViewModelProvider.Factory =
+            viewModelFactory {
+                initializer { ProjectionsViewModel(repository) }
+            }
     }
 }
