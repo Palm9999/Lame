@@ -1670,3 +1670,31 @@ git commit -m "app: wire :feature:projections into the navigation graph"
   cancellation-safety behavior it exists to test.
 - **Cross-player correlated simulation** (H2H win probability, lineup optimization) stays
   entirely out of scope, per the design spec — that's Phase 6.
+
+### Added after the final whole-branch review (opus, base f86b6bc, head 52bd8a3)
+
+- **No navigation entry point.** `ProjectionsKey`/`AccuracyKey` are valid, wired, compilable
+  nav destinations that nothing currently pushes — deliberately deferred out of Task 11's
+  file scope (adding one touches `:feature:players`/`:feature:compare`, and where it belongs
+  is an unspecified product-design decision). Ship together with the next two items: all
+  three are "is this feature actually usable" work, not wiring work.
+- **`ProjectionsRoute` hardcodes `ScoringPresets.PPR` and `position = null`** — the one real
+  caller of `ProjectionsViewModel.load()` ignores the viewer's real league scoring profile
+  and the player's actual position, contradicting the plan's own Goal ("applies the user's
+  real `ScoringProfile`") and `attributeFactors`' KDoc ("never a server-assumed default").
+  `receptionWeight(null)` skips TE-premium scoring rules entirely. Needs `ScoringRepository`
+  threaded through the route (the pattern `CompareRoute` already uses for the same repository)
+  plus a player-position source that doesn't exist yet at this call site.
+- **The final-review fix wave (commits ed96c12/20a3aa5/7aac2d5) fixed the numeric-correctness
+  bug this gap would otherwise mask**: today's ETL only ships a final-stage
+  `player_week_projection` row for `targets` (see `etl/gridiron_etl/projections.py`'s own
+  docstring — `receiving_tds` "stays baseline-only in this pass"), so `ProjectionsViewModel`
+  now merges each component's baseline value forward when there's no final-stage override
+  (at the `ProjectionComponent` level, carrying variance too), instead of silently treating
+  a not-yet-adjusted component as absent. `ProjectionsUiState` also gained `Empty`/`Failed`
+  cases (an empty result set or a thrown exception no longer spins forever or crashes the
+  app), and the 10k-draw `simulate()` call now runs off the main thread. A genuine end-to-end
+  contract test — real ETL-shaped `build_projections()` output run through
+  `ProjectionsRepository`/`ProjectionsViewModel`, the way `:core:statquery`'s three-tier
+  strategy already does for the Grid — remains a real gap; today's Android-side projection
+  tests use only hand-inserted fixture rows and would not have caught this on their own.

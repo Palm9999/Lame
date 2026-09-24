@@ -53,6 +53,7 @@ export GRIDIRON_STATS_DB=etl/build/stats.db
 - `:core:statquery` — Query builder that turns `StatQuerySpec` into SQL. Guarantees rate recomputation, SQL injection safety, determinism, and stable percentiles. Three test tiers: in-memory SQLite, safety/determinism checks, and contract tests against the real ETL database
 - `:core:database` — Read-only SQLite access via the bundled driver; wraps the JDBC executor
 - `:core:testing` — Test fixtures: JDBC executor over the real database. Proves results match what the phone's SQLite driver will return
+- `:core:projections` — Pure `score()` (the in-memory twin of `StatQueryBuilder`'s SQL scoring), factor attribution, and single-player Monte Carlo (floor/ceiling) for the Projections feature
 
 **Android Modules**:
 - `:app` — App entry point; ships `stats.db` inside the APK and copies it on first launch
@@ -60,6 +61,7 @@ export GRIDIRON_STATS_DB=etl/build/stats.db
 - `:core:table` — Frozen-column stat table with shared horizontal scroll state
 - `:core:designsystem` — Theme, dark mode, colorblind-safe heat scale
 - `:core:data` — Stat packs, qualifying bars, formatting, repository pattern
+- `:feature:projections` — The Projections waterfall card and the accuracy ("trust page") screen; wired into the nav graph as `ProjectionsKey`/`AccuracyKey` but not yet reachable from any UI (see Known Gaps)
 
 ### Data Flow
 
@@ -122,6 +124,11 @@ To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI 
 - Hilt dependency injection and Navigation 3 architecture arrive with the second feature
 - User database (`user.db`) for presets and rosters not yet implemented
 - APK signing uses a committed keystore (`app/gridiron.keystore`, intentional for a never-published personal app)
+- **Projections feature is wired but not reachable**: `:feature:projections`'s `ProjectionsRoute`/`AccuracyRoute` are valid, working nav destinations (`ProjectionsKey`/`AccuracyKey`), but no button or menu item anywhere navigates to them yet — reaching them today needs a manual nav-graph edit. Adding a real entry point should land together with the two gaps below, since all three are "is the feature actually usable" work.
+- **`ProjectionsRoute` hardcodes `ScoringPresets.PPR` and `position = null`** instead of the viewer's real league scoring profile and the player's actual position — `receptionWeight(null)` skips TE-premium scoring rules, and non-PPR leagues see PPR numbers. Needs `ScoringRepository` threaded through the route (the pattern `CompareRoute` already uses) plus a player-position lookup that doesn't exist yet at that call site.
+- **Every projection component is simulated as `DistributionFamily.GAMMA`**, not each metric's real `dist_family`/`zero_inflated` from the `metric` registry (the column exists from the ETL plan's schema v4, but isn't yet threaded through `:core:data`'s `Catalog`/`MetricInfo`)
+- **K/DST fantasy scoring is out of scope** for `:core:projections`'s `score()` — `ScoringRule` structurally covers QB/RB/WR/TE only
+- **No contract test** runs real ETL-shaped projection output end-to-end through `ProjectionsRepository`/`ProjectionsViewModel` the way `:core:statquery`'s three-tier strategy does for the Grid — today's Android-side projection tests use hand-inserted fixture rows only, and would not have caught the final-stage-rows-mostly-missing issue the final whole-branch review found (since fixed: `ProjectionsViewModel` now merges baseline values forward for any component with no final-stage adjustment)
 
 ## Codebase Notes
 
