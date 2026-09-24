@@ -5,7 +5,6 @@ import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.statquery.Component
 import java.util.SplittableRandom
 import kotlin.math.ln
-import kotlin.math.max
 
 public enum class DistributionFamily { NEGBINOM, BINOMIAL, GAMMA, POISSON }
 
@@ -52,9 +51,11 @@ public fun simulate(
 }
 
 private fun drawOne(spec: DistributionSpec, rng: SplittableRandom): Double {
-    // variance = 0 is a point mass at the mean for every family — a bye-week
-    // placeholder or a data gap must never divide by zero or produce NaN.
-    if (spec.variance <= 0.0) return spec.mean
+    // variance = 0, or a non-positive mean, is a point mass at the mean for
+    // every family — a bye-week placeholder, an inactive/rookie player with
+    // a true zero mean, or a data gap must never divide by zero or produce
+    // NaN/Infinity.
+    if (spec.mean <= 0.0 || spec.variance <= 0.0) return spec.mean
     return when (spec.family) {
         DistributionFamily.GAMMA -> drawGamma(spec.mean, spec.variance, rng)
         DistributionFamily.POISSON -> drawPoisson(spec.mean, rng)
@@ -65,14 +66,35 @@ private fun drawOne(spec: DistributionSpec, rng: SplittableRandom): Double {
     }
 }
 
-private fun drawGamma(mean: Double, variance: Double, rng: SplittableRandom): Double {
+// internal (not private) so MonteCarloTest can call it directly to verify the
+// shape<1 boost trick's raw mean/variance, matching this module's existing
+// pattern of `internal` test seams (see e.g. core/statquery's
+// SCORING_COMPONENTS) rather than only checking through simulate()'s
+// percentile-only, skew-obscured surface.
+internal fun drawGamma(mean: Double, variance: Double, rng: SplittableRandom): Double {
     val shape = mean * mean / variance
     val scale = variance / mean
-    // Marsaglia-Tsang method, shape >= 1 (clamp — shrinkage-heavy small-n
-    // components can produce shape < 1 from a tiny mean/large variance; a
-    // proper shape<1 boost-trick sampler is a follow-up, this clamp keeps
-    // the draw defined and non-crashing in the meantime).
-    val d = max(shape, 1.0) - 1.0 / 3.0
+    // Shrinkage-heavy small-n components (low volume, high variance) can
+    // produce shape < 1 — a realistic case (e.g. a boom/bust low-target
+    // receiver), not a degenerate one, so it must be sampled correctly
+    // rather than clamped up to shape 1.
+    return if (shape < 1.0) {
+        // Boost trick: draw Gamma(shape+1, scale) via the shape>=1 method
+        // below, then correct down to Gamma(shape, scale) by multiplying by
+        // U^(1/shape) (Ahrens-Dieter / standard boost-trick construction).
+        val boosted = drawGammaShapeAtLeastOne(shape + 1.0, scale, rng)
+        val u = rng.nextDouble().coerceAtLeast(1e-12)
+        boosted * Math.pow(u, 1.0 / shape)
+    } else {
+        drawGammaShapeAtLeastOne(shape, scale, rng)
+    }
+}
+
+private fun drawGammaShapeAtLeastOne(shape: Double, scale: Double, rng: SplittableRandom): Double {
+    // Marsaglia-Tsang method. Callers must guarantee shape >= 1 — no
+    // clamping here, since a clamp would silently sample the wrong
+    // distribution (see drawGamma's boost trick for shape < 1).
+    val d = shape - 1.0 / 3.0
     val c = 1.0 / kotlin.math.sqrt(9.0 * d)
     while (true) {
         var x: Double
