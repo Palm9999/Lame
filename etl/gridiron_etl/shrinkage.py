@@ -65,3 +65,55 @@ def shrink(observed: pl.Expr, n: pl.Expr, baseline: pl.Expr, k: float) -> pl.Exp
     """
     w = n / (n + k)
     return w * observed + (1 - w) * baseline
+
+
+def positional_baseline(df: pl.DataFrame, position_col: str, rate_col: str,
+                        n_col: str) -> pl.DataFrame:
+    """Sample-size-weighted mean rate per position — the shrinkage target."""
+    return (
+        df.group_by(position_col)
+        .agg(
+            ((pl.col(rate_col) * pl.col(n_col)).sum() / pl.col(n_col).sum())
+            .alias(f"{rate_col}_baseline")
+        )
+    )
+
+
+def shrink_efficiency(df: pl.DataFrame, rate_col: str, n_col: str,
+                      position_col: str = "position") -> pl.DataFrame:
+    """James-Stein-shrink `rate_col` toward its positional baseline."""
+    k = SHRINKAGE_K.get(rate_col, 15.0)
+    baseline = positional_baseline(df, position_col, rate_col, n_col)
+    joined = df.join(baseline, on=position_col, how="left")
+    return joined.with_columns(
+        shrink(pl.col(rate_col), pl.col(n_col), pl.col(f"{rate_col}_baseline"), k)
+        .alias(f"{rate_col}_shrunk")
+    )
+
+
+def shrink_td_rate(df: pl.DataFrame, baseline: pl.DataFrame,
+                   xtd_col: str = "x_receiving_tds",
+                   opportunities_col: str = "targets",
+                   position_col: str = "position") -> pl.DataFrame:
+    """James-Stein-shrink an xTD-derived rate toward the positional baseline,
+    with the large `k` in SHRINKAGE_K["td_rate"] — even a full season stays
+    close to baseline, matching research-prediction-models.md §1.2.
+
+    `baseline` is precomputed (not derived from `df` itself) because TD-rate
+    baselines are fit on a much larger historical window than one build's
+    current-season sample — see Task 6.
+    """
+    xtd_rate = (
+        pl.when(pl.col(opportunities_col) > 0)
+        .then(pl.col(xtd_col) / pl.col(opportunities_col))
+        .otherwise(0.0)
+    )
+    joined = df.with_columns(xtd_rate.alias("_xtd_rate")).join(
+        baseline, on=position_col, how="left"
+    )
+    k = SHRINKAGE_K["td_rate"]
+    return joined.with_columns(
+        shrink(pl.col("_xtd_rate"), pl.col(opportunities_col),
+               pl.col("xtd_rate_baseline"), k)
+        .alias("xtd_rate_shrunk")
+    ).drop("_xtd_rate")
