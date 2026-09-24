@@ -35,6 +35,7 @@ rootProject.name = "gridiron"
 
 include(":core:model")
 include(":core:statquery")
+include(":core:projections")
 include(":core:database")
 include(":core:datastore")
 include(":core:testing")
