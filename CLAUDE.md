@@ -80,16 +80,21 @@ export GRIDIRON_STATS_DB=etl/build/stats.db
 
 **No Hilt or Navigation Yet** — Current single-screen setup. Hilt and Navigation 3 will arrive with the second feature.
 
-### Database Schema (Version 2)
+### Database Schema (Version 4)
 
 Long/narrow design: adding a metric is an `INSERT`, not a migration.
 
 | Table | Purpose |
 |---|---|
 | `player_week_stat` | Facts: `(player_id, season, week, team, metric_id, value)`, indexed as covering index on `(metric_id, season, week, value)` |
-| `metric` | Metric registry: name, definition, formula, tier, predictive use, stability, internal flag |
+| `metric` | Metric registry: name, definition, formula, tier, predictive use, stability, internal flag, plus `dist_family` (distribution for on-device Monte Carlo/percentile reconstruction) and `zero_inflated` |
 | `player` | Players with at least one stat in the built seasons |
 | `schema_meta` | Schema version, seasons, attribution |
+| `player_week_projection` | Per (player, week, metric, stage) projected mean/variance — `stage` is `baseline` (post volume-cascade) or `final` (fully adjusted) |
+| `player_week_projection_factor` | Per (player, week, factor) log-space attribution multiplier for one projection adjustment stage |
+| `player_ros_projection` | Rest-of-season aggregate: summed weekly mean/variance per (player, metric), no per-week detail |
+| `projection_snapshot` | Projected mean/variance frozen at snapshot time, never overwritten — joined against `player_week_stat` once actuals land to compute accuracy |
+| `accuracy_summary` | Precomputed MAE/RMSE/bias/R² per (position, season, metric, baseline), refreshed each ETL run |
 
 **No year in table/column names** — New seasons are data rows, not schema changes.
 

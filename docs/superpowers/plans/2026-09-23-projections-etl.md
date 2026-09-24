@@ -2201,3 +2201,59 @@ plan (which only needs the schema and the pipeline's *output shape* to exist):
 6. **xTD baseline fit window** — call `xtd_baseline` (Task 6) on a genuine walk-forward
    historical window (all completed weeks before the one being projected, pulled from
    the already-built `stats.db`) instead of the empty frame Task 11 wires today.
+
+**Architectural gaps found in final review (not yet fixed, confirmed inert today):**
+
+The real ETL build's existing try/except around the projections stage in `build.py`
+already skips the whole stage on the real weekly frame today, so none of the following
+affect anything currently shipping. They're recorded here so whoever wires real data in
+(items 4-6 above) fixes them first, rather than rediscovering them under time pressure.
+
+7. **No walk-forward timing in `build_projections`.** Each week's row is computed from
+   EWMAs that include that week's own actuals (confirmed: changing week 4's
+   `target_share` moves week 4's own `targets` projection). No row is ever emitted for
+   the *next* unplayed week, which is what a real projection product needs. `rest_of_season`
+   sums *completed* weeks 1..max rather than remaining weeks. Real fix: shift EWMA'd
+   signals by one game per player before use in `volume_cascade`, emit a genuine
+   next-week row in `build_projections`, and redefine `rest_of_season`'s input to cover
+   remaining (not completed) weeks.
+8. **Team-level EWMA in `volume_cascade` mixes players together.** It groups by `"team"`
+   on a frame sorted by `(player_id, season, week)`, so with multiple players per team
+   the EWMA recurrence walks one player's full week range before moving to the next,
+   corrupting `team_targets_ewma`/`team_carries_ewma` (confirmed: two same-team players
+   got different values for the same week from the same team total). Real fix: EWMA a
+   de-duplicated `(team, season, week)` frame, then join the result back onto the
+   player-level frame.
+9. **Market blend applies a receptions-prop mean to the `targets` metric** — a unit
+   mismatch, since receptions isn't actually projected as its own metric yet (see item
+   10). Fix once receptions has its own metric row: blend receptions props only into
+   that.
+10. **The receiving chain is thinner than the plan's "through all six stages" language
+    implied.** Matchup and game-script multipliers are computed but never applied to the
+    output mean; `shrink_efficiency`/`assemble_distributions` are unused; receptions is
+    never projected; `metric.dist_family` is populated for no metric (everything falls
+    back to Gamma client-side); the `market_blended` flag is computed then dropped (no
+    schema column carries it, though the design spec's error-handling table calls for
+    it); `season_avg`/`last4_avg` accuracy baselines (spec §2/§4) are never produced.
+11. **`projection_snapshot` rows don't survive between nightly builds** —
+    `schema.create()` deletes and rebuilds `stats.db` from scratch every run (including
+    the nightly `.github/workflows/etl.yml` build), so "frozen, never overwritten"
+    snapshots are destroyed before any later actual could ever be scored against them.
+    Needs a persistence strategy across builds (e.g. carrying snapshots forward from the
+    previous release's DB, or a separate persisted artifact) that neither the spec nor
+    this plan currently specifies.
+12. **Multi-season builds need per-season projection runs, not a single accumulated
+    `weekly` frame.** An earlier ledger note suggested fixing the "only the last season
+    gets projected" gap by accumulating `weekly` across seasons the way `frames`/`long`
+    already do — that remedy is itself wrong, because `rest_of_season`/`season`/
+    `as_of_week`/the carryover loop are all implicitly single-season (accumulating
+    across seasons would double-count via the season-spanning `over(player_id)` EWMAs).
+    Correct approach: run `build_projections` once per season, deriving that season's
+    `prior_season_final` from the *previous* season's own frame.
+13. **xTD shrinkage operates on one week's sample, not a cumulative one.**
+    `shrink_td_rate` is called with `n` = that single week's targets (~6) and that
+    week's own xTD rate — with `k=200` this means every row sits near the positional
+    baseline regardless of how much of-season history exists, defeating the shrinkage
+    design's intent of gradually trusting the player's own data. Needs the same
+    shift-and-accumulate treatment as item 7: cumulative shifted sums per player for
+    both the xTD numerator and the opportunity count `n`.
