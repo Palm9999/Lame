@@ -38,3 +38,29 @@ def test_apply_market_blend_leaves_players_with_no_props_untouched():
     row = out.row(0, named=True)
     assert row["mean"] == pytest.approx(50.0, abs=1e-9)
     assert row["market_blended"] is False
+
+
+def test_apply_market_blend_handles_mixed_players_with_and_without_props():
+    # One player has a matching player_receptions prop, one doesn't -- the
+    # realistic case where map_batches sees both real values and nulls in
+    # the same column (nulls from the left join for the no-prop player).
+    model = pl.DataFrame({
+        "player_name": ["Has Prop Guy", "No Props Guy"],
+        "mean": [5.0, 50.0],
+        "variance": [4.0, 100.0],
+    })
+    props = pl.DataFrame({
+        "player_name": ["Has Prop Guy"],
+        "market": ["player_receptions"],
+        "line": [5.5],
+        "fair_prob": [0.5],
+    }, schema={"player_name": pl.String, "market": pl.String,
+               "line": pl.Float64, "fair_prob": pl.Float64})
+
+    out = projections.apply_market_blend(model, props)
+
+    rows = {r["player_name"]: r for r in out.iter_rows(named=True)}
+    assert rows["No Props Guy"]["mean"] == pytest.approx(50.0, abs=1e-9)
+    assert rows["No Props Guy"]["market_blended"] is False
+    assert rows["Has Prop Guy"]["market_blended"] is True
+    assert rows["Has Prop Guy"]["mean"] != pytest.approx(5.0, abs=1e-9)

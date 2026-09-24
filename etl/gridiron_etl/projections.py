@@ -189,7 +189,9 @@ def prop_to_mean(fair_prob: pl.Expr, line: pl.Expr, cv: float) -> pl.Expr:
     # computed once in Python, not as a polars expression.
     sigma = math.sqrt(math.log(1 + cv ** 2))
     z = (1.0 - fair_prob).map_batches(
-        lambda s: pl.Series([_norm_ppf(p) for p in s.to_list()])
+        lambda s: pl.Series([_norm_ppf(p) if p is not None else None for p in s.to_list()],
+                             dtype=pl.Float64),
+        return_dtype=pl.Float64,
     )
     return line / (z * sigma - 0.5 * sigma ** 2).exp()
 
@@ -241,6 +243,10 @@ def apply_market_blend(df: pl.DataFrame, props: pl.DataFrame,
     )
     joined = df.join(receptions, left_on="player_name", right_on="player_name", how="left")
     has_prop = pl.col("fair_prob").is_not_null()
+    # cv=0.35 is a pragmatic placeholder, not sourced from
+    # research-prediction-models.md §1.8 (which gives CVs for WR rec yards
+    # and RB rush yards, not receptions) — refine to a per-position/role
+    # table when one is available.
     market_mean = prop_to_mean(pl.col("fair_prob"), pl.col("line"), cv=0.35)
     return joined.with_columns(
         pl.when(has_prop)
