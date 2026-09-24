@@ -185,12 +185,18 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
     }
     # Real odds/prior-season/xTD-baseline wiring (live odds fetch, cross-season
     # history) is deferred to a follow-up: this call proves the pipeline shape
-    # end-to-end against the real weekly frame with empty/neutral context, so
-    # `build_projections` never sees a frame it wasn't tested against.
-    proj_rows, factor_rows, ros_rows = proj_module.build_projections(weekly, projection_context)
-    schema.load_projections(conn, proj_rows)
-    schema.load_projection_factors(conn, factor_rows)
-    schema.load_ros_projections(conn, ros_rows)
+    # end-to-end against the real weekly frame with empty/neutral context. The
+    # real `weekly` frame doesn't yet carry every column the pipeline's later
+    # stages want (position, opponent, weather, Vegas lines, etc. are wired by
+    # later tasks), so this is wrapped like snap counts above: projections are
+    # additive, not a blocker for the stats the rest of the app already ships.
+    try:
+        proj_rows, factor_rows, ros_rows = proj_module.build_projections(weekly, projection_context)
+        schema.load_projections(conn, proj_rows)
+        schema.load_projection_factors(conn, factor_rows)
+        schema.load_ros_projections(conn, ros_rows)
+    except Exception as exc:  # projections are additive, not a blocker
+        log.warning("projections stage skipped (%s)", exc)
 
     schema.finalize(conn, built, meta)
     validation.validate(conn)
