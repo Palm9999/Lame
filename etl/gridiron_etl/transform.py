@@ -24,11 +24,41 @@ PBP_COLUMNS = [
     "pass_touchdown", "rush_touchdown", "interception", "sack", "qb_scramble",
     "receiver_player_id", "rusher_player_id", "passer_player_id",
     "yardline_100", "epa", "success", "cpoe", "two_point_attempt",
+    "first_down_pass", "first_down_rush", "fumble_lost", "fumbled_1_player_id",
+    "two_point_conv_result",
 ]
 
 
+# Scrimmage play types that carry official rushing/passing stats. Kneels and
+# spikes are excluded by nflverse's own play-by-play convention from the
+# `["pass", "run"]` shorthand elsewhere in this module, but they are real
+# attempts: nflverse marks qb_kneel with rush_attempt=1 (always negative
+# yardage, correctly deflating a QB's rushing total — cross-checked against
+# ffopportunity, which includes them) and qb_spike with pass_attempt=1,
+# complete_pass=0 (a zero-yard incompletion). Both must stay in the base scan
+# so box-score counting stats and scoring inputs (carries, rushing yards,
+# pass attempts, ...) see them, matching official box scores and ffopportunity.
+SCRIMMAGE_PLAY_TYPES = ("pass", "run", "qb_kneel", "qb_spike")
+
+# Play types counted above for box-score volume but excluded from anything
+# rate-shaped or usage-shaped:
+# - rates: EPA per play/carry, success rate, CPOE, dropbacks, and every share
+#   metric's numerator and denominator (team_carries included);
+# - usage signals: red-zone, green-zone and goal-line carries, designed QB
+#   runs inside the 5 and weighted opportunities (built on `carries_eff`).
+# A kneel is a scripted, always-negative-EPA clock-killer, not a competitive
+# rushing attempt or a scoring opportunity, and a spike is a zero-yard,
+# always-incomplete clock stop, not a competitive dropback — mixing either
+# into a rate or a usage count distorts it without adding signal.
+# The split, then: box-score counts (carries, rushing yards, pass attempts,
+# ...) and every scoring input include kneels and spikes; rates and usage
+# signals don't. `load_pbp` flags every play with `is_efficiency_play`;
+# aggregations that must exclude them filter on it.
+_RATE_EXCLUDED_PLAY_TYPES = ("qb_kneel", "qb_spike")
+
+
 def load_pbp(path: Path, season_types: tuple[str, ...] = ("REG", "POST")) -> pl.LazyFrame:
-    """Scan play-by-play, keeping only scrimmage plays that count for stats."""
+    """Scan play-by-play, keeping scrimmage and two-point plays that count for stats."""
     lf = pl.scan_csv(path, infer_schema_length=20_000)
     available = set(lf.collect_schema().names())
     missing = [c for c in PBP_COLUMNS if c not in available]
@@ -38,13 +68,41 @@ def load_pbp(path: Path, season_types: tuple[str, ...] = ("REG", "POST")) -> pl.
 
     lf = lf.select(cols).filter(
         pl.col("season_type").is_in(season_types)
-        & pl.col("play_type").is_in(["pass", "run"])
+        & pl.col("play_type").is_in(list(SCRIMMAGE_PLAY_TYPES))
         & pl.col("posteam").is_not_null()
+    ).with_columns(
+        is_efficiency_play=~pl.col("play_type").is_in(list(_RATE_EXCLUDED_PLAY_TYPES))
     )
-    # Two-point conversions don't accrue normal stats and would distort shares.
-    if "two_point_attempt" in available:
-        lf = lf.filter(pl.col("two_point_attempt").fill_null(0) == 0)
     return lf
+
+
+def _scrimmage(lf: pl.LazyFrame) -> pl.LazyFrame:
+    """Plays that accrue normal stats. Two-point tries don't, and would distort shares."""
+    if "two_point_attempt" not in lf.collect_schema().names():
+        return lf
+    return lf.filter(pl.col("two_point_attempt").fill_null(0) == 0)
+
+
+def _efficiency_flag(lf: pl.LazyFrame) -> pl.Expr:
+    """`is_efficiency_play` when `load_pbp` provided it, recomputed from
+    `play_type` otherwise (a `pl.lit(True)` fallback would sum to 1 per group
+    rather than counting rows — it isn't a per-row expression).
+
+    The fallback path only matters for synthetic test frames (which build
+    their own `LazyFrame` without running it through `load_pbp`), the same
+    pattern already used here for `qb_scramble` and `cpoe`; `play_type` is
+    always present either way.
+    """
+    if "is_efficiency_play" in lf.collect_schema().names():
+        return pl.col("is_efficiency_play")
+    return ~pl.col("play_type").is_in(list(_RATE_EXCLUDED_PLAY_TYPES))
+
+
+def _long_td(td_col: str, yards_col: str, threshold: int) -> pl.Expr:
+    """Touchdowns of at least `threshold` yards. A 55-yard score counts at 40 and at 50."""
+    return (
+        (pl.col(td_col).fill_null(0) == 1) & (pl.col(yards_col).fill_null(0) >= threshold)
+    ).sum()
 
 
 def _receiving(lf: pl.LazyFrame) -> pl.LazyFrame:
@@ -63,6 +121,9 @@ def _receiving(lf: pl.LazyFrame) -> pl.LazyFrame:
             # A target thrown to or past the goal line.
             ez_targets=(pl.col("air_yards") >= pl.col("yardline_100")).sum(),
             rec_epa=pl.col("epa").fill_null(0).sum(),
+            receiving_first_downs=pl.col("first_down_pass").fill_null(0).sum(),
+            receiving_tds_40=_long_td("pass_touchdown", "receiving_yards", 40),
+            receiving_tds_50=_long_td("pass_touchdown", "receiving_yards", 50),
         )
         .rename({"receiver_player_id": "player_id", "posteam": "team"})
     )
@@ -75,19 +136,31 @@ def _rushing(lf: pl.LazyFrame) -> pl.LazyFrame:
     designed = (
         (pl.col("qb_scramble").fill_null(0) == 0) if has_scramble else pl.lit(True)
     )
+    eff = _efficiency_flag(lf)
     return (
         lf.filter(pl.col("rusher_player_id").is_not_null())
         .group_by(["season", "week", "posteam", "rusher_player_id"])
         .agg(
+            # Box-score counting stats: every carry, kneels included, matching
+            # the box score and the scoring inputs.
             carries=pl.len(),
             rushing_yards=pl.col("rushing_yards").fill_null(0).sum(),
             rushing_tds=pl.col("rush_touchdown").fill_null(0).sum(),
-            rz_carries=(pl.col("yardline_100") <= 20).sum(),
-            gz_carries=(pl.col("yardline_100") <= 10).sum(),
-            gl_carries=(pl.col("yardline_100") <= 5).sum(),
-            qb_rush_inside_5=((pl.col("yardline_100") <= 5) & designed).sum(),
-            rush_epa=pl.col("epa").fill_null(0).sum(),
-            rush_successes=pl.col("success").fill_null(0).sum(),
+            rushing_first_downs=pl.col("first_down_rush").fill_null(0).sum(),
+            rushing_tds_40=_long_td("rush_touchdown", "rushing_yards", 40),
+            rushing_tds_50=_long_td("rush_touchdown", "rushing_yards", 50),
+            # Usage signals: kneels excluded. A kneel inside the 5 is a
+            # clock-killer, not a scoring opportunity, and never scores.
+            rz_carries=((pl.col("yardline_100") <= 20) & eff).sum(),
+            gz_carries=((pl.col("yardline_100") <= 10) & eff).sum(),
+            gl_carries=((pl.col("yardline_100") <= 5) & eff).sum(),
+            qb_rush_inside_5=((pl.col("yardline_100") <= 5) & designed & eff).sum(),
+            # Rate/efficiency inputs: kneels excluded, so rush_success_rate,
+            # rush_epa_per_carry and carry_share (via `carries_eff` below)
+            # reproduce their pre-kneel values exactly.
+            rush_epa=pl.col("epa").filter(eff).fill_null(0).sum(),
+            rush_successes=pl.col("success").filter(eff).fill_null(0).sum(),
+            carries_eff=eff.sum(),
         )
         .rename({"rusher_player_id": "player_id", "posteam": "team"})
     )
@@ -98,25 +171,33 @@ def _passing(lf: pl.LazyFrame) -> pl.LazyFrame:
     is_scramble = (
         (pl.col("qb_scramble").fill_null(0) == 1) if "qb_scramble" in names else pl.lit(False)
     )
+    eff = _efficiency_flag(lf)
     aggs = dict(
+        # Counting stats: every attempt, spikes included, matching the box score.
         attempts=pl.col("pass_attempt").fill_null(0).sum(),
         completions=pl.col("complete_pass").fill_null(0).sum(),
         passing_yards=pl.col("passing_yards").fill_null(0).sum(),
         passing_tds=pl.col("pass_touchdown").fill_null(0).sum(),
         interceptions=pl.col("interception").fill_null(0).sum(),
         sacks_taken=pl.col("sack").fill_null(0).sum(),
+        passing_first_downs=pl.col("first_down_pass").fill_null(0).sum(),
+        passing_tds_40=_long_td("pass_touchdown", "passing_yards", 40),
+        passing_tds_50=_long_td("pass_touchdown", "passing_yards", 50),
+        # Rate/efficiency inputs: spikes excluded, so dropbacks and
+        # epa_per_dropback reproduce their pre-spike values exactly. A spike
+        # is a real pass_attempt but not a competitive dropback.
         dropbacks=(
             pl.col("pass_attempt").fill_null(0) + pl.col("sack").fill_null(0)
             + is_scramble.cast(pl.Int64)
-        ).sum(),
-        pass_epa=pl.col("epa").fill_null(0).sum(),
+        ).filter(eff).sum(),
+        pass_epa=pl.col("epa").filter(eff).fill_null(0).sum(),
     )
     if "cpoe" in names:
-        aggs["cpoe"] = pl.col("cpoe").mean()
+        aggs["cpoe"] = pl.col("cpoe").filter(eff).mean()
         # Sum and count, so CPOE over a range is attempt-weighted rather than a
         # mean of weekly means.
-        aggs["cpoe_sum"] = pl.col("cpoe").sum()
-        aggs["cpoe_n"] = pl.col("cpoe").is_not_null().sum()
+        aggs["cpoe_sum"] = pl.col("cpoe").filter(eff).sum()
+        aggs["cpoe_n"] = pl.col("cpoe").filter(eff).is_not_null().sum()
 
     return (
         lf.filter(pl.col("passer_player_id").is_not_null())
@@ -126,27 +207,90 @@ def _passing(lf: pl.LazyFrame) -> pl.LazyFrame:
     )
 
 
+def _fumbles(lf: pl.LazyFrame) -> pl.LazyFrame:
+    """Fumbles lost, credited to the ball carrier: the rusher, the receiver
+    after a catch, or the passer (sack and scramble fumbles). A defender who
+    fumbles during a return is not an offensive player and is not counted."""
+    carrier = pl.col("fumbled_1_player_id")
+    involved = (
+        (carrier == pl.col("rusher_player_id"))
+        | (carrier == pl.col("receiver_player_id"))
+        | (carrier == pl.col("passer_player_id"))
+    ).fill_null(False)
+    return (
+        lf.filter((pl.col("fumble_lost").fill_null(0) == 1) & carrier.is_not_null() & involved)
+        .group_by(["season", "week", "posteam", "fumbled_1_player_id"])
+        .agg(fumbles_lost=pl.len())
+        .rename({"fumbled_1_player_id": "player_id", "posteam": "team"})
+    )
+
+
+def _two_point(lf: pl.LazyFrame) -> pl.LazyFrame | None:
+    """Successful two-point conversions: the passer and receiver on a pass,
+    the rusher on a run. None when the source predates the columns."""
+    names = lf.collect_schema().names()
+    if "two_point_attempt" not in names or "two_point_conv_result" not in names:
+        return None
+    ok = lf.filter(
+        (pl.col("two_point_attempt").fill_null(0) == 1)
+        & (pl.col("two_point_conv_result") == "success")
+    )
+    keys = ["season", "week", "team", "player_id"]
+
+    def credit(id_col: str, name: str) -> pl.LazyFrame:
+        return (
+            ok.filter(pl.col(id_col).is_not_null())
+            .group_by(["season", "week", "posteam", id_col])
+            .agg(pl.len().alias(name))
+            .rename({id_col: "player_id", "posteam": "team"})
+        )
+
+    return (
+        credit("passer_player_id", "passing_2pt")
+        .join(credit("receiver_player_id", "receiving_2pt"), on=keys, how="full", coalesce=True)
+        .join(credit("rusher_player_id", "rushing_2pt"), on=keys, how="full", coalesce=True)
+    )
+
+
 def _team_context(lf: pl.LazyFrame) -> pl.LazyFrame:
-    """Denominators for share metrics, computed on the same filtered play set."""
+    """Denominators for share metrics, computed on the same filtered play set.
+
+    Every one of these but `team_plays` excludes kneels/spikes, so a share
+    metric's denominator always matches its numerator (both built the same
+    way — see the module-level note on `_RATE_EXCLUDED_PLAY_TYPES`). In
+    practice only `team_carries` (kneels set `rusher_player_id`) and
+    `team_air_yards` (a small number of `qb_spike` rows carry a stray non-null
+    `air_yards`, confirmed in the 2024-2026 data, e.g. BAL wk2 2024) ever
+    differ from leaving this filter off; `team_targets` is filtered too, on
+    the same "no share denominator counts a dead-clock play" principle, even
+    though no kneel/spike row has ever been observed setting
+    `receiver_player_id`. `team_plays` intentionally stays unfiltered: it is
+    a literal count of scrimmage plays run, kneels and spikes included.
+    """
+    eff = _efficiency_flag(lf)
     return lf.group_by(["season", "week", "posteam"]).agg(
-        team_targets=pl.col("receiver_player_id").is_not_null().sum(),
-        team_air_yards=pl.col("air_yards").fill_null(0).sum(),
-        team_carries=pl.col("rusher_player_id").is_not_null().sum(),
+        team_targets=(pl.col("receiver_player_id").is_not_null() & eff).sum(),
+        team_air_yards=pl.col("air_yards").filter(eff).fill_null(0).sum(),
+        team_carries=(pl.col("rusher_player_id").is_not_null() & eff).sum(),
         team_plays=pl.len(),
     ).rename({"posteam": "team"})
 
 
 def weekly_player_stats(lf: pl.LazyFrame) -> pl.DataFrame:
-    """Join the three usage frames, add team shares and derived rate metrics."""
+    """Join the usage frames, add team shares and derived rate metrics."""
     keys = ["season", "week", "team", "player_id"]
-    rec, rush, pas = _receiving(lf), _rushing(lf), _passing(lf)
+    plays = _scrimmage(lf)
+    rec, rush, pas = _receiving(plays), _rushing(plays), _passing(plays)
 
-    df = (
+    joined = (
         rec.join(rush, on=keys, how="full", coalesce=True)
         .join(pas, on=keys, how="full", coalesce=True)
-        .join(_team_context(lf), on=["season", "week", "team"], how="left")
-        .collect()
+        .join(_fumbles(plays), on=keys, how="full", coalesce=True)
     )
+    two = _two_point(lf)
+    if two is not None:
+        joined = joined.join(two, on=keys, how="full", coalesce=True)
+    df = joined.join(_team_context(plays), on=["season", "week", "team"], how="left").collect()
 
     counting = [
         "targets", "receptions", "receiving_yards", "air_yards", "yac", "receiving_tds",
@@ -154,6 +298,10 @@ def weekly_player_stats(lf: pl.LazyFrame) -> pl.DataFrame:
         "rz_carries", "gz_carries", "gl_carries", "qb_rush_inside_5", "attempts",
         "completions", "passing_yards", "passing_tds", "interceptions", "sacks_taken",
         "dropbacks", "rush_successes", "cpoe_n",
+        "passing_first_downs", "rushing_first_downs", "receiving_first_downs",
+        "passing_2pt", "rushing_2pt", "receiving_2pt", "fumbles_lost",
+        "passing_tds_40", "passing_tds_50", "rushing_tds_40", "rushing_tds_50",
+        "receiving_tds_40", "receiving_tds_50", "carries_eff",
     ]
     present = [c for c in counting if c in df.columns]
     df = df.with_columns([pl.col(c).fill_null(0) for c in present])
@@ -170,14 +318,17 @@ def weekly_player_stats(lf: pl.LazyFrame) -> pl.DataFrame:
         g=pl.lit(1, dtype=pl.Int64),
         target_share=ratio("targets", "team_targets"),
         air_yards_share=ratio("air_yards", "team_air_yards"),
-        carry_share=ratio("carries", "team_carries"),
+        # `carries_eff` (kneels excluded), not the stored `carries` fact, so
+        # this share's numerator matches its `team_carries` denominator.
+        carry_share=ratio("carries_eff", "team_carries"),
         adot=ratio("air_yards", "targets"),
         racr=ratio("receiving_yards", "air_yards"),
         catch_rate=ratio("receptions", "targets"),
-        rush_success_rate=ratio("rush_successes", "carries"),
-        rush_epa_per_carry=ratio("rush_epa", "carries"),
+        rush_success_rate=ratio("rush_successes", "carries_eff"),
+        rush_epa_per_carry=ratio("rush_epa", "carries_eff"),
         epa_per_dropback=ratio("pass_epa", "dropbacks"),
-        weighted_opportunities=pl.col("carries") + 2.6 * pl.col("targets"),
+        # A usage signal, so kneel-excluded carries (see `_RATE_EXCLUDED_PLAY_TYPES`).
+        weighted_opportunities=pl.col("carries_eff") + 2.6 * pl.col("targets"),
         total_epa=(
             pl.col("rec_epa").fill_null(0) + pl.col("rush_epa").fill_null(0)
         ),
@@ -259,8 +410,14 @@ def add_snap_share(df: pl.DataFrame, snaps: pl.DataFrame,
     return df.join(mapped, on=["season", "week", "player_id"], how="left")
 
 
-def to_long(df: pl.DataFrame, metric_ids: list[str]) -> pl.DataFrame:
-    """Unpivot to the long/narrow fact shape the database stores."""
+def to_long(df: pl.DataFrame, metric_ids: list[str],
+            sparse: frozenset[str] = frozenset()) -> pl.DataFrame:
+    """Unpivot to the long/narrow fact shape the database stores.
+
+    Metrics in `sparse` drop zero values: absent means zero. The scoring inputs
+    are zero for most player-weeks (a receiver's completions, anyone's
+    fumbles), and storing those zeros would roughly double the database.
+    """
     present = [m for m in metric_ids if m in df.columns]
     long = (
         df.select(["player_id", "season", "week", "team", *present])
@@ -271,6 +428,46 @@ def to_long(df: pl.DataFrame, metric_ids: list[str]) -> pl.DataFrame:
             value_name="value",
         )
         .filter(pl.col("value").is_not_null())
+        .filter(~(pl.col("metric_id").is_in(list(sparse)) & (pl.col("value") == 0)))
         .with_columns(pl.col("value").cast(pl.Float64))
     )
     return long
+
+
+# ffopportunity column -> our expected component. Actual counterparts come from
+# play-by-play; only the model's expectations are taken from this source.
+# rec_interception_exp (targets intercepted) is deliberately not charged to
+# receivers, which matches every mainstream scoring system.
+EXPECTED_COLUMNS: dict[str, str] = {
+    "pass_completions_exp": "x_completions",
+    "receptions_exp": "x_receptions",
+    "pass_yards_gained_exp": "x_passing_yards",
+    "rush_yards_gained_exp": "x_rushing_yards",
+    "rec_yards_gained_exp": "x_receiving_yards",
+    "pass_touchdown_exp": "x_passing_tds",
+    "rush_touchdown_exp": "x_rushing_tds",
+    "rec_touchdown_exp": "x_receiving_tds",
+    "pass_two_point_conv_exp": "x_passing_2pt",
+    "rush_two_point_conv_exp": "x_rushing_2pt",
+    "rec_two_point_conv_exp": "x_receiving_2pt",
+    "pass_first_down_exp": "x_passing_first_downs",
+    "rush_first_down_exp": "x_rushing_first_downs",
+    "rec_first_down_exp": "x_receiving_first_downs",
+    "pass_interception_exp": "x_interceptions",
+}
+
+
+def expected_components(ep: pl.DataFrame) -> pl.DataFrame:
+    """ffopportunity's weekly expectations in our key shape.
+
+    The file stores season as text and week as a float, and has rows with no
+    player id (unidentified ball carriers), which are dropped.
+    """
+    return ep.filter(pl.col("player_id").is_not_null()).select(
+        pl.col("player_id"),
+        pl.col("season").cast(pl.Int64),
+        pl.col("week").cast(pl.Int64),
+        pl.col("posteam").alias("team"),
+        *[pl.col(src).fill_null(0.0).cast(pl.Float64).alias(dst)
+          for src, dst in EXPECTED_COLUMNS.items()],
+    )

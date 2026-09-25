@@ -9,11 +9,14 @@ android {
 }
 
 dependencies {
+    implementation(projects.core.charts)
     implementation(projects.core.data)
     implementation(projects.core.designsystem)
     implementation(projects.core.table)
+    implementation(projects.core.ui)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)
+    implementation(libs.androidx.core.ktx)
 
     // Screenshots and ViewModel tests run the real stack on the JVM: the real
     // repository and query builder over the real database, via JDBC.

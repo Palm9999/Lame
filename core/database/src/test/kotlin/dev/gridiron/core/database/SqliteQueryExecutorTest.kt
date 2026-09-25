@@ -3,6 +3,7 @@ package dev.gridiron.core.database
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import dev.gridiron.core.model.Position
+import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.statquery.Bind
 import dev.gridiron.core.statquery.CatalogQueries
@@ -89,6 +90,7 @@ class SqliteQueryExecutorTest {
                 StatQuerySpec(
                     season, WeekRange.regularSeason(season), StatColumn.entries,
                     positions = Position.FLEX, percentiles = true, limit = StatQuerySpec.MAX_LIMIT,
+                    scoring = ScoringPresets.PPR,
                 ),
             ).query,
             StatQueryBuilder.search("ja")!!,

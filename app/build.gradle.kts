@@ -1,14 +1,15 @@
 plugins {
     alias(libs.plugins.gridiron.android.application)
     alias(libs.plugins.gridiron.android.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
     namespace = "dev.gridiron.app"
     defaultConfig {
         applicationId = "dev.gridiron.app"
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     // A personal, sideloaded app. Android only installs an update signed with
@@ -39,11 +40,31 @@ android {
 
 dependencies {
     implementation(projects.feature.players)
+    implementation(projects.feature.compare)
+    implementation(projects.feature.scoring)
+    implementation(projects.feature.projections)
     implementation(projects.core.data)
+    implementation(projects.core.projections)
+    implementation(projects.core.datastore)
+    implementation(projects.core.database)
     implementation(projects.core.designsystem)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.androidx.navigation3.runtime)
+    implementation(libs.androidx.navigation3.ui)
+    implementation(libs.androidx.lifecycle.viewmodel.navigation3)
+    implementation(libs.kotlinx.serialization.json)
+
+    // The navigation test drives the real Grid, Compare and scoring screens
+    // over the real database, like the feature modules' own screen tests.
+    testImplementation(projects.core.testing)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
+    testImplementation(libs.roborazzi.compose)
+    testImplementation(libs.androidx.compose.ui.test.junit4)
+    debugImplementation(libs.androidx.compose.ui.test.manifest)
 }
 
 /**

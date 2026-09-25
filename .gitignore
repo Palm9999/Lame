@@ -21,3 +21,9 @@ captures/
 
 # Kotlin 2.x session data
 .kotlin/
+
+# Agent worktrees (temporary checkouts used while building in parallel)
+.claude/worktrees/
+
+# Personal Claude Code settings (not shared)
+.claude/settings.local.json

@@ -14,10 +14,27 @@ import polars as pl
 import requests
 
 from . import sources, schema, transform, validate as validation
-from .metrics import METRICS, metric_rows
+from .metrics import METRICS, metric_rows, sparse_metric_ids
 
 log = logging.getLogger("gridiron.build")
 
+
+
+def _drop_nonfinite(df: pl.DataFrame, cols: list[str], label: str) -> pl.DataFrame:
+    """Filter out any row whose given columns aren't finite (NaN or +/-inf)
+    before it reaches SQLite, which either rejects a NaN with a NOT NULL
+    constraint failure or accepts it silently depending on column affinity —
+    neither of which a build should ship. A zero-variance market blend (see
+    projections.blend_inverse_variance) is the known source of this today,
+    but this filter is a defensive backstop, not a substitute for that guard.
+    Logs how many rows were dropped, if any."""
+    mask = pl.all_horizontal([pl.col(c).is_finite() for c in cols])
+    filtered = df.filter(mask)
+    dropped = df.height - filtered.height
+    if dropped:
+        log.warning("projections: dropped %d %s row(s) with non-finite value(s) in %s",
+                    dropped, label, cols)
+    return filtered
 
 
 def _search_name(expr: pl.Expr) -> pl.Expr:
@@ -73,6 +90,17 @@ def _published(season: int, cache: Path | None, force: bool) -> Path | None:
         raise
 
 
+def _expected(season: int, cache: Path | None, force: bool) -> pl.DataFrame | None:
+    """ffopportunity's weekly expectations, or None if not published for the season."""
+    try:
+        path = sources.fetch("ep_weekly", season, cache_dir=cache, force=force)
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            return None
+        raise
+    return pl.read_parquet(path)
+
+
 def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
           skip_missing: bool = False) -> None:
     players = build_players(sources.fetch("players", cache_dir=cache, force=force))
@@ -88,6 +116,7 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
     metric_ids = list(METRICS.keys())
     frames: list[pl.DataFrame] = []
     built: list[int] = []
+    meta: dict[str, str] = {}
 
     for season in seasons:
         pbp_path = _published(season, cache, force)
@@ -111,7 +140,25 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
         except Exception as exc:  # snap counts are a nice-to-have, not a blocker
             log.warning("season %d: snap counts unavailable (%s)", season, exc)
 
-        frames.append(transform.to_long(weekly, metric_ids))
+        ep = _expected(season, cache, force)
+        through = validation.expected_coverage(season, weekly, ep)
+        meta[f"expected_through_week:{season}"] = str(through)
+        log.info("season %d: expected points through week %d", season, through)
+        if ep is None:
+            if not skip_missing:
+                raise RuntimeError(f"no ffopportunity data published for {season}")
+            log.warning("season %d: no expected-points data yet; xFP will be missing", season)
+        else:
+            problems = validation.cross_check(weekly, ep) + validation.fantasy_contract(weekly, ep)
+            for p in problems:
+                log.error("VALIDATION: season %d: %s", season, p)
+            if problems:
+                raise validation.ValidationError(f"{len(problems)} ffopportunity check(s) failed; first: {problems[0]}")
+            expected = transform.expected_components(ep)
+            log.info("season %d: %d expected player-weeks", season, expected.height)
+            frames.append(transform.to_long(expected, metric_ids, sparse_metric_ids()))
+
+        frames.append(transform.to_long(weekly, metric_ids, sparse_metric_ids()))
 
     if not frames:
         raise RuntimeError(f"none of the seasons {seasons} has published play-by-play")
@@ -134,7 +181,59 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
     schema.load_metrics(conn, metric_rows())
     schema.load_players(conn, players)
     n = schema.load_facts(conn, long)
-    schema.finalize(conn, built)
+
+    from . import projections as proj_module
+    projection_context = {
+        "odds_props": pl.DataFrame(
+            {"player_name": [], "market": [], "line": [], "fair_prob": []},
+            schema={"player_name": pl.String, "market": pl.String,
+                    "line": pl.Float64, "fair_prob": pl.Float64},
+        ),
+        "prior_season_final": pl.DataFrame(
+            {"player_id": [], "target_share_ewma_final": [],
+             "carry_share_ewma_final": [], "snap_share_ewma_final": []},
+            schema={"player_id": pl.String, "target_share_ewma_final": pl.Float64,
+                    "carry_share_ewma_final": pl.Float64,
+                    "snap_share_ewma_final": pl.Float64},
+        ),
+        "xtd_baseline": pl.DataFrame({"position": [], "xtd_rate_baseline": []},
+                                      schema={"position": pl.String,
+                                              "xtd_rate_baseline": pl.Float64}),
+    }
+    # Real odds/prior-season/xTD-baseline wiring (live odds fetch, cross-season
+    # history) is deferred to a follow-up: this call proves the pipeline shape
+    # end-to-end against the real weekly frame with empty/neutral context. The
+    # real `weekly` frame doesn't yet carry every column the pipeline's later
+    # stages want (position, opponent, weather, Vegas lines, etc. are wired by
+    # later tasks), so this is wrapped like snap counts above: projections are
+    # additive, not a blocker for the stats the rest of the app already ships.
+    try:
+        proj_rows, factor_rows, ros_rows = proj_module.build_projections(weekly, projection_context)
+
+        # Defensive filter: a data problem (e.g. a zero-variance blend) must
+        # never reach SQLite as a NaN/inf, even though the blend itself is
+        # now guarded at the source (projections.blend_inverse_variance).
+        proj_rows = _drop_nonfinite(proj_rows, ["mean", "variance"], "player_week_projection")
+        factor_rows = _drop_nonfinite(factor_rows, ["log_multiplier"], "player_week_projection_factor")
+        ros_rows = _drop_nonfinite(ros_rows, ["mean", "variance"], "player_ros_projection")
+
+        # All three loads succeed together or none of them persist: each
+        # load defers its own commit, and a failure partway through rolls
+        # back everything written so far in this transaction rather than
+        # leaving a partial, inconsistent set of projection rows for
+        # schema.finalize()'s later commit to lock in.
+        try:
+            schema.load_projections(conn, proj_rows, commit=False)
+            schema.load_projection_factors(conn, factor_rows, commit=False)
+            schema.load_ros_projections(conn, ros_rows, commit=False)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+    except Exception as exc:  # projections are additive, not a blocker
+        log.warning("projections stage skipped (%s)", exc)
+
+    schema.finalize(conn, built, meta)
     validation.validate(conn)
     conn.close()
 

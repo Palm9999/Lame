@@ -15,10 +15,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -26,6 +28,8 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
 import androidx.compose.material3.TextButton
@@ -34,9 +38,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -44,31 +52,59 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.gridiron.core.charts.Sparkline
 import dev.gridiron.core.data.ColumnUi
+import dev.gridiron.core.data.CompareTrayRepository
+import dev.gridiron.core.data.CsvExport
 import dev.gridiron.core.data.GridPage
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.GridRowUi
 import dev.gridiron.core.data.MetricInfo
 import dev.gridiron.core.data.PositionFilter
+import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.Sparkline as SparklineData
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.describeFilter
+import dev.gridiron.core.data.weeksLabel
 import dev.gridiron.core.designsystem.HeaderStyle
 import dev.gridiron.core.designsystem.NumberStyle
 import dev.gridiron.core.designsystem.heatColor
 import dev.gridiron.core.statquery.Direction
 import dev.gridiron.core.table.StatTable
 import dev.gridiron.core.table.TableColumn
+import dev.gridiron.core.ui.MetricSheet
+import dev.gridiron.core.ui.ProfileChip
+import dev.gridiron.core.ui.SeasonWeeksSheet
+import dev.gridiron.core.ui.WeeksSheet
+import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
-fun GridRoute(repository: StatsRepository, modifier: Modifier = Modifier) {
-    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository))
+fun GridRoute(
+    repository: StatsRepository,
+    scoring: ScoringRepository,
+    tray: CompareTrayRepository,
+    onCompare: () -> Unit,
+    onEditProfiles: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray))
     val state by vm.state.collectAsStateWithLifecycle()
-    GridScreen(state, vm::onEvent, modifier)
+    GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles)
 }
 
 @Composable
-fun GridScreen(state: GridUiState, onEvent: (GridEvent) -> Unit, modifier: Modifier = Modifier) {
+fun GridScreen(
+    state: GridUiState,
+    onEvent: (GridEvent) -> Unit,
+    modifier: Modifier = Modifier,
+    onCompare: () -> Unit = {},
+    onEditProfiles: () -> Unit = {},
+) {
     // A Surface, not a Box with a background: it also sets the content color
     // that every Text inherits. Without it, text defaults to black, which is
     // unreadable in dark mode.
@@ -88,86 +124,201 @@ fun GridScreen(state: GridUiState, onEvent: (GridEvent) -> Unit, modifier: Modif
                 Modifier.align(Alignment.Center).padding(24.dp),
                 color = MaterialTheme.colorScheme.error,
             )
-            is GridUiState.Ready -> GridContent(state, onEvent)
+            is GridUiState.Ready -> GridContent(state, onEvent, onCompare, onEditProfiles)
         }
       }
     }
 }
 
 @Composable
-private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit) {
+private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, onCompare: () -> Unit, onEditProfiles: () -> Unit) {
     val r = state.request
     var showWeeks by remember { mutableStateOf(false) }
+    var showTeams by remember { mutableStateOf(false) }
+    var showFilters by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<MetricInfo?>(null) }
+    val haptics = LocalHapticFeedback.current
+    val snackbar = remember { SnackbarHostState() }
 
-    Column(Modifier.fillMaxSize()) {
-        TitleBar(state, onEvent, onWeeks = { showWeeks = true })
-
-        OutlinedTextField(
-            value = r.name,
-            onValueChange = { onEvent(GridEvent.NameChanged(it)) },
-            placeholder = { Text("Search players") },
-            singleLine = true,
-            trailingIcon = if (r.name.isNotEmpty()) {
-                { TextButton(onClick = { onEvent(GridEvent.NameChanged("")) }) { Text("✕") } }
-            } else {
-                null
-            },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("search"),
-        )
-
-        ChipRow {
-            StatPack.entries.forEach { pack ->
-                FilterChip(
-                    selected = r.pack == pack,
-                    onClick = { onEvent(GridEvent.PackSelected(pack)) },
-                    label = { Text(pack.label) },
-                )
-            }
-        }
-        ChipRow {
-            PositionFilter.entries.forEach { p ->
-                FilterChip(
-                    selected = r.positions == p,
-                    onClick = { onEvent(GridEvent.PositionsSelected(p)) },
-                    label = { Text(p.label) },
-                )
-            }
-        }
-
-        Summary(state, onEvent)
-
-        val page = state.page
-        when {
-            page == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            page.rows.isEmpty() -> Text(
-                "No players match.",
-                Modifier.fillMaxWidth().padding(32.dp),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            else -> PlayerTable(page, state.heat, onSort = { onEvent(GridEvent.SortBy(it.column)) }, onInfo = { info = it.info })
+    LaunchedEffect(state.message) {
+        state.message?.let {
+            snackbar.showSnackbar(it)
+            onEvent(GridEvent.MessageShown)
         }
     }
 
-    if (showWeeks) WeeksSheet(r, onDismiss = { showWeeks = false }, onChange = { onEvent(GridEvent.WeeksChanged(it)) })
+    Box(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize()) {
+            TitleBar(state, onEvent, onWeeks = { showWeeks = true }, onEditProfiles = onEditProfiles)
+
+            OutlinedTextField(
+                value = r.name,
+                onValueChange = { onEvent(GridEvent.NameChanged(it)) },
+                placeholder = { Text("Search players") },
+                singleLine = true,
+                trailingIcon = if (r.name.isNotEmpty()) {
+                    { TextButton(onClick = { onEvent(GridEvent.NameChanged("")) }) { Text("✕") } }
+                } else {
+                    null
+                },
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("search"),
+            )
+
+            ChipRow {
+                StatPack.entries.forEach { pack ->
+                    FilterChip(
+                        selected = r.pack == pack,
+                        onClick = { onEvent(GridEvent.PackSelected(pack)) },
+                        label = { Text(pack.label) },
+                    )
+                }
+            }
+            ChipRow {
+                PositionFilter.entries.forEach { p ->
+                    FilterChip(
+                        selected = r.positions == p,
+                        onClick = { onEvent(GridEvent.PositionsSelected(p)) },
+                        label = { Text(p.label) },
+                    )
+                }
+            }
+            ChipRow {
+                val teams = r.teams
+                FilterChip(
+                    selected = teams.isNotEmpty(),
+                    onClick = { showTeams = true },
+                    label = { Text(when (teams.size) { 0 -> "All teams"; 1 -> teams.single(); else -> "${teams.size} teams" }) },
+                    modifier = Modifier.testTag("chip:teams"),
+                )
+                SnapChip(r.minSnapShare) { onEvent(GridEvent.MinSnapShareSelected(it)) }
+                FilterChip(
+                    selected = r.filters.isNotEmpty(),
+                    onClick = { showFilters = true },
+                    label = { Text(if (r.filters.isEmpty()) "Filters" else "Filters (${r.filters.size})") },
+                    modifier = Modifier.testTag("chip:filters"),
+                )
+                val context = LocalContext.current
+                val scope = rememberCoroutineScope()
+                var exporting by remember { mutableStateOf(false) }
+                AssistChip(
+                    onClick = {
+                        if (exporting) return@AssistChip
+                        val page = state.page ?: return@AssistChip
+                        exporting = true
+                        scope.launch {
+                            try {
+                                val csv = withContext(Dispatchers.Default) { CsvExport.build(page, state.catalog) }
+                                val ok = CsvShare.share(context, CsvExport.fileName(page.request), csv)
+                                exporting = false
+                                if (!ok) snackbar.showSnackbar("Couldn't export")
+                            } finally {
+                                exporting = false
+                            }
+                        }
+                    },
+                    enabled = state.page != null && !exporting,
+                    label = { Text("Export") },
+                    modifier = Modifier.testTag("chip:export"),
+                )
+            }
+
+            Summary(state, onEvent)
+
+            Box(Modifier.weight(1f)) {
+                val page = state.page
+                when {
+                    page == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                    page.rows.isEmpty() -> Text(
+                        "No players match.",
+                        Modifier.fillMaxWidth().padding(32.dp),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    else -> PlayerTable(
+                        page,
+                        state.heat,
+                        state.sparklines,
+                        onSort = { onEvent(GridEvent.SortBy(it.column)) },
+                        onInfo = { info = it.info },
+                        onRowLongClick = { row ->
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onEvent(GridEvent.AddToCompare(row.playerId, row.name))
+                        },
+                    )
+                }
+            }
+
+            if (state.tray.isNotEmpty()) {
+                TrayBar(
+                    tray = state.tray,
+                    onEdit = { onEvent(GridEvent.EditTraySlot(it.slot)) },
+                    onRemove = { onEvent(GridEvent.RemoveFromTray(it)) },
+                    onCompare = onCompare,
+                )
+            }
+        }
+
+        SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
+    }
+
+    if (showWeeks) WeeksSheet(r.season, r.weeks, onDismiss = { showWeeks = false }, onChange = { onEvent(GridEvent.WeeksChanged(it)) })
     info?.let { MetricSheet(it, onDismiss = { info = null }) }
+    state.editingSlot?.let { original ->
+        SeasonWeeksSheet(
+            state.catalog,
+            original,
+            onDismiss = { onEvent(GridEvent.TraySlotEditClosed) },
+            onChange = { updated -> onEvent(GridEvent.ReplaceTraySlot(original, updated)) },
+        )
+    }
+    if (showTeams) {
+        TeamSheet(state.catalog.teams, r.teams, onChange = { onEvent(GridEvent.TeamsSelected(it)) }, onDismiss = { showTeams = false })
+    }
+    if (showFilters) {
+        FilterSheet(
+            catalog = state.catalog,
+            pack = r.pack,
+            sort = r.sort,
+            perGame = r.perGame,
+            applied = r.filters,
+            count = state.draftCount,
+            onDraftChanged = { onEvent(GridEvent.FilterDraftChanged(it)) },
+            onApply = {
+                onEvent(GridEvent.FiltersApplied(it))
+                showFilters = false
+            },
+            onDismiss = {
+                onEvent(GridEvent.FilterSheetClosed)
+                showFilters = false
+            },
+        )
+    }
 }
 
 @Composable
-private fun TitleBar(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, onWeeks: () -> Unit) {
+private fun TitleBar(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, onWeeks: () -> Unit, onEditProfiles: () -> Unit) {
     var open by remember { mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text("Gridiron", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+            Text("Gridiron", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             Text(
                 "Data through week ${state.request.season.lastWeek}, ${state.request.season.season}",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
         }
-        TextButton(onClick = onWeeks) { Text(weeksLabel(state.request) + " ▾", style = MaterialTheme.typography.titleSmall) }
+        ProfileChip(
+            active = state.request.scoring,
+            profiles = state.profiles,
+            onSelect = { onEvent(GridEvent.ProfileSelected(it)) },
+            onEditProfiles = onEditProfiles,
+        )
+        TextButton(onClick = onWeeks) {
+            Text(weeksLabel(state.request.season, state.request.weeks) + " ▾", style = MaterialTheme.typography.titleSmall)
+        }
         Box {
-            TextButton(onClick = { open = true }) { Text("${state.request.season.season} ▾", style = MaterialTheme.typography.titleMedium) }
+            TextButton(onClick = { open = true }) { Text("${state.request.season.season} ▾", style = MaterialTheme.typography.titleSmall) }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
                 state.catalog.seasons.asReversed().forEach { s ->
                     DropdownMenuItem(
@@ -193,12 +344,27 @@ private fun ChipRow(content: @Composable () -> Unit) {
 }
 
 @Composable
+private fun SnapChip(share: Double?, onSelect: (Double?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    fun label(s: Double?) = if (s == null) "Any snaps" else "${(s * 100).toInt()}%+ snaps"
+    Box {
+        FilterChip(selected = share != null, onClick = { open = true }, label = { Text(label(share)) }, modifier = Modifier.testTag("chip:snaps"))
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            (listOf<Double?>(null) + GridRequest.SNAP_SHARE_CHOICES).forEach { s ->
+                DropdownMenuItem(text = { Text(label(s)) }, onClick = { open = false; onSelect(s) })
+            }
+        }
+    }
+}
+
+@Composable
 private fun Summary(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit) {
     val page = state.page
     val parts = buildList {
+        state.error?.let { add("Error: $it") }
         if (page != null) add("${page.rows.size} players")
         page?.threshold?.let(::add)
-        state.error?.let { add("Error: $it") }
+        state.request.filters.forEach { add(describeFilter(it, state.catalog)) }
     }
     Column {
         Row(
@@ -208,10 +374,11 @@ private fun Summary(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit) {
         ) {
             Text(
                 parts.joinToString(" · "),
-                Modifier.weight(1f),
+                Modifier.weight(1f).testTag("summary"),
                 style = MaterialTheme.typography.labelMedium,
                 color = if (state.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
             FilterChip(selected = state.request.perGame, onClick = { onEvent(GridEvent.PerGameToggled) }, label = { Text("Per game") })
             FilterChip(selected = state.heat, onClick = { onEvent(GridEvent.HeatToggled) }, label = { Text("Heat") })
@@ -230,7 +397,14 @@ private val HeaderHeight = 44.sp
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PlayerTable(page: GridPage, heat: Boolean, onSort: (ColumnUi) -> Unit, onInfo: (ColumnUi) -> Unit) {
+private fun PlayerTable(
+    page: GridPage,
+    heat: Boolean,
+    sparklines: ImmutableMap<String, SparklineData>,
+    onSort: (ColumnUi) -> Unit,
+    onInfo: (ColumnUi) -> Unit,
+    onRowLongClick: (GridRowUi) -> Unit,
+) {
     val columns = remember(page.columns) { page.columns.map { TableColumn(it.column, ColumnWidth) }.toImmutableList() }
     val sortIndex = page.columns.indexOfFirst { it.column == page.request.sort }
     val listState = rememberLazyListState()
@@ -249,7 +423,7 @@ private fun PlayerTable(page: GridPage, heat: Boolean, onSort: (ColumnUi) -> Uni
         frozenHeader = {
             Column(Modifier.align(Alignment.CenterStart).padding(start = 16.dp)) {
                 Text("PLAYER", style = HeaderStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("hold a stat to explain it", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("hold a player to compare", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         header = { i ->
@@ -282,7 +456,17 @@ private fun PlayerTable(page: GridPage, heat: Boolean, onSort: (ColumnUi) -> Uni
                 )
                 Column {
                     Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(row.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(row.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                        sparklines[row.playerId]?.takeIf { it.drawable }?.let { line ->
+                            val values = remember(line) { line.values.map { it?.toFloat() }.toImmutableList() }
+                            Sparkline(
+                                values,
+                                MaterialTheme.colorScheme.onSurfaceVariant,
+                                Modifier.padding(start = 6.dp).size(44.dp, 14.dp).testTag("spark:${row.playerId}"),
+                            )
+                        }
+                    }
                 }
             }
         },
@@ -308,12 +492,12 @@ private fun PlayerTable(page: GridPage, heat: Boolean, onSort: (ColumnUi) -> Uni
                     append(col.info?.name ?: col.header).append(' ').append(row.cells[i].text)
                     if (i < page.columns.lastIndex) append(", ")
                 }
+                sparklines[row.playerId]?.takeIf { it.drawable }?.let { line ->
+                    append(". Last ${line.values.size} weeks: ").append(line.labels.joinToString(", "))
+                }
             }
         },
+        onRowLongClick = onRowLongClick,
+        rowLongClickLabel = "Add to compare",
     )
-}
-
-internal fun weeksLabel(r: GridRequest): String {
-    val last = minOf(r.weeks.last, r.season.lastWeek)
-    return if (r.weeks.first == last) "Week ${r.weeks.first}" else "Wk ${r.weeks.first}–$last"
 }

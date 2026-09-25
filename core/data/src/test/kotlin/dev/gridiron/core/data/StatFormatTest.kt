@@ -44,4 +44,12 @@ class StatFormatTest {
     fun `follows the device locale`() {
         assertEquals("27,3%", StatFormat(Locale.GERMANY).format(StatColumn.TARGET_SHARE, 0.2734, perGame = false))
     }
+
+    @Test
+    fun `fantasy columns always show one decimal`() {
+        val f = StatFormat(Locale.US)
+        assertEquals("212.4", f.format(StatColumn.FANTASY_POINTS, 212.43, perGame = false))
+        assertEquals("-3.0", f.format(StatColumn.FPOE, -3.0, perGame = false))
+        assertEquals("14.2", f.format(StatColumn.EXPECTED_FANTASY_POINTS, 14.21, perGame = true))
+    }
 }

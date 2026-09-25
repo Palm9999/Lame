@@ -12,10 +12,14 @@ import dev.gridiron.core.statquery.StatColumn.CATCH_RATE
 import dev.gridiron.core.statquery.StatColumn.COMPLETIONS
 import dev.gridiron.core.statquery.StatColumn.CPOE
 import dev.gridiron.core.statquery.StatColumn.EPA_PER_DROPBACK
+import dev.gridiron.core.statquery.StatColumn.EXPECTED_FANTASY_POINTS
 import dev.gridiron.core.statquery.StatColumn.EZ_TARGETS
+import dev.gridiron.core.statquery.StatColumn.FANTASY_POINTS
+import dev.gridiron.core.statquery.StatColumn.FPOE
 import dev.gridiron.core.statquery.StatColumn.GL_CARRIES
 import dev.gridiron.core.statquery.StatColumn.GZ_CARRIES
 import dev.gridiron.core.statquery.StatColumn.INTERCEPTIONS
+import dev.gridiron.core.statquery.StatColumn.OFFENSE_SNAPS
 import dev.gridiron.core.statquery.StatColumn.PASSING_TDS
 import dev.gridiron.core.statquery.StatColumn.PASSING_YARDS
 import dev.gridiron.core.statquery.StatColumn.QB_RUSH_INSIDE_5
@@ -52,6 +56,12 @@ public enum class StatPack(
     public val defaultSort: StatColumn,
     public val population: StatColumn?,
 ) {
+    FANTASY(
+        "Fantasy",
+        listOf(FANTASY_POINTS, EXPECTED_FANTASY_POINTS, FPOE, TARGETS, CARRIES, TARGET_SHARE, CARRY_SHARE, SNAP_SHARE),
+        FANTASY_POINTS,
+        OFFENSE_SNAPS,
+    ),
     OPPORTUNITY(
         "Opportunity",
         listOf(WOPR, TARGET_SHARE, AIR_YARDS_SHARE, TARGETS, ADOT, SNAP_SHARE, RZ_TARGETS, EZ_TARGETS),

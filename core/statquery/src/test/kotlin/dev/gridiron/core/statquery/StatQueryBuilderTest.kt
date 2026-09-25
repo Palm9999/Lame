@@ -254,6 +254,18 @@ class StatQueryBuilderTest {
 
             assertEquals(setOf("c1", "c2"), rows.map { it.playerId }.toSet())
         }
+
+        @Test
+        fun `filtering to players happens after percentiles`() {
+            for ((i, id) in listOf("a", "b", "c", "d").withIndex()) {
+                db.player(id, "Player $id")
+                db.week(id, 1, C.TARGETS to (i + 1) * 3)
+            }
+            val all = db.grid(spec(TARGETS).copy(percentiles = true)).associateBy { it.playerId }
+            val two = db.grid(spec(TARGETS).copy(percentiles = true, playerIds = setOf("b", "d")))
+            assertEquals(listOf("d", "b"), two.map { it.playerId })
+            for (r in two) assertEquals(all.getValue(r.playerId).percentile(TARGETS)!!, r.percentile(TARGETS)!!, EPS)
+        }
     }
 
     @Nested
@@ -443,6 +455,20 @@ class StatQueryBuilderTest {
             assertTrue(byTeam.isEmpty())
             assertTrue(byName.isEmpty())
             assertEquals(1, (db.scalar("SELECT COUNT(*) FROM player") as Number).toInt())
+        }
+    }
+
+    @Nested
+    inner class Players {
+        @Test
+        fun `players looks up ids with every id bound`() {
+            db.player("a", "Alpha One")
+            db.player("b", "Beta Two", position = "RB")
+            val q = StatQueryBuilder.players(listOf("b", "a", "zzz"))!!
+            val rows = db.rows(q).map { it[0] as String to it[2] as String }
+            assertEquals(listOf("a" to "WR", "b" to "RB"), rows.sortedBy { it.first })
+            assertTrue(q.binds.containsAll(listOf(Bind.Text("a"), Bind.Text("b"), Bind.Text("zzz"))))
+            assertNull(StatQueryBuilder.players(emptyList()))
         }
     }
 }

@@ -6,23 +6,41 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.gridiron.core.data.Catalog
+import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.GridPage
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PositionFilter
+import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.Sparkline
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.TraySlotUi
+import dev.gridiron.core.data.describeSlot
+import dev.gridiron.core.model.CompareSlot
+import dev.gridiron.core.model.ScoringPresets
+import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.statquery.Direction
+import dev.gridiron.core.statquery.Filter
 import dev.gridiron.core.statquery.StatColumn
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.stateIn
@@ -39,6 +57,21 @@ sealed interface GridEvent {
     data class NameChanged(val name: String) : GridEvent
     data object PerGameToggled : GridEvent
     data object HeatToggled : GridEvent
+    data class ProfileSelected(val id: String) : GridEvent
+    data class AddToCompare(val playerId: String, val name: String) : GridEvent
+    data class RemoveFromTray(val slot: CompareSlot) : GridEvent
+    /** Opens the season/weeks sheet for a tray chip. */
+    data class EditTraySlot(val slot: CompareSlot) : GridEvent
+    data class ReplaceTraySlot(val old: CompareSlot, val new: CompareSlot) : GridEvent
+    data object TraySlotEditClosed : GridEvent
+    data object MessageShown : GridEvent
+    data class TeamsSelected(val teams: Set<String>) : GridEvent
+    data class MinSnapShareSelected(val share: Double?) : GridEvent
+    /** Commits the filter sheet's complete rows. */
+    data class FiltersApplied(val filters: List<Filter>) : GridEvent
+    /** The sheet's complete rows changed; counts them without touching the Grid. */
+    data class FilterDraftChanged(val filters: List<Filter>) : GridEvent
+    data object FilterSheetClosed : GridEvent
 }
 
 sealed interface GridUiState {
@@ -56,16 +89,37 @@ sealed interface GridUiState {
         val heat: Boolean,
         val page: GridPage?,
         val error: String?,
+        val profiles: ImmutableList<ScoringProfile> = ScoringPresets.all.toImmutableList(),
+        val tray: ImmutableList<TraySlotUi> = persistentListOf(),
+        /** A one-off message for the snackbar; the screen sends [GridEvent.MessageShown] after showing it. */
+        val message: String? = null,
+        /** The tray slot the season/weeks sheet is editing, or null when the sheet is closed. */
+        val editingSlot: CompareSlot? = null,
+        /** Sparklines for [page]'s rows, by player id; empty until they load or if they fail. */
+        val sparklines: ImmutableMap<String, Sparkline> = persistentMapOf(),
+        /** The open filter sheet's match count; null when the sheet is closed. */
+        val draftCount: DraftCount? = null,
     ) : GridUiState {
         val refreshing: Boolean get() = page?.request != request && error == null
     }
 }
 
+/** The filter sheet's live "N players match". */
+sealed interface DraftCount {
+    data object Counting : DraftCount
+    data class Matches(val count: Int) : DraftCount
+    data object Unavailable : DraftCount
+}
+
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class GridViewModel(
     private val repository: StatsRepository,
+    private val scoring: ScoringRepository,
+    private val tray: CompareTrayRepository,
     /** Coalesces bursts (typing, dragging the week slider) into one query. */
     debounceMillis: Long = 150,
+    /** Coalesces filter-sheet typing into one count. */
+    countDebounceMillis: Long = 250,
 ) : ViewModel() {
 
     private sealed interface CatalogLoad {
@@ -84,6 +138,28 @@ class GridViewModel(
     private val catalog: Catalog?
         get() = (catalogLoad.value as? CatalogLoad.Loaded)?.catalog
 
+    private val message = MutableStateFlow<String?>(null)
+    private val editingSlot = MutableStateFlow<CompareSlot?>(null)
+    /** Sparklines tagged with the page they were computed for, so a stale set is never shown. */
+    private val sparklines = MutableStateFlow<Pair<GridPage, Map<String, Sparkline>>?>(null)
+    private val draft = MutableStateFlow<List<Filter>?>(null)
+    /** Count results tagged with the draft they were computed for, so a stale count never resurfaces after the sheet closes or a newer draft supersedes it. */
+    private val draftCount = MutableStateFlow<Pair<List<Filter>, DraftCount>?>(null)
+
+    private val trayUi: Flow<ImmutableList<TraySlotUi>> =
+        combine(tray.slots, catalogLoad) { slots, load -> slots to (load as? CatalogLoad.Loaded)?.catalog }
+            .mapLatest { (slots, catalog) ->
+                if (catalog == null) return@mapLatest persistentListOf()
+                val names = try {
+                    repository.players(slots.map { it.playerId })
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyMap()
+                }
+                slots.map { TraySlotUi(it, names[it.playerId]?.name ?: it.playerId, describeSlot(it, catalog)) }.toImmutableList()
+            }
+
     val state: StateFlow<GridUiState> =
         combine(catalogLoad, request, heat, lastPage, pageError) { load, r, h, page, err ->
             when (load) {
@@ -93,7 +169,46 @@ class GridViewModel(
                     if (r == null) GridUiState.Loading
                     else GridUiState.Ready(load.catalog, r, h, page, err?.takeIf { it.first == r }?.second)
             }
+        }.combine(
+            combine(scoring.profiles, trayUi, message, editingSlot, combine(sparklines, draft, draftCount, ::Lines), ::Extras),
+        ) { base, extras ->
+            if (base is GridUiState.Ready) {
+                val lines = extras.lines.sparklines?.takeIf { (page, _) -> page == base.page }?.second.orEmpty()
+                // A count is only shown when it was computed for the draft the sheet
+                // currently holds; a stale in-flight or completed count is ignored
+                // rather than resurrecting after the draft moved on or the sheet closed.
+                val draftCount = when {
+                    extras.lines.draft == null -> null
+                    extras.lines.count?.first == extras.lines.draft -> extras.lines.count.second
+                    else -> DraftCount.Counting
+                }
+                base.copy(
+                    profiles = extras.profiles,
+                    tray = extras.tray,
+                    message = extras.message,
+                    editingSlot = extras.editingSlot,
+                    sparklines = lines.toImmutableMap(),
+                    draftCount = draftCount,
+                )
+            } else {
+                base
+            }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, GridUiState.Loading)
+
+    private data class Extras(
+        val profiles: ImmutableList<ScoringProfile>,
+        val tray: ImmutableList<TraySlotUi>,
+        val message: String?,
+        val editingSlot: CompareSlot?,
+        val lines: Lines,
+    )
+
+    /** The sparkline and draft-count sources, combined once so each carries its own staleness tag. */
+    private data class Lines(
+        val sparklines: Pair<GridPage, Map<String, Sparkline>>?,
+        val draft: List<Filter>?,
+        val count: Pair<List<Filter>, DraftCount>?,
+    )
 
     init {
         viewModelScope.launch {
@@ -106,7 +221,7 @@ class GridViewModel(
                 return@launch
             }
             catalogLoad.value = CatalogLoad.Loaded(c)
-            request.value = GridRequest(c.latest, c.latest.defaultWeeks, StatPack.OPPORTUNITY)
+            request.value = GridRequest(c.latest, c.latest.defaultWeeks, StatPack.OPPORTUNITY, scoring = scoring.active.first())
         }
         viewModelScope.launch {
             request.filterNotNull()
@@ -123,12 +238,121 @@ class GridViewModel(
                 }
                 .collect()
         }
+        viewModelScope.launch {
+            // After each page, never before it: the table must not wait on its sparklines.
+            lastPage.filterNotNull()
+                .mapLatest { page ->
+                    val lines = try {
+                        repository.sparklines(page)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        emptyMap()
+                    }
+                    sparklines.value = page to lines
+                }
+                .collect()
+        }
+        viewModelScope.launch {
+            draft.debounce(countDebounceMillis)
+                .mapLatest { filters ->
+                    val r = request.value
+                    if (filters == null || r == null) return@mapLatest
+                    val result = try {
+                        DraftCount.Matches(repository.count(r.copy(filters = filters)))
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        DraftCount.Unavailable
+                    }
+                    // Tagged with the draft it was computed for: if this coroutine is slow
+                    // to cancel (debounce itself delays the cancelling emission) and the
+                    // draft has since moved on or the sheet closed, the state combine
+                    // above ignores this write instead of showing a stale count.
+                    draftCount.value = filters to result
+                }
+                .collect()
+        }
+        viewModelScope.launch {
+            scoring.active.collect { profile -> request.update { it?.copy(scoring = profile) } }
+        }
+        viewModelScope.launch {
+            scoring.resetNotice.filter { it }.collect {
+                message.value = "Saved scoring profiles couldn't be read, so they were reset."
+                scoring.dismissResetNotice()
+            }
+        }
     }
 
     fun onEvent(event: GridEvent) {
-        if (event == GridEvent.HeatToggled) {
-            heat.update { !it }
-            return
+        when (event) {
+            GridEvent.HeatToggled -> {
+                heat.update { !it }
+                return
+            }
+            is GridEvent.ProfileSelected -> {
+                viewModelScope.launch { scoring.setActive(event.id) }
+                return
+            }
+            is GridEvent.AddToCompare -> {
+                val r = request.value ?: return
+                viewModelScope.launch {
+                    // No snackbar on a successful add: the screen's haptic and the
+                    // new tray chip confirm it, and a snackbar would sit over the
+                    // tray's Compare button for its whole duration.
+                    when (tray.add(CompareSlot(event.playerId, r.season.season, r.weeks))) {
+                        CompareTrayRepository.AddResult.ADDED -> Unit
+                        CompareTrayRepository.AddResult.ALREADY_THERE -> message.value = "${event.name} is already in compare"
+                        CompareTrayRepository.AddResult.FULL ->
+                            message.value = "Compare holds ${CompareTrayRepository.CAPACITY} players. Remove one first."
+                    }
+                }
+                return
+            }
+            is GridEvent.RemoveFromTray -> {
+                viewModelScope.launch { tray.remove(event.slot) }
+                return
+            }
+            is GridEvent.EditTraySlot -> {
+                editingSlot.value = event.slot
+                return
+            }
+            is GridEvent.ReplaceTraySlot -> {
+                // The sheet follows the change straight away, so a quick second
+                // change replaces the new slot rather than the old one...
+                editingSlot.value = event.new
+                viewModelScope.launch {
+                    if (!tray.replace(event.old, event.new)) {
+                        message.value = "That player and range is already in compare"
+                        // ...and on a rejection it closes rather than keep editing
+                        // a slot that never made it into the tray.
+                        editingSlot.update { if (it == event.new) null else it }
+                    }
+                }
+                return
+            }
+            GridEvent.TraySlotEditClosed -> {
+                editingSlot.value = null
+                return
+            }
+            GridEvent.MessageShown -> {
+                message.value = null
+                return
+            }
+            is GridEvent.FilterDraftChanged -> {
+                draft.value = event.filters
+                return
+            }
+            GridEvent.FilterSheetClosed -> {
+                draft.value = null
+                draftCount.value = null
+                return
+            }
+            is GridEvent.FiltersApplied -> {
+                draft.value = null
+                draftCount.value = null
+            }
+            else -> Unit
         }
         val c = catalog ?: return
         request.update { current -> current?.let { reduce(it, event, c) } }
@@ -158,10 +382,23 @@ class GridViewModel(
             is GridEvent.NameChanged -> r.copy(name = event.name)
             GridEvent.PerGameToggled -> r.copy(perGame = !r.perGame)
             GridEvent.HeatToggled -> r
+            is GridEvent.ProfileSelected -> r
+            is GridEvent.AddToCompare -> r
+            is GridEvent.RemoveFromTray -> r
+            is GridEvent.EditTraySlot -> r
+            is GridEvent.ReplaceTraySlot -> r
+            GridEvent.TraySlotEditClosed -> r
+            GridEvent.MessageShown -> r
+            is GridEvent.TeamsSelected -> r.copy(teams = event.teams)
+            is GridEvent.MinSnapShareSelected -> r.copy(minSnapShare = event.share)
+            is GridEvent.FiltersApplied -> r.copy(filters = event.filters)
+            is GridEvent.FilterDraftChanged -> r
+            GridEvent.FilterSheetClosed -> r
         }
 
-        fun factory(repository: StatsRepository): ViewModelProvider.Factory = viewModelFactory {
-            initializer { GridViewModel(repository) }
-        }
+        fun factory(repository: StatsRepository, scoring: ScoringRepository, tray: CompareTrayRepository): ViewModelProvider.Factory =
+            viewModelFactory {
+                initializer { GridViewModel(repository, scoring, tray) }
+            }
     }
 }
