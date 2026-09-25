@@ -91,10 +91,12 @@ fun GridRoute(
     onCompare: () -> Unit,
     onEditProfiles: () -> Unit,
     modifier: Modifier = Modifier,
+    onPlayer: (playerId: String, season: Int, week: Int) -> Unit = { _, _, _ -> },
+    menu: List<Pair<String, (season: Int) -> Unit>> = emptyList(),
 ) {
     val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray))
     val state by vm.state.collectAsStateWithLifecycle()
-    GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles)
+    GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu)
 }
 
 @Composable
@@ -104,6 +106,8 @@ fun GridScreen(
     modifier: Modifier = Modifier,
     onCompare: () -> Unit = {},
     onEditProfiles: () -> Unit = {},
+    onPlayer: (playerId: String, season: Int, week: Int) -> Unit = { _, _, _ -> },
+    menu: List<Pair<String, (season: Int) -> Unit>> = emptyList(),
 ) {
     // A Surface, not a Box with a background: it also sets the content color
     // that every Text inherits. Without it, text defaults to black, which is
@@ -124,14 +128,21 @@ fun GridScreen(
                 Modifier.align(Alignment.Center).padding(24.dp),
                 color = MaterialTheme.colorScheme.error,
             )
-            is GridUiState.Ready -> GridContent(state, onEvent, onCompare, onEditProfiles)
+            is GridUiState.Ready -> GridContent(state, onEvent, onCompare, onEditProfiles, onPlayer, menu)
         }
       }
     }
 }
 
 @Composable
-private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, onCompare: () -> Unit, onEditProfiles: () -> Unit) {
+private fun GridContent(
+    state: GridUiState.Ready,
+    onEvent: (GridEvent) -> Unit,
+    onCompare: () -> Unit,
+    onEditProfiles: () -> Unit,
+    onPlayer: (playerId: String, season: Int, week: Int) -> Unit,
+    menu: List<Pair<String, (season: Int) -> Unit>>,
+) {
     val r = state.request
     var showWeeks by remember { mutableStateOf(false) }
     var showTeams by remember { mutableStateOf(false) }
@@ -149,7 +160,7 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            TitleBar(state, onEvent, onWeeks = { showWeeks = true }, onEditProfiles = onEditProfiles)
+            TitleBar(state, onEvent, onWeeks = { showWeeks = true }, onEditProfiles = onEditProfiles, menu = menu)
 
             OutlinedTextField(
                 value = r.name,
@@ -243,6 +254,8 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             onEvent(GridEvent.AddToCompare(row.playerId, row.name))
                         },
+                        // Tap opens the projection for the week after the latest data.
+                        onRowClick = { row -> onPlayer(row.playerId, r.season.season, r.season.lastWeek + 1) },
                     )
                 }
             }
@@ -295,8 +308,15 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
 }
 
 @Composable
-private fun TitleBar(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, onWeeks: () -> Unit, onEditProfiles: () -> Unit) {
+private fun TitleBar(
+    state: GridUiState.Ready,
+    onEvent: (GridEvent) -> Unit,
+    onWeeks: () -> Unit,
+    onEditProfiles: () -> Unit,
+    menu: List<Pair<String, (season: Int) -> Unit>>,
+) {
     var open by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("Gridiron", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -328,6 +348,16 @@ private fun TitleBar(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, onW
                             onEvent(GridEvent.SeasonSelected(s.season))
                         },
                     )
+                }
+            }
+        }
+        if (menu.isNotEmpty()) {
+            Box {
+                TextButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("menu")) { Text("☰") }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    menu.forEach { (label, action) ->
+                        DropdownMenuItem(text = { Text(label) }, onClick = { menuOpen = false; action(state.request.season.season) })
+                    }
                 }
             }
         }
@@ -404,6 +434,7 @@ private fun PlayerTable(
     onSort: (ColumnUi) -> Unit,
     onInfo: (ColumnUi) -> Unit,
     onRowLongClick: (GridRowUi) -> Unit,
+    onRowClick: (GridRowUi) -> Unit = {},
 ) {
     val columns = remember(page.columns) { page.columns.map { TableColumn(it.column, ColumnWidth) }.toImmutableList() }
     val sortIndex = page.columns.indexOfFirst { it.column == page.request.sort }
@@ -498,6 +529,7 @@ private fun PlayerTable(
             }
         },
         onRowLongClick = onRowLongClick,
+        onRowClick = onRowClick,
         rowLongClickLabel = "Add to compare",
     )
 }

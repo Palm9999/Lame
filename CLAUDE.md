@@ -82,7 +82,7 @@ export GRIDIRON_STATS_DB=etl/build/stats.db
 
 **No Hilt or Navigation Yet** — Current single-screen setup. Hilt and Navigation 3 will arrive with the second feature.
 
-### Database Schema (Version 4)
+### Database Schema (Version 5)
 
 Long/narrow design: adding a metric is an `INSERT`, not a migration.
 
@@ -96,6 +96,8 @@ Long/narrow design: adding a metric is an `INSERT`, not a migration.
 | `player_week_projection_factor` | Per (player, week, factor) log-space attribution multiplier for one projection adjustment stage |
 | `player_ros_projection` | Rest-of-season aggregate: summed weekly mean/variance per (player, metric), no per-week detail |
 | `projection_snapshot` | Projected mean/variance frozen at snapshot time, never overwritten — joined against `player_week_stat` once actuals land to compute accuracy |
+| `team_week_defense` | Per (team, season, week) points/yards allowed, sacks, INTs, fumbles recovered, defensive TDs |
+| `injury_report` | Per (player, season, week) nflverse injury report status/injury/practice |
 | `accuracy_summary` | Precomputed MAE/RMSE/bias/R² per (position, season, metric, baseline), refreshed each ETL run |
 
 **No year in table/column names** — New seasons are data rows, not schema changes.
@@ -124,7 +126,8 @@ To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI 
 - Hilt dependency injection and Navigation 3 architecture arrive with the second feature
 - User database (`user.db`) for presets and rosters not yet implemented
 - APK signing uses a committed keystore (`app/gridiron.keystore`, intentional for a never-published personal app)
-- **Projections feature is wired but not reachable**: `:feature:projections`'s `ProjectionsRoute`/`AccuracyRoute` are valid, working nav destinations (`ProjectionsKey`/`AccuracyKey`), but no button or menu item anywhere navigates to them yet — reaching them today needs a manual nav-graph edit. Adding a real entry point should land together with the two gaps below, since all three are "is the feature actually usable" work.
+- **Grid entry points**: tapping a Grid row opens that player's projection (week after the latest data); the ☰ menu opens Projection accuracy, Injury report, Team defense (`app/TeamScreens.kt`, backed by `TeamsRepository` over the schema v5 `injury_report`/`team_week_defense` tables), and Refresh stats (downloads `stats.db.gz` from the rolling `data` release, requires matching `schema_version`, then restarts the app).
+- **ETL projections stage currently fails** (`unable to find column "regime_break"`) and is skipped, so real builds ship no projection rows and the projection screen shows "No projection available".
 - **`ProjectionsRoute` hardcodes `ScoringPresets.PPR` and `position = null`** instead of the viewer's real league scoring profile and the player's actual position — `receptionWeight(null)` skips TE-premium scoring rules, and non-PPR leagues see PPR numbers. Needs `ScoringRepository` threaded through the route (the pattern `CompareRoute` already uses) plus a player-position lookup that doesn't exist yet at that call site.
 - **Every projection component is simulated as `DistributionFamily.GAMMA`**, not each metric's real `dist_family`/`zero_inflated` from the `metric` registry (the column exists from the ETL plan's schema v4, but isn't yet threaded through `:core:data`'s `Catalog`/`MetricInfo`)
 - **K/DST fantasy scoring is out of scope** for `:core:projections`'s `score()` — `ScoringRule` structurally covers QB/RB/WR/TE only

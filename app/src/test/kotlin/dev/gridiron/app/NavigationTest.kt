@@ -17,6 +17,7 @@ import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.testing.FakePrefsSource
@@ -63,6 +64,7 @@ class NavigationTest {
             tray = CompareTrayRepository(prefs),
             projections = ProjectionsRepository(executor),
             accuracy = AccuracyRepository(executor),
+            teams = TeamsRepository(executor),
         )
     }
 

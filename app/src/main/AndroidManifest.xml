@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- No permissions: all data ships inside the app. -->
+    <!-- Data ships inside the app; the network is only for "Refresh stats". -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:name=".GridironApplication"
         android:allowBackup="false"

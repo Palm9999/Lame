@@ -7,6 +7,7 @@ import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.database.DeferredQueryExecutor
 import dev.gridiron.core.database.SqliteQueryExecutor
 import dev.gridiron.core.datastore.UserPrefsStore
@@ -36,6 +37,8 @@ class GridironApplication : Application() {
             CompareTrayRepository(prefs),
             ProjectionsRepository(executor),
             AccuracyRepository(executor),
+            TeamsRepository(executor),
+            refresh = { StatsDbInstaller(this).refresh() },
         )
     }
 }

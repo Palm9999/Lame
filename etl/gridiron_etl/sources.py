@@ -57,6 +57,7 @@ SOURCES: dict[str, Source] = {
     "pbp": Source("pbp", "pbp", "play_by_play_{season}.csv"),
     "snap_counts": Source("snap_counts", "snap_counts", "snap_counts_{season}.csv"),
     "weekly_rosters": Source("weekly_rosters", "weekly_rosters", "roster_weekly_{season}.csv"),
+    "injuries": Source("injuries", "injuries", "injuries_{season}.csv"),
     "schedules": Source("schedules", "schedules", "games.csv", partitioned=False),
     # Not season-partitioned — adding a season 404s.
     "players": Source("players", "players", "players.csv", partitioned=False),

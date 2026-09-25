@@ -1,6 +1,11 @@
 package dev.gridiron.app
 
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -12,6 +17,7 @@ import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.feature.compare.CompareRoute
 import dev.gridiron.feature.players.GridRoute
 import dev.gridiron.feature.projections.AccuracyRoute
@@ -27,6 +33,9 @@ data class Deps(
     val tray: CompareTrayRepository,
     val projections: ProjectionsRepository,
     val accuracy: AccuracyRepository,
+    val teams: TeamsRepository,
+    /** Downloads the latest stats; null in tests. */
+    val refresh: (suspend () -> Result<String>)? = null,
 )
 
 /**
@@ -42,6 +51,24 @@ internal fun <T> MutableList<T>.push(key: T) {
 fun GridironNavHost(deps: Deps) {
     val backStack = rememberNavBackStack(GridKey)
     val back: () -> Unit = { backStack.removeLastOrNull() }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val refresh: () -> Unit = {
+        deps.refresh?.let { download ->
+            Toast.makeText(context, "Downloading latest stats…", Toast.LENGTH_SHORT).show()
+            scope.launch {
+                download()
+                    .onSuccess { msg ->
+                        Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                        // Restart so every screen reopens on the new database.
+                        val intent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+                        context.startActivity(Intent.makeRestartActivityTask(intent!!.component))
+                        Runtime.getRuntime().exit(0)
+                    }
+                    .onFailure { Toast.makeText(context, "Refresh failed: ${it.message}", Toast.LENGTH_LONG).show() }
+            }
+        }
+    }
     NavDisplay(
         backStack = backStack,
         onBack = back,
@@ -54,6 +81,13 @@ fun GridironNavHost(deps: Deps) {
                     deps.stats, deps.scoring, deps.tray,
                     onCompare = { backStack.push(CompareKey) },
                     onEditProfiles = { backStack.push(ScoringListKey) },
+                    onPlayer = { id, season, week -> backStack.push(ProjectionsKey(id, season, week)) },
+                    menu = listOf(
+                        "Projection accuracy" to { s: Int -> backStack.push(AccuracyKey(s)) },
+                        "Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) },
+                        "Team defense" to { s: Int -> backStack.push(DefenseKey(s)) },
+                        "Refresh stats" to { _: Int -> refresh() },
+                    ),
                 )
             }
             entry<CompareKey> {
@@ -65,6 +99,8 @@ fun GridironNavHost(deps: Deps) {
             entry<ScoringEditKey> { key -> ScoringEditRoute(key.profileId, deps.scoring, onDone = back) }
             entry<ProjectionsKey> { key -> ProjectionsRoute(key.playerId, key.season, key.week, deps.projections, onBack = back) }
             entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, onBack = back) }
+            entry<InjuriesKey> { key -> InjuriesScreen(key.season, deps.teams, onBack = back) }
+            entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back) }
         },
     )
 }

@@ -33,6 +33,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -76,6 +77,8 @@ public fun <R> StatTable(
     /** Long-press on a row. Also exposed to TalkBack as a custom long-click action. */
     onRowLongClick: ((R) -> Unit)? = null,
     rowLongClickLabel: String? = null,
+    /** Tap on a row. */
+    onRowClick: ((R) -> Unit)? = null,
 ) {
     val density = LocalDensity.current
     val frozen = with(density) { frozenWidth.toDp() }
@@ -118,13 +121,21 @@ public fun <R> StatTable(
                         .height(rowH)
                         .background(background)
                         .then(
-                            if (onRowLongClick == null) Modifier
-                            else Modifier.pointerInput(row) { detectTapGestures(onLongPress = { onRowLongClick(row) }) },
+                            if (onRowLongClick == null && onRowClick == null) Modifier
+                            else Modifier.pointerInput(row) {
+                                detectTapGestures(
+                                    onTap = onRowClick?.let { { _ -> it(row) } },
+                                    onLongPress = onRowLongClick?.let { { _ -> it(row) } },
+                                )
+                            },
                         )
                         .clearAndSetSemantics {
                             contentDescription = rowDescription(row)
                             if (onRowLongClick != null) {
                                 onLongClick(label = rowLongClickLabel) { onRowLongClick(row); true }
+                            }
+                            if (onRowClick != null) {
+                                onClick { onRowClick(row); true }
                             }
                         },
                 ) {
