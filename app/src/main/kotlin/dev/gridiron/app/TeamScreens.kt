@@ -1,5 +1,7 @@
 package dev.gridiron.app
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +23,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,6 +36,9 @@ import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.DefenseRow
 import dev.gridiron.core.data.InjuryRow
 import dev.gridiron.core.data.TeamsRepository
+import dev.gridiron.core.data.live.LiveRepository
+import java.time.Instant
+import kotlinx.coroutines.CancellationException
 
 @Composable
 fun InjuriesScreen(season: Int, teams: TeamsRepository, onBack: () -> Unit) {
@@ -48,6 +54,110 @@ fun InjuriesScreen(season: Int, teams: TeamsRepository, onBack: () -> Unit) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+    }
+}
+
+/**
+ * The current season's report is ESPN's live list with official practice
+ * alongside; a past season (or no live data source, in tests) shows
+ * nflverse's official list as before.
+ */
+@Composable
+fun InjuriesRoute(
+    season: Int,
+    currentSeason: Int,
+    teams: TeamsRepository,
+    live: LiveRepository?,
+    onBack: () -> Unit,
+    onPlayer: (String) -> Unit,
+) {
+    if (live != null && season == currentSeason) {
+        LiveInjuriesRoute(season, teams, live, onBack, onPlayer)
+    } else {
+        InjuriesScreen(season, teams, onBack)
+    }
+}
+
+@Composable
+private fun LiveInjuriesRoute(season: Int, teams: TeamsRepository, live: LiveRepository, onBack: () -> Unit, onPlayer: (String) -> Unit) {
+    val version by live.changes.collectAsState()
+    var groups by remember { mutableStateOf<List<InjuryGroup>?>(null) }
+    var asOf by remember { mutableStateOf<Instant?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) { error = live.refreshIfStale()?.injuriesError }
+    LaunchedEffect(version) {
+        // Official practice rows are a bonus: the live list shows without them.
+        val official = try {
+            teams.injuries(season)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyList()
+        }
+        groups = injuryReport(live.injuries(), official)
+        asOf = live.fetchedAt()
+    }
+    LiveInjuriesScreen(groups, asOf, error, onBack, onPlayer)
+}
+
+@Composable
+fun LiveInjuriesScreen(
+    groups: List<InjuryGroup>?,
+    asOf: Instant?,
+    error: String?,
+    onBack: () -> Unit,
+    onPlayer: (String) -> Unit,
+) {
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onBack) { Text("← Back") }
+                Text("Injury report", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            }
+            LiveCaption(asOf, error)
+            when {
+                groups == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                groups.isEmpty() -> Message(if (error != null) "Couldn't reach ESPN. Try again later." else "No injuries reported.")
+                else -> LazyColumn {
+                    for (group in groups) {
+                        item(key = "team:${group.team}") {
+                            Text(
+                                group.team,
+                                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 16.dp, vertical = 6.dp),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                        }
+                        items(group.lines, key = { it.injury.espnId }) { line ->
+                            InjuryLineRow(line, onPlayer)
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun InjuryLineRow(line: InjuryLine, onPlayer: (String) -> Unit) {
+    val i = line.injury
+    val id = i.playerId
+    Column(
+        Modifier.fillMaxWidth()
+            .then(if (id != null) Modifier.clickable { onPlayer(id) } else Modifier)
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Row {
+            Text(i.name, Modifier.weight(1f), fontWeight = FontWeight.Bold)
+            Text(i.status, color = injuryColor(i.abbr))
+        }
+        Text(
+            listOfNotNull(i.position, line.practice?.let { "Practice: $it" }).joinToString(" · "),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        i.shortComment?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     }
 }
 
@@ -133,6 +243,6 @@ private fun <T> ListScreen(
 }
 
 @Composable
-private fun Message(text: String) {
+internal fun Message(text: String) {
     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Text(text, textAlign = TextAlign.Center) }
 }

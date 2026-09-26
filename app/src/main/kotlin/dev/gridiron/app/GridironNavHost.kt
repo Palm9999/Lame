@@ -41,6 +41,7 @@ import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.live.LiveRepository
+import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.feature.compare.CompareRoute
 import dev.gridiron.feature.players.GridRoute
 import dev.gridiron.feature.projections.AccuracyRoute
@@ -137,8 +138,9 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             deps.stats, deps.scoring, deps.tray,
                             onCompare = { backStack.push(CompareKey) },
                             onEditProfiles = { backStack.push(ScoringListKey) },
-                            onPlayer = { id, season, week -> backStack.push(ProjectionsKey(id, season, week)) },
+                            onPlayer = { id, _, _ -> backStack.push(PlayerKey(id)) },
                             menu = buildList<Pair<String, (Int) -> Unit>> {
+                                if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
                                 add("Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) })
                                 add("Team defense" to { s: Int -> backStack.push(DefenseKey(s)) })
                                 if (deps.settings != null) add("Settings" to { _: Int -> backStack.push(SettingsKey) })
@@ -156,7 +158,13 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                     // Unreachable until the on-device projections follow-up: no menu item or row tap leads here.
                     entry<ProjectionsKey> { key -> ProjectionsRoute(key.playerId, key.season, key.week, deps.projections, onBack = back) }
                     entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, onBack = back) }
-                    entry<InjuriesKey> { key -> InjuriesScreen(key.season, deps.teams, onBack = back) }
+                    entry<InjuriesKey> { key ->
+                        InjuriesRoute(key.season, currentSeason(), deps.teams, deps.live, onBack = back, onPlayer = { backStack.push(PlayerKey(it)) })
+                    }
+                    entry<NewsKey> {
+                        deps.live?.let { NewsRoute(it, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
+                    }
+                    entry<PlayerKey> { key -> PlayerRoute(key.playerId, deps.players, deps.live, onBack = back) }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back) }
                     entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back) } }
                 },

@@ -6,6 +6,7 @@ import dev.gridiron.core.statquery.Bind
 import dev.gridiron.core.statquery.SqlQuery
 
 public data class InjuryRow(
+    val playerId: String,
     val name: String,
     val team: String,
     val position: String,
@@ -34,7 +35,7 @@ public class TeamsRepository(private val executor: QueryExecutor) {
     public suspend fun injuries(season: Int): List<InjuryRow> = executor.query(
         SqlQuery(
             """
-            SELECT i.name, i.team, i.position, i.week, i.status, i.injury, i.practice
+            SELECT i.player_id, i.name, i.team, i.position, i.week, i.status, i.injury, i.practice
             FROM injury_report i
             JOIN (SELECT player_id, MAX(week) AS week FROM injury_report WHERE season = ? GROUP BY player_id) latest
               ON latest.player_id = i.player_id AND latest.week = i.week
@@ -45,13 +46,14 @@ public class TeamsRepository(private val executor: QueryExecutor) {
         ),
     ) {
         InjuryRow(
-            name = it.textOrNull(0) ?: "?",
-            team = it.textOrNull(1) ?: "",
-            position = it.textOrNull(2) ?: "",
-            week = it.long(3).toInt(),
-            status = it.textOrNull(4),
-            injury = it.textOrNull(5),
-            practice = it.textOrNull(6),
+            playerId = it.text(0),
+            name = it.textOrNull(1) ?: "?",
+            team = it.textOrNull(2) ?: "",
+            position = it.textOrNull(3) ?: "",
+            week = it.long(4).toInt(),
+            status = it.textOrNull(5),
+            injury = it.textOrNull(6),
+            practice = it.textOrNull(7),
         )
     }
 

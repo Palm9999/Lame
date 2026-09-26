@@ -58,6 +58,7 @@ class TeamsRepositoryTest {
         val rows = repo.injuries(2026)
         assertEquals(1, rows.size)
         assertEquals("Out", rows.single().status)
+        assertEquals("p1", rows.single().playerId)
     }
 
     @Test
