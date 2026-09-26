@@ -1,26 +1,56 @@
 # Session Handoff: Projection Model
 
-**How the user wants to work:** one fresh session per batch of **4 tasks**, with `/clear` after each. Every new session starts by reading this file, runs the next 4 tasks starting at **Next step** below, updates this file (tick each task, record any rulings), commits, pushes, and stops.
+**How the user wants to work:**
+- One fresh session per batch of **4 tasks**, with `/clear` after each.
+- Every session starts by reading this file, runs the next 4 tasks from **Next step**, then updates this file (tick each task, record rulings), commits, pushes, and stops.
+- Keep replies short. Ask a question only when blocked, one line at a time.
 
-**Branch:** `claude/dreamy-euler-phbdq1`, now restarted on the merged live-data-refresh work (PR #3 merged as 9dabb9a). Draft PR #4 carries this project.
+**Branch:** `claude/dreamy-euler-phbdq1`. It restarted from the merged live-data-refresh work (PR #3, merge 9dabb9a). Draft PR #4 (https://github.com/Palm9999/Lame/pull/4) carries this project. It's docs-only so far; CI is green on c4cd8bd.
 
-## Projection model: where things stand
+## Where things stand
 
-- [x] **Design approved** (2026-09-26): `docs/superpowers/specs/2026-09-26-projection-model-design.md`. The model is pure Kotlin, runs inside Refresh and is walk-forward. It's split into four sub-projects, built in order:
-  1. Engine
-  2. Accuracy page
-  3. Odds API props
-  4. K/DST
-- [x] **Sub-project 1 plan written:** `docs/superpowers/plans/2026-09-26-projection-engine.md`. It has 12 tasks: Session A is Tasks 1–4, Session B Tasks 5–8, Session C Tasks 9–12.
-- [ ] **The user reviews the plan and picks an execution method.** Native (executing-plans) was used for the last project.
+- [x] **Design approved** (2026-09-26): `docs/superpowers/specs/2026-09-26-projection-model-design.md`.
+  - A pure-Kotlin model runs inside Refresh and projects each week only from the games before it.
+  - Four sub-projects, in order:
+    1. Engine
+    2. Accuracy page
+    3. Odds API props (the user will enter their own key)
+    4. K/DST
+- [x] **Sub-project 1 plan written:** `docs/superpowers/plans/2026-09-26-projection-engine.md`.
+  - 12 tasks, all with full code and tests.
+  - Session A = Tasks 1–4, Session B = Tasks 5–8, Session C = Tasks 9–12.
+  - Rulings made while planning are at the end of the plan ("Plan self-review").
+- [ ] **Open: the user's approval of the plan and choice of execution method.** Recommended: **native**. The implementer does each task itself with the `executing-plans` skill, as in the last project, and one fresh reviewer on the most capable model checks the whole branch after Task 12.
+  - If the first message of the new session doesn't settle this, ask in one line before touching code.
+  - If the user says to go ahead without naming a method, use native.
 
-## Next step
+## Next step: Session A (Tasks 1–4)
 
-Once the user approves the plan, execute **Session A: Tasks 1–4** of `docs/superpowers/plans/2026-09-26-projection-engine.md` in a fresh session. The final whole-branch review runs after Task 12.
+1. Read the plan's header: Global Constraints, Review Focus and File Structure. Then read Tasks 1–4. Don't read the rest.
+2. Invoke `executing-plans` and run Tasks 1–4 in order.
+   - Follow each task's steps exactly: write the failing test, watch it fail, implement, watch it pass, commit.
+   - Code blocks are written verbatim; fix only what fails to compile or test. Record every deviation as a ruling (below).
+3. Run `./gradlew :core:forecast:test :core:ingest:test` and `cd etl && python -m pytest tests/ -q` at the end.
+4. Push. The GitHub MCP tools are deferred, so load them with ToolSearch before use. Update **Execution progress** below and set **Next step** to Session B (Tasks 5–8). Commit and push this file, then stop.
+
+**Things to know:**
+- **Task 3 Step 6 needs network** for the parity build. If there's none, say so here and let CI's parity job prove it.
+- **Task 2 changes the schema:** `SCHEMA_VERSION` 7, `INGEST_VERSION` 2. The first phone refresh afterwards rebuilds every season. That's expected.
+- **A timing test flakes under full parallel builds.** `:core:statquery`'s "scoring a full season … is fast" test fails under `./gradlew build` in this 4-CPU container. It's a known CPU-contention flake (see the previous project's rulings); run that module alone to confirm it's green.
+- **Warnings are errors.** Explicit API mode is on in JVM modules, and any unused parameter, variable or import fails the build.
+- **Test runners differ.** JVM modules use JUnit Jupiter; Android modules use JUnit 4 and Robolectric.
+- **Tracking.** The `.superpowers/` ledger is git-ignored and doesn't survive the container. Rulings go in this file.
+
+**PR #4 watch:**
+- This session is subscribed to PR #4's activity.
+- A self check-in is scheduled for 2026-09-26 22:32 UTC (`trig_01LbtqsUqJrVwC6d3Bq3H6Jp`). While the PR only waits on the user, re-arm it every 3–6 hours and say nothing if nothing changed.
+- Once code lands, CI failures on PR #4 are ours to fix: follow the drive-to-green rules.
 
 ## Projection engine: execution progress
 
 (none yet)
+
+Record each task as: `- [x] Task N: <name> (commit <sha>; <test command> → <result>)`, then `Ruling: <what> — <why> — <cost if wrong>` for any deviation.
 
 ---
 
