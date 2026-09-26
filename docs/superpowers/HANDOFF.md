@@ -31,7 +31,7 @@
 
 ## Next step
 
-**Execute Plan 1, Task 1** (`docs/superpowers/plans/2026-09-25-kotlin-ingest.md`), natively, with the `executing-plans` skill.
+**Execute Plan 1, Task 2: Metric registry** (`docs/superpowers/plans/2026-09-25-kotlin-ingest.md`), natively, with the `executing-plans` skill.
 
 1. Follow the task's steps exactly: failing test, implementation, passing test, commit.
 2. Tick the task under **Execution progress** below.
@@ -42,6 +42,11 @@ Plan 2 depends on all of Plan 1. Start Plan 2 only after Plan 1's Task 12 (the p
 
 ## Execution progress
 
-**Plan 1** (`2026-09-25-kotlin-ingest.md`): tasks 1–12 not started.
+**Plan 1** (`2026-09-25-kotlin-ingest.md`):
+- [x] Task 1: `:core:ingest` module and CSV reader (commit 8f2536c; `./gradlew :core:ingest:test` → 9/9 pass).
+  - Ruling: the byte order mark is written as a `\uFEFF` escape, not a literal invisible character. The runtime bytes are the same. Cost if wrong: none.
+- Tasks 2–12 not started.
+
+The executing-plans ledger lives in git-ignored `.superpowers/` and does not survive the container. Rulings are copied here so the final reviewer sees them.
 
 **Plan 2** (`2026-09-25-live-refresh-app.md`): tasks 1–11 not started.
