@@ -16,11 +16,15 @@ import dev.gridiron.core.statquery.StatQuerySpec
 import dev.gridiron.core.statquery.ValueMode
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import java.util.Locale
 
 public class StatsRepository(
     private val executor: QueryExecutor,
     locale: Locale = Locale.getDefault(),
+    /** Emits whenever the database behind [executor] is replaced; screens reload on each value. */
+    public val dataVersion: Flow<Long> = flowOf(0L),
 ) {
     private val format = StatFormat(locale)
 

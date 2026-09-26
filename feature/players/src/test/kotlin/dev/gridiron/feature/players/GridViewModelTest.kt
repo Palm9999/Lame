@@ -2,8 +2,10 @@ package dev.gridiron.feature.players
 
 import dev.gridiron.core.data.Catalog
 import dev.gridiron.core.data.CompareTrayRepository
+import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PositionFilter
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.SeasonInfo
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.sparklineWeeks
@@ -13,6 +15,7 @@ import dev.gridiron.core.database.ResultRow
 import dev.gridiron.core.datastore.UserPrefs
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.WeekRange
+import dev.gridiron.core.statquery.CatalogQueries
 import dev.gridiron.core.statquery.Condition
 import dev.gridiron.core.statquery.Direction
 import dev.gridiron.core.statquery.Filter
@@ -21,9 +24,12 @@ import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.testing.FakePrefsSource
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -348,6 +354,50 @@ class GridViewModelTest {
         advanceUntilIdle()
         assertEquals("Saved scoring profiles couldn't be read, so they were reset.", (vm.state.value as GridUiState.Ready).message)
         assertFalse(flagged.current.resetNotice)
+    }
+
+    private val catalogQueries = setOf(CatalogQueries.seasons, CatalogQueries.metrics, CatalogQueries.teams)
+
+    @Test
+    fun `a new data version reloads the catalog and re-runs the page, keeping the user's choices`() = runTest(dispatcher) {
+        val version = MutableStateFlow(0L)
+        val log = mutableListOf<SqlQuery>()
+        repo = StatsRepository(trackingExecutor { log += it }, Locale.US, dataVersion = version)
+        val vm = viewModel()
+        ready(vm)
+        vm.onEvent(GridEvent.PackSelected(StatPack.RUSHING))
+        val chosen = ready(vm).request
+        val before = log.size
+
+        version.value = 1
+        val after = ready(vm)
+
+        val since = log.drop(before)
+        assertEquals(1, since.count { it == CatalogQueries.seasons })
+        assertTrue("expected the page to re-run", since.any { it !in catalogQueries })
+        assertEquals(chosen, after.request)
+    }
+
+    @Test
+    fun `rebase keeps the season and lets default weeks follow new data`() {
+        val old = SeasonInfo(2026, 2)
+        val catalog = Catalog(persistentListOf(SeasonInfo(2025, 22), SeasonInfo(2026, 3)), persistentMapOf())
+        val r = GridRequest(old, old.defaultWeeks, StatPack.OPPORTUNITY)
+
+        assertEquals(WeekRange(1, 3), GridViewModel.rebase(r, catalog).weeks)
+        val custom = r.copy(weeks = WeekRange(2, 2))
+        assertEquals(WeekRange(2, 2), GridViewModel.rebase(custom, catalog).weeks)
+        assertEquals(SeasonInfo(2026, 3), GridViewModel.rebase(custom, catalog).season)
+    }
+
+    @Test
+    fun `rebase moves to the latest season when the old one was dropped`() {
+        val gone = SeasonInfo(2023, 22)
+        val catalog = Catalog(persistentListOf(SeasonInfo(2025, 22), SeasonInfo(2026, 3)), persistentMapOf())
+        val rebased = GridViewModel.rebase(GridRequest(gone, gone.defaultWeeks, StatPack.OPPORTUNITY), catalog)
+
+        assertEquals(SeasonInfo(2026, 3), rebased.season)
+        assertEquals(WeekRange(1, 3), rebased.weeks)
     }
 }
 

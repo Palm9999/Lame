@@ -36,9 +36,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.mapLatest
@@ -124,7 +126,7 @@ class GridViewModel(
 
     private sealed interface CatalogLoad {
         data object Loading : CatalogLoad
-        data class Loaded(val catalog: Catalog) : CatalogLoad
+        data class Loaded(val catalog: Catalog, val version: Long) : CatalogLoad
         data class Failed(val message: String) : CatalogLoad
     }
 
@@ -212,23 +214,32 @@ class GridViewModel(
 
     init {
         viewModelScope.launch {
-            val c = try {
-                repository.catalog()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                catalogLoad.value = CatalogLoad.Failed("Couldn't open the stats database: ${e.message}")
-                return@launch
+            repository.dataVersion.collectLatest { version ->
+                val c = try {
+                    repository.catalog()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    catalogLoad.value = CatalogLoad.Failed("Couldn't open the stats database: ${e.message}")
+                    return@collectLatest
+                }
+                catalogLoad.value = CatalogLoad.Loaded(c, version)
+                val current = request.value
+                request.value = if (current != null) {
+                    rebase(current, c)
+                } else {
+                    GridRequest(c.latest, c.latest.defaultWeeks, StatPack.OPPORTUNITY, scoring = scoring.active.first())
+                }
             }
-            catalogLoad.value = CatalogLoad.Loaded(c)
-            request.value = GridRequest(c.latest, c.latest.defaultWeeks, StatPack.OPPORTUNITY, scoring = scoring.active.first())
         }
         viewModelScope.launch {
-            request.filterNotNull()
+            // Pairs each request with the catalog it runs against, so a new
+            // data version re-runs the page even when the request is unchanged.
+            combine(request.filterNotNull(), catalogLoad.filterIsInstance<CatalogLoad.Loaded>(), ::Pair)
                 .debounce(debounceMillis)
-                .mapLatest { r ->
+                .mapLatest { (r, load) ->
                     try {
-                        lastPage.value = repository.grid(r, checkNotNull(catalog))
+                        lastPage.value = repository.grid(r, load.catalog)
                         pageError.value = null
                     } catch (e: CancellationException) {
                         throw e
@@ -394,6 +405,18 @@ class GridViewModel(
             is GridEvent.FiltersApplied -> r.copy(filters = event.filters)
             is GridEvent.FilterDraftChanged -> r
             GridEvent.FilterSheetClosed -> r
+        }
+
+        /**
+         * Carries [r] over to a reloaded [catalog]. The same season is kept if
+         * it still exists, and default weeks follow its new last week. If the
+         * season is gone (deselected in Settings), the latest season is used.
+         */
+        internal fun rebase(r: GridRequest, catalog: Catalog): GridRequest {
+            val season = catalog.seasons.firstOrNull { it.season == r.season.season }
+                ?: return r.copy(season = catalog.latest, weeks = catalog.latest.defaultWeeks)
+            val weeks = if (r.weeks == r.season.defaultWeeks) season.defaultWeeks else r.weeks
+            return r.copy(season = season, weeks = weeks)
         }
 
         fun factory(repository: StatsRepository, scoring: ScoringRepository, tray: CompareTrayRepository): ViewModelProvider.Factory =
