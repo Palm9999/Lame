@@ -23,9 +23,28 @@ internal class PlayerContext(
     val week: Int,
     /** The player's games before this week, oldest first. */
     val history: List<PlayerGame>,
-    /** Last season shouldn't count: a new team, a new head coach, or (pass catchers) a new starting QB. */
+    /** Last season's share isn't this season's target: a new team, a new head coach, or (pass catchers) a new starting QB. */
     val regimeBreak: Boolean,
 )
+
+/** A player's expected shares of his team's volume. [pass] is nonzero only for the expected starting QB, [target] only for non-QBs. */
+internal data class Shares(val pass: Double, val target: Double, val carry: Double)
+
+/**
+ * Scales one team's shares so its target shares sum to one and its carry
+ * shares sum to one: the players projected for a team split exactly its
+ * volume. Pass shares are left alone, because one starter takes them.
+ */
+internal fun normalizeShares(shares: Map<String, Shares>): Map<String, Shares> {
+    val targets = shares.values.sumOf { it.target }
+    val carries = shares.values.sumOf { it.carry }
+    return shares.mapValues { (_, s) ->
+        s.copy(
+            target = if (targets > 0.0) s.target / targets else 0.0,
+            carry = if (carries > 0.0) s.carry / carries else 0.0,
+        )
+    }
+}
 
 /**
  * Layers 1-4 of the spec's model: team volume times the player's share,
@@ -37,11 +56,27 @@ internal class BaselineModel(
     private val teamGames: Map<Triple<String, Int, Int>, TeamGame>,
     private val expectedThrough: Map<Int, Int>,
 ) {
-    fun project(ctx: PlayerContext, rates: Rates, volume: TeamVolume): Map<String, Double> {
+    /** A lone player's projection, as a starter, with no team normalization. */
+    fun project(ctx: PlayerContext, rates: Rates, volume: TeamVolume): Map<String, Double> =
+        project(ctx, rates, volume, shares(ctx, rates, starter = true))
+
+    /** Layer 2's raw shares, before [normalizeShares]. [starter]: whether this QB is his team's expected starter. */
+    fun shares(ctx: PlayerContext, rates: Rates, starter: Boolean): Shares {
+        val carry = share(ctx, rates.carryShare * K.NEWCOMER_SHARE_FACTOR, { it["carries"] }, { it.carries })
+        if (ctx.position != "QB") {
+            val target = share(ctx, rates.targetShare * K.NEWCOMER_SHARE_FACTOR, { it["targets"] }, { it.targets })
+            return Shares(pass = 0.0, target = target, carry = carry)
+        }
+        // A starter is shrunk toward a starter's share, never toward his own backup history.
+        val pass = if (starter) share(ctx, K.STARTER_PASS_SHARE, { it["attempts"] }, { it.passAttempts }, usePrior = false) else 0.0
+        return Shares(pass = pass, target = 0.0, carry = carry)
+    }
+
+    fun project(ctx: PlayerContext, rates: Rates, volume: TeamVolume, shares: Shares): Map<String, Double> {
         val h = ctx.history
         val out = LinkedHashMap<String, Double>()
 
-        val carries = volume.carries * share(ctx, rates.carryShare, { it["carries"] }, { it.carries })
+        val carries = volume.carries * shares.carry
         val rushTds = carries * tdRate(h, "x_rushing_tds", "carries", rates.xRushingTdPerCarry)
         out["carries"] = carries
         out["rushing_yards"] = carries * efficiency(h, "rushing_yards", "carries", rates.yardsPerCarry)
@@ -54,7 +89,7 @@ internal class BaselineModel(
         var receptions = 0.0
         var attempts = 0.0
         if (ctx.position == "QB") {
-            attempts = volume.passAttempts * share(ctx, rates.passShare, { it["attempts"] }, { it.passAttempts })
+            attempts = volume.passAttempts * shares.pass
             val completions = attempts * efficiency(h, "completions", "attempts", rates.completionRate)
             val passTds = attempts * tdRate(h, "x_passing_tds", "attempts", rates.xPassingTdPerAttempt)
             out["attempts"] = attempts
@@ -68,7 +103,7 @@ internal class BaselineModel(
             out["passing_first_downs"] = completions * rates.passFirstDownsPerCompletion
             out["passing_2pt"] = attempts * rates.pass2ptPerAttempt
         } else {
-            val targets = volume.targets * share(ctx, rates.targetShare, { it["targets"] }, { it.targets })
+            val targets = volume.targets * shares.target
             receptions = targets * efficiency(h, "receptions", "targets", rates.catchRate)
             val recTds = targets * tdRate(h, "x_receiving_tds", "targets", rates.xReceivingTdPerTarget)
             out["targets"] = targets
@@ -85,20 +120,24 @@ internal class BaselineModel(
     }
 
     /**
-     * Layer 2: this season's recency-weighted share, shrunk toward the
-     * position's, blended with last season's final share early in the season
-     * unless the regime broke.
+     * Layer 2: this season's recency-weighted share, shrunk (k = 5 games)
+     * toward the player's own last-season share, or toward [fallback] when
+     * he has none, his regime broke, or [usePrior] is false.
      */
-    internal fun share(ctx: PlayerContext, baseline: Double, part: (PlayerGame) -> Double, whole: (TeamGame) -> Double): Double {
+    internal fun share(
+        ctx: PlayerContext,
+        fallback: Double,
+        part: (PlayerGame) -> Double,
+        whole: (TeamGame) -> Double,
+        usePrior: Boolean = true,
+    ): Double {
         fun series(games: List<PlayerGame>): List<Double> = games.mapNotNull { g ->
             val team = whole(teamGames.getValue(Triple(g.team, g.season, g.week)))
             if (team > 0.0) part(g) / team else null
         }
         val current = series(ctx.history.filter { it.season == ctx.season })
-        val shrunk = shrink(ewma(current, K.SHARE_HALF_LIFE), current.size.toDouble(), baseline, K.SHARE_K_GAMES)
-        val prior = if (ctx.regimeBreak) null else ewma(series(ctx.history.filter { it.season == ctx.season - 1 }), K.SHARE_HALF_LIFE)
-        val w = if (prior == null) 0.0 else carryoverWeight(ctx.week)
-        return w * (prior ?: 0.0) + (1 - w) * shrunk
+        val prior = if (!usePrior || ctx.regimeBreak) null else ewma(series(ctx.history.filter { it.season == ctx.season - 1 }), K.SHARE_HALF_LIFE)
+        return shrink(ewma(current, K.SHARE_HALF_LIFE), current.size.toDouble(), prior ?: fallback, K.SHARE_K_GAMES)
     }
 
     /** Layer 3: a rate over every earlier game (half-life 10), shrunk toward the position's with k = 15 games. */

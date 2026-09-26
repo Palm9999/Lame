@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 1
+public const val FORECAST_VERSION: Int = 2
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -19,8 +19,12 @@ internal object K {
     // Layer 2, player share (shrinkage.py HALF_LIVES and SHRINKAGE_K; k in games).
     const val SHARE_HALF_LIFE = 4.5
     const val SHARE_K_GAMES = 5.0
-    const val CARRYOVER_START = 0.55
-    const val CARRYOVER_LAST_WEEK = 6
+    // Layer 2 amendment (spec, 2026-09-26): shrink toward the player's own last season; newcomers
+    // toward half the position's average share; the starting QB toward a starter's share. Only
+    // players who played for their team in one of its last ACTIVE_WINDOW games are projected.
+    const val NEWCOMER_SHARE_FACTOR = 0.5
+    const val STARTER_PASS_SHARE = 0.97
+    const val ACTIVE_WINDOW = 2
 
     // Layer 3, efficiency (shrinkage.py: half-life 10, catch_rate k = 15 games, int_rate k = 150 attempts).
     const val EFFICIENCY_HALF_LIFE = 10.0

@@ -25,13 +25,6 @@ internal fun ewmaRatio(numerators: List<Double>, denominators: List<Double>, hal
 internal fun shrink(observed: Double?, n: Double, baseline: Double, k: Double): Double =
     if (observed == null || n <= 0.0) baseline else (n * observed + k * baseline) / (n + k)
 
-/** Last season's weight entering [week]: 0.55 in week 1, falling linearly to 0 by week 6. */
-internal fun carryoverWeight(week: Int): Double {
-    if (week >= K.CARRYOVER_LAST_WEEK) return 0.0
-    val span = (K.CARRYOVER_LAST_WEEK - 1).toDouble()
-    return K.CARRYOVER_START * (K.CARRYOVER_LAST_WEEK - maxOf(week, 1)) / span
-}
-
 /** `sigma = a * mean^0.75`, with `a` set so the CV at a mean of 10 is [cv]; returned as a variance. */
 internal fun varianceFor(mean: Double, cv: Double): Double {
     if (mean <= 0.0) return 0.0

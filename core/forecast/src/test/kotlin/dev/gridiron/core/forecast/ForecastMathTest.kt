@@ -32,14 +32,6 @@ class ForecastMathTest {
     }
 
     @Test
-    fun `carryover starts at 0_55 in week 1 and is gone by week 6`() {
-        assertEquals(0.55, carryoverWeight(1), 1e-12)
-        assertEquals(0.33, carryoverWeight(3), 1e-12)
-        assertEquals(0.0, carryoverWeight(6), 1e-12)
-        assertEquals(0.0, carryoverWeight(12), 1e-12)
-    }
-
-    @Test
     fun `variance is calibrated so the CV at a mean of 10 is the position's`() {
         assertEquals(49.0, varianceFor(10.0, 0.7), 1e-9)
         assertEquals(0.0, varianceFor(0.0, 0.7))

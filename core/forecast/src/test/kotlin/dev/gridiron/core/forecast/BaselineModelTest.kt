@@ -32,29 +32,30 @@ class BaselineModelTest {
 
     private fun model(expectedThrough: Map<Int, Int> = emptyMap()) = BaselineModel(teamGames, expectedThrough)
 
-    private fun targetShare(ctx: PlayerContext): Double = model().share(ctx, rates.targetShare, { it["targets"] }, { it.targets })
+    private fun targetShare(ctx: PlayerContext): Double =
+        model().share(ctx, rates.targetShare * 0.5, { it["targets"] }, { it.targets })
 
     @Test
-    fun `two games at a 30 percent share are shrunk toward the position's 10`() {
+    fun `a newcomer's two games at 30 percent are shrunk toward half the position's 10`() {
         val history = listOf(game(2025, 1, "targets" to 9.0), game(2025, 2, "targets" to 9.0))
         val ctx = PlayerContext("WR", 2025, 3, history, regimeBreak = false)
 
-        assertEquals(1.1 / 7, targetShare(ctx), 1e-12) // (2 x 0.3 + 5 x 0.1) / (2 + 5)
-        assertEquals(30 * 1.1 / 7, model().project(ctx, rates, volume).getValue("targets"), 1e-12)
+        assertEquals(0.85 / 7, targetShare(ctx), 1e-12) // (2 x 0.3 + 5 x 0.05) / (2 + 5)
+        assertEquals(30 * 0.85 / 7, model().project(ctx, rates, volume).getValue("targets"), 1e-12)
     }
 
     @Test
-    fun `last season carries 0_44 of the weight in week 2 unless the regime broke`() {
+    fun `this season is shrunk toward the player's own last season, unless the regime broke`() {
         val history = listOf(
             game(2024, 16, "targets" to 7.5),
             game(2024, 17, "targets" to 7.5),
             game(2025, 1, "targets" to 9.0),
         )
-        val shrunk = (0.3 + 5 * 0.1) / 6
 
-        assertEquals(0.44 * 0.25 + 0.56 * shrunk, targetShare(PlayerContext("WR", 2025, 2, history, regimeBreak = false)), 1e-12)
-        assertEquals(shrunk, targetShare(PlayerContext("WR", 2025, 2, history, regimeBreak = true)), 1e-12)
-        assertEquals(shrunk, targetShare(PlayerContext("WR", 2025, 6, history, regimeBreak = false)), 1e-12)
+        assertEquals((0.3 + 5 * 0.25) / 6, targetShare(PlayerContext("WR", 2025, 2, history, regimeBreak = false)), 1e-12)
+        assertEquals((0.3 + 5 * 0.05) / 6, targetShare(PlayerContext("WR", 2025, 2, history, regimeBreak = true)), 1e-12)
+        // No fade by week number: last season keeps its pseudo-games until this season's games outweigh them.
+        assertEquals((0.3 + 5 * 0.25) / 6, targetShare(PlayerContext("WR", 2025, 12, history, regimeBreak = false)), 1e-12)
     }
 
     @Test
@@ -72,13 +73,36 @@ class BaselineModelTest {
     }
 
     @Test
-    fun `a player with no history gets the position's rates`() {
+    fun `a player with no history gets a newcomer's share and the position's rates`() {
         val out = model().project(PlayerContext("WR", 2025, 3, emptyList(), regimeBreak = false), rates, volume)
 
-        assertEquals(3.0, out.getValue("targets"), 1e-12)
-        assertEquals(1.8, out.getValue("receptions"), 1e-12)
-        assertEquals(24.0, out.getValue("receiving_yards"), 1e-12)
-        assertEquals(0.25, out.getValue("carries"), 1e-12)
+        assertEquals(1.5, out.getValue("targets"), 1e-12) // 30 x (0.1 x 0.5)
+        assertEquals(0.9, out.getValue("receptions"), 1e-12)
+        assertEquals(12.0, out.getValue("receiving_yards"), 1e-12)
+        assertEquals(0.125, out.getValue("carries"), 1e-12) // 25 x (0.01 x 0.5)
+    }
+
+    @Test
+    fun `only the starting QB passes, shrunk toward a starter's share rather than his backup history`() {
+        // One relief appearance last season: 3.2 of the team's 32 attempts, a 0.1 share.
+        val ctx = PlayerContext("QB", 2025, 1, listOf(game(2024, 5, "attempts" to 3.2)), regimeBreak = false)
+        val m = model()
+
+        assertEquals(0.97, m.shares(ctx, rates, starter = true).pass, 1e-12)
+        assertEquals(0.0, m.shares(ctx, rates, starter = false).pass)
+        assertEquals(0.0, m.project(ctx, rates, volume, m.shares(ctx, rates, starter = false)).getValue("attempts"))
+    }
+
+    @Test
+    fun `a team's target and carry shares are scaled to sum to one`() {
+        val n = normalizeShares(
+            mapOf("a" to Shares(0.0, 0.6, 0.1), "b" to Shares(0.0, 0.6, 0.3), "q" to Shares(0.97, 0.0, 0.0)),
+        )
+        assertEquals(0.5, n.getValue("a").target, 1e-12)
+        assertEquals(0.25, n.getValue("a").carry, 1e-12)
+        assertEquals(0.75, n.getValue("b").carry, 1e-12)
+        assertEquals(0.97, n.getValue("q").pass, 1e-12)
+        assertEquals(Shares(0.0, 0.0, 0.0), normalizeShares(mapOf("x" to Shares(0.0, 0.0, 0.0))).getValue("x"))
     }
 
     @Test
