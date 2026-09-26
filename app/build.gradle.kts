@@ -47,6 +47,7 @@ dependencies {
     implementation(projects.core.projections)
     implementation(projects.core.datastore)
     implementation(projects.core.database)
+    implementation(projects.core.ingest)
     implementation(projects.core.designsystem)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)

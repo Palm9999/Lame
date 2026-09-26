@@ -11,6 +11,9 @@ import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.database.DeferredQueryExecutor
 import dev.gridiron.core.database.SqliteQueryExecutor
 import dev.gridiron.core.datastore.UserPrefsStore
+import dev.gridiron.core.ingest.HttpFetcher
+import dev.gridiron.core.ingest.benchmarkSeason
+import dev.gridiron.core.ingest.currentSeason
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +42,14 @@ class GridironApplication : Application() {
             AccuracyRepository(executor),
             TeamsRepository(executor),
             refresh = { StatsDbInstaller(this).refresh() },
+            benchmark = { benchmark() },
         )
+    }
+
+    /** Last complete season: the worst case for a single season's build. */
+    private suspend fun benchmark(): Result<String> = runCatching {
+        val r = benchmarkSeason(HttpFetcher(), currentSeason() - 1, File(cacheDir, "benchmark"))
+        "${r.season} play-by-play: ${"%.1f".format(r.bytes / 1e6)} MB downloaded in ${r.downloadMs / 1000.0} s, " +
+            "${r.plays} plays crunched into ${r.playerWeeks} player-weeks in ${r.crunchMs / 1000.0} s."
     }
 }

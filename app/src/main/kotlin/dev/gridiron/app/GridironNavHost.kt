@@ -2,8 +2,15 @@ package dev.gridiron.app
 
 import android.content.Intent
 import android.widget.Toast
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.launch
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
@@ -36,6 +43,8 @@ data class Deps(
     val teams: TeamsRepository,
     /** Downloads the latest stats; null in tests. */
     val refresh: (suspend () -> Result<String>)? = null,
+    /** Times downloading and crunching last season's play-by-play on this phone; null in tests. */
+    val benchmark: (suspend () -> Result<String>)? = null,
 )
 
 /**
@@ -69,6 +78,21 @@ fun GridironNavHost(deps: Deps) {
             }
         }
     }
+    var timing by remember { mutableStateOf<String?>(null) }
+    val timeBuild: () -> Unit = {
+        deps.benchmark?.let { run ->
+            Toast.makeText(context, "Timing a stats build… about a minute", Toast.LENGTH_SHORT).show()
+            scope.launch { timing = run().getOrElse { "Timing failed: ${it.message}" } }
+        }
+    }
+    timing?.let { text ->
+        AlertDialog(
+            onDismissRequest = { timing = null },
+            confirmButton = { TextButton(onClick = { timing = null }) { Text("OK") } },
+            title = { Text("Stats build timing") },
+            text = { Text(text) },
+        )
+    }
     NavDisplay(
         backStack = backStack,
         onBack = back,
@@ -87,6 +111,7 @@ fun GridironNavHost(deps: Deps) {
                         "Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) },
                         "Team defense" to { s: Int -> backStack.push(DefenseKey(s)) },
                         "Refresh stats" to { _: Int -> refresh() },
+                        "Time a stats build" to { _: Int -> timeBuild() },
                     ),
                 )
             }
