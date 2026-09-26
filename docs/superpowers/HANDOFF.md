@@ -5,7 +5,7 @@
 - Every session starts by reading this file, runs the next 4 tasks from **Next step**, then updates this file (tick each task, record rulings), commits, pushes, and stops.
 - Keep replies short. Ask a question only when blocked, one line at a time.
 
-**Branch:** `claude/dreamy-euler-phbdq1`. It restarted from the merged live-data-refresh work (PR #3, merge 9dabb9a). Draft PR #4 (https://github.com/Palm9999/Lame/pull/4) carries this project. Session A's code (Tasks 1–4) is on it.
+**Branch:** `claude/dreamy-euler-phbdq1`. It restarted from the merged live-data-refresh work (PR #3, merge 9dabb9a). Draft PR #4 (https://github.com/Palm9999/Lame/pull/4) carries this project. Sub-project 1's code (Tasks 1–12 plus review fixes) is on it.
 
 ## Where things stand
 
@@ -21,31 +21,39 @@
   - Session A = Tasks 1–4, Session B = Tasks 5–8, Session C = Tasks 9–12.
   - Rulings made while planning are at the end of the plan ("Plan self-review").
 - [x] **Plan approved; execution method: native** (2026-09-26). The implementer does each task itself with the `executing-plans` skill. One fresh reviewer on the most capable model checks the whole branch after Task 12.
+- [x] **Sub-project 1 built** (Sessions A–C, Tasks 1–12) and reviewed. The final whole-branch review found 1 Critical, 3 Important and about 11 Minor issues.
+  - Two of the Important issues are fixed (commit 44d16f0).
+  - The Critical issue and the third Important one both come from layer 2's design, so they need a spec amendment rather than a code fix.
+- [x] **Layer-2 fix designed** (user's choice: next session). It's the spec's "Amendment: layer 2", planned in `docs/superpowers/plans/2026-09-26-projection-share-fix.md` (2 tasks, full code).
 
-## Next step: Session C (Tasks 9–12)
+## Next step: the layer-2 fix (2 tasks)
 
-1. Read the plan's header: Global Constraints, Review Focus and File Structure. Then read Tasks 9–12. Don't read the rest.
-2. Invoke `executing-plans` and run Tasks 9–12 in order.
-   - Follow each task's steps exactly: write the failing test, watch it fail, implement, watch it pass, commit.
-   - Code blocks are written verbatim; fix only what fails to compile or test. Record every deviation as a ruling (below).
-   - The `executing-plans` ledger (`.superpowers/sdd/2026-09-26-projection-engine/progress.md`) is git-ignored. If it's gone, start a fresh one; Tasks 1–8 are done (see below and `git log`).
-3. At the end: `./gradlew :core:forecast:test :core:ingest:test :core:projections:test :core:data:test :app:testDebugUnitTest`, ETL pytest (Task 12 deletes Python projection code), and `GRIDIRON_STATS_DB=<Kotlin-built 2024–2026 DB> ./gradlew test` (run `:core:statquery:test` alone if the timing test flakes).
-4. After Task 12, run the plan's final whole-branch review: one fresh reviewer on the most capable model (see `executing-plans`, "Final Review"), then one fix pass.
-5. Push. Update **Execution progress** below, commit and push this file, then stop.
+1. Read `docs/superpowers/plans/2026-09-26-projection-share-fix.md` in full (it's short), and the spec's "Amendment: layer 2" section.
+2. Invoke `executing-plans` (native) and run Tasks 1–2.
+   - Follow each task's steps: write the failing test, watch it fail, implement, watch it pass, commit.
+   - Code blocks are written verbatim; fix only what fails to compile or test. Record every deviation as a ruling below.
+3. Task 2 Step 6 needs network to build 2024–2026 and prove the fix on real data. Record the numbers it asks for.
+4. Update this file and push. Then check PR #4's CI; the GitHub MCP tools are deferred, so load them with ToolSearch.
+   - If CI is green and the PR merges cleanly, tell the user sub-project 1 is ready to merge.
+   - Next after that: plan sub-project 2 (accuracy page, spec §4) with writing-plans, in a fresh session.
 
 **Things to know:**
-- **Parity needs network** (`--force` on the Python build avoids a stale `~/.cache`). It worked in Session A.
-- **Schema is now v7** (`INGEST_VERSION` 2, done in Task 2). The first phone refresh afterwards rebuilds every season. That's expected.
-- **A timing test flakes under full parallel builds.** `:core:statquery`'s "scoring a full season … is fast" test fails under `./gradlew build` in this 4-CPU container. It's a known CPU-contention flake (see the previous project's rulings); run that module alone to confirm it's green.
-- **Warnings are errors.** Explicit API mode is on in JVM modules, and any unused parameter, variable or import fails the build.
-- **Test runners differ.** JVM modules use JUnit Jupiter; Android modules use JUnit 4 and Robolectric.
-- **Tracking.** The `.superpowers/` ledger is git-ignored and doesn't survive the container. Rulings go in this file.
+- **The Python projection code is still in `etl/`.** Plan Task 12 Step 4 (delete `projections.py`, `shrinkage.py`, `odds.py`, 14 projection-only tests, and the `build.py`/`schema.py`/`requirements.txt` references) was blocked: the session's permission classifier refused the deletion as irreversible. It's the user's call.
+  - Nothing breaks either way.
+  - The spec and plan say it's deleted, so either run that step with the user's OK or correct those two docs.
+- **The accuracy gap is expected until the fix.** The reviewer's quick 2025 backtest had the model's error larger than a season-to-date average's at every position (QB 6.99 vs 6.62, RB 5.52 vs 5.23, WR 5.13 vs 4.99, TE 4.86 vs 4.85). The fix targets the causes; the real gate is sub-project 2's.
+- **Deferred Minor findings** (the user decides):
+  - Player page scoring runs on the main thread.
+  - The list's scoring time was never measured.
+  - Screens don't reload after a refresh swap until reopened.
+- **A timing test flakes under full parallel builds.** `:core:statquery`'s "scoring a full season … is fast" test fails under a full parallel `./gradlew build`. It's a known CPU-contention flake: run that module alone to confirm green.
+- **Warnings are errors**, and explicit API mode is on in JVM modules.
+- **Tracking.** The `.superpowers/` ledger doesn't survive the container. Rulings go in this file.
 
 **PR #4 watch:**
-- This session is subscribed to PR #4's activity.
-- A self check-in is scheduled for 2026-09-26 22:32 UTC (`trig_01LbtqsUqJrVwC6d3Bq3H6Jp`). While the PR only waits on the user, re-arm it every 3–6 hours and say nothing if nothing changed.
-- Once code lands, CI failures on PR #4 are ours to fix: follow the drive-to-green rules.
-- Session B's session also has a check-in at 2026-09-26 19:06 UTC (`trig_01RHSSQWFUZLxvHy3Yn8dFgw`).
+- This session is subscribed.
+- Self check-in: `trig_01LbtqsUqJrVwC6d3Bq3H6Jp` (2026-09-26 22:32 UTC). Re-arm every 3–6 hours while the PR only waits on the user; say nothing if nothing changed.
+- CI failures on PR #4 are ours to fix.
 
 ## Projection engine: execution progress
 
@@ -75,6 +83,27 @@
 - [x] Task 8: Run the forecast at the end of every refresh (commit 9557b7f; `./gradlew :app:testDebugUnitTest :core:ingest:test :core:forecast:test` → 38 + 124 + 46 pass).
   - No rulings. Code written verbatim; watched failing first (unresolved `report.forecast`, `IngestProgress.Projecting`; then the non-exhaustive `when` in `progressText`).
   - Real data: `./gradlew :core:ingest:buildStatsDb -Pseasons="2024 2025"` ends with `projections: ok` in 14 s wall time. The database has 280,614 `final` rows over 35 weeks (2024 weeks 2–18, 2025 weeks 1–18), `forecast_status` ok and `forecast_version` 1. There's no upcoming week or rest of season because both seasons are complete. A 2024–2026 build also reports `projections: ok`.
+
+**Session C** (2026-09-26). After Task 12: `./gradlew test` passes 565/565 with `:core:statquery:test` run alone (the full parallel run fails only the known timing flake). ETL pytest passes 119/119. On a real 2024–2026 build: `projections: ok`, `ProjectionsContractTest` and `ForecastTimingTest` pass, and `forecast: 38 weeks, 330175 rows in 2.0 s` on the JVM.
+
+- [x] Task 9: Real distribution families, the list and status queries, the active scoring profile (commit 73754f0). No rulings.
+- [x] Task 10: ☰ → Projections list (commit 016fa4b). No rulings.
+- [x] Task 11: The Player page "This week" card (commit 2f011b3). No rulings.
+- [x] Task 12: Real-data contract and timing tests, and docs (commit c54dddf).
+  - Ruling: Step 4 (retire the Python projection code) wasn't done. The permission classifier refused the deletion as irreversible. A grep confirmed that all 14 listed tests test only projection code. Cost if wrong: dead Python code stays until the user runs Step 4.
+  - Ruling: CLAUDE.md's `:feature:projections` line and its Data Flow Python ETL line were also updated (the brief didn't name them), because both had become false. Cost if wrong: none.
+
+**Final whole-branch review** (9dabb9a..c54dddf; Opus). Verdict: "with fixes". It found 1 Critical, 3 Important and 11 Minor issues. It agreed with every executor ruling and confirmed the strengths below:
+- walk-forward holds;
+- a forecast failure never loses the stats;
+- schema v7 degrades gracefully;
+- there are no NaN or infinite values in real data.
+
+- **Fixed** (commit 44d16f0, each with a test that failed first):
+  - A team on bye in the upcoming week lost its players' rest of season. The Player card now says "Bye this week" and keeps rest of season. Tests: `ForecastEngineTest` "a team on bye in the upcoming week keeps its rest of season", `ProjectionCardTest`, `ThisWeekCardTest`.
+  - A `games.csv` download error failed the whole refresh. It's now a warning, and the build falls back to the kept copy. Tests: `IngestPipelineTest` × 2.
+- **Critical, not fixed here:** backups are projected like starters, team totals are about doubled, and stars are pulled down early. This is layer 2's design. The user chose to fix it in the next session. Spec amendment written; plan `2026-09-26-projection-share-fix.md`; CLAUDE.md Known Gaps updated.
+- **Important, not fixed here:** the model loses to the season-to-date average (numbers above). It's largely the same cause, and sub-project 2's gate owns it.
 
 Record each task as: `- [x] Task N: <name> (commit <sha>; <test command> → <result>)`, then `Ruling: <what> — <why> — <cost if wrong>` for any deviation.
 

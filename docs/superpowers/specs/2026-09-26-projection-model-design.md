@@ -106,9 +106,9 @@ The projected components are every scoring input the app reads:
 Seven layers:
 
 1. **Team volume.** EWMA of team pass attempts and carries per game, half-life 4 games.
-2. **Player share.** EWMA of target share, carry share, and (QB) share of team dropbacks, with half-lives from the existing constants: `snap_share` 2.5, `target_share` 4.5, `carry_share` 4.5. Each is then shrunk toward the positional baseline with James-Stein `w = n/(n+k)`, using `target_share` k=5 and `carry_share` k=5.
-   - **Carryover.** Last season's final EWMA enters week 1 with weight 0.55, decaying linearly to 0 by week 6.
-   - **Regime break.** A new team, a new head coach, or (for pass catchers) a new primary starting QB zeroes the carryover. All three are detectable from `player_week_stat.team` and the `game` table's coach and QB columns.
+2. **Player share** *(amended 2026-09-26 after the final review; see "Amendment: layer 2" below)*. EWMA of target share, carry share and (the starting QB only) share of team pass attempts, half-life 4.5 games. Each is shrunk with James-Stein `w = n/(n+k)`, k = 5 games. The target is the player's own last-season share, or a newcomer's share when he has none.
+   - **Regime break.** A new team, a new head coach, or (for pass catchers) a new primary starting QB means last season's share isn't used as the target. All three are detectable from `player_week_stat.team` and the `game` table's coach and QB columns.
+   - **Who is on the field.** Only the expected starting QB gets passing volume, and only active players get a share. Each team's target and carry shares are scaled to sum to one.
 3. **Efficiency.** Catch rate k=15, yards per target, yards per carry, completion rate, yards per attempt, and interception rate k=150. Each is shrunk toward the positional baseline. Efficiency half-life is 10.
 4. **Touchdowns.** The rate comes from ffopportunity's expected TDs (`x_*_tds` per opportunity) rather than actual TDs, shrunk with k=200. 2-pt, 40+ and 50+ TD rates are league-average rates per opportunity.
 5. **Matchup.** A ridge regression `y = μ + offense + defense + home` per outcome: yards per attempt, yards per carry, pass TD rate and rush TD rate.
@@ -201,6 +201,35 @@ Presets get the common defaults, and the scoring editor shows the new rules. `sc
 - Empirical CV is 0.85.
 
 **Screens.** K and DST tabs in the Projections list, and Player page cards. The Grid is unchanged.
+
+## Amendment: layer 2 (2026-09-26, after the final review of sub-project 1)
+
+The final whole-branch review found layer 2's first design wrong on real data. The findings are from 2026 week 3 and a 2025 backtest.
+
+**What was wrong**
+- **Backups projected like starters.** A player's share came only from games he played, shrunk toward the average share of players who played. A backup with almost no history landed near a starter's share: Buffalo's backup QB, with 3 pass attempts in two seasons, was projected for 27 attempts and 17 points.
+- **Team totals about double.** Summed per team, the projections came to about 70 pass attempts, 55 targets and 50 carries, against real averages of 34, 30 and 27.
+- **Stars pulled down early.** Last season counted only through week 6, so a star's share was dragged toward the positional average. Ja'Marr Chase (11.6 targets per game in 2025) was projected for 8.7 targets in week 1 and 6.8 in week 3.
+- **Worse than a simple average.** The model's error was larger than a season-to-date average's at every position.
+
+**The amended layer 2**
+1. **Shrink toward the player, not the position.** Shrink this season's recency-weighted share toward the player's own last-season share, with k = 5 games.
+   - A regime break, or no last season, uses a newcomer share instead: half the positional average share (`NEWCOMER_SHARE_FACTOR` = 0.5).
+   - The separate week 1–6 carryover blend is removed.
+2. **One passer per team.** Only the expected starting QB gets pass attempts. The starter is picked in this order:
+   - the QB nflverse lists for this week's game;
+   - else the most recent listed starter still on the team;
+   - else the team's QB with the most attempts in its latest game.
+
+   His pass share is shrunk toward a starter's share (`STARTER_PASS_SHARE` = 0.97), never toward his own backup history. Other QBs aren't projected.
+3. **Active players only.** A non-QB is projected for a team's week only if either:
+   - he played for that team in one of its last two games (`ACTIVE_WINDOW` = 2); or
+   - from the upcoming week on, nflverse lists him on the team and he hasn't played for it yet (a signing or trade).
+4. **Team totals are conserved.** Within each team's week, the projected players' target shares are scaled to sum to 1, and so are their carry shares (the starting QB's carries included). Team volume (layer 1) is therefore exactly what the players split.
+
+`FORECAST_VERSION` goes to 2, so the next refresh recomputes every season.
+
+**Acceptance.** A real-data contract test checks every team's projected week: at most one QB with more than 5 pass attempts, and team totals within a normal game's range. The accuracy gate itself (the model must beat the season-to-date average) stays with sub-project 2.
 
 ## Testing
 
