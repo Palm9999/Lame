@@ -31,7 +31,7 @@
 
 ## Next step
 
-**Execute Plan 1, Task 5: Upstream sources and an HTTP fetcher that asks "changed since?"** (`docs/superpowers/plans/2026-09-25-kotlin-ingest.md`), natively, with the `executing-plans` skill.
+**Execute Plan 1, Task 6: Early phone timing — "Time a stats build" menu item** (`docs/superpowers/plans/2026-09-25-kotlin-ingest.md`), natively, with the `executing-plans` skill.
 
 1. Follow the task's steps exactly: failing test, implementation, passing test, commit.
 2. Tick the task under **Execution progress** below.
@@ -51,7 +51,9 @@ Plan 2 depends on all of Plan 1. Start Plan 2 only after Plan 1's Task 12 (the p
   - No rulings. The brief's code blocks were written verbatim, and the tests were watched failing (unresolved `Play`) before the implementation went in.
 - [x] Task 4: Derived rates and the long fact shape (commit 8e7c954; `./gradlew :core:ingest:test` → 52/52 pass, 16 of them new).
   - No rulings. The brief's code blocks were written verbatim, and the tests were watched failing (unresolved `weeklyPlayerStats`, `toFacts`, `Fact`) before the implementation went in.
-- Tasks 5–12 not started.
+- [x] Task 5: Upstream sources and an HTTP fetcher that asks "changed since?" (commit c8423a7; `./gradlew :core:ingest:test` → 61/61 pass, 9 of them new).
+  - No rulings. The brief's code blocks were written verbatim, and the tests were watched failing (unresolved `Sources`, `Input`, `Validators`, `FetchResult`, `HttpFetcher`) before the implementation went in.
+- Tasks 6–12 not started.
 
 The executing-plans ledger lives in git-ignored `.superpowers/` and does not survive the container. Rulings are copied here so the final reviewer sees them.
 
