@@ -1,6 +1,6 @@
 # Session Handoff: Live Data Refresh
 
-**How the user wants to work:** one fresh session per plan-writing step and per task, with `/clear` after each. Every new session starts by reading this file, does the single **Next step** below, updates this file (tick the step, fill in the next one), commits, pushes, and stops.
+**How the user wants to work:** one fresh session per batch of **4 tasks** (changed 2026-09-26 from one task per session), with `/clear` after each. Every new session starts by reading this file, runs the next 4 tasks starting at **Next step** below, updates this file (tick each task, fill in the next one), commits, pushes, and stops.
 
 **Branch:** `claude/dreamy-euler-phbdq1`. It is based on `claude/relaxed-hypatia-73hhub`, which serves as the repo's main branch. PR #2 was merged.
 
@@ -31,11 +31,11 @@
 
 ## Next step
 
-**Execute Plan 1, Task 6: Early phone timing — "Time a stats build" menu item** (`docs/superpowers/plans/2026-09-25-kotlin-ingest.md`), natively, with the `executing-plans` skill.
+**Execute Plan 1, Task 10: Validation** (then Tasks 11 and 12, which finish Plan 1, then Plan 2 Task 1) (`docs/superpowers/plans/2026-09-25-kotlin-ingest.md`), natively, with the `executing-plans` skill.
 
-1. Follow the task's steps exactly: failing test, implementation, passing test, commit.
-2. Tick the task under **Execution progress** below.
-3. Set this section to the next task.
+1. For each of the next 4 tasks, follow the task's steps exactly: failing test, implementation, passing test, commit.
+2. Tick each task under **Execution progress** below.
+3. Set this section to the task after the batch.
 4. Commit, push, and stop.
 
 Plan 2 depends on all of Plan 1. Start Plan 2 only after Plan 1's Task 12 (the parity gate) is green.
@@ -53,7 +53,16 @@ Plan 2 depends on all of Plan 1. Start Plan 2 only after Plan 1's Task 12 (the p
   - No rulings. The brief's code blocks were written verbatim, and the tests were watched failing (unresolved `weeklyPlayerStats`, `toFacts`, `Fact`) before the implementation went in.
 - [x] Task 5: Upstream sources and an HTTP fetcher that asks "changed since?" (commit c8423a7; `./gradlew :core:ingest:test` → 61/61 pass, 9 of them new).
   - No rulings. The brief's code blocks were written verbatim, and the tests were watched failing (unresolved `Sources`, `Input`, `Validators`, `FetchResult`, `HttpFetcher`) before the implementation went in.
-- Tasks 6–12 not started.
+- [x] Task 6: Early phone timing — "Time a stats build" menu item (commit 74fef46; `./gradlew :core:ingest:test :app:testDebugUnitTest` → 64/64 ingest + 6/6 app pass; `:app:assembleRelease` BUILD SUCCESSFUL).
+  - No rulings. Code written verbatim; `BenchmarkTest` watched failing (unresolved `benchmarkSeason`, `currentSeason`) first.
+  - **Checkpoint (non-blocking), for the user:** once CI publishes the APK from this commit, install it, tap **☰ → Time a stats build**, and report the numbers. If crunch time exceeds about 60 s, record it here for the Plan 2 design. Not yet reported.
+- [x] Task 7: Snap share (commit 6f2925d; `./gradlew :core:ingest:test` → 69/69 pass, 5 new).
+  - No rulings. Code written verbatim; `SnapsTest` watched failing (unresolved `SnapRow`, `teamOffenseSnaps`, `attachSnapShare`, `readSnaps`) first.
+- [x] Task 8: Players, injury reports, expected points and team defense (commit 1de46f4; `./gradlew :core:ingest:test` → 75/75 pass, 6 new).
+  - No rulings. Code written verbatim; the four test classes watched failing (unresolved readers and `TeamDefenseAggregator`) first.
+- [x] Task 9: The database writer (commit 0de55c0; `./gradlew :core:ingest:test` → 80/80 pass, 5 new).
+  - No rulings. Code written verbatim; `StatsDbWriterTest` watched failing (unresolved `StatsDbWriter`, `readMeta`) first.
+- Tasks 10–12 not started.
 
 The executing-plans ledger lives in git-ignored `.superpowers/` and does not survive the container. Rulings are copied here so the final reviewer sees them.
 
