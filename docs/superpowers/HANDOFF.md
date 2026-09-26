@@ -38,9 +38,7 @@
    - Next after that: plan sub-project 2 (accuracy page, spec §4) with writing-plans, in a fresh session.
 
 **Things to know:**
-- **The Python projection code is still in `etl/`.** Plan Task 12 Step 4 (delete `projections.py`, `shrinkage.py`, `odds.py`, 14 projection-only tests, and the `build.py`/`schema.py`/`requirements.txt` references) was blocked: the session's permission classifier refused the deletion as irreversible. It's the user's call.
-  - Nothing breaks either way.
-  - The spec and plan say it's deleted, so either run that step with the user's OK or correct those two docs.
+- **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
 - **The accuracy gap is expected until the fix.** The reviewer's quick 2025 backtest had the model's error larger than a season-to-date average's at every position (QB 6.99 vs 6.62, RB 5.52 vs 5.23, WR 5.13 vs 4.99, TE 4.86 vs 4.85). The fix targets the causes; the real gate is sub-project 2's.
 - **Deferred Minor findings** (the user decides):
   - Player page scoring runs on the main thread.
@@ -90,7 +88,7 @@
 - [x] Task 10: ☰ → Projections list (commit 016fa4b). No rulings.
 - [x] Task 11: The Player page "This week" card (commit 2f011b3). No rulings.
 - [x] Task 12: Real-data contract and timing tests, and docs (commit c54dddf).
-  - Ruling: Step 4 (retire the Python projection code) wasn't done. The permission classifier refused the deletion as irreversible. A grep confirmed that all 14 listed tests test only projection code. Cost if wrong: dead Python code stays until the user runs Step 4.
+  - Ruling: Step 4 (retire the Python projection code) wasn't done. The permission classifier refused the deletion as irreversible. A grep confirmed that all 14 listed tests test only projection code. Cost if wrong: dead Python code stays until the user runs Step 4. (Done afterwards with the user's OK; see Things to know.)
   - Ruling: CLAUDE.md's `:feature:projections` line and its Data Flow Python ETL line were also updated (the brief didn't name them), because both had become false. Cost if wrong: none.
 
 **Final whole-branch review** (9dabb9a..c54dddf; Opus). Verdict: "with fixes". It found 1 Critical, 3 Important and 11 Minor issues. It agreed with every executor ruling and confirmed the strengths below:
