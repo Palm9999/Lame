@@ -38,6 +38,7 @@ public fun main(args: Array<String>) {
         report.warnings.forEach { println("WARNING $it") }
         report.skipped.forEach { (season, why) -> println("SKIPPED $season: $why") }
         println("built ${report.built}, ${report.facts} facts -> $target")
+        println("projections: ${report.forecast}")
     } finally {
         scratch.deleteRecursively()
     }

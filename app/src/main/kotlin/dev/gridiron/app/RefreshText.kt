@@ -25,6 +25,7 @@ internal fun progressText(p: IngestProgress): String = when (p) {
     }
     is IngestProgress.Crunching -> "Crunching ${p.season}…"
     IngestProgress.Validating -> "Checking the new stats…"
+    is IngestProgress.Projecting -> "Projecting ${p.season} week ${p.week}…"
 }
 
 private fun megabytes(bytes: Long, whole: Boolean): String =
@@ -51,6 +52,7 @@ internal fun summary(report: IngestReport, elapsedMs: Long): String = buildStrin
     append("Stats updated for ").append((report.built + report.reused).sorted().joinToString(", "))
     append(" in ").append(formatDuration(elapsedMs)).append('.')
     for ((season, why) in report.skipped.toSortedMap()) append(' ').append(season).append(" skipped: ").append(why).append('.')
+    if (!report.projectionsOk) append(" Projections unavailable: ").append(report.forecast).append('.')
 }
 
 internal fun formatDuration(ms: Long): String {

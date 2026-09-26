@@ -65,4 +65,18 @@ class RefreshTextTest {
         assertEquals("42 s", formatDuration(41_600))
         assertEquals("0 s", formatDuration(0))
     }
+
+    @Test
+    fun `projecting shows the season and week`() {
+        assertEquals("Projecting 2026 week 4…", progressText(IngestProgress.Projecting(2026, 4)))
+    }
+
+    @Test
+    fun `the summary says why projections are missing, and nothing when they're fine`() {
+        val ok = IngestReport(listOf(2026), emptyList(), emptyMap(), emptyList(), 1L)
+        val missing = ok.copy(forecast = "failed: disk I/O error")
+
+        assertEquals("Stats updated for 2026 in 5 s.", summary(ok, 5_000))
+        assertEquals("Stats updated for 2026 in 5 s. Projections unavailable: failed: disk I/O error.", summary(missing, 5_000))
+    }
 }

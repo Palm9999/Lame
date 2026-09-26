@@ -1,5 +1,7 @@
 package dev.gridiron.core.ingest
 
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
 import dev.gridiron.core.ingest.db.readMeta
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
@@ -334,5 +336,66 @@ class IngestPipelineTest {
 
         assertNotNull(fetcher.calls.single { it.first == Sources.url(Input.GAMES) }.second)
         assertEquals(listOf(listOf("1")), query(second, "SELECT COUNT(*) FROM game"))
+    }
+
+    @Test
+    fun `a build projects its seasons and records how`() = runTest {
+        servePlayers()
+        serveSeason(2024)
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+        val progress = mutableListOf<IngestProgress>()
+
+        val report = pipeline.build(listOf(2024, 2025), previous = null, out = out) { progress += it }
+
+        assertEquals("ok", report.forecast)
+        assertTrue(report.projectionsOk)
+        assertEquals("ok", readMeta(out)!!["forecast_status"])
+        assertTrue(IngestProgress.Projecting(2025, 1) in progress, "$progress")
+        // 2025 week 1 is projected from 2024's games; 2024 week 1 has nothing before it.
+        assertEquals(listOf(listOf("2025", "1")), query(out, "SELECT DISTINCT season, week FROM player_week_projection"))
+    }
+
+    @Test
+    fun `a forecast failure keeps the stats and says why`() = runTest {
+        servePlayers()
+        serveSeason(2024)
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2024, 2025), null, first)
+        // Break the table the next build copies 2024's projections from.
+        BundledSQLiteDriver().open(first.path).use { it.execSQL("DROP TABLE player_week_projection_factor") }
+
+        val second = File(dir, "second.db")
+        val report = pipeline.build(listOf(2024, 2025), first, second)
+
+        assertEquals(listOf(2024, 2025), report.reused)
+        assertTrue(report.forecast.startsWith("failed:"), report.forecast)
+        assertFalse(report.projectionsOk)
+        assertTrue(readMeta(second)!!.getValue("forecast_status").startsWith("failed:"))
+        assertEquals(listOf(listOf("0")), query(second, "SELECT COUNT(*) FROM player_week_projection"))
+        assertEquals(facts(first), facts(second))
+    }
+
+    @Test
+    fun `a build without a schedule has stats but no projections`() = runTest {
+        servePlayers()
+        fetcher.remove(Sources.url(Input.GAMES))
+        serveSeason(2025)
+
+        val report = pipeline.build(listOf(2025), null, File(dir, "stats.db"))
+
+        assertEquals("no schedule", report.forecast)
+    }
+
+    @Test
+    fun `a single season with nothing before it has no projections yet, and still builds`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+
+        val report = pipeline.build(listOf(2025), null, File(dir, "stats.db"))
+
+        assertEquals(listOf(2025), report.built)
+        assertEquals("no games to project from yet", report.forecast)
     }
 }
