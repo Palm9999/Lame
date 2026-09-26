@@ -45,6 +45,7 @@ import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.feature.compare.CompareRoute
 import dev.gridiron.feature.players.GridRoute
 import dev.gridiron.feature.projections.AccuracyRoute
+import dev.gridiron.feature.projections.ProjectionListRoute
 import dev.gridiron.feature.projections.ProjectionsRoute
 import dev.gridiron.feature.scoring.ScoringEditRoute
 import dev.gridiron.feature.scoring.ScoringListRoute
@@ -141,6 +142,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             onEditProfiles = { backStack.push(ScoringListKey) },
                             onPlayer = { id, _, _ -> backStack.push(PlayerKey(id)) },
                             menu = buildList<Pair<String, (Int) -> Unit>> {
+                                add("Projections" to { s: Int -> backStack.push(ProjectionListKey(s)) })
                                 if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
                                 add("Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) })
                                 add("Team defense" to { s: Int -> backStack.push(DefenseKey(s)) })
@@ -163,6 +165,12 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                     entry<ScoringEditKey> { key -> ScoringEditRoute(key.profileId, deps.scoring, onDone = back) }
                     entry<ProjectionsKey> { key ->
                         ProjectionsRoute(key.playerId, key.season, key.week, deps.projections, deps.scoring, deps.players, onBack = back)
+                    }
+                    entry<ProjectionListKey> { key ->
+                        ProjectionListRoute(
+                            key.season, deps.projections, deps.scoring, deps.live?.badges ?: flowOf(emptyMap()),
+                            onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back,
+                        )
                     }
                     entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, onBack = back) }
                     entry<InjuriesKey> { key ->
