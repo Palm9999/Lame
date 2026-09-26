@@ -1,6 +1,6 @@
 # Session Handoff: Live Data Refresh
 
-**How the user wants to work:** one fresh session per batch of **4 tasks** (changed 2026-09-26 from one task per session), with `/clear` after each. Every new session starts by reading this file, runs the next 4 tasks starting at **Next step** below, updates this file (tick each task, fill in the next one), commits, pushes, and stops.
+**How the user wants to work:** one fresh session per batch of **4 tasks** (changed 2026-09-26 from one task per session; the user may ask for more, as on 2026-09-26 when a session ran 5), with `/clear` after each. Every new session starts by reading this file, runs the next 4 tasks starting at **Next step** below, updates this file (tick each task, fill in the next one), commits, pushes, and stops.
 
 **Branch:** `claude/dreamy-euler-phbdq1`. It is based on `claude/relaxed-hypatia-73hhub`, which serves as the repo's main branch. PR #2 was merged.
 
@@ -31,18 +31,21 @@
 
 ## Next step
 
-**Execute Plan 2, Tasks 2–5** (`docs/superpowers/plans/2026-09-25-live-refresh-app.md`), natively, with the `executing-plans` skill:
-- Task 2: Screens reload on a new data version
-- Task 3: A seasons choice in preferences
-- Task 4: Reading ESPN's news and injuries
-- Task 5: The `live.db` store
+**Execute Plan 2, Tasks 7–11** (`docs/superpowers/plans/2026-09-25-live-refresh-app.md`), natively, with the `executing-plans` skill. These are the plan's last five tasks:
+- Task 7: `RefreshCoordinator`
+- Task 8: App wiring, Load stats and Settings, removing the bundled database
+- Task 9: News, Player page and live Injury report
+- Task 10: Grid injury badges
+- Task 11: Removing `etl.yml` and the benchmark, plus docs
 
-1. For each of the next 4 tasks, follow the task's steps exactly: failing test, implementation, passing test, commit.
+The standing batch size is 4, but the 2026-09-26 session ran 5 at the user's request. If the next session also runs 5, it finishes the plan. After that comes the final whole-branch review: one fresh reviewer on the most capable model.
+
+1. For each task in the batch, follow the task's steps exactly: failing test, implementation, passing test, commit.
 2. Tick each task under **Execution progress** below.
 3. Set this section to the task after the batch.
 4. Commit, push, and stop.
 
-First, check that CI's new `parity` job passed on commit 2249afc or later. Plan 1 Task 12's parity gate was green locally (`parity: OK`); CI is the gate of record.
+First, check that CI is green on this handoff commit. CI was green on 5605a11, including the `parity` job, before this batch started.
 
 ## Execution progress
 
@@ -81,4 +84,15 @@ The executing-plans ledger lives in git-ignored `.superpowers/` and does not sur
 **Plan 2** (`2026-09-25-live-refresh-app.md`):
 - [x] Task 1: `ReopenableQueryExecutor` (commit 39ea0ea; `./gradlew :core:database:test :app:compileDebugKotlin` → green, 4/4 new tests).
   - Ruling: `runCurrent()` is `@ExperimentalCoroutinesApi` and fails `-Werror`, so the one test that uses it has `@OptIn(ExperimentalCoroutinesApi::class)`, the repo's existing pattern (see `GridViewModelTest`). Cost if wrong: none.
-- Tasks 2–11 not started.
+- [x] Task 2: Screens reload on a new data version (commit c6d9b27; `./gradlew :core:data:test :feature:players:testDebugUnitTest :feature:compare:testDebugUnitTest` → green; 3 new Grid tests (18/18 in `GridViewModelTest`) and 1 new Compare test (7/7), none skipped).
+  - No rulings. Code written verbatim; the tests were watched failing first (`No parameter with name 'dataVersion'`, `Unresolved reference 'rebase'`).
+- [x] Task 3: A seasons choice in preferences (commit c47d430; `./gradlew :core:datastore:test :core:data:test` → green; `SettingsRepositoryTest` 7/7, `UserPrefsStoreTest` 6/6).
+  - No rulings. Code written verbatim; watched failing first (unresolved `SeasonChoice`, `SettingsRepository`).
+- [x] Task 4: Reading ESPN's news and injuries (commit 4bec92d; `./gradlew :core:data:test` → green; `EspnTest` 5/5, `UrlConnectionHttpGetTest` 3/3).
+  - No rulings. Code and recorded fixtures written verbatim; watched failing first (unresolved `EspnParser`).
+- [x] Task 5: The `live.db` store (commit ac74118; `./gradlew :core:data:test` → green; `LiveStoreTest` 10/10).
+  - No rulings. Code written verbatim; watched failing first (unresolved `LiveDb`).
+- [x] Task 6: `LiveRepository` and `PlayerDirectory` (commit 7485cf9; `./gradlew :core:data:test` → green; `PlayerDirectoryTest` 3/3, `LiveRepositoryTest` 7/7).
+  - No rulings. Code written verbatim; watched failing first (unresolved `PlayerDirectory`).
+- Batch check: `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test :app:assembleRelease` → BUILD SUCCESSFUL after Task 6.
+- Tasks 7–11 not started.
