@@ -5,7 +5,7 @@
 - Every session starts by reading this file, runs the next 4 tasks from **Next step**, then updates this file (tick each task, record rulings), commits, pushes, and stops.
 - Keep replies short. Ask a question only when blocked, one line at a time.
 
-**Branch:** `claude/dreamy-euler-phbdq1`. It restarted from the merged live-data-refresh work (PR #3, merge 9dabb9a). Draft PR #4 (https://github.com/Palm9999/Lame/pull/4) carries this project. It's docs-only so far; CI is green on c4cd8bd.
+**Branch:** `claude/dreamy-euler-phbdq1`. It restarted from the merged live-data-refresh work (PR #3, merge 9dabb9a). Draft PR #4 (https://github.com/Palm9999/Lame/pull/4) carries this project. Session A's code (Tasks 1–4) is on it.
 
 ## Where things stand
 
@@ -20,22 +20,21 @@
   - 12 tasks, all with full code and tests.
   - Session A = Tasks 1–4, Session B = Tasks 5–8, Session C = Tasks 9–12.
   - Rulings made while planning are at the end of the plan ("Plan self-review").
-- [ ] **Open: the user's approval of the plan and choice of execution method.** Recommended: **native**. The implementer does each task itself with the `executing-plans` skill, as in the last project, and one fresh reviewer on the most capable model checks the whole branch after Task 12.
-  - If the first message of the new session doesn't settle this, ask in one line before touching code.
-  - If the user says to go ahead without naming a method, use native.
+- [x] **Plan approved; execution method: native** (2026-09-26). The implementer does each task itself with the `executing-plans` skill. One fresh reviewer on the most capable model checks the whole branch after Task 12.
 
-## Next step: Session A (Tasks 1–4)
+## Next step: Session B (Tasks 5–8)
 
-1. Read the plan's header: Global Constraints, Review Focus and File Structure. Then read Tasks 1–4. Don't read the rest.
-2. Invoke `executing-plans` and run Tasks 1–4 in order.
+1. Read the plan's header: Global Constraints, Review Focus and File Structure. Then read Tasks 5–8. Don't read the rest.
+2. Invoke `executing-plans` and run Tasks 5–8 in order.
    - Follow each task's steps exactly: write the failing test, watch it fail, implement, watch it pass, commit.
    - Code blocks are written verbatim; fix only what fails to compile or test. Record every deviation as a ruling (below).
-3. Run `./gradlew :core:forecast:test :core:ingest:test` and `cd etl && python -m pytest tests/ -q` at the end.
-4. Push. The GitHub MCP tools are deferred, so load them with ToolSearch before use. Update **Execution progress** below and set **Next step** to Session B (Tasks 5–8). Commit and push this file, then stop.
+   - The `executing-plans` ledger is git-ignored and gone. Start a fresh one; Tasks 1–4 are done (see below and `git log`).
+3. Run `./gradlew :core:forecast:test :core:ingest:test` and `cd etl && python -m pytest tests/ -q` at the end. Task 8 touches `:app`, so also run `:app:testDebugUnitTest`, and `./gradlew test` against a Kotlin-built DB if time allows.
+4. Push. The GitHub MCP tools are deferred, so load them with ToolSearch before use. Update **Execution progress** below and set **Next step** to Session C (Tasks 9–12). Commit and push this file, then stop.
 
 **Things to know:**
-- **Task 3 Step 6 needs network** for the parity build. If there's none, say so here and let CI's parity job prove it.
-- **Task 2 changes the schema:** `SCHEMA_VERSION` 7, `INGEST_VERSION` 2. The first phone refresh afterwards rebuilds every season. That's expected.
+- **Parity needs network** (`--force` on the Python build avoids a stale `~/.cache`). It worked in Session A.
+- **Schema is now v7** (`INGEST_VERSION` 2, done in Task 2). The first phone refresh afterwards rebuilds every season. That's expected.
 - **A timing test flakes under full parallel builds.** `:core:statquery`'s "scoring a full season … is fast" test fails under `./gradlew build` in this 4-CPU container. It's a known CPU-contention flake (see the previous project's rulings); run that module alone to confirm it's green.
 - **Warnings are errors.** Explicit API mode is on in JVM modules, and any unused parameter, variable or import fails the build.
 - **Test runners differ.** JVM modules use JUnit Jupiter; Android modules use JUnit 4 and Robolectric.
@@ -48,7 +47,19 @@
 
 ## Projection engine: execution progress
 
-(none yet)
+**Session A** (2026-09-26). Batch check after Task 4: `./gradlew :core:forecast:test :core:ingest:test` → green; ETL pytest 119/119; `GRIDIRON_STATS_DB=<Kotlin-built 2024–2026 DB> ./gradlew test` → BUILD SUCCESSFUL.
+
+- [x] Task 1: `:core:forecast` module, math and ridge solver (commit aa81989; `./gradlew :core:forecast:test` → 11/11 pass).
+  - No rulings. Code written verbatim; watched failing first (unresolved `ewma`, `fitRidge`).
+- [x] Task 2: Schedule download, `game` table and schema v7 (commit 9a47856; `./gradlew :core:ingest:test` → 119/119 pass).
+  - Watched failing first (unresolved `readGames`, then `writeGames`).
+  - Ruling: `StatsDbWriterTest` also asserted `ingest_version` "1"; the brief only named its schema version. Changed to "2" to match the brief's `INGEST_VERSION` bump; the assertion isn't loosened. Cost if wrong: none.
+  - Ruling: `core/data`'s `AccuracyRepository` still selects from `accuracy_summary`, which schema 7 drops. Left as-is: `AccuracyScreen` is unreachable, the accuracy page is sub-project 2, and the phone-built DB never had rows there. Cost if wrong: that unreachable screen shows a query error instead of an empty page.
+- [x] Task 3: Distribution family for every projected stat (commit 26822db; `./gradlew :core:ingest:test` → 120/120; ETL pytest 119/119; parity for 2025: **OK**, all 5 tables 0 differing, metric 81/81).
+  - Watched failing first (unresolved `DIST_FAMILIES` / Python assertion).
+  - Ruling: the Python parity build ran with `--force` (the brief omits it), so a stale `~/.cache` copy couldn't skew parity, as in the previous project's Plan 1 Task 12. Cost if wrong: none.
+- [x] Task 4: Forecast inputs and league rates (commit 9f87510; `./gradlew :core:forecast:test` → 17/17 pass).
+  - No rulings. Code written verbatim; watched failing first (unresolved `loadInputs`, `LeagueTotals`).
 
 Record each task as: `- [x] Task N: <name> (commit <sha>; <test command> → <result>)`, then `Ruling: <what> — <why> — <cost if wrong>` for any deviation.
 
