@@ -47,3 +47,15 @@ def test_carries_eff_is_an_internal_denominator_like_its_peers():
     assert m.internal
     assert not m.computed
     assert "carries_eff" not in sparse_metric_ids()
+
+
+def test_projected_stats_have_distribution_families():
+    from gridiron_etl.metrics import DIST_FAMILIES
+
+    assert METRICS["targets"].dist_family == "negbinom"
+    assert METRICS["receptions"].dist_family == "binomial"
+    assert METRICS["receiving_yards"].dist_family == "gamma"
+    assert METRICS["receiving_tds"].dist_family == "poisson"
+    assert METRICS["target_share"].dist_family is None
+    for mid, family in DIST_FAMILIES.items():
+        assert METRICS[mid].dist_family == family, mid

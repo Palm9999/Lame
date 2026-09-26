@@ -91,7 +91,7 @@ private val RANGE_COMPONENTS = listOf(
     Component("cpoe_n", "CPOE Attempts", "Attempts with a CPOE value.", 0),
 )
 
-internal val METRICS: List<Metric> = listOf(
+private val REGISTRY: List<Metric> = listOf(
     // ---------------- Receiving volume ----------------
     Metric("targets", "Targets", "TGT", "volume",
         "Pass attempts thrown in this player's direction, including incompletions.",
@@ -250,5 +250,24 @@ internal val METRICS: List<Metric> = listOf(
     Metric(it.id, it.name, it.id.uppercase(), "context", it.definition,
         positions = ALL_POSITIONS, decimals = it.decimals, isInternal = true)
 }
+
+/**
+ * The distribution the phone's floor/ceiling simulation draws each projected
+ * stat from: counts of opportunities are negative binomial, successes out of
+ * them binomial, yards gamma, and rare events Poisson. Mirrors
+ * `etl/gridiron_etl/metrics.py`'s DIST_FAMILIES, which CI's parity job checks.
+ */
+internal val DIST_FAMILIES: Map<String, String> = buildMap {
+    for (id in listOf("attempts", "carries", "targets")) put(id, "negbinom")
+    for (id in listOf("completions", "receptions")) put(id, "binomial")
+    for (id in listOf("passing_yards", "rushing_yards", "receiving_yards")) put(id, "gamma")
+    listOf(
+        "passing_tds", "passing_tds_40", "passing_tds_50", "interceptions", "sacks_taken", "passing_first_downs", "passing_2pt",
+        "rushing_tds", "rushing_tds_40", "rushing_tds_50", "rushing_first_downs", "rushing_2pt",
+        "receiving_tds", "receiving_tds_40", "receiving_tds_50", "receiving_first_downs", "receiving_2pt", "fumbles_lost",
+    ).forEach { put(it, "poisson") }
+}
+
+internal val METRICS: List<Metric> = REGISTRY.map { it.copy(distFamily = DIST_FAMILIES[it.id] ?: it.distFamily) }
 
 internal val SPARSE_METRIC_IDS: Set<String> = METRICS.filter { it.sparse }.mapTo(HashSet()) { it.id }
