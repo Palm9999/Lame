@@ -36,6 +36,7 @@ export GRIDIRON_STATS_DB=etl/build/stats.db
 
 # Run tests for a single module
 ./gradlew :core:statquery:test
+./gradlew :core:forecast:test
 
 # Run tests for a specific test class
 ./gradlew :core:statquery:test --tests "StatQueryBuilderTest"
@@ -60,7 +61,8 @@ export GRIDIRON_STATS_DB=etl/build/stats.db
 - `:core:database` — Read-only SQLite access via the bundled driver. `ReopenableQueryExecutor` closes and reopens the connection when a refresh swaps in a new `stats.db`, and bumps a version flow the Grid and Compare reload on
 - `:core:testing` — Test fixtures: JDBC executor over the real database. Proves results match what the phone's SQLite driver will return
 - `:core:projections` — Pure `score()` (the in-memory twin of `StatQueryBuilder`'s SQL scoring), factor attribution, and single-player Monte Carlo (floor/ceiling) for the Projections feature
-- `:core:ingest` — Builds `stats.db` from nflverse and ffopportunity: a streaming CSV reader, Kotlin ports of the ETL's transforms and validation, and a pipeline that re-downloads only files whose ETag changed and copies unchanged seasons from the previous build. Runs on the phone and on the JVM (`./gradlew :core:ingest:buildStatsDb -Pseasons="2025" -Pout=etl/build/stats.db`); CI's parity job holds it to the Python ETL's values
+- `:core:ingest` — Builds `stats.db` from nflverse and ffopportunity: a streaming CSV reader, Kotlin ports of the ETL's transforms and validation, and a pipeline that re-downloads only files whose ETag changed and copies unchanged seasons from the previous build. It also downloads nflverse's schedule (`games.csv`) into the `game` table and runs `:core:forecast` after validation; a forecast failure leaves the stats and records why. Runs on the phone and on the JVM (`./gradlew :core:ingest:buildStatsDb -Pseasons="2025" -Pout=etl/build/stats.db`); CI's parity job holds it to the Python ETL's values
+- `:core:forecast` — The projection model. Reads a freshly built stats.db and writes weekly, rest-of-season and waterfall-factor projections for QB/RB/WR/TE, walk-forward (each week only from the games before it). Seven layers: team volume, shrunk share, shrunk efficiency, expected TDs, opponent ratings (ridge), game script from nflverse's lines, distributions. Every constant is in `ForecastConstants.kt`; bump `FORECAST_VERSION` when one changes
 
 **Android Modules**:
 - `:app` — App entry point. `RefreshCoordinator` builds `stats.db` on the phone with `:core:ingest` and swaps it in without a restart; News, Player page, live Injury report, Settings (seasons) and Load stats screens
@@ -68,15 +70,16 @@ export GRIDIRON_STATS_DB=etl/build/stats.db
 - `:core:table` — Frozen-column stat table with shared horizontal scroll state
 - `:core:designsystem` — Theme, dark mode, colorblind-safe heat scale
 - `:core:data` — Stat packs, qualifying bars, formatting, repositories; `SettingsRepository` (which seasons to build); `PlayerDirectory` (ESPN id → player via `player_xref`); and the `live` package: the ESPN news/injuries parser and client, the writable `live.db` store, and `LiveRepository`
-- `:feature:projections` — The Projections waterfall card and the accuracy ("trust page") screen; wired into the nav graph as `ProjectionsKey`/`AccuracyKey` but not yet reachable from any UI (see Known Gaps)
+- `:feature:projections` — The Projections list (☰ → Projections), the Player page's "This week" card, the waterfall screen (`ProjectionsKey`), and the accuracy ("trust page") screen (`AccuracyKey`, not yet reachable; see Known Gaps)
 
 ### Data Flow
 
 1. **Refresh on the phone** — ☰ → Refresh stats (or Load stats on a fresh install) runs `:core:ingest`'s `IngestPipeline` for the seasons chosen in Settings. It downloads nflverse and ffopportunity files with conditional GETs, copies unchanged seasons from the current database, crunches the rest, validates, and writes `stats.db.new`
-2. **Swap** — `RefreshCoordinator` renames `stats.db.new` over `stats.db` inside `ReopenableQueryExecutor.swap`; screens reload on the version bump. A failed build leaves `stats.db` untouched
-3. **Live data** — the same refresh (and the News, Player and Injury report screens, when data is over 15 minutes old) fetches ESPN's news and injuries into `live.db`, linked to players through `player_xref`, pruned at 30 days
-4. **Query Layer** — `:core:statquery` generates parameterized SQL for any stat grid query (columns, filters, week ranges, percentiles). Tests run it through the JDBC executor against a Kotlin-built database (`GRIDIRON_STATS_DB`); the phone runs it through the bundled SQLite driver
-5. **Python ETL** (`etl/`) — kept only as CI's parity reference for the Kotlin port (and for the projections follow-up); nothing it builds reaches the app
+2. **Forecast** — the same build projects every regular-season week of the chosen seasons into the projection tables (the upcoming week with both stages and factors, past weeks' final stage for the backtest, rest of season summed); the refresh toast says if projections are unavailable
+3. **Swap** — `RefreshCoordinator` renames `stats.db.new` over `stats.db` inside `ReopenableQueryExecutor.swap`; screens reload on the version bump. A failed build leaves `stats.db` untouched
+4. **Live data** — the same refresh (and the News, Player and Injury report screens, when data is over 15 minutes old) fetches ESPN's news and injuries into `live.db`, linked to players through `player_xref`, pruned at 30 days
+5. **Query Layer** — `:core:statquery` generates parameterized SQL for any stat grid query (columns, filters, week ranges, percentiles). Tests run it through the JDBC executor against a Kotlin-built database (`GRIDIRON_STATS_DB`); the phone runs it through the bundled SQLite driver
+6. **Python ETL** (`etl/`) — kept only as CI's parity reference for the Kotlin port; nothing it builds reaches the app
 
 ### Key Design Decisions
 
@@ -90,7 +93,7 @@ export GRIDIRON_STATS_DB=etl/build/stats.db
 
 **No Hilt or Navigation Yet** — Current single-screen setup. Hilt and Navigation 3 will arrive with the second feature.
 
-### Database Schema (Version 6)
+### Database Schema (Version 7)
 
 Long/narrow design: adding a metric is an `INSERT`, not a migration.
 
@@ -101,13 +104,12 @@ Long/narrow design: adding a metric is an `INSERT`, not a migration.
 | `player` | Players with at least one stat in the built seasons |
 | `player_xref` | ESPN athlete id → `player_id` for every player nflverse lists, stats or not; links ESPN news and injuries |
 | `schema_meta` | Schema version, seasons, attribution |
-| `player_week_projection` | Per (player, week, metric, stage) projected mean/variance — `stage` is `baseline` (post volume-cascade) or `final` (fully adjusted) |
+| `game` | nflverse schedule for the built seasons: opponents, results, spread and total, starting QBs, head coaches; the forecast's matchups and game script |
+| `player_week_projection` | Per (player, week, metric, stage) projected mean/variance, written by `:core:forecast` — `stage` is `baseline` (post volume-cascade) or `final` (fully adjusted) |
 | `player_week_projection_factor` | Per (player, week, factor) log-space attribution multiplier for one projection adjustment stage |
 | `player_ros_projection` | Rest-of-season aggregate: summed weekly mean/variance per (player, metric), no per-week detail |
-| `projection_snapshot` | Projected mean/variance frozen at snapshot time, never overwritten — joined against `player_week_stat` once actuals land to compute accuracy |
 | `team_week_defense` | Per (team, season, week) points/yards allowed, sacks, INTs, fumbles recovered, defensive TDs |
 | `injury_report` | Per (player, season, week) nflverse injury report status/injury/practice |
-| `accuracy_summary` | Precomputed MAE/RMSE/bias/R² per (position, season, metric, baseline), refreshed each ETL run |
 
 **`live.db`** (separate file, `PRAGMA user_version` 1): `news_item`, `news_player` (ESPN id, name, nullable `player_id`), `injury_status` (current snapshot), `injury_note` (appended when a comment changes), `live_meta` (fetch times). Rows older than 30 days are pruned; an unreadable file is recreated.
 
@@ -137,14 +139,12 @@ To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI 
 - Hilt dependency injection and Navigation 3 architecture arrive with the second feature
 - User database (`user.db`) for presets and rosters not yet implemented
 - APK signing uses a committed keystore (`app/gridiron.keystore`, intentional for a never-published personal app)
-- **Grid entry points**: tapping a Grid row opens the Player page (ESPN status, injury notes, tagged news); the ☰ menu opens News, Injury report (ESPN's live list with nflverse practice for the current season; the official list for past seasons), Team defense, Settings and Refresh stats. `ProjectionsKey`/`AccuracyKey` stay registered but unreachable until on-device projections.
+- **Grid entry points**: tapping a Grid row opens the Player page (ESPN status, injury notes, tagged news, and a "This week" projection card that opens the waterfall); the ☰ menu opens Projections (the upcoming week or rest of season by position, scored with the active profile), News, Injury report (ESPN's live list with nflverse practice for the current season; the official list for past seasons), Team defense, Settings and Refresh stats. `AccuracyKey` stays unreachable until the accuracy sub-project.
 - **ESPN's endpoints are unofficial and keyless**; a shape change shows as "Not updated: ESPN changed its … format" with the last data kept. Parsing lives in `core/data/.../live/Espn.kt`, tested against recorded responses in `core/data/src/test/resources/espn/`.
 - **Refresh runs in an application-scope coroutine, not WorkManager**: if Android kills the process mid-build, the old database stays and the next refresh starts over.
-- **Projections are hidden** until the follow-up that computes them on the phone; the phone-built `stats.db` has no projection rows. (The Python ETL's projections stage also fails today: `unable to find column "regime_break"`.)
-- **`ProjectionsRoute` hardcodes `ScoringPresets.PPR` and `position = null`** instead of the viewer's real league scoring profile and the player's actual position — `receptionWeight(null)` skips TE-premium scoring rules, and non-PPR leagues see PPR numbers. Needs `ScoringRepository` threaded through the route (the pattern `CompareRoute` already uses) plus a player-position lookup that doesn't exist yet at that call site.
-- **Every projection component is simulated as `DistributionFamily.GAMMA`**, not each metric's real `dist_family`/`zero_inflated` from the `metric` registry (the column exists from the ETL plan's schema v4, but isn't yet threaded through `:core:data`'s `Catalog`/`MetricInfo`)
+- **Projection model sub-projects 2–4 are not built yet**: the accuracy page (backtest), Odds API props and K/DST. See `docs/superpowers/specs/2026-09-26-projection-model-design.md`.
+- **Not modeled:** weather (wind is only known after kickoff) and shifting an injured player's share to teammates; an Out/IR player just shows Out.
 - **K/DST fantasy scoring is out of scope** for `:core:projections`'s `score()` — `ScoringRule` structurally covers QB/RB/WR/TE only
-- **No contract test** runs real ETL-shaped projection output end-to-end through `ProjectionsRepository`/`ProjectionsViewModel` the way `:core:statquery`'s three-tier strategy does for the Grid — today's Android-side projection tests use hand-inserted fixture rows only, and would not have caught the final-stage-rows-mostly-missing issue the final whole-branch review found (since fixed: `ProjectionsViewModel` now merges baseline values forward for any component with no final-stage adjustment)
 
 ## Codebase Notes
 
