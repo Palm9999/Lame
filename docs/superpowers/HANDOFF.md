@@ -22,15 +22,16 @@
   - Rulings made while planning are at the end of the plan ("Plan self-review").
 - [x] **Plan approved; execution method: native** (2026-09-26). The implementer does each task itself with the `executing-plans` skill. One fresh reviewer on the most capable model checks the whole branch after Task 12.
 
-## Next step: Session B (Tasks 5–8)
+## Next step: Session C (Tasks 9–12)
 
-1. Read the plan's header: Global Constraints, Review Focus and File Structure. Then read Tasks 5–8. Don't read the rest.
-2. Invoke `executing-plans` and run Tasks 5–8 in order.
+1. Read the plan's header: Global Constraints, Review Focus and File Structure. Then read Tasks 9–12. Don't read the rest.
+2. Invoke `executing-plans` and run Tasks 9–12 in order.
    - Follow each task's steps exactly: write the failing test, watch it fail, implement, watch it pass, commit.
    - Code blocks are written verbatim; fix only what fails to compile or test. Record every deviation as a ruling (below).
-   - The `executing-plans` ledger is git-ignored and gone. Start a fresh one; Tasks 1–4 are done (see below and `git log`).
-3. Run `./gradlew :core:forecast:test :core:ingest:test` and `cd etl && python -m pytest tests/ -q` at the end. Task 8 touches `:app`, so also run `:app:testDebugUnitTest`, and `./gradlew test` against a Kotlin-built DB if time allows.
-4. Push. The GitHub MCP tools are deferred, so load them with ToolSearch before use. Update **Execution progress** below and set **Next step** to Session C (Tasks 9–12). Commit and push this file, then stop.
+   - The `executing-plans` ledger (`.superpowers/sdd/2026-09-26-projection-engine/progress.md`) is git-ignored. If it's gone, start a fresh one; Tasks 1–8 are done (see below and `git log`).
+3. At the end: `./gradlew :core:forecast:test :core:ingest:test :core:projections:test :core:data:test :app:testDebugUnitTest`, ETL pytest (Task 12 deletes Python projection code), and `GRIDIRON_STATS_DB=<Kotlin-built 2024–2026 DB> ./gradlew test` (run `:core:statquery:test` alone if the timing test flakes).
+4. After Task 12, run the plan's final whole-branch review: one fresh reviewer on the most capable model (see `executing-plans`, "Final Review"), then one fix pass.
+5. Push. Update **Execution progress** below, commit and push this file, then stop.
 
 **Things to know:**
 - **Parity needs network** (`--force` on the Python build avoids a stale `~/.cache`). It worked in Session A.
@@ -44,6 +45,7 @@
 - This session is subscribed to PR #4's activity.
 - A self check-in is scheduled for 2026-09-26 22:32 UTC (`trig_01LbtqsUqJrVwC6d3Bq3H6Jp`). While the PR only waits on the user, re-arm it every 3–6 hours and say nothing if nothing changed.
 - Once code lands, CI failures on PR #4 are ours to fix: follow the drive-to-green rules.
+- Session B's session also has a check-in at 2026-09-26 19:06 UTC (`trig_01RHSSQWFUZLxvHy3Yn8dFgw`).
 
 ## Projection engine: execution progress
 
@@ -60,6 +62,19 @@
   - Ruling: the Python parity build ran with `--force` (the brief omits it), so a stale `~/.cache` copy couldn't skew parity, as in the previous project's Plan 1 Task 12. Cost if wrong: none.
 - [x] Task 4: Forecast inputs and league rates (commit 9f87510; `./gradlew :core:forecast:test` → 17/17 pass).
   - No rulings. Code written verbatim; watched failing first (unresolved `loadInputs`, `LeagueTotals`).
+
+**Session B** (2026-09-26). Batch check after Task 8: `./gradlew :core:forecast:test :core:ingest:test :app:testDebugUnitTest` → 46 + 124 + 38 pass; ETL pytest 119/119; `GRIDIRON_STATS_DB=<Kotlin-built 2024–2026 DB> ./gradlew test` → 539/539 once `:core:statquery:test` ran alone (it failed only the known "scoring a full season … is fast" timing test under the full parallel build, and passed alone).
+
+- [x] Task 5: Baseline model, layers 1–4 (commit d9b3a30; `./gradlew :core:forecast:test` → 23/23 pass).
+  - No rulings. Code written verbatim; watched failing first (unresolved `BaselineModel`, `PlayerContext`, `TeamVolume`).
+- [x] Task 6: Matchup and game script, layers 5–6 (commit b705176; `./gradlew :core:forecast:test` → 36/36 pass).
+  - No rulings. Code written verbatim; watched failing first (unresolved `KINDS`, `MatchupModel`, `gameScript`).
+- [x] Task 7: The walk-forward engine (commit 02a90a4; `./gradlew :core:forecast:test` → 46/46 pass).
+  - Watched failing first (unresolved `Forecast`, `SeasonCopy`, `FORECAST_OK`). Production code verbatim.
+  - Ruling: two of `ForecastEngineTest`'s matchup-note expectations named the wrong week-3 opponents. The test's own fixture schedules AAA–DDD and BBB–CCC in week 3, but its docstring said AAA–BBB. Corrected to WR_A "vs DDD" and WR_T "vs BBB", and fixed the docstring. The WR_T assertion now tells the new team (CCC, playing BBB) from the old one (AAA, playing DDD); the brief's value would have passed only if the old team were used. Cost if wrong: none.
+- [x] Task 8: Run the forecast at the end of every refresh (commit 9557b7f; `./gradlew :app:testDebugUnitTest :core:ingest:test :core:forecast:test` → 38 + 124 + 46 pass).
+  - No rulings. Code written verbatim; watched failing first (unresolved `report.forecast`, `IngestProgress.Projecting`; then the non-exhaustive `when` in `progressText`).
+  - Real data: `./gradlew :core:ingest:buildStatsDb -Pseasons="2024 2025"` ends with `projections: ok` in 14 s wall time. The database has 280,614 `final` rows over 35 weeks (2024 weeks 2–18, 2025 weeks 1–18), `forecast_status` ok and `forecast_version` 1. There's no upcoming week or rest of season because both seasons are complete. A 2024–2026 build also reports `projections: ok`.
 
 Record each task as: `- [x] Task N: <name> (commit <sha>; <test command> → <result>)`, then `Ruling: <what> — <why> — <cost if wrong>` for any deviation.
 
