@@ -50,6 +50,7 @@ import dev.gridiron.feature.scoring.ScoringEditRoute
 import dev.gridiron.feature.scoring.ScoringListRoute
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 
 /** What the screens need, built by [GridironApplication] or by a test. */
 data class Deps(
@@ -146,6 +147,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 if (deps.settings != null) add("Settings" to { _: Int -> backStack.push(SettingsKey) })
                                 if (refresher != null) add("Refresh stats" to { _: Int -> refresh() })
                             },
+                            badges = deps.live?.badges ?: flowOf(emptyMap()),
                         )
                     }
                     entry<CompareKey> {

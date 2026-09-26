@@ -37,8 +37,8 @@ import dev.gridiron.core.data.DefenseRow
 import dev.gridiron.core.data.InjuryRow
 import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.live.LiveRepository
-import java.time.Instant
 import kotlinx.coroutines.CancellationException
+import java.time.Instant
 
 @Composable
 fun InjuriesScreen(season: Int, teams: TeamsRepository, onBack: () -> Unit) {

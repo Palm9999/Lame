@@ -399,6 +399,19 @@ class GridViewModelTest {
         assertEquals(SeasonInfo(2026, 3), rebased.season)
         assertEquals(WeekRange(1, 3), rebased.weeks)
     }
+
+    @Test
+    fun `injury badges reach the state and follow live updates`() = runTest(dispatcher) {
+        val badges = MutableStateFlow<Map<String, String>>(emptyMap())
+        val vm = GridViewModel(repo, ScoringRepository(prefs), CompareTrayRepository(prefs), badges = badges)
+        val first = ready(vm).page!!.rows.first().playerId
+
+        badges.value = mapOf(first to "Q")
+        assertEquals(mapOf(first to "Q"), ready(vm).badges)
+
+        badges.value = emptyMap()
+        assertEquals(emptyMap<String, String>(), ready(vm).badges)
+    }
 }
 
 /** State transitions, without coroutines or a database. */

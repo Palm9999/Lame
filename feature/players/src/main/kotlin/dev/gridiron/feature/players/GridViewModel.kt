@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.stateIn
@@ -101,6 +102,8 @@ sealed interface GridUiState {
         val sparklines: ImmutableMap<String, Sparkline> = persistentMapOf(),
         /** The open filter sheet's match count; null when the sheet is closed. */
         val draftCount: DraftCount? = null,
+        /** ESPN injury letters (Q, D, O, IR, …) by player id; empty when there is no live data. */
+        val badges: ImmutableMap<String, String> = persistentMapOf(),
     ) : GridUiState {
         val refreshing: Boolean get() = page?.request != request && error == null
     }
@@ -122,6 +125,8 @@ class GridViewModel(
     debounceMillis: Long = 150,
     /** Coalesces filter-sheet typing into one count. */
     countDebounceMillis: Long = 250,
+    /** Live injury letters by player id, from ESPN; re-emits after every live refresh. */
+    badges: Flow<Map<String, String>> = flowOf(emptyMap()),
 ) : ViewModel() {
 
     private sealed interface CatalogLoad {
@@ -172,7 +177,7 @@ class GridViewModel(
                     else GridUiState.Ready(load.catalog, r, h, page, err?.takeIf { it.first == r }?.second)
             }
         }.combine(
-            combine(scoring.profiles, trayUi, message, editingSlot, combine(sparklines, draft, draftCount, ::Lines), ::Extras),
+            combine(scoring.profiles, trayUi, message, editingSlot, combine(sparklines, draft, draftCount, badges, ::Lines), ::Extras),
         ) { base, extras ->
             if (base is GridUiState.Ready) {
                 val lines = extras.lines.sparklines?.takeIf { (page, _) -> page == base.page }?.second.orEmpty()
@@ -191,6 +196,7 @@ class GridViewModel(
                     editingSlot = extras.editingSlot,
                     sparklines = lines.toImmutableMap(),
                     draftCount = draftCount,
+                    badges = extras.lines.badges.toImmutableMap(),
                 )
             } else {
                 base
@@ -205,11 +211,12 @@ class GridViewModel(
         val lines: Lines,
     )
 
-    /** The sparkline and draft-count sources, combined once so each carries its own staleness tag. */
+    /** The sparkline, draft-count and badge sources, combined once so each carries its own staleness tag. */
     private data class Lines(
         val sparklines: Pair<GridPage, Map<String, Sparkline>>?,
         val draft: List<Filter>?,
         val count: Pair<List<Filter>, DraftCount>?,
+        val badges: Map<String, String>,
     )
 
     init {
@@ -419,9 +426,14 @@ class GridViewModel(
             return r.copy(season = season, weeks = weeks)
         }
 
-        fun factory(repository: StatsRepository, scoring: ScoringRepository, tray: CompareTrayRepository): ViewModelProvider.Factory =
+        fun factory(
+            repository: StatsRepository,
+            scoring: ScoringRepository,
+            tray: CompareTrayRepository,
+            badges: Flow<Map<String, String>> = flowOf(emptyMap()),
+        ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { GridViewModel(repository, scoring, tray) }
+                initializer { GridViewModel(repository, scoring, tray, badges = badges) }
             }
     }
 }

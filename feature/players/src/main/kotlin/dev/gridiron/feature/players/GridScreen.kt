@@ -80,6 +80,8 @@ import dev.gridiron.core.ui.WeeksSheet
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -93,8 +95,9 @@ fun GridRoute(
     modifier: Modifier = Modifier,
     onPlayer: (playerId: String, season: Int, week: Int) -> Unit = { _, _, _ -> },
     menu: List<Pair<String, (season: Int) -> Unit>> = emptyList(),
+    badges: Flow<Map<String, String>> = flowOf(emptyMap()),
 ) {
-    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray))
+    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges))
     val state by vm.state.collectAsStateWithLifecycle()
     GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu)
 }
@@ -248,6 +251,7 @@ private fun GridContent(
                         page,
                         state.heat,
                         state.sparklines,
+                        state.badges,
                         onSort = { onEvent(GridEvent.SortBy(it.column)) },
                         onInfo = { info = it.info },
                         onRowLongClick = { row ->
@@ -431,6 +435,7 @@ private fun PlayerTable(
     page: GridPage,
     heat: Boolean,
     sparklines: ImmutableMap<String, SparklineData>,
+    badges: ImmutableMap<String, String>,
     onSort: (ColumnUi) -> Unit,
     onInfo: (ColumnUi) -> Unit,
     onRowLongClick: (GridRowUi) -> Unit,
@@ -486,7 +491,17 @@ private fun PlayerTable(
                     maxLines = 1,
                 )
                 Column {
-                    Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            row.name,
+                            Modifier.weight(1f, fill = false),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        badges[row.playerId]?.let { InjuryBadge(it, Modifier.padding(start = 4.dp)) }
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(row.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                         sparklines[row.playerId]?.takeIf { it.drawable }?.let { line ->
@@ -518,7 +533,9 @@ private fun PlayerTable(
         },
         rowDescription = { row ->
             buildString {
-                append(row.name).append(", ").append(row.detail).append(". ")
+                append(row.name)
+                badges[row.playerId]?.let { append(" (injury status ").append(it).append(')') }
+                append(", ").append(row.detail).append(". ")
                 page.columns.forEachIndexed { i, col ->
                     append(col.info?.name ?: col.header).append(' ').append(row.cells[i].text)
                     if (i < page.columns.lastIndex) append(", ")
@@ -532,4 +549,14 @@ private fun PlayerTable(
         onRowClick = onRowClick,
         rowLongClickLabel = "Add to compare",
     )
+}
+
+/** ESPN's injury letter after a name: red for O, IR and D, the accent color for Q and anything else. */
+@Composable
+private fun InjuryBadge(abbr: String, modifier: Modifier = Modifier) {
+    val color = when (abbr) {
+        "O", "IR", "D" -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.tertiary
+    }
+    Text(abbr, modifier, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1)
 }
