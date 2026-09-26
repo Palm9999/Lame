@@ -116,7 +116,7 @@ Seven layers:
    - **Shrinkage.** Ratings are shrunk by games played with a large k, so weeks 2–3 sit near league average.
    - **Caps.** Efficiency ±15%, volume ±5%, TD ±20%.
    - **Solver.** 65 parameters, solved by Cholesky decomposition on the normal equations; no library needed.
-6. **Game script.** Implied team points are `total/2 − spread/2` for home and `total/2 + spread/2` for away.
+6. **Game script.** Implied team points are `total/2 + spread/2` for home and `total/2 − spread/2` for away (nflverse's `spread_line` is positive when the home team is favored).
    - **Implied-points multiplier.** Implied points relative to the league average scale TD rates most, yards less and attempts least; the elasticities are constants in `ForecastConstants`.
    - **Pass-rate shift.** Pass rate moves 0.6 percentage points per point of spread, toward passing for the underdog.
    - **Missing lines.** With no line posted, this layer is a no-op with note "No line yet".

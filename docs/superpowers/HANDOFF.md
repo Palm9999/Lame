@@ -1,4 +1,30 @@
-# Session Handoff: Live Data Refresh
+# Session Handoff: Projection Model
+
+**How the user wants to work:** one fresh session per batch of **4 tasks**, with `/clear` after each. Every new session starts by reading this file, runs the next 4 tasks starting at **Next step** below, updates this file (tick each task, record any rulings), commits, pushes, and stops.
+
+**Branch:** `claude/dreamy-euler-phbdq1`, now restarted on the merged live-data-refresh work (PR #3 merged as 9dabb9a). Draft PR #4 carries this project.
+
+## Projection model: where things stand
+
+- [x] **Design approved** (2026-09-26): `docs/superpowers/specs/2026-09-26-projection-model-design.md`. The model is pure Kotlin, runs inside Refresh and is walk-forward. It's split into four sub-projects, built in order:
+  1. Engine
+  2. Accuracy page
+  3. Odds API props
+  4. K/DST
+- [x] **Sub-project 1 plan written:** `docs/superpowers/plans/2026-09-26-projection-engine.md`. It has 12 tasks: Session A is Tasks 1–4, Session B Tasks 5–8, Session C Tasks 9–12.
+- [ ] **The user reviews the plan and picks an execution method.** Native (executing-plans) was used for the last project.
+
+## Next step
+
+Once the user approves the plan, execute **Session A: Tasks 1–4** of `docs/superpowers/plans/2026-09-26-projection-engine.md` in a fresh session. The final whole-branch review runs after Task 12.
+
+## Projection engine: execution progress
+
+(none yet)
+
+---
+
+# Previous project: Live Data Refresh (complete, PR #3 merged)
 
 **How the user wants to work:** one fresh session per batch of **4 tasks** (changed 2026-09-26 from one task per session; the user may ask for more, as on 2026-09-26 when a session ran 5), with `/clear` after each. Every new session starts by reading this file, runs the next 4 tasks starting at **Next step** below, updates this file (tick each task, fill in the next one), commits, pushes, and stops.
 
