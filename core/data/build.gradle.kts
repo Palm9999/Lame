@@ -7,6 +7,8 @@ dependencies {
     api(projects.core.datastore)
     api(projects.core.projections)
     api(libs.kotlinx.collections.immutable)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.androidx.sqlite.bundled)
 
     testImplementation(projects.core.testing)
     testImplementation(libs.kotlinx.coroutines.test)

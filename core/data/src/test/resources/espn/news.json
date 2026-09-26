@@ -1,0 +1,43 @@
+{
+  "header": "NFL News",
+  "articles": [
+    {
+      "id": 50029598,
+      "type": "HeadlineNews",
+      "headline": "Eagles' Saquon Barkley to be 'fearless' vs. Bears despite stinger",
+      "description": "Eagles running back Saquon Barkley plans to play \"fearless\" Monday night against the Chicago Bears as he eyes a return from a stinger injury.",
+      "published": "2026-09-25T23:01:03Z",
+      "links": { "web": { "href": "https://www.espn.com/nfl/story/_/id/50029598/eagles-saquon-barkley-fearless-vs-bears-stinger" } },
+      "categories": [
+        { "id": 1407, "type": "team", "description": "Philadelphia Eagles", "teamId": 21 },
+        { "id": 184478, "type": "athlete", "description": "Saquon Barkley", "athleteId": 3929630 }
+      ]
+    },
+    {
+      "id": 50029379,
+      "type": "HeadlineNews",
+      "headline": "QB Sam Darnold back Sunday, but Seahawks down two safeties",
+      "description": "Seahawks quarterback Sam Darnold will start Sunday, but the defending Super Bowl champions will be without both starting safeties as Julian Love and Ty Okada have been ruled out.",
+      "published": "2026-09-25T22:25:25Z",
+      "links": { "web": { "href": "https://www.espn.com/nfl/story/_/id/50029379/qb-sam-darnold-back-sunday-seahawks-two-safeties" } },
+      "categories": [
+        { "id": 1693, "type": "team", "description": "Seattle Seahawks", "teamId": 26 },
+        { "id": 184497, "type": "athlete", "description": "Sam Darnold", "athleteId": 3912547 },
+        { "id": 380576, "type": "athlete", "description": "Julian Love", "athleteId": 4046675 },
+        { "id": 205575, "type": "athlete", "description": "Ty Okada", "athleteId": 4247808 }
+      ]
+    },
+    {
+      "id": 50028554,
+      "type": "HeadlineNews",
+      "headline": "NFL, NFLPA continue to monitor field conditions in Rio",
+      "description": "Field experts for the NFL and the NFL Players Association have been in Brazil for days to monitor the playing surface at Maracanã Stadium, NFLPA executive director JC Tretter said in a lengthy statement on Friday.",
+      "published": "2026-09-25T18:53:45Z",
+      "links": { "web": { "href": "https://www.espn.com/nfl/story/_/id/50028554/nfl-nflpa-continue-monitor-field-conditions-rio" } },
+      "categories": [
+        { "id": 2830, "type": "team", "description": "Baltimore Ravens", "teamId": 33 },
+        { "id": 1298, "type": "team", "description": "Dallas Cowboys", "teamId": 6 }
+      ]
+    }
+  ]
+}
