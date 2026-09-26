@@ -1,8 +1,9 @@
 name: Build and test
 
-# Builds the stats database with the on-device ingest code, runs every test
-# against it, renders the Grid screenshots, and builds the installable app. On
-# anything but a pull request it then publishes the APK to a fixed link:
+# Builds a stats database with the same Kotlin code the phone runs, runs every
+# test against it, renders the Grid screenshots, and builds the installable app.
+# The APK carries no data: the phone builds its own stats. On anything but a
+# pull request it then publishes the APK to a fixed link:
 #   https://github.com/Palm9999/Lame/releases/download/app/gridiron.apk
 # The parity job proves the Kotlin ingest reproduces the Python ETL exactly.
 
@@ -21,7 +22,8 @@ on:
       - ".github/workflows/ci.yml"
   pull_request:
   schedule:
-    # Tuesdays 10:00 UTC, after Monday Night Football.
+    # Tuesdays 10:00 UTC, after Monday Night Football: reruns every test against
+    # the week's fresh nflverse data, so an upstream change shows up here first.
     - cron: "0 10 * * 2"
   workflow_dispatch:
 
@@ -92,8 +94,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp app/build/outputs/apk/release/app-release.apk gridiron.apk
-          SEASONS=$(python -c "import sqlite3; print(sqlite3.connect('etl/build/stats.db').execute(\"SELECT value FROM schema_meta WHERE key = 'seasons'\").fetchone()[0])")
-          NOTES="Built $(date -u +%Y-%m-%d) from ${GITHUB_SHA::7}. Seasons: ${SEASONS}. Install gridiron.apk on your phone."
+          NOTES="Built $(date -u +%Y-%m-%d) from ${GITHUB_SHA::7}. Install gridiron.apk on your phone, then tap ☰ → Refresh stats to build the latest stats on the phone."
           gh release view app > /dev/null 2>&1 || gh release create app --title "Gridiron app" --notes "$NOTES"
           gh release edit app --notes "$NOTES"
           gh release upload app gridiron.apk --clobber

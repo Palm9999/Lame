@@ -53,6 +53,8 @@ Open that on the phone, then tap the download to install. One-time setup on a Ga
 2. **Settings → Security and privacy → More security settings → Install unknown apps**: allow the browser you downloaded with.
 3. If Play Protect warns about an unrecognized app, choose **Install anyway**. It says that about any app not from the Play Store.
 
+On first launch, tap **Load stats**. The phone downloads nflverse's public data and builds its own stats: about a minute per season. After that, **☰ → Refresh stats** brings in new games, injuries and news; **☰ → Settings** picks the seasons.
+
 Every build is signed with the same key (`app/gridiron.keystore`, committed on purpose for this never-published app), so a new APK installs over the old one. A new build is published on every change and every Tuesday morning, after Monday Night Football.
 
 ## How to use
@@ -66,17 +68,18 @@ The third chip row filters by team, minimum snap share and any stat (**Filters**
 | Phase | State |
 |---|---|
 | Spec and research | Done: [docs/](docs/PRODUCT_SPEC.md) |
-| Data pipeline | Done: [`etl/`](etl/README.md). nflverse, plus ffopportunity for expected-points components → pre-indexed SQLite, validated on every build. |
+| Data pipeline | Done, on the phone: [`core/ingest/`](core/ingest) is a Kotlin port of [`etl/`](etl/README.md), held to it by a CI parity gate. nflverse, plus ffopportunity for expected-points components → pre-indexed SQLite, validated on every build. |
 | Query builder | Done: [`core/statquery/`](core/statquery/README.md). 413k+ values checked against the ETL. |
 | The Grid | Done. Six stat packs, position filters, week ranges, per-game mode, positional heat map, tap-to-sort, hold-for-definition, name search, team and snap-share filters, advanced filters with a live count, last-6-week sparklines, CSV export. |
 | **Compare** | **Done.** Hold up to four players in the Grid, then a tray, percentile bars, a head-to-head table, a two-player radar and an xFP-vs-actual scatter. |
 | **Custom scoring** | **Done.** PPR/Half/Standard presets plus your own profiles, edited on-device; FPTS, xFP and FPOE flow into the Grid and Compare under whichever profile is active. |
+| **Live data** | **Done.** Stats build on the phone; ESPN injuries and news on a News screen, Player pages and Grid badges; seasons chosen in Settings. |
 
 ## Modules
 
 | Module | Kind | Role |
 |---|---|---|
-| `:app` | Android app | Navigation 3 wiring (Grid, Compare, scoring list/editor); ships `stats.db` inside the APK and copies it out on first launch |
+| `:app` | Android app | Navigation 3 wiring; builds `stats.db` on the phone and swaps it in without a restart; News, Player, Injury report, Settings and Load stats screens |
 | `:feature:players` | Android | The Grid screen, its ViewModel and the compare tray bar |
 | `:feature:compare` | Android | The Compare screen: bars, head-to-head table, radar, xFP scatter |
 | `:feature:scoring` | Android | The scoring profile list and editor screens |
@@ -84,9 +87,10 @@ The third chip row filters by team, minimum snap share and any stat (**Filters**
 | `:core:charts` | Android | Compose Canvas charts (bars, radar, scatter) — no charting library |
 | `:core:ui` | Android | Shared screen chrome (profile chip, metric/weeks sheets) so no feature module depends on another |
 | `:core:designsystem` | Android | Theme, dark mode, colorblind-safe heat scale |
-| `:core:data` | JVM | Stat packs, qualifying bars, formatting, and the Grid/Compare/scoring/tray repositories |
+| `:core:data` | JVM | Stat packs, qualifying bars, formatting, the Grid/Compare/scoring/tray/settings repositories, and ESPN live data (`live.db`) |
 | `:core:datastore` | JVM | User preferences (scoring profiles, active profile, compare tray) as a small JSON file, read through a `PrefsSource` interface for virtual-time tests |
-| `:core:database` | JVM | Read-only SQLite access via the bundled driver |
+| `:core:database` | JVM | Read-only SQLite access via the bundled driver, reopened after each refresh |
+| `:core:ingest` | JVM | Builds `stats.db` from nflverse and ffopportunity, on the phone and in CI |
 | `:core:statquery` | JVM | Query builder |
 | `:core:model` | JVM | Shared types |
 | `:core:testing` | JVM | Test fixtures: a JDBC executor over the real database, a fake `PrefsSource` |
@@ -105,14 +109,16 @@ The data modules are plain JVM, so the phone's own database code, including the 
 ## Building
 
 ```bash
-# Data
-cd etl && pip install -r requirements.txt
-python -m gridiron_etl.build --seasons 2024 2025 2026 --out build/stats.db && cd ..
+# A stats database for the tests, built by the same Kotlin code the phone runs
+./gradlew :core:ingest:buildStatsDb -Pseasons="2024 2025 2026" -Pout=etl/build/stats.db
 
 # Everything else (JDK 17+, Android SDK with platform 37)
-GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test                  # all tests, against the real data
-GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew :app:assembleRelease  # the APK
-./gradlew :feature:players:recordRoborazziDebug                      # screenshots of the Grid
+GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test   # all tests, against the real data
+./gradlew :app:assembleRelease                        # the APK (it carries no data)
+./gradlew :feature:players:recordRoborazziDebug       # screenshots of the Grid
+
+# The Python ETL, now only the parity reference
+cd etl && pip install -r requirements.txt && python -m pytest tests/ -q
 ```
 
 ## Attribution
