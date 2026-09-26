@@ -31,21 +31,18 @@
 
 ## Next step
 
-**Execute Plan 2, Tasks 7–11** (`docs/superpowers/plans/2026-09-25-live-refresh-app.md`), natively, with the `executing-plans` skill. These are the plan's last five tasks:
-- Task 7: `RefreshCoordinator`
-- Task 8: App wiring, Load stats and Settings, removing the bundled database
-- Task 9: News, Player page and live Injury report
-- Task 10: Grid injury badges
-- Task 11: Removing `etl.yml` and the benchmark, plus docs
+**Execute Plan 2, Task 11** (`docs/superpowers/plans/2026-09-25-live-refresh-app.md`), natively, with the `executing-plans` skill: removing `etl.yml` and the benchmark, plus docs. It is the plan's last task.
 
-The standing batch size is 4, but the 2026-09-26 session ran 5 at the user's request. If the next session also runs 5, it finishes the plan. After that comes the final whole-branch review: one fresh reviewer on the most capable model.
+Then run the **final whole-branch review**: one fresh reviewer on the most capable model, per the `executing-plans` skill's Final Review section (review package from `git merge-base origin/claude/relaxed-hypatia-73hhub HEAD` to `HEAD`, the plan's Review Focus verbatim, and the rulings recorded below). Fix its Critical and Important findings in one pass, each with a test that fails first.
 
-1. For each task in the batch, follow the task's steps exactly: failing test, implementation, passing test, commit.
-2. Tick each task under **Execution progress** below.
-3. Set this section to the task after the batch.
+1. Follow Task 11's steps exactly: failing test, implementation, passing test, commit.
+2. Tick it under **Execution progress** below.
+3. Run the final review and its fix pass, and record the results here.
 4. Commit, push, and stop.
 
-First, check that CI is green on this handoff commit. CI was green on 5605a11, including the `parity` job, before this batch started.
+First, check that CI is green on this handoff commit. Locally, `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test :app:assembleRelease` was green after Task 10.
+
+**Checkpoint (non-blocking), for the user:** the APK from this commit is the first that builds stats on the phone. Existing installs keep their stats and get a one-time "Refresh now" prompt; a fresh install opens on Load stats.
 
 ## Execution progress
 
@@ -95,4 +92,14 @@ The executing-plans ledger lives in git-ignored `.superpowers/` and does not sur
 - [x] Task 6: `LiveRepository` and `PlayerDirectory` (commit 7485cf9; `./gradlew :core:data:test` → green; `PlayerDirectoryTest` 3/3, `LiveRepositoryTest` 7/7).
   - No rulings. Code written verbatim; watched failing first (unresolved `PlayerDirectory`).
 - Batch check: `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test :app:assembleRelease` → BUILD SUCCESSFUL after Task 6.
-- Tasks 7–11 not started.
+- [x] Task 7: `RefreshCoordinator` (commit d7aa620; `./gradlew :app:testDebugUnitTest --tests "*RefreshTextTest*" --tests "*RefreshCoordinatorTest*"` → 12/12 pass).
+  - No rulings. Code written verbatim; watched failing first (unresolved `RefreshCoordinator`, `StatsBuilder`, `progressText`).
+- [x] Task 8: App wiring, Load stats, refresh bar, Settings; no bundled database (commit ffb2794; `GRIDIRON_STATS_DB=… ./gradlew :app:testDebugUnitTest` → 27/27; `env -u GRIDIRON_STATS_DB ./gradlew :app:assembleRelease` → BUILD SUCCESSFUL; `assets/stats.db` entries in the APK: 0).
+  - No rulings. Code written verbatim; watched failing first (unresolved `LoadStatsScreen`, `SettingsScreen`, `No parameter with name 'refresher'`).
+- [x] Task 9: News, Player page, live Injury report (commit 8c9adca; `./gradlew :core:data:test :app:testDebugUnitTest` → 114/114 core:data, 36/36 app).
+  - No rulings. Code written verbatim; watched failing first (unresolved `playerId`, `formatWhen`, `injuryReport`).
+- [x] Task 10: Grid injury badges (commit 7378e76; `./gradlew :feature:players:testDebugUnitTest :app:testDebugUnitTest` → 45/45 players, 36/36 app). The recorded `11_injury_badge.png` shows a "Q" after the first player's name.
+  - Ruling: Task 9 merged its new imports alphabetically, putting `java.time.Instant` ahead of `kotlinx.*` in `TeamScreens.kt`, against the repo's java-last order. The Task 10 commit moved it back. Cost if wrong: none (import order only).
+  - Note: Roborazzi writes `build/outputs/roborazzi/*.png` only in record mode (`./gradlew :feature:players:recordRoborazziDebug`), not on a plain `testDebugUnitTest` run.
+- Batch check: `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test :app:assembleRelease` → BUILD SUCCESSFUL after Task 10.
+- Task 11 not started.
