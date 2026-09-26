@@ -272,4 +272,55 @@ class ForecastEngineTest {
             )
         }
     }
+
+    @Test
+    fun `only the starting QB is projected to pass`() {
+        league("a.db").use { db ->
+            db.player("QB2_A", "QB", "AAA")
+            db.week("QB2_A", 2024, 1, "AAA", "attempts" to 3.0, "completions" to 2.0, "passing_yards" to 15.0)
+
+            run(db)
+
+            assertEquals(
+                listOf(listOf("QB_A")),
+                db.query(
+                    "SELECT player_id FROM player_week_projection WHERE season = 2025 AND week = 3 AND stage = 'final' " +
+                        "AND metric_id = 'attempts' AND player_id IN ('QB_A', 'QB2_A')",
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `a team's players split exactly its targets and carries`() {
+        league("a.db").use { db ->
+            run(db)
+            // AAA is team index 0, so playWeek's k is 1 + 0.05 x week; its 2025 week 2 WR had 9 targets.
+            val weeks = listOf(2024 to 1, 2024 to 2, 2024 to 3, 2025 to 1, 2025 to 2)
+            val targets = weeks.map { (s, w) -> 4.0 + if (s == 2025 && w == 2) 9.0 else 9 * (1.0 + 0.05 * w) }
+            val carries = weeks.map { (_, w) -> 3.0 + 18 * (1.0 + 0.05 * w) }
+            fun baseline(metric: String) = db.query(
+                "SELECT SUM(mean) FROM player_week_projection WHERE season = 2025 AND week = 3 AND stage = 'baseline' " +
+                    "AND metric_id = '$metric' AND player_id IN ('QB_A', 'RB_A', 'WR_A')",
+            ).single()[0]!!.toDouble()
+
+            assertEquals(ewma(targets, 4.0)!!, baseline("targets"), 1e-6)
+            assertEquals(ewma(carries, 4.0)!!, baseline("carries"), 1e-6)
+        }
+    }
+
+    @Test
+    fun `a player who hasn't played for his team lately isn't projected`() {
+        league("a.db").use { db ->
+            db.player("WR_X", "WR", "AAA")
+            for (week in 1..3) db.week("WR_X", 2024, week, "AAA", "targets" to 3.0, "receptions" to 2.0, "receiving_yards" to 20.0)
+
+            run(db)
+
+            assertEquals(
+                listOf(listOf("0")),
+                db.query("SELECT COUNT(*) FROM player_week_projection WHERE player_id = 'WR_X' AND season = 2025 AND week = 3"),
+            )
+        }
+    }
 }

@@ -66,7 +66,7 @@ internal class Projector(
             onWeek(season, week)
             projected++
             val state = WeekState(season, week)
-            val prepared = candidates(state.order).mapNotNull { projectPlayer(state, it, kind) }
+            val prepared = prepareWeek(state, kind)
             if (kind == WeekKind.UPCOMING) {
                 upcoming = state to prepared
                 for (p in prepared) addRest(state, p, season, week, ros)
@@ -123,7 +123,28 @@ internal class Projector(
             .sortedBy { it.playerId }
     }
 
-    private fun projectPlayer(state: WeekState, player: PlayerInfo, kind: WeekKind): Prepared? {
+    /** A player placed on a team for one week, before his team's shares are worked out. */
+    private class Draft(val player: PlayerInfo, val team: String, val game: Game?, val ctx: PlayerContext, val rates: Rates)
+
+    /**
+     * One week's projections, a team at a time: the expected starting QB and
+     * the active players, with the team's target and carry shares scaled to
+     * sum to one (spec amendment to layer 2).
+     */
+    private fun prepareWeek(state: WeekState, kind: WeekKind): List<Prepared> =
+        candidates(state.order).mapNotNull { draft(state, it, kind) }.groupBy { it.team }.flatMap { (team, onTeam) ->
+            val starter = expectedStarter(team, onTeam, state, kind)
+            val kept = onTeam.filter { d ->
+                if (d.player.position == "QB") d.player.playerId == starter else isActive(d, team, state, kind)
+            }
+            val shares = normalizeShares(
+                kept.associate { d -> d.player.playerId to model.shares(d.ctx, d.rates, starter = d.player.playerId == starter) },
+            )
+            val volume = teamVolume(teamHistory[team].orEmpty().takeWhile { it.order < state.order }, state.leagueTeam)
+            kept.map { d -> finish(state, d, shares.getValue(d.player.playerId), volume, kind) }
+        }
+
+    private fun draft(state: WeekState, player: PlayerInfo, kind: WeekKind): Draft? {
         val rates = state.rates[player.position] ?: return null
         val all = inputs.history[player.playerId].orEmpty()
         val before = all.takeWhile { it.order < state.order }
@@ -132,18 +153,53 @@ internal class Projector(
         // A past bye has nothing to project. An upcoming bye has no weekly rows, but its later games still make rest of season.
         if (game == null && kind != WeekKind.UPCOMING) return null
         val ctx = PlayerContext(player.position, state.season, state.week, before, regimeBreak(player, team, before, state.season, state.week))
-        val volume = teamVolume(teamHistory[team].orEmpty().takeWhile { it.order < state.order }, state.leagueTeam)
-        val prepared = Prepared(player, team, model.project(ctx, rates, volume), volume.passRate)
-        if (game == null) return prepared
+        return Draft(player, team, game, ctx, rates)
+    }
+
+    /**
+     * Whether a non-QB is on the field for [team] as of this week: he played
+     * for it in one of its last [K.ACTIVE_WINDOW] games, or, from the upcoming
+     * week on, nflverse lists him on [team] and he hasn't played for it yet (a
+     * signing or trade).
+     */
+    private fun isActive(d: Draft, team: String, state: WeekState, kind: WeekKind): Boolean {
+        val recent = teamHistory[team].orEmpty().filter { it.order < state.order }.takeLast(K.ACTIVE_WINDOW).map { it.order }.toSet()
+        if (d.ctx.history.any { it.team == team && it.order in recent }) return true
+        return kind != WeekKind.PAST && d.player.team == team && d.ctx.history.lastOrNull()?.team != team
+    }
+
+    /**
+     * The QB who gets [team]'s passing this week. In order: the starter
+     * nflverse lists for the game; else the most recent listed starter who is
+     * still with the team; else the team's QB with the most attempts in its
+     * latest game. Null when the team has no QB candidate.
+     */
+    private fun expectedStarter(team: String, onTeam: List<Draft>, state: WeekState, kind: WeekKind): String? {
+        val qbs = onTeam.filter { it.player.position == "QB" }
+        if (qbs.isEmpty()) return null
+        val ids = qbs.map { it.player.playerId }.toSet()
+        gameOf[Triple(team, state.season, state.week)]?.qbOf(team)?.takeIf { it in ids }?.let { return it }
+        inputs.games
+            .filter { it.involves(team) && order(it.season, it.week) < state.order }
+            .mapNotNull { it.qbOf(team) }
+            .lastOrNull { it in ids && (kind == WeekKind.PAST || inputs.players[it]?.team == team) }
+            ?.let { return it }
+        val latest = teamHistory[team].orEmpty().lastOrNull { it.order < state.order }?.order
+        return qbs.maxByOrNull { d -> d.ctx.history.lastOrNull { it.team == team && it.order == latest }?.get("attempts") ?: 0.0 }?.player?.playerId
+    }
+
+    private fun finish(state: WeekState, d: Draft, shares: Shares, volume: TeamVolume, kind: WeekKind): Prepared {
+        val prepared = Prepared(d.player, d.team, model.project(d.ctx, d.rates, volume, shares), volume.passRate)
+        val game = d.game ?: return prepared
         val (afterMatchup, final) = finalFor(state, prepared, game)
-        val cv = K.EMPIRICAL_CV.getValue(player.position)
+        val cv = K.EMPIRICAL_CV.getValue(d.player.position)
         when (kind) {
             WeekKind.PAST -> if (referencePoints(final) >= K.PAST_WEEK_MIN_POINTS) {
-                emit(player.playerId, state.season, state.week, "final", final, cv)
+                emit(d.player.playerId, state.season, state.week, "final", final, cv)
             }
             WeekKind.UPCOMING -> if (referencePoints(final) >= K.UPCOMING_MIN_POINTS) {
-                emit(player.playerId, state.season, state.week, "baseline", prepared.baseline, cv)
-                emit(player.playerId, state.season, state.week, "final", final, cv)
+                emit(d.player.playerId, state.season, state.week, "baseline", prepared.baseline, cv)
+                emit(d.player.playerId, state.season, state.week, "final", final, cv)
                 emitFactors(state, prepared, game, afterMatchup, final)
             }
             WeekKind.REST -> Unit

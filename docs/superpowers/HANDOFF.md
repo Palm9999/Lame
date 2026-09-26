@@ -26,20 +26,15 @@
   - The Critical issue and the third Important one both come from layer 2's design, so they need a spec amendment rather than a code fix.
 - [x] **Layer-2 fix designed** (user's choice: next session). It's the spec's "Amendment: layer 2", planned in `docs/superpowers/plans/2026-09-26-projection-share-fix.md` (2 tasks, full code).
 
-## Next step: the layer-2 fix (2 tasks)
+- [x] **Layer-2 fix built** (Tasks 1–2 of the fix plan; see "Layer-2 fix: execution progress" below). Real data now has one passer per team and team totals at real volume.
 
-1. Read `docs/superpowers/plans/2026-09-26-projection-share-fix.md` in full (it's short), and the spec's "Amendment: layer 2" section.
-2. Invoke `executing-plans` (native) and run Tasks 1–2.
-   - Follow each task's steps: write the failing test, watch it fail, implement, watch it pass, commit.
-   - Code blocks are written verbatim; fix only what fails to compile or test. Record every deviation as a ruling below.
-3. Task 2 Step 6 needs network to build 2024–2026 and prove the fix on real data. Record the numbers it asks for.
-4. Update this file and push. Then check PR #4's CI; the GitHub MCP tools are deferred, so load them with ToolSearch.
-   - If CI is green and the PR merges cleanly, tell the user sub-project 1 is ready to merge.
-   - Next after that: plan sub-project 2 (accuracy page, spec §4) with writing-plans, in a fresh session.
+## Next step
+
+Sub-project 1 is complete; merge PR #4 when CI is green, then plan sub-project 2 (accuracy page, spec §4) with writing-plans in a fresh session.
 
 **Things to know:**
 - **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
-- **The accuracy gap is expected until the fix.** The reviewer's quick 2025 backtest had the model's error larger than a season-to-date average's at every position (QB 6.99 vs 6.62, RB 5.52 vs 5.23, WR 5.13 vs 4.99, TE 4.86 vs 4.85). The fix targets the causes; the real gate is sub-project 2's.
+- **The accuracy gap was measured before the fix.** The reviewer's quick 2025 backtest had the model's error larger than a season-to-date average's at every position (QB 6.99 vs 6.62, RB 5.52 vs 5.23, WR 5.13 vs 4.99, TE 4.86 vs 4.85). The fix targets the causes, but nobody has re-run the backtest since; the real gate is sub-project 2's.
 - **Deferred Minor findings** (the user decides):
   - Player page scoring runs on the main thread.
   - The list's scoring time was never measured.
@@ -50,7 +45,7 @@
 
 **PR #4 watch:**
 - This session is subscribed.
-- Self check-in: `trig_01LbtqsUqJrVwC6d3Bq3H6Jp` (2026-09-26 22:32 UTC). Re-arm every 3–6 hours while the PR only waits on the user; say nothing if nothing changed.
+- Self check-ins: `trig_01LbtqsUqJrVwC6d3Bq3H6Jp` (2026-09-26 22:32 UTC) and `trig_01PKEqFesGyPyqfsHvpQKpbq` (21:11 UTC). Re-arm every 3–6 hours while the PR only waits on the user; say nothing if nothing changed.
 - CI failures on PR #4 are ours to fix.
 
 ## Projection engine: execution progress
@@ -102,6 +97,20 @@
   - A `games.csv` download error failed the whole refresh. It's now a warning, and the build falls back to the kept copy. Tests: `IngestPipelineTest` × 2.
 - **Critical, not fixed here:** backups are projected like starters, team totals are about doubled, and stars are pulled down early. This is layer 2's design. The user chose to fix it in the next session. Spec amendment written; plan `2026-09-26-projection-share-fix.md`; CLAUDE.md Known Gaps updated.
 - **Important, not fixed here:** the model loses to the season-to-date average (numbers above). It's largely the same cause, and sub-project 2's gate owns it.
+
+**Layer-2 fix** (`docs/superpowers/plans/2026-09-26-projection-share-fix.md`, 2026-09-26). After Task 2, with `GRIDIRON_STATS_DB` set to a fresh 2024–2026 Kotlin build: `./gradlew :core:forecast:test :core:ingest:test :core:data:test` → 52 + 126 + 123 pass; `./gradlew :app:testDebugUnitTest :feature:projections:testDebugUnitTest` → 39 + 23 pass.
+
+- [x] Task 1: Shares shrunk toward the player, a starter-only pass share, and team normalization (commit 3097c75; `./gradlew :core:forecast:test` → 49/49 pass).
+  - No rulings. Code written verbatim; watched failing first (unresolved `shares`, `Shares`, `normalizeShares`).
+- [x] Task 2: The projector projects a team at a time; real-data contract (`./gradlew :core:forecast:test` → 52/52; `ProjectionsContractTest` → 2/2 on real data).
+  - Watched failing first: "only the starting QB is projected to pass" (QB2_A projected too) and "a player who hasn't played for his team lately isn't projected" (8 rows for WR_X).
+  - Ruling: the third new test, "a team's players split exactly its targets and carries", already passed before Step 3 (the brief expected it to fail). In this fixture each team has exactly the players who get its targets and carries, and Task 1's shrink toward each player's own last season is linear, so their shares already summed to one. The test stays as written: it would have failed before Task 1, and it guards the invariant. The Task 1 `normalizeShares` unit test and the real-data contract test cover normalization directly. Cost if wrong: an engine-level normalization regression in a fixture this simple would be caught only by those two tests.
+  - Real data (2024–2026 build, 19 s, `projections: ok`, `forecast_version` 2; upcoming week 2026 week 3):
+    - QBs projected over 20 pass attempts: **32** (was 73).
+    - Max team pass attempts: **39.8** (was 123). Team totals (min / average / max): attempts 23.5 / 32.9 / 39.8, targets 23.7 / 29.9 / 36.1, carries 17.1 / 26.9 / 37.0. Real averages are about 34, 30 and 27.
+    - Ja'Marr Chase's targets: **7.5** final, 7.8 baseline (was 6.8).
+- Final review: self-review only (no fresh reviewer for this 2-task plan); the user decides whether that's enough before merge.
+- Deferred minor: `Rates.passShare` (`League.kt`) no longer has a caller.
 
 Record each task as: `- [x] Task N: <name> (commit <sha>; <test command> → <result>)`, then `Ruling: <what> — <why> — <cost if wrong>` for any deviation.
 

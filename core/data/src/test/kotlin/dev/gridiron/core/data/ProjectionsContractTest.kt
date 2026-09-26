@@ -1,5 +1,6 @@
 package dev.gridiron.core.data
 
+import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.projections.projectPoints
@@ -14,27 +15,29 @@ import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
 
 /**
  * The phone's projection reads, end to end, against the database CI builds
- * with the same Kotlin code the phone runs: the gap the old fixture-only
- * projection tests left open.
+ * with the same Kotlin code the phone runs.
  */
 @EnabledIfEnvironmentVariable(named = "GRIDIRON_STATS_DB", matches = ".+")
 class ProjectionsContractTest {
+    /** In season, the upcoming week; off-season, the last week projected. */
+    private suspend fun projectedWeek(repo: ProjectionsRepository, executor: QueryExecutor): Pair<Int, Int> {
+        val status = repo.status()
+        assertEquals("ok", status.status)
+        return status.upcoming.maxByOrNull { it.key }?.toPair()
+            ?: executor.query(
+                SqlQuery(
+                    "SELECT season, MAX(week) FROM player_week_projection " +
+                        "WHERE season = (SELECT MAX(season) FROM player_week_projection)",
+                    emptyList(),
+                ),
+            ) { it.long(0).toInt() to it.long(1).toInt() }.single()
+    }
+
     @Test
     fun `the refresh-built database projects a full week that scores sensibly`() = runTest {
         JdbcQueryExecutor(StatsDb.path!!).use { executor ->
             val repo = ProjectionsRepository(executor)
-            val status = repo.status()
-            assertEquals("ok", status.status)
-
-            // In season, the upcoming week; off-season, the last week projected.
-            val (season, week) = status.upcoming.maxByOrNull { it.key }?.toPair()
-                ?: executor.query(
-                    SqlQuery(
-                        "SELECT season, MAX(week) FROM player_week_projection " +
-                            "WHERE season = (SELECT MAX(season) FROM player_week_projection)",
-                        emptyList(),
-                    ),
-                ) { it.long(0).toInt() to it.long(1).toInt() }.single()
+            val (season, week) = projectedWeek(repo, executor)
 
             val scored = repo.weekAll(season, week).mapNotNull { p ->
                 val position = p.position ?: return@mapNotNull null
@@ -49,6 +52,25 @@ class ProjectionsContractTest {
             assertTrue(topAverage("RB", 24) in 8.0..25.0, "RB1-24 average ${topAverage("RB", 24)}")
             assertTrue(topAverage("WR", 24) in 8.0..25.0, "WR1-24 average ${topAverage("WR", 24)}")
             assertTrue(topAverage("TE", 12) in 5.0..20.0, "TE1-12 average ${topAverage("TE", 12)}")
+        }
+    }
+
+    @Test
+    fun `every team's projected week adds up to one game, with one passer`() = runTest {
+        JdbcQueryExecutor(StatsDb.path!!).use { executor ->
+            val repo = ProjectionsRepository(executor)
+            val (season, week) = projectedWeek(repo, executor)
+
+            // Grouped by nflverse's current team: a traded player can land on his old team here, which the bounds allow for.
+            for ((team, players) in repo.weekAll(season, week).groupBy { it.team }) {
+                fun total(metric: String) = players.sumOf { p -> p.components.filter { it.metricId == metric }.sumOf { it.mean } }
+                val passers = players.filter { p -> p.components.any { it.metricId == "attempts" && it.mean > 5.0 } }.map { it.name }
+                assertTrue(passers.size <= 1, "$team has ${passers.size} passers: $passers")
+                // Real teams average about 34 pass attempts, 30 targets and 27 carries; matchup and script move them ±20%.
+                assertTrue(total("attempts") <= 50.0, "$team: ${total("attempts")} pass attempts")
+                assertTrue(total("targets") <= 50.0, "$team: ${total("targets")} targets")
+                assertTrue(total("carries") <= 45.0, "$team: ${total("carries")} carries")
+            }
         }
     }
 }
