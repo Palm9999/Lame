@@ -12,6 +12,7 @@ import dev.gridiron.core.data.live.LiveStatus
 import dev.gridiron.core.data.live.NewsItem
 import dev.gridiron.core.data.live.NewsPlayer
 import dev.gridiron.core.designsystem.GridironTheme
+import dev.gridiron.feature.projections.ProjectionCard
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -103,5 +104,20 @@ class LiveScreensTest {
         compose.onNodeWithText("Max Melton").performClick()
 
         assertEquals(listOf("P1"), players)
+    }
+
+    @Test
+    fun `the player page shows this week's projection and opens its waterfall`() {
+        var opened: Pair<Int, Int>? = null
+        val card = ProjectionCard(2026, 4, "@ BUF", null, 11.0, 5.2, 18.9, null, null, out = false)
+        val page = PlayerPage(null, null, emptyList(), emptyList(), null, projection = card)
+        compose.setContent {
+            GridironTheme {
+                PlayerScreen("P1", page, liveAvailable = true, onBack = {}, onOpen = {}, onProjection = { s, w -> opened = s to w })
+            }
+        }
+
+        compose.onNodeWithText("11.0 pts").performClick()
+        assertEquals(2026 to 4, opened)
     }
 }

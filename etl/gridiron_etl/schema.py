@@ -269,11 +269,9 @@ def _load_chunked(conn: sqlite3.Connection, table: str, cols: list[str],
                    df: pl.DataFrame, chunk: int = 100_000, commit: bool = True) -> int:
     """`commit=False` leaves the insert(s) in the connection's open
     transaction without committing, so a caller running several
-    `_load_chunked`-backed loaders as one all-or-nothing unit (see
-    build.py's projections stage) can `conn.commit()` once all of them
-    succeed, or `conn.rollback()` if any of them raises — undoing every
-    chunk already written by this call and any earlier sibling call in the
-    same transaction, not just this one's own rows."""
+    `_load_chunked`-backed loaders as one all-or-nothing unit can
+    `conn.commit()` once all of them succeed, or `conn.rollback()` if any
+    of them raises."""
     placeholders = ", ".join("?" for _ in cols)
     stmt = f"INSERT OR REPLACE INTO {table} ({', '.join(cols)}) VALUES ({placeholders})"
     rows = df.select(cols).rows()
@@ -282,36 +280,6 @@ def _load_chunked(conn: sqlite3.Connection, table: str, cols: list[str],
     if commit:
         conn.commit()
     return len(rows)
-
-
-def load_projections(conn: sqlite3.Connection, df: pl.DataFrame, commit: bool = True) -> int:
-    return _load_chunked(conn, "player_week_projection",
-                          ["player_id", "season", "week", "metric_id", "stage",
-                           "mean", "variance"], df, commit=commit)
-
-
-def load_projection_factors(conn: sqlite3.Connection, df: pl.DataFrame, commit: bool = True) -> int:
-    return _load_chunked(conn, "player_week_projection_factor",
-                          ["player_id", "season", "week", "factor",
-                           "log_multiplier", "note"], df, commit=commit)
-
-
-def load_ros_projections(conn: sqlite3.Connection, df: pl.DataFrame, commit: bool = True) -> int:
-    return _load_chunked(conn, "player_ros_projection",
-                          ["player_id", "season", "as_of_week", "metric_id",
-                           "mean", "variance"], df, commit=commit)
-
-
-def load_snapshots(conn: sqlite3.Connection, df: pl.DataFrame) -> int:
-    return _load_chunked(conn, "projection_snapshot",
-                          ["player_id", "season", "week", "metric_id",
-                           "projected_mean", "projected_variance", "snapshot_at"], df)
-
-
-def load_accuracy_summary(conn: sqlite3.Connection, df: pl.DataFrame) -> int:
-    return _load_chunked(conn, "accuracy_summary",
-                          ["position", "season", "metric_id", "baseline", "sample_n",
-                           "mae", "rmse", "bias", "r2"], df)
 
 
 def load_team_defense(conn: sqlite3.Connection, df: pl.DataFrame) -> int:

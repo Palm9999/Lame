@@ -1,17 +1,20 @@
 package dev.gridiron.core.ingest.db
 
-/** Written into `schema_meta`: the Python ETL's schema 5 plus `player_xref`. */
-public const val SCHEMA_VERSION: Int = 6
+/**
+ * Written into `schema_meta`: the Python ETL's schema 5, plus `player_xref`
+ * (6), plus `game`, minus the Python ETL's projection bookkeeping tables (7).
+ */
+public const val SCHEMA_VERSION: Int = 7
 
 /**
  * Bump whenever a transform, the schema or an input's meaning changes: a build
  * only copies a season out of a previous database built with the same version.
  */
-public const val INGEST_VERSION: Int = 1
+public const val INGEST_VERSION: Int = 2
 
 internal const val SOURCE_NOTE: String = "nflverse-data (CC BY 4.0); ffopportunity expected points (GPL >= 3)"
 
-/** `etl/gridiron_etl/schema.py`'s DDL, one statement per entry, plus `player_xref`. */
+/** `etl/gridiron_etl/schema.py`'s DDL, one statement per entry, plus `player_xref` and `game`, minus `projection_snapshot` and `accuracy_summary`. */
 internal val SCHEMA: List<String> = listOf(
     "PRAGMA journal_mode = OFF",
     "PRAGMA synchronous = OFF",
@@ -42,16 +45,6 @@ internal val SCHEMA: List<String> = listOf(
         player_id TEXT NOT NULL, season INTEGER NOT NULL, as_of_week INTEGER NOT NULL,
         metric_id TEXT NOT NULL, mean REAL NOT NULL, variance REAL NOT NULL,
         PRIMARY KEY (player_id, season, as_of_week, metric_id)) WITHOUT ROWID""",
-    """CREATE TABLE projection_snapshot (
-        player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
-        metric_id TEXT NOT NULL, projected_mean REAL NOT NULL, projected_variance REAL NOT NULL,
-        snapshot_at TEXT NOT NULL,
-        PRIMARY KEY (player_id, season, week, metric_id, snapshot_at)) WITHOUT ROWID""",
-    """CREATE TABLE accuracy_summary (
-        position TEXT NOT NULL, season INTEGER NOT NULL, metric_id TEXT NOT NULL,
-        baseline TEXT NOT NULL, sample_n INTEGER NOT NULL, mae REAL NOT NULL, rmse REAL NOT NULL,
-        bias REAL NOT NULL, r2 REAL,
-        PRIMARY KEY (position, season, metric_id, baseline)) WITHOUT ROWID""",
     """CREATE TABLE team_week_defense (
         team TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
         points_allowed REAL NOT NULL, yards_allowed REAL NOT NULL, sacks REAL NOT NULL,
@@ -66,6 +59,12 @@ internal val SCHEMA: List<String> = listOf(
     """CREATE TABLE player_xref (
         espn_id TEXT PRIMARY KEY, player_id TEXT NOT NULL, full_name TEXT NOT NULL,
         position TEXT, team TEXT) WITHOUT ROWID""",
+    // nflverse's schedule for the built seasons: opponents, results, pre-game lines, starting QBs and coaches.
+    """CREATE TABLE game (
+        game_id TEXT PRIMARY KEY, season INTEGER NOT NULL, week INTEGER NOT NULL, game_type TEXT NOT NULL,
+        home_team TEXT NOT NULL, away_team TEXT NOT NULL, home_score INTEGER, away_score INTEGER,
+        spread_line REAL, total_line REAL, roof TEXT, home_qb_id TEXT, away_qb_id TEXT,
+        home_coach TEXT, away_coach TEXT) WITHOUT ROWID""",
 )
 
 /** One covering index for the Grid's metric-over-range reads; see `schema.py` for why only these. */
@@ -73,4 +72,5 @@ internal val INDEXES: List<String> = listOf(
     "CREATE INDEX idx_pws_metric_season_week ON player_week_stat (metric_id, season, week, value)",
     "CREATE INDEX idx_player_search ON player (search_name)",
     "CREATE INDEX idx_player_position ON player (position)",
+    "CREATE INDEX idx_game_week ON game (season, week)",
 )

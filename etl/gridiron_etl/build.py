@@ -19,24 +19,6 @@ from .metrics import METRICS, metric_rows, sparse_metric_ids
 log = logging.getLogger("gridiron.build")
 
 
-
-def _drop_nonfinite(df: pl.DataFrame, cols: list[str], label: str) -> pl.DataFrame:
-    """Filter out any row whose given columns aren't finite (NaN or +/-inf)
-    before it reaches SQLite, which either rejects a NaN with a NOT NULL
-    constraint failure or accepts it silently depending on column affinity —
-    neither of which a build should ship. A zero-variance market blend (see
-    projections.blend_inverse_variance) is the known source of this today,
-    but this filter is a defensive backstop, not a substitute for that guard.
-    Logs how many rows were dropped, if any."""
-    mask = pl.all_horizontal([pl.col(c).is_finite() for c in cols])
-    filtered = df.filter(mask)
-    dropped = df.height - filtered.height
-    if dropped:
-        log.warning("projections: dropped %d %s row(s) with non-finite value(s) in %s",
-                    dropped, label, cols)
-    return filtered
-
-
 def _search_name(expr: pl.Expr) -> pl.Expr:
     """Normalize for the indexed prefix-range search.
 
@@ -191,57 +173,6 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
     log.info("team defense rows: %d", schema.load_team_defense(conn, pl.concat(defense, how="vertical_relaxed")))
     if injury:
         log.info("injury rows: %d", schema.load_injuries(conn, pl.concat(injury, how="vertical_relaxed")))
-
-    from . import projections as proj_module
-    projection_context = {
-        "odds_props": pl.DataFrame(
-            {"player_name": [], "market": [], "line": [], "fair_prob": []},
-            schema={"player_name": pl.String, "market": pl.String,
-                    "line": pl.Float64, "fair_prob": pl.Float64},
-        ),
-        "prior_season_final": pl.DataFrame(
-            {"player_id": [], "target_share_ewma_final": [],
-             "carry_share_ewma_final": [], "snap_share_ewma_final": []},
-            schema={"player_id": pl.String, "target_share_ewma_final": pl.Float64,
-                    "carry_share_ewma_final": pl.Float64,
-                    "snap_share_ewma_final": pl.Float64},
-        ),
-        "xtd_baseline": pl.DataFrame({"position": [], "xtd_rate_baseline": []},
-                                      schema={"position": pl.String,
-                                              "xtd_rate_baseline": pl.Float64}),
-    }
-    # Real odds/prior-season/xTD-baseline wiring (live odds fetch, cross-season
-    # history) is deferred to a follow-up: this call proves the pipeline shape
-    # end-to-end against the real weekly frame with empty/neutral context. The
-    # real `weekly` frame doesn't yet carry every column the pipeline's later
-    # stages want (position, opponent, weather, Vegas lines, etc. are wired by
-    # later tasks), so this is wrapped like snap counts above: projections are
-    # additive, not a blocker for the stats the rest of the app already ships.
-    try:
-        proj_rows, factor_rows, ros_rows = proj_module.build_projections(weekly, projection_context)
-
-        # Defensive filter: a data problem (e.g. a zero-variance blend) must
-        # never reach SQLite as a NaN/inf, even though the blend itself is
-        # now guarded at the source (projections.blend_inverse_variance).
-        proj_rows = _drop_nonfinite(proj_rows, ["mean", "variance"], "player_week_projection")
-        factor_rows = _drop_nonfinite(factor_rows, ["log_multiplier"], "player_week_projection_factor")
-        ros_rows = _drop_nonfinite(ros_rows, ["mean", "variance"], "player_ros_projection")
-
-        # All three loads succeed together or none of them persist: each
-        # load defers its own commit, and a failure partway through rolls
-        # back everything written so far in this transaction rather than
-        # leaving a partial, inconsistent set of projection rows for
-        # schema.finalize()'s later commit to lock in.
-        try:
-            schema.load_projections(conn, proj_rows, commit=False)
-            schema.load_projection_factors(conn, factor_rows, commit=False)
-            schema.load_ros_projections(conn, ros_rows, commit=False)
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
-    except Exception as exc:  # projections are additive, not a blocker
-        log.warning("projections stage skipped (%s)", exc)
 
     schema.finalize(conn, built, meta)
     validation.validate(conn)

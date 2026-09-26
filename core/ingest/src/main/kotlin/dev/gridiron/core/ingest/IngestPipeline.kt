@@ -1,5 +1,10 @@
 package dev.gridiron.core.ingest
 
+import dev.gridiron.core.forecast.FORECAST_OK
+import dev.gridiron.core.forecast.FORECAST_VERSION
+import dev.gridiron.core.forecast.Forecast
+import dev.gridiron.core.forecast.SeasonCopy
+import dev.gridiron.core.ingest.csv.MissingColumnsException
 import dev.gridiron.core.ingest.csv.openInput
 import dev.gridiron.core.ingest.db.INGEST_VERSION
 import dev.gridiron.core.ingest.db.StatsDbWriter
@@ -12,6 +17,7 @@ import dev.gridiron.core.ingest.validate.crossCheck
 import dev.gridiron.core.ingest.validate.expectedCoverage
 import dev.gridiron.core.ingest.validate.fantasyContract
 import dev.gridiron.core.ingest.validate.validateDatabase
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
@@ -27,6 +33,7 @@ public sealed interface IngestProgress {
     public data class Downloading(public val season: Int?, public val what: String, public val bytes: Long, public val total: Long) : IngestProgress
     public data class Crunching(public val season: Int) : IngestProgress
     public data object Validating : IngestProgress
+    public data class Projecting(public val season: Int, public val week: Int) : IngestProgress
 }
 
 public data class IngestReport(
@@ -35,7 +42,11 @@ public data class IngestReport(
     public val skipped: Map<Int, String>,
     public val warnings: List<String>,
     public val facts: Long,
-)
+    /** "ok", or why the new database has no projections (the stats are fine either way). */
+    public val forecast: String = FORECAST_OK,
+) {
+    public val projectionsOk: Boolean get() = forecast == FORECAST_OK
+}
 
 private val SEASON_INPUTS = listOf(Input.PBP, Input.SNAP_COUNTS, Input.INJURIES, Input.EXPECTED)
 
@@ -44,13 +55,15 @@ private val SEASON_INPUTS = listOf(Input.PBP, Input.SNAP_COUNTS, Input.INJURIES,
  * for the Python ETL. A season whose inputs haven't changed since `previous`
  * was built is copied from it instead of downloaded and recomputed.
  *
- * [playersFile] (the player list, kept between builds) must live outside
- * [workDir], which is emptied when a build ends.
+ * [playersFile] and [gamesFile] (the player list and the schedule, kept
+ * between builds so an unchanged one needn't be downloaded again) must live
+ * outside [workDir], which is emptied when a build ends.
  */
 public class IngestPipeline(
     private val fetcher: Fetcher,
     private val workDir: File,
     private val playersFile: File,
+    private val gamesFile: File = playersFile.resolveSibling("games.csv"),
     private val now: () -> Instant = Instant::now,
 ) {
     /**
@@ -103,12 +116,44 @@ public class IngestPipeline(
                 }
                 check(built.isNotEmpty() || reused.isNotEmpty()) { "none of the seasons $seasons has published play-by-play" }
                 writer.writePlayers(players)
+                writer.writeGames(readSchedule((built + reused).toSet()))
                 writer.finish(built + reused, meta, now())
                 onProgress(IngestProgress.Validating)
                 val problems = validateDatabase(writer.connection)
                 if (problems.isNotEmpty()) throw ValidationException(problems)
-                IngestReport(built.sorted(), reused.sorted(), skipped.toMap(), warnings.toList(), writer.factCount())
+                val forecast = forecast(writer)
+                IngestReport(built.sorted(), reused.sorted(), skipped.toMap(), warnings.toList(), writer.factCount(), forecast)
             }
+        }
+
+        /** Projections for the new database. A failure leaves none and says why; it never fails the build. */
+        private fun forecast(writer: StatsDbWriter): String = try {
+            Forecast.run(writer.connection, now(), forecastCopy()) { season, week ->
+                job.ensureActive()
+                onProgress(IngestProgress.Projecting(season, week))
+            }.status
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val reason = e.message ?: e::class.simpleName ?: "unknown error"
+            Forecast.fail(writer.connection, now(), reason)
+            "failed: $reason"
+        }
+
+        /**
+         * Past seasons whose projections can be copied from the previous
+         * database: reused seasons, from the oldest up to the first rebuilt
+         * one (a season's projections depend on every season before it),
+         * never the latest, and only when the previous build projected them
+         * with this forecast version from exactly the same earlier seasons.
+         */
+        private fun forecastCopy(): SeasonCopy? {
+            val p = prior ?: return null
+            val prev = previous ?: return null
+            if (p["forecast_version"] != FORECAST_VERSION.toString() || p["forecast_status"] != FORECAST_OK) return null
+            val copyable = (built + reused).sorted().dropLast(1).takeWhile { it in reused }
+            if (copyable.isEmpty() || priorSeasons.sorted().takeWhile { it <= copyable.last() } != copyable) return null
+            return SeasonCopy(prev, copyable.toSet())
         }
 
         private suspend fun fetch(input: Input, season: Int?, known: Validators?, dest: File = File(workDir, Sources.fileName(input, season))): FetchResult =
@@ -123,6 +168,47 @@ public class IngestPipeline(
                 is FetchResult.Downloaded -> meta[key] = r.validators.encode()
                 FetchResult.NotModified -> meta[key] = checkNotNull(prior).getValue(key)
                 FetchResult.NotPublished -> error("nflverse's player list isn't available")
+            }
+        }
+
+        /**
+         * Null, with a warning, when there's no schedule: projections need it,
+         * stats don't. A download that fails falls back to the kept copy.
+         */
+        private suspend fun fetchGames(): File? {
+            val key = Sources.metaKey(Input.GAMES)
+            val known = prior?.get(key)?.let(Validators::decode)?.takeIf { gamesFile.isFile }
+            val result = try {
+                fetch(Input.GAMES, null, known, gamesFile)
+            } catch (e: IOException) {
+                if (known == null) {
+                    warnings += "couldn't download nflverse's schedule (${e.message}); no projections this time"
+                    return null
+                }
+                warnings += "couldn't download nflverse's schedule (${e.message}); using the last one"
+                meta[key] = checkNotNull(prior).getValue(key)
+                return gamesFile
+            }
+            return when (val r = result) {
+                is FetchResult.Downloaded -> gamesFile.also { meta[key] = r.validators.encode() }
+                FetchResult.NotModified -> gamesFile.also { meta[key] = checkNotNull(prior).getValue(key) }
+                FetchResult.NotPublished -> {
+                    warnings += "nflverse's schedule isn't available right now; no projections this time"
+                    null
+                }
+            }
+        }
+
+        private suspend fun readSchedule(seasons: Set<Int>): List<GameRow> {
+            val file = fetchGames() ?: return emptyList()
+            return try {
+                openInput(file).use { readGames(it, file.name, seasons) }
+            } catch (e: IOException) {
+                warnings += "the schedule file is unreadable (${e.message}); no projections this time"
+                emptyList()
+            } catch (e: MissingColumnsException) {
+                warnings += "${e.message}; no projections this time"
+                emptyList()
             }
         }
 

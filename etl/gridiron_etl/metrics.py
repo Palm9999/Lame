@@ -11,7 +11,7 @@ surfaced to the user so an unstable stat can't be mistaken for a reliable one.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass, replace
 from typing import Literal
 
 Tier = Literal["A", "B", "C", "D"]
@@ -283,7 +283,25 @@ _M: list[Metric] = [
     ],
 ]
 
-METRICS: dict[str, Metric] = {m.id: m for m in _M}
+# The distribution the phone's floor/ceiling simulation draws each projected
+# stat from. Mirrors core/ingest's Metrics.kt DIST_FAMILIES; the parity job
+# compares the metric table's dist_family column between the two builds.
+DIST_FAMILIES: dict[str, str] = {
+    **{m: "negbinom" for m in ("attempts", "carries", "targets")},
+    **{m: "binomial" for m in ("completions", "receptions")},
+    **{m: "gamma" for m in ("passing_yards", "rushing_yards", "receiving_yards")},
+    **{m: "poisson" for m in (
+        "passing_tds", "passing_tds_40", "passing_tds_50", "interceptions", "sacks_taken",
+        "passing_first_downs", "passing_2pt",
+        "rushing_tds", "rushing_tds_40", "rushing_tds_50", "rushing_first_downs", "rushing_2pt",
+        "receiving_tds", "receiving_tds_40", "receiving_tds_50", "receiving_first_downs",
+        "receiving_2pt", "fumbles_lost",
+    )},
+}
+
+METRICS: dict[str, Metric] = {
+    m.id: replace(m, dist_family=DIST_FAMILIES.get(m.id, m.dist_family)) for m in _M
+}
 
 
 def metric_rows() -> list[dict]:

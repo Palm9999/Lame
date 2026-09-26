@@ -5,6 +5,7 @@ import androidx.sqlite.SQLiteStatement
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
 import dev.gridiron.core.ingest.Fact
+import dev.gridiron.core.ingest.GameRow
 import dev.gridiron.core.ingest.InjuryRow
 import dev.gridiron.core.ingest.Metric
 import dev.gridiron.core.ingest.PlayerInfo
@@ -96,6 +97,29 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
         st.bindTextOrNull(7, r.status)
         st.bindTextOrNull(8, r.injury)
         st.bindTextOrNull(9, r.practice)
+    }
+
+    fun writeGames(rows: List<GameRow>) = insert(
+        """INSERT OR REPLACE INTO game (game_id, season, week, game_type, home_team, away_team, home_score,
+           away_score, spread_line, total_line, roof, home_qb_id, away_qb_id, home_coach, away_coach)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        rows,
+    ) { st, g ->
+        st.bindText(1, g.gameId)
+        st.bindLong(2, g.season.toLong())
+        st.bindLong(3, g.week.toLong())
+        st.bindText(4, g.gameType)
+        st.bindText(5, g.homeTeam)
+        st.bindText(6, g.awayTeam)
+        st.bindLongOrNull(7, g.homeScore)
+        st.bindLongOrNull(8, g.awayScore)
+        st.bindDoubleOrNull(9, g.spreadLine)
+        st.bindDoubleOrNull(10, g.totalLine)
+        st.bindTextOrNull(11, g.roof)
+        st.bindTextOrNull(12, g.homeQbId)
+        st.bindTextOrNull(13, g.awayQbId)
+        st.bindTextOrNull(14, g.homeCoach)
+        st.bindTextOrNull(15, g.awayCoach)
     }
 
     /**
@@ -229,6 +253,14 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
 
 private fun SQLiteStatement.bindTextOrNull(index: Int, value: String?) {
     if (value == null) bindNull(index) else bindText(index, value)
+}
+
+private fun SQLiteStatement.bindLongOrNull(index: Int, value: Int?) {
+    if (value == null) bindNull(index) else bindLong(index, value.toLong())
+}
+
+private fun SQLiteStatement.bindDoubleOrNull(index: Int, value: Double?) {
+    if (value == null) bindNull(index) else bindDouble(index, value)
 }
 
 private fun Boolean.toLong(): Long = if (this) 1L else 0L

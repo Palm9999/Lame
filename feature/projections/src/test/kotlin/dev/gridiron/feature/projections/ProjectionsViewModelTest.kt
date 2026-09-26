@@ -65,8 +65,8 @@ class ProjectionsViewModelTest {
                     emptyList()
                 } else {
                     listOf(
-                        FakeResultRow(listOf(playerId, "targets", "baseline", 6.0, 0.0)),
-                        FakeResultRow(listOf(playerId, "targets", "final", 7.2, 4.0)),
+                        FakeResultRow(listOf(playerId, "targets", "baseline", 6.0, 0.0, null)),
+                        FakeResultRow(listOf(playerId, "targets", "final", 7.2, 4.0, null)),
                     )
                 }
                 return rows.map(map)
@@ -106,9 +106,9 @@ class ProjectionsViewModelTest {
                         // so it contributes nothing to fantasy points -- it's
                         // here only to prove a *scored* baseline-only metric
                         // (receiving_tds, below) is the one driving the result.
-                        FakeResultRow(listOf("P1", "targets", "baseline", 6.0, 0.0)),
-                        FakeResultRow(listOf("P1", "targets", "final", 7.2, 4.0)),
-                        FakeResultRow(listOf("P1", "receiving_tds", "baseline", 0.5, 0.1)),
+                        FakeResultRow(listOf("P1", "targets", "baseline", 6.0, 0.0, null)),
+                        FakeResultRow(listOf("P1", "targets", "final", 7.2, 4.0, null)),
+                        FakeResultRow(listOf("P1", "receiving_tds", "baseline", 0.5, 0.1, null)),
                     )
                 }
                 return rows.map(map)

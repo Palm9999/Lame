@@ -19,28 +19,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.ProjectionsRepository
-import dev.gridiron.core.model.ScoringPresets
+import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.model.Position
 
-/**
- * Hosts [WaterfallCard] for one player/season/week. Always scores with
- * [ScoringPresets.PPR] and no position override -- profile/position aren't
- * wired through navigation yet, a deliberate scope limit (see task-11 brief).
- */
+/** Hosts [WaterfallCard] for one player's week, scored with the active profile and the player's own position. */
 @Composable
 public fun ProjectionsRoute(
     playerId: String,
     season: Int,
     week: Int,
     repository: ProjectionsRepository,
+    scoring: ScoringRepository,
+    players: PlayerDirectory?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val vm: ProjectionsViewModel = viewModel(factory = ProjectionsViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
+    val profile by scoring.active.collectAsStateWithLifecycle(initialValue = null)
 
-    LaunchedEffect(playerId, season, week) {
-        vm.load(playerId, season, week, ScoringPresets.PPR, position = null)
+    LaunchedEffect(playerId, season, week, profile) {
+        val active = profile ?: return@LaunchedEffect
+        val position = players?.header(playerId)?.position?.let(Position::fromCode)
+        vm.load(playerId, season, week, active, position)
     }
 
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {

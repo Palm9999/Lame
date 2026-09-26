@@ -1,5 +1,7 @@
 package dev.gridiron.core.ingest
 
+import androidx.sqlite.driver.bundled.BundledSQLiteDriver
+import androidx.sqlite.execSQL
 import dev.gridiron.core.ingest.db.readMeta
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
+import java.io.IOException
 import java.time.Instant
 
 class IngestPipelineTest {
@@ -41,6 +44,22 @@ class IngestPipelineTest {
             ),
         )
         fetcher.serve(Sources.url(Input.PLAYERS), Fixtures.gzip(csv), version)
+        serveGames()
+    }
+
+    private val gamesHeader = listOf(
+        "game_id", "season", "game_type", "week", "home_team", "away_team", "home_score", "away_score", "spread_line", "total_line",
+    )
+
+    private fun serveGames(version: String = "g1") {
+        val rows = listOf(2023, 2024, 2025).map { season ->
+            mapOf(
+                "game_id" to "${season}_01_BBB_AAA", "season" to season, "game_type" to "REG", "week" to 1,
+                "home_team" to "AAA", "away_team" to "BBB", "home_score" to 20, "away_score" to 17,
+                "spread_line" to 2.5, "total_line" to 41.5,
+            )
+        }
+        fetcher.serve(Sources.url(Input.GAMES), Fixtures.csv(gamesHeader, rows).toByteArray(), version)
     }
 
     private fun ep(season: Int, id: String, vararg values: Pair<String, Any?>): Map<String, Any?> =
@@ -102,8 +121,8 @@ class IngestPipelineTest {
         assertEquals(listOf(2024, 2025), report.built)
         assertEquals(emptyList<Int>(), report.reused)
         val meta = readMeta(out)!!
-        assertEquals("6", meta["schema_version"])
-        assertEquals("1", meta["ingest_version"])
+        assertEquals("7", meta["schema_version"])
+        assertEquals("2", meta["ingest_version"])
         assertEquals("2024,2025", meta["seasons"])
         assertEquals("1", meta["expected_through_week:2025"])
         assertNotNull(meta[Sources.metaKey(Input.PBP, 2025)])
@@ -277,5 +296,136 @@ class IngestPipelineTest {
         job.cancelAndJoin()
         assertFalse(out.exists())
         assertTrue(before.contentEquals(previous.readBytes()))
+    }
+
+    @Test
+    fun `the schedule is stored for the built seasons only`() = runTest {
+        servePlayers()
+        serveSeason(2024)
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+
+        pipeline.build(listOf(2024, 2025), previous = null, out = out)
+
+        assertEquals(listOf(listOf("2024"), listOf("2025")), query(out, "SELECT season FROM game ORDER BY season"))
+        assertNotNull(readMeta(out)!![Sources.metaKey(Input.GAMES)])
+    }
+
+    @Test
+    fun `a missing schedule is a warning, not a failed build`() = runTest {
+        servePlayers()
+        fetcher.remove(Sources.url(Input.GAMES))
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+
+        val report = pipeline.build(listOf(2025), previous = null, out = out)
+
+        assertEquals(listOf(2025), report.built)
+        assertTrue(report.warnings.any { "schedule" in it }, "${report.warnings}")
+        assertEquals(listOf(listOf("0")), query(out, "SELECT COUNT(*) FROM game"))
+    }
+
+    @Test
+    fun `a schedule download error is a warning, not a failed build`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        fetcher.onFetch = { url -> if (url == Sources.url(Input.GAMES)) throw IOException("HTTP 503") }
+        val out = File(dir, "stats.db")
+
+        val report = pipeline.build(listOf(2025), previous = null, out = out)
+
+        assertEquals(listOf(2025), report.built)
+        assertTrue(report.warnings.any { "schedule" in it }, "${report.warnings}")
+        assertEquals("no schedule", report.forecast)
+    }
+
+    @Test
+    fun `a schedule download error falls back to the kept copy`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        pipeline.build(listOf(2025), null, File(dir, "first.db"))
+        fetcher.onFetch = { url -> if (url == Sources.url(Input.GAMES)) throw IOException("HTTP 503") }
+
+        val second = File(dir, "second.db")
+        val report = pipeline.build(listOf(2025), File(dir, "first.db"), second)
+
+        assertTrue(report.warnings.any { "schedule" in it }, "${report.warnings}")
+        assertEquals(listOf(listOf("1")), query(second, "SELECT COUNT(*) FROM game"))
+        assertNotNull(readMeta(second)!![Sources.metaKey(Input.GAMES)])
+    }
+
+    @Test
+    fun `an unchanged schedule is read from the kept copy`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        pipeline.build(listOf(2025), null, File(dir, "first.db"))
+        fetcher.calls.clear()
+
+        val second = File(dir, "second.db")
+        pipeline.build(listOf(2025), File(dir, "first.db"), second)
+
+        assertNotNull(fetcher.calls.single { it.first == Sources.url(Input.GAMES) }.second)
+        assertEquals(listOf(listOf("1")), query(second, "SELECT COUNT(*) FROM game"))
+    }
+
+    @Test
+    fun `a build projects its seasons and records how`() = runTest {
+        servePlayers()
+        serveSeason(2024)
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+        val progress = mutableListOf<IngestProgress>()
+
+        val report = pipeline.build(listOf(2024, 2025), previous = null, out = out) { progress += it }
+
+        assertEquals("ok", report.forecast)
+        assertTrue(report.projectionsOk)
+        assertEquals("ok", readMeta(out)!!["forecast_status"])
+        assertTrue(IngestProgress.Projecting(2025, 1) in progress, "$progress")
+        // 2025 week 1 is projected from 2024's games; 2024 week 1 has nothing before it.
+        assertEquals(listOf(listOf("2025", "1")), query(out, "SELECT DISTINCT season, week FROM player_week_projection"))
+    }
+
+    @Test
+    fun `a forecast failure keeps the stats and says why`() = runTest {
+        servePlayers()
+        serveSeason(2024)
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2024, 2025), null, first)
+        // Break the table the next build copies 2024's projections from.
+        BundledSQLiteDriver().open(first.path).use { it.execSQL("DROP TABLE player_week_projection_factor") }
+
+        val second = File(dir, "second.db")
+        val report = pipeline.build(listOf(2024, 2025), first, second)
+
+        assertEquals(listOf(2024, 2025), report.reused)
+        assertTrue(report.forecast.startsWith("failed:"), report.forecast)
+        assertFalse(report.projectionsOk)
+        assertTrue(readMeta(second)!!.getValue("forecast_status").startsWith("failed:"))
+        assertEquals(listOf(listOf("0")), query(second, "SELECT COUNT(*) FROM player_week_projection"))
+        assertEquals(facts(first), facts(second))
+    }
+
+    @Test
+    fun `a build without a schedule has stats but no projections`() = runTest {
+        servePlayers()
+        fetcher.remove(Sources.url(Input.GAMES))
+        serveSeason(2025)
+
+        val report = pipeline.build(listOf(2025), null, File(dir, "stats.db"))
+
+        assertEquals("no schedule", report.forecast)
+    }
+
+    @Test
+    fun `a single season with nothing before it has no projections yet, and still builds`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+
+        val report = pipeline.build(listOf(2025), null, File(dir, "stats.db"))
+
+        assertEquals(listOf(2025), report.built)
+        assertEquals("no games to project from yet", report.forecast)
     }
 }
