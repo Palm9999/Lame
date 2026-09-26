@@ -179,7 +179,13 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                     entry<NewsKey> {
                         deps.live?.let { NewsRoute(it, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
                     }
-                    entry<PlayerKey> { key -> PlayerRoute(key.playerId, deps.players, deps.live, onBack = back) }
+                    entry<PlayerKey> { key ->
+                        PlayerRoute(
+                            key.playerId, deps.players, deps.live, onBack = back,
+                            projections = deps.projections, scoring = deps.scoring,
+                            onProjection = { season, week -> backStack.push(ProjectionsKey(key.playerId, season, week)) },
+                        )
+                    }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back) }
                     entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back) } }
                 },

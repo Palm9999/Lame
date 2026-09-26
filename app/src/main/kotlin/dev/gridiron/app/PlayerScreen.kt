@@ -33,45 +33,85 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerHeader
+import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.live.InjuryNote
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.LiveStatus
 import dev.gridiron.core.data.live.NewsItem
+import dev.gridiron.core.model.Position
+import dev.gridiron.feature.projections.ProjectionCard
+import dev.gridiron.feature.projections.ThisWeekCard
+import dev.gridiron.feature.projections.loadProjectionCard
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.flowOf
 import java.time.Instant
 
-/** Everything the Player page shows. The projections follow-up adds its card here. */
+/** Everything the Player page shows. */
 data class PlayerPage(
     val header: PlayerHeader?,
     val status: LiveStatus?,
     val notes: List<InjuryNote>,
     val news: List<NewsItem>,
     val asOf: Instant?,
+    val projection: ProjectionCard? = null,
 )
 
 private val NO_CHANGES: StateFlow<Long> = MutableStateFlow(0L)
 
 @Composable
-fun PlayerRoute(playerId: String, players: PlayerDirectory?, live: LiveRepository?, onBack: () -> Unit) {
+fun PlayerRoute(
+    playerId: String,
+    players: PlayerDirectory?,
+    live: LiveRepository?,
+    onBack: () -> Unit,
+    projections: ProjectionsRepository? = null,
+    scoring: ScoringRepository? = null,
+    onProjection: (season: Int, week: Int) -> Unit = { _, _ -> },
+) {
     val version by (live?.changes ?: NO_CHANGES).collectAsState()
+    val profile by remember(scoring) { scoring?.active ?: flowOf(null) }.collectAsState(initial = null)
     var page by remember(playerId) { mutableStateOf<PlayerPage?>(null) }
     LaunchedEffect(Unit) { live?.refreshIfStale() }
-    LaunchedEffect(playerId, version) {
+    LaunchedEffect(playerId, version, profile) {
+        val header = players?.header(playerId)
+        val status = live?.status(playerId)
+        val active = profile
+        val card = if (projections != null && active != null) {
+            try {
+                loadProjectionCard(projections, playerId, header?.team, active, header?.position?.let(Position::fromCode), status?.abbr)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null // a projection that can't be read never blocks the rest of the page
+            }
+        } else {
+            null
+        }
         page = PlayerPage(
-            header = players?.header(playerId),
-            status = live?.status(playerId),
+            header = header,
+            status = status,
             notes = live?.notes(playerId).orEmpty(),
             news = live?.playerNews(playerId).orEmpty(),
             asOf = live?.fetchedAt(),
+            projection = card,
         )
     }
     val uri = LocalUriHandler.current
-    PlayerScreen(playerId, page, liveAvailable = live != null, onBack = onBack, onOpen = { uri.openSafely(it) })
+    PlayerScreen(playerId, page, liveAvailable = live != null, onBack = onBack, onOpen = { uri.openSafely(it) }, onProjection = onProjection)
 }
 
 @Composable
-fun PlayerScreen(playerId: String, page: PlayerPage?, liveAvailable: Boolean, onBack: () -> Unit, onOpen: (String) -> Unit) {
+fun PlayerScreen(
+    playerId: String,
+    page: PlayerPage?,
+    liveAvailable: Boolean,
+    onBack: () -> Unit,
+    onOpen: (String) -> Unit,
+    onProjection: (season: Int, week: Int) -> Unit = { _, _ -> },
+) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -95,6 +135,10 @@ fun PlayerScreen(playerId: String, page: PlayerPage?, liveAvailable: Boolean, on
                             Text(detail.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
+                }
+                page.projection?.let { card ->
+                    item { SectionTitle("This week") }
+                    item { ThisWeekCard(card, onOpen = { onProjection(card.season, card.week) }) }
                 }
                 item { SectionTitle("Status") }
                 item {
