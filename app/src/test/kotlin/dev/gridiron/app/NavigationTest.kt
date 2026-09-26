@@ -25,6 +25,7 @@ import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -141,5 +142,43 @@ class NavigationTest {
 
         compose.onNodeWithTag("field:name").assertExists()
         compose.onNodeWithText("PPR copy").assertExists()
+    }
+
+    @Test
+    fun aFreshInstallShowsLoadStatsUntilTheFirstBuildLands() {
+        val refresher = FakeRefresher(hasStats = false)
+        compose.setContent { GridironTheme { GridironNavHost(deps.copy(refresher = refresher)) } }
+        settle()
+
+        compose.onNodeWithText("Load stats").performClick()
+        assertEquals(1, refresher.refreshes)
+
+        refresher.hasStats.value = true
+        settle()
+        compose.onNodeWithTag("grid").assertExists()
+    }
+
+    @Test
+    fun statsFromAnOlderAppPromptARefresh() {
+        val refresher = FakeRefresher(hasStats = true, legacy = true)
+        compose.setContent { GridironTheme { GridironNavHost(deps.copy(refresher = refresher)) } }
+        settle()
+
+        compose.onNodeWithText("Refresh now").performClick()
+        settle()
+
+        assertEquals(1, refresher.refreshes)
+        compose.onNodeWithText("Refresh now").assertDoesNotExist()
+    }
+
+    @Test
+    fun aRunningRefreshShowsItsProgressUnderTheGrid() {
+        val refresher = FakeRefresher()
+        refresher.state.value = RefreshState.Running("Crunching 2026…")
+        compose.setContent { GridironTheme { GridironNavHost(deps.copy(refresher = refresher)) } }
+        settle()
+
+        compose.onNodeWithText("Crunching 2026…").assertExists()
+        compose.onNodeWithTag("grid").assertExists()
     }
 }
