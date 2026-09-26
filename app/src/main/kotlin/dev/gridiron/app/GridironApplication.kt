@@ -8,7 +8,7 @@ import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TeamsRepository
-import dev.gridiron.core.database.DeferredQueryExecutor
+import dev.gridiron.core.database.ReopenableQueryExecutor
 import dev.gridiron.core.database.SqliteQueryExecutor
 import dev.gridiron.core.datastore.UserPrefsStore
 import dev.gridiron.core.ingest.HttpFetcher
@@ -28,7 +28,7 @@ class GridironApplication : Application() {
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val executor by lazy {
-        DeferredQueryExecutor { SqliteQueryExecutor.openReadOnly(StatsDbInstaller(this).install().path) }
+        ReopenableQueryExecutor { SqliteQueryExecutor.openReadOnly(StatsDbInstaller(this).install().path) }
     }
     private val prefs by lazy { UserPrefsStore.create(File(filesDir, "user_prefs.json"), appScope) }
 
