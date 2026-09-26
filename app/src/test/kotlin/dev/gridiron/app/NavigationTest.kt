@@ -1,6 +1,7 @@
 package dev.gridiron.app
 
 import android.os.Looper
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -13,10 +14,12 @@ import dev.gridiron.core.data.AccuracyRepository
 import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.GridRequest
+import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.testing.FakePrefsSource
@@ -24,6 +27,7 @@ import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertEquals
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Rule
@@ -63,6 +67,8 @@ class NavigationTest {
             tray = CompareTrayRepository(prefs),
             projections = ProjectionsRepository(executor),
             accuracy = AccuracyRepository(executor),
+            teams = TeamsRepository(executor),
+            players = PlayerDirectory(executor),
         )
     }
 
@@ -139,5 +145,69 @@ class NavigationTest {
 
         compose.onNodeWithTag("field:name").assertExists()
         compose.onNodeWithText("PPR copy").assertExists()
+    }
+
+    @Test
+    fun aFreshInstallShowsLoadStatsUntilTheFirstBuildLands() {
+        val refresher = FakeRefresher(hasStats = false)
+        compose.setContent { GridironTheme { GridironNavHost(deps.copy(refresher = refresher)) } }
+        settle()
+
+        compose.onNodeWithText("Load stats").performClick()
+        assertEquals(1, refresher.refreshes)
+
+        refresher.hasStats.value = true
+        settle()
+        compose.onNodeWithTag("grid").assertExists()
+    }
+
+    @Test
+    fun statsFromAnOlderAppPromptARefresh() {
+        val refresher = FakeRefresher(hasStats = true, legacy = true)
+        compose.setContent { GridironTheme { GridironNavHost(deps.copy(refresher = refresher)) } }
+        settle()
+
+        compose.onNodeWithText("Refresh now").performClick()
+        settle()
+
+        assertEquals(1, refresher.refreshes)
+        compose.onNodeWithText("Refresh now").assertDoesNotExist()
+    }
+
+    @Test
+    fun aRunningRefreshShowsItsProgressUnderTheGrid() {
+        val refresher = FakeRefresher()
+        refresher.state.value = RefreshState.Running("Crunching 2026…")
+        compose.setContent { GridironTheme { GridironNavHost(deps.copy(refresher = refresher)) } }
+        settle()
+
+        compose.onNodeWithText("Crunching 2026…").assertExists()
+        compose.onNodeWithTag("grid").assertExists()
+    }
+
+    @Test
+    fun tappingAGridRowOpensThePlayerPage() {
+        val (first, _) = firstTwoPlayerNames()
+        compose.setContent { GridironTheme { GridironNavHost(deps) } }
+        settle()
+
+        compose.onNodeWithContentDescription(first, substring = true).performClick()
+        settle()
+
+        compose.onNodeWithTag("playerName").assertTextEquals(first)
+        compose.onNodeWithText("Live injuries and news aren't available.").assertExists()
+    }
+
+    @Test
+    fun theMenuNoLongerOffersProjections() {
+        compose.setContent { GridironTheme { GridironNavHost(deps) } }
+        settle()
+
+        compose.onNodeWithTag("menu").performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Injury report").assertExists()
+        compose.onNodeWithText("Projection accuracy").assertDoesNotExist()
+        compose.onNodeWithText("Time a stats build").assertDoesNotExist()
     }
 }

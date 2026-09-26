@@ -13,7 +13,7 @@ from pathlib import Path
 import polars as pl
 import requests
 
-from . import sources, schema, transform, validate as validation
+from . import sources, schema, teams, transform, validate as validation
 from .metrics import METRICS, metric_rows, sparse_metric_ids
 
 log = logging.getLogger("gridiron.build")
@@ -115,6 +115,8 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
 
     metric_ids = list(METRICS.keys())
     frames: list[pl.DataFrame] = []
+    defense: list[pl.DataFrame] = []
+    injury: list[pl.DataFrame] = []
     built: list[int] = []
     meta: dict[str, str] = {}
 
@@ -127,6 +129,11 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
             continue
         built.append(season)
         lf = transform.load_pbp(pbp_path)
+        defense.append(teams.team_defense(pbp_path))
+        try:
+            injury.append(teams.injuries(sources.fetch("injuries", season, cache_dir=cache, force=force)))
+        except Exception as exc:  # injury reports are a nice-to-have, not a blocker
+            log.warning("season %d: injury report unavailable (%s)", season, exc)
         weekly = transform.weekly_player_stats(lf)
         log.info("season %d: %d player-weeks from play-by-play", season, weekly.height)
 
@@ -181,6 +188,9 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
     schema.load_metrics(conn, metric_rows())
     schema.load_players(conn, players)
     n = schema.load_facts(conn, long)
+    log.info("team defense rows: %d", schema.load_team_defense(conn, pl.concat(defense, how="vertical_relaxed")))
+    if injury:
+        log.info("injury rows: %d", schema.load_injuries(conn, pl.concat(injury, how="vertical_relaxed")))
 
     from . import projections as proj_module
     projection_context = {

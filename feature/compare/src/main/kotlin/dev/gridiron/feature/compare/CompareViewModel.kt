@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.launch
@@ -116,44 +117,48 @@ internal class CompareViewModel(
             }
         }
         viewModelScope.launch {
-            val catalog = try {
-                stats.catalog()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                catalogLoad = CatalogLoad.Failed("Couldn't open the stats database: ${e.message}")
-                recompute()
-                return@launch
-            }
-            catalogLoad = CatalogLoad.Loaded(catalog)
-            recompute()
-
-            combine(tray.slots, scoring.active, perGame, ::Triple)
-                .mapLatest { (slots, profile, pg) ->
-                    if (slots.size < 2) {
-                        needsPlayers = true
-                        page = null
-                        firstLoadError = null
-                        recompute()
-                        return@mapLatest
-                    }
-                    needsPlayers = false
-                    computing = true
+            // Each data version restarts the whole pipeline on the new catalog;
+            // the tray and profile live in preferences, so they carry over.
+            stats.dataVersion.collectLatest {
+                val catalog = try {
+                    stats.catalog()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    catalogLoad = CatalogLoad.Failed("Couldn't open the stats database: ${e.message}")
                     recompute()
-                    try {
-                        page = compare.compare(CompareRequest(slots, profile, pg), catalog)
-                        firstLoadError = null
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        val msg = e.message ?: e::class.simpleName.orEmpty()
-                        if (page == null) firstLoadError = msg else message = "Couldn't refresh: $msg"
-                    } finally {
-                        computing = false
-                        recompute()
-                    }
+                    return@collectLatest
                 }
-                .collect()
+                catalogLoad = CatalogLoad.Loaded(catalog)
+                recompute()
+
+                combine(tray.slots, scoring.active, perGame, ::Triple)
+                    .mapLatest { (slots, profile, pg) ->
+                        if (slots.size < 2) {
+                            needsPlayers = true
+                            page = null
+                            firstLoadError = null
+                            recompute()
+                            return@mapLatest
+                        }
+                        needsPlayers = false
+                        computing = true
+                        recompute()
+                        try {
+                            page = compare.compare(CompareRequest(slots, profile, pg), catalog)
+                            firstLoadError = null
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            val msg = e.message ?: e::class.simpleName.orEmpty()
+                            if (page == null) firstLoadError = msg else message = "Couldn't refresh: $msg"
+                        } finally {
+                            computing = false
+                            recompute()
+                        }
+                    }
+                    .collect()
+            }
         }
     }
 

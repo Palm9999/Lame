@@ -21,7 +21,7 @@ import polars as pl
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 DDL = """
 PRAGMA journal_mode = OFF;
@@ -142,6 +142,34 @@ CREATE TABLE accuracy_summary (
     bias      REAL NOT NULL,
     r2        REAL,
     PRIMARY KEY (position, season, metric_id, baseline)
+) WITHOUT ROWID;
+
+-- Team defense per week, straight from play-by-play.
+CREATE TABLE team_week_defense (
+    team              TEXT NOT NULL,
+    season            INTEGER NOT NULL,
+    week              INTEGER NOT NULL,
+    points_allowed    REAL NOT NULL,
+    yards_allowed     REAL NOT NULL,
+    sacks             REAL NOT NULL,
+    interceptions     REAL NOT NULL,
+    fumbles_recovered REAL NOT NULL,
+    defensive_tds     REAL NOT NULL,
+    PRIMARY KEY (team, season, week)
+) WITHOUT ROWID;
+
+-- Weekly injury report. Not tied to `player`: injured players may have no stats.
+CREATE TABLE injury_report (
+    player_id TEXT NOT NULL,
+    season    INTEGER NOT NULL,
+    week      INTEGER NOT NULL,
+    team      TEXT,
+    name      TEXT,
+    position  TEXT,
+    status    TEXT,
+    injury    TEXT,
+    practice  TEXT,
+    PRIMARY KEY (player_id, season, week)
 ) WITHOUT ROWID;
 """
 
@@ -284,3 +312,15 @@ def load_accuracy_summary(conn: sqlite3.Connection, df: pl.DataFrame) -> int:
     return _load_chunked(conn, "accuracy_summary",
                           ["position", "season", "metric_id", "baseline", "sample_n",
                            "mae", "rmse", "bias", "r2"], df)
+
+
+def load_team_defense(conn: sqlite3.Connection, df: pl.DataFrame) -> int:
+    return _load_chunked(conn, "team_week_defense",
+                          ["team", "season", "week", "points_allowed", "yards_allowed",
+                           "sacks", "interceptions", "fumbles_recovered", "defensive_tds"], df)
+
+
+def load_injuries(conn: sqlite3.Connection, df: pl.DataFrame) -> int:
+    return _load_chunked(conn, "injury_report",
+                          ["player_id", "season", "week", "team", "name", "position",
+                           "status", "injury", "practice"], df)

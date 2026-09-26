@@ -102,4 +102,11 @@ class UserPrefsStoreTest {
         val prefs = UserPrefs(profiles = emptyList(), activeProfileId = "gone", tray = emptyList())
         assertEquals(ScoringPresets.PPR, prefs.active)
     }
+
+    @Test
+    fun `the seasons choice survives a reopen, and an older file has none`() {
+        assertEquals(null, withStore { it.prefs.first() }.seasons)
+        withStore { store -> store.update { it.copy(seasons = SeasonChoice(listOf(2026, 2024), 2026)) } }
+        assertEquals(SeasonChoice(listOf(2024, 2026), 2026), withStore { it.prefs.first() }.seasons)
+    }
 }

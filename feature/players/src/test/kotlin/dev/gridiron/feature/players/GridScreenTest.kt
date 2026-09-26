@@ -32,6 +32,7 @@ import dev.gridiron.core.statquery.Filter
 import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.runBlocking
@@ -84,6 +85,23 @@ class GridScreenTest {
 
     private fun show(state: GridUiState, dark: Boolean = false, onEvent: (GridEvent) -> Unit = {}) {
         compose.setContent { GridironTheme(darkTheme = dark) { GridScreen(state, onEvent) } }
+    }
+
+    @Test
+    fun aDatabaseThatWontOpenStillOffersARefresh() {
+        var refreshed = 0
+        compose.setContent {
+            GridironTheme {
+                GridScreen(
+                    GridUiState.Failed("Couldn't open the stats database: file is not a database"),
+                    onEvent = {},
+                    recovery = listOf("Refresh stats" to { refreshed++ }),
+                )
+            }
+        }
+        compose.onNodeWithText("Couldn't open the stats database: file is not a database").assertIsDisplayed()
+        compose.onNodeWithText("Refresh stats").performClick()
+        assertEquals(1, refreshed)
     }
 
     @Test
@@ -281,5 +299,17 @@ class GridScreenTest {
         // than a single tagged node.
         compose.onAllNodesWithContentDescription("Last 6 weeks:", substring = true).onFirst().assertExists()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/10_sparklines_dark.png")
+    }
+
+    @Test
+    fun anInjuredPlayerShowsTheirBadge() {
+        val season = catalog.season(2025)
+        val state = ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY))
+        val first = state.page!!.rows.first()
+        show(state.copy(badges = persistentMapOf(first.playerId to "Q")))
+
+        // Rows expose one merged description; the badge is part of it.
+        compose.onNodeWithContentDescription("${first.name} (injury status Q)", substring = true).assertExists()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/11_injury_badge.png")
     }
 }

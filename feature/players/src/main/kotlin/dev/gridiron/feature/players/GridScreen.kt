@@ -80,6 +80,8 @@ import dev.gridiron.core.ui.WeeksSheet
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -91,10 +93,14 @@ fun GridRoute(
     onCompare: () -> Unit,
     onEditProfiles: () -> Unit,
     modifier: Modifier = Modifier,
+    onPlayer: (playerId: String, season: Int, week: Int) -> Unit = { _, _, _ -> },
+    menu: List<Pair<String, (season: Int) -> Unit>> = emptyList(),
+    badges: Flow<Map<String, String>> = flowOf(emptyMap()),
+    recovery: List<Pair<String, () -> Unit>> = emptyList(),
 ) {
-    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray))
+    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges))
     val state by vm.state.collectAsStateWithLifecycle()
-    GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles)
+    GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu, recovery)
 }
 
 @Composable
@@ -104,6 +110,10 @@ fun GridScreen(
     modifier: Modifier = Modifier,
     onCompare: () -> Unit = {},
     onEditProfiles: () -> Unit = {},
+    onPlayer: (playerId: String, season: Int, week: Int) -> Unit = { _, _, _ -> },
+    menu: List<Pair<String, (season: Int) -> Unit>> = emptyList(),
+    /** Offered when the database won't open (the ☰ menu needs a season, so it can't show): a way out. */
+    recovery: List<Pair<String, () -> Unit>> = emptyList(),
 ) {
     // A Surface, not a Box with a background: it also sets the content color
     // that every Text inherits. Without it, text defaults to black, which is
@@ -119,19 +129,28 @@ fun GridScreen(
                 Spacer(Modifier.height(12.dp))
                 Text("Opening stats…", style = MaterialTheme.typography.bodyMedium)
             }
-            is GridUiState.Failed -> Text(
-                state.message,
+            is GridUiState.Failed -> Column(
                 Modifier.align(Alignment.Center).padding(24.dp),
-                color = MaterialTheme.colorScheme.error,
-            )
-            is GridUiState.Ready -> GridContent(state, onEvent, onCompare, onEditProfiles)
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(state.message, color = MaterialTheme.colorScheme.error)
+                recovery.forEach { (label, action) -> TextButton(onClick = action) { Text(label) } }
+            }
+            is GridUiState.Ready -> GridContent(state, onEvent, onCompare, onEditProfiles, onPlayer, menu)
         }
       }
     }
 }
 
 @Composable
-private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, onCompare: () -> Unit, onEditProfiles: () -> Unit) {
+private fun GridContent(
+    state: GridUiState.Ready,
+    onEvent: (GridEvent) -> Unit,
+    onCompare: () -> Unit,
+    onEditProfiles: () -> Unit,
+    onPlayer: (playerId: String, season: Int, week: Int) -> Unit,
+    menu: List<Pair<String, (season: Int) -> Unit>>,
+) {
     val r = state.request
     var showWeeks by remember { mutableStateOf(false) }
     var showTeams by remember { mutableStateOf(false) }
@@ -149,7 +168,7 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            TitleBar(state, onEvent, onWeeks = { showWeeks = true }, onEditProfiles = onEditProfiles)
+            TitleBar(state, onEvent, onWeeks = { showWeeks = true }, onEditProfiles = onEditProfiles, menu = menu)
 
             OutlinedTextField(
                 value = r.name,
@@ -237,12 +256,15 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
                         page,
                         state.heat,
                         state.sparklines,
+                        state.badges,
                         onSort = { onEvent(GridEvent.SortBy(it.column)) },
                         onInfo = { info = it.info },
                         onRowLongClick = { row ->
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             onEvent(GridEvent.AddToCompare(row.playerId, row.name))
                         },
+                        // Tap opens the projection for the week after the latest data.
+                        onRowClick = { row -> onPlayer(row.playerId, r.season.season, r.season.lastWeek + 1) },
                     )
                 }
             }
@@ -295,8 +317,15 @@ private fun GridContent(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, 
 }
 
 @Composable
-private fun TitleBar(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, onWeeks: () -> Unit, onEditProfiles: () -> Unit) {
+private fun TitleBar(
+    state: GridUiState.Ready,
+    onEvent: (GridEvent) -> Unit,
+    onWeeks: () -> Unit,
+    onEditProfiles: () -> Unit,
+    menu: List<Pair<String, (season: Int) -> Unit>>,
+) {
     var open by remember { mutableStateOf(false) }
+    var menuOpen by remember { mutableStateOf(false) }
     Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text("Gridiron", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
@@ -328,6 +357,16 @@ private fun TitleBar(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit, onW
                             onEvent(GridEvent.SeasonSelected(s.season))
                         },
                     )
+                }
+            }
+        }
+        if (menu.isNotEmpty()) {
+            Box {
+                TextButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("menu")) { Text("☰") }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    menu.forEach { (label, action) ->
+                        DropdownMenuItem(text = { Text(label) }, onClick = { menuOpen = false; action(state.request.season.season) })
+                    }
                 }
             }
         }
@@ -401,9 +440,11 @@ private fun PlayerTable(
     page: GridPage,
     heat: Boolean,
     sparklines: ImmutableMap<String, SparklineData>,
+    badges: ImmutableMap<String, String>,
     onSort: (ColumnUi) -> Unit,
     onInfo: (ColumnUi) -> Unit,
     onRowLongClick: (GridRowUi) -> Unit,
+    onRowClick: (GridRowUi) -> Unit = {},
 ) {
     val columns = remember(page.columns) { page.columns.map { TableColumn(it.column, ColumnWidth) }.toImmutableList() }
     val sortIndex = page.columns.indexOfFirst { it.column == page.request.sort }
@@ -455,7 +496,17 @@ private fun PlayerTable(
                     maxLines = 1,
                 )
                 Column {
-                    Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            row.name,
+                            Modifier.weight(1f, fill = false),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        badges[row.playerId]?.let { InjuryBadge(it, Modifier.padding(start = 4.dp)) }
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(row.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                         sparklines[row.playerId]?.takeIf { it.drawable }?.let { line ->
@@ -487,7 +538,9 @@ private fun PlayerTable(
         },
         rowDescription = { row ->
             buildString {
-                append(row.name).append(", ").append(row.detail).append(". ")
+                append(row.name)
+                badges[row.playerId]?.let { append(" (injury status ").append(it).append(')') }
+                append(", ").append(row.detail).append(". ")
                 page.columns.forEachIndexed { i, col ->
                     append(col.info?.name ?: col.header).append(' ').append(row.cells[i].text)
                     if (i < page.columns.lastIndex) append(", ")
@@ -498,6 +551,17 @@ private fun PlayerTable(
             }
         },
         onRowLongClick = onRowLongClick,
+        onRowClick = onRowClick,
         rowLongClickLabel = "Add to compare",
     )
+}
+
+/** ESPN's injury letter after a name: red for O, IR and D, the accent color for Q and anything else. */
+@Composable
+private fun InjuryBadge(abbr: String, modifier: Modifier = Modifier) {
+    val color = when (abbr) {
+        "O", "IR", "D" -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.tertiary
+    }
+    Text(abbr, modifier, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1)
 }

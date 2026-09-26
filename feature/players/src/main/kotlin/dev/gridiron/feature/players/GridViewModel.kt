@@ -36,11 +36,14 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.stateIn
@@ -99,6 +102,8 @@ sealed interface GridUiState {
         val sparklines: ImmutableMap<String, Sparkline> = persistentMapOf(),
         /** The open filter sheet's match count; null when the sheet is closed. */
         val draftCount: DraftCount? = null,
+        /** ESPN injury letters (Q, D, O, IR, …) by player id; empty when there is no live data. */
+        val badges: ImmutableMap<String, String> = persistentMapOf(),
     ) : GridUiState {
         val refreshing: Boolean get() = page?.request != request && error == null
     }
@@ -120,11 +125,13 @@ class GridViewModel(
     debounceMillis: Long = 150,
     /** Coalesces filter-sheet typing into one count. */
     countDebounceMillis: Long = 250,
+    /** Live injury letters by player id, from ESPN; re-emits after every live refresh. */
+    badges: Flow<Map<String, String>> = flowOf(emptyMap()),
 ) : ViewModel() {
 
     private sealed interface CatalogLoad {
         data object Loading : CatalogLoad
-        data class Loaded(val catalog: Catalog) : CatalogLoad
+        data class Loaded(val catalog: Catalog, val version: Long) : CatalogLoad
         data class Failed(val message: String) : CatalogLoad
     }
 
@@ -170,7 +177,7 @@ class GridViewModel(
                     else GridUiState.Ready(load.catalog, r, h, page, err?.takeIf { it.first == r }?.second)
             }
         }.combine(
-            combine(scoring.profiles, trayUi, message, editingSlot, combine(sparklines, draft, draftCount, ::Lines), ::Extras),
+            combine(scoring.profiles, trayUi, message, editingSlot, combine(sparklines, draft, draftCount, badges, ::Lines), ::Extras),
         ) { base, extras ->
             if (base is GridUiState.Ready) {
                 val lines = extras.lines.sparklines?.takeIf { (page, _) -> page == base.page }?.second.orEmpty()
@@ -189,6 +196,7 @@ class GridViewModel(
                     editingSlot = extras.editingSlot,
                     sparklines = lines.toImmutableMap(),
                     draftCount = draftCount,
+                    badges = extras.lines.badges.toImmutableMap(),
                 )
             } else {
                 base
@@ -203,32 +211,42 @@ class GridViewModel(
         val lines: Lines,
     )
 
-    /** The sparkline and draft-count sources, combined once so each carries its own staleness tag. */
+    /** The sparkline, draft-count and badge sources, combined once so each carries its own staleness tag. */
     private data class Lines(
         val sparklines: Pair<GridPage, Map<String, Sparkline>>?,
         val draft: List<Filter>?,
         val count: Pair<List<Filter>, DraftCount>?,
+        val badges: Map<String, String>,
     )
 
     init {
         viewModelScope.launch {
-            val c = try {
-                repository.catalog()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                catalogLoad.value = CatalogLoad.Failed("Couldn't open the stats database: ${e.message}")
-                return@launch
+            repository.dataVersion.collectLatest { version ->
+                val c = try {
+                    repository.catalog()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    catalogLoad.value = CatalogLoad.Failed("Couldn't open the stats database: ${e.message}")
+                    return@collectLatest
+                }
+                catalogLoad.value = CatalogLoad.Loaded(c, version)
+                val current = request.value
+                request.value = if (current != null) {
+                    rebase(current, c)
+                } else {
+                    GridRequest(c.latest, c.latest.defaultWeeks, StatPack.OPPORTUNITY, scoring = scoring.active.first())
+                }
             }
-            catalogLoad.value = CatalogLoad.Loaded(c)
-            request.value = GridRequest(c.latest, c.latest.defaultWeeks, StatPack.OPPORTUNITY, scoring = scoring.active.first())
         }
         viewModelScope.launch {
-            request.filterNotNull()
+            // Pairs each request with the catalog it runs against, so a new
+            // data version re-runs the page even when the request is unchanged.
+            combine(request.filterNotNull(), catalogLoad.filterIsInstance<CatalogLoad.Loaded>(), ::Pair)
                 .debounce(debounceMillis)
-                .mapLatest { r ->
+                .mapLatest { (r, load) ->
                     try {
-                        lastPage.value = repository.grid(r, checkNotNull(catalog))
+                        lastPage.value = repository.grid(r, load.catalog)
                         pageError.value = null
                     } catch (e: CancellationException) {
                         throw e
@@ -396,9 +414,26 @@ class GridViewModel(
             GridEvent.FilterSheetClosed -> r
         }
 
-        fun factory(repository: StatsRepository, scoring: ScoringRepository, tray: CompareTrayRepository): ViewModelProvider.Factory =
+        /**
+         * Carries [r] over to a reloaded [catalog]. The same season is kept if
+         * it still exists, and default weeks follow its new last week. If the
+         * season is gone (deselected in Settings), the latest season is used.
+         */
+        internal fun rebase(r: GridRequest, catalog: Catalog): GridRequest {
+            val season = catalog.seasons.firstOrNull { it.season == r.season.season }
+                ?: return r.copy(season = catalog.latest, weeks = catalog.latest.defaultWeeks)
+            val weeks = if (r.weeks == r.season.defaultWeeks) season.defaultWeeks else r.weeks
+            return r.copy(season = season, weeks = weeks)
+        }
+
+        fun factory(
+            repository: StatsRepository,
+            scoring: ScoringRepository,
+            tray: CompareTrayRepository,
+            badges: Flow<Map<String, String>> = flowOf(emptyMap()),
+        ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { GridViewModel(repository, scoring, tray) }
+                initializer { GridViewModel(repository, scoring, tray, badges = badges) }
             }
     }
 }

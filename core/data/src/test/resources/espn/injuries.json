@@ -1,0 +1,89 @@
+{
+  "timestamp": "2026-09-25T23:54:57Z",
+  "status": "success",
+  "season": { "year": 2026, "type": 2, "name": "Regular Season", "displayName": "2026" },
+  "injuries": [
+    {
+      "id": "22",
+      "displayName": "Arizona Cardinals",
+      "injuries": [
+        {
+          "id": "-2015438",
+          "longComment": "",
+          "shortComment": "",
+          "status": "Active",
+          "date": "2026-09-25T21:57Z",
+          "athlete": {
+            "displayName": "Hjalte Froholdt",
+            "links": [ { "language": "en-US", "rel": ["playercard", "desktop", "athlete"], "href": "https://www.espn.com/nfl/player/_/id/3886633/hjalte-froholdt", "text": "Player Card" } ],
+            "position": { "abbreviation": "C" },
+            "team": { "abbreviation": "ARI" }
+          },
+          "type": { "id": "0", "name": "INJURY_STATUS_ACTIVE", "description": "active", "abbreviation": "A" }
+        },
+        {
+          "id": "639083",
+          "longComment": "It's a step in the right direction for Melton, who missed Wednesday's practice due to a toe injury he sustained during the Cardinals' Week 2 loss to the Seahawks. The Cardinals will announce injury designations following Friday's practice, at which point Melton's status for Sunday's game against the 49ers will become clearer.",
+          "shortComment": "Melton (toe) was a limited participant in Thursday's practice.",
+          "status": "Questionable",
+          "date": "2026-09-25T03:06Z",
+          "athlete": {
+            "displayName": "Max Melton",
+            "links": [ { "language": "en-US", "rel": ["playercard", "desktop", "athlete"], "href": "https://www.espn.com/nfl/player/_/id/4698113/max-melton", "text": "Player Card" } ],
+            "position": { "abbreviation": "CB" },
+            "team": { "abbreviation": "ARI" }
+          },
+          "type": { "id": "2", "name": "INJURY_STATUS_QUESTIONABLE", "description": "questionable", "abbreviation": "Q" }
+        },
+        {
+          "id": "639082",
+          "longComment": "Taylor-Demerson missed Wednesday's practice due to a back injury he likely picked up in the Cardinals' Week 2 loss to the Seahawks. His ability to return to practice Thursday is a positive sign in his injury progression, and Friday's injury report will provide more clarity on Taylor-Demerson's status heading into Sunday's game against the 49ers.",
+          "shortComment": "Taylor-Demerson (back) was a limited participant in Thursday's practice.",
+          "status": "Out",
+          "date": "2026-09-25T03:04Z",
+          "athlete": {
+            "displayName": "Dadrion Taylor-Demerson",
+            "links": [ { "language": "en-US", "rel": ["playercard", "desktop", "athlete"], "href": "https://www.espn.com/nfl/player/_/id/4428633/dadrion-taylor-demerson", "text": "Player Card" } ],
+            "position": { "abbreviation": "S" },
+            "team": { "abbreviation": "ARI" }
+          },
+          "type": { "id": "4", "name": "INJURY_STATUS_OUT", "description": "out", "abbreviation": "O" }
+        }
+      ]
+    },
+    {
+      "id": "1",
+      "displayName": "Atlanta Falcons",
+      "injuries": [
+        {
+          "id": "639030",
+          "longComment": "Strand saw some action in relief of Cooper Rush in the 34-3 loss to Carolina in Week 2. However, he didn't play well, throwing for 59 yards and one interception off 8-for-15 passing, adding two carries for 16 yards. With Michael Penix (knee) and Tua Tagovailoa (oblique) back in the mix, and Rush serving as the emergency signal-caller, Strand's services won't be needed in Week 3.",
+          "shortComment": "Strand (coach's decision) is inactive for Thursday's game against the Packers.",
+          "status": "Out",
+          "date": "2026-09-24T23:18Z",
+          "athlete": {
+            "displayName": "Jack Strand",
+            "links": [ { "language": "en-US", "rel": ["playercard", "desktop", "athlete"], "href": "https://www.espn.com/nfl/player/_/id/5344782/jack-strand", "text": "Player Card" } ],
+            "position": { "abbreviation": "QB" },
+            "team": { "abbreviation": "ATL" }
+          },
+          "type": { "id": "4", "name": "INJURY_STATUS_OUT", "description": "out", "abbreviation": "O" }
+        },
+        {
+          "id": "639024",
+          "longComment": "Rush started for Atlanta in the team's first two games of the 2026 campaign. However, the signal-caller struggled overall, throwing for 229 yards, one touchdown and four interceptions while completing just 56.4 percent of his attempts. With Michael Penix (knee) and Tua Tagovailoa (oblique) back in the equation, Rush will be inactive against the Packers, though he will be available in an emergency situation.",
+          "shortComment": "Rush (coach's decision) is inactive for Thursday's game versus Green Bay but will serve as the emergency quarterback.",
+          "status": "Out",
+          "date": "2026-09-24T23:01Z",
+          "athlete": {
+            "displayName": "Cooper Rush",
+            "links": [ { "language": "en-US", "rel": ["playercard", "desktop", "athlete"], "href": "https://www.espn.com/nfl/player/_/id/2972515/cooper-rush", "text": "Player Card" } ],
+            "position": { "abbreviation": "QB" },
+            "team": { "abbreviation": "ATL" }
+          },
+          "type": { "id": "4", "name": "INJURY_STATUS_OUT", "description": "out", "abbreviation": "O" }
+        }
+      ]
+    }
+  ]
+}

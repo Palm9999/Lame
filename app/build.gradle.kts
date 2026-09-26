@@ -8,8 +8,8 @@ android {
     namespace = "dev.gridiron.app"
     defaultConfig {
         applicationId = "dev.gridiron.app"
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "0.4.0"
     }
 
     // A personal, sideloaded app. Android only installs an update signed with
@@ -47,6 +47,7 @@ dependencies {
     implementation(projects.core.projections)
     implementation(projects.core.datastore)
     implementation(projects.core.database)
+    implementation(projects.core.ingest)
     implementation(projects.core.designsystem)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
@@ -65,47 +66,4 @@ dependencies {
     testImplementation(libs.roborazzi.compose)
     testImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-}
-
-/**
- * Bundles the ETL-built stats database into the APK as assets/stats.db.
- * Uses GRIDIRON_STATS_DB if set, else etl/build/stats.db.
- */
-abstract class BundleStatsDb : DefaultTask() {
-    @get:InputFile
-    @get:Optional
-    @get:PathSensitive(PathSensitivity.NONE)
-    abstract val database: RegularFileProperty
-
-    @get:Input
-    abstract val expectedPath: Property<String>
-
-    @get:OutputDirectory
-    abstract val outputDir: DirectoryProperty
-
-    @TaskAction
-    fun bundle() {
-        val source = database.orNull?.asFile
-        if (source == null || !source.isFile) {
-            throw GradleException(
-                "No stats database at ${expectedPath.get()}. Build one first:\n" +
-                    "  cd etl && python -m gridiron_etl.build --seasons 2024 2025 2026 --out build/stats.db",
-            )
-        }
-        val out = outputDir.get().asFile
-        out.deleteRecursively()
-        out.mkdirs()
-        source.copyTo(out.resolve("stats.db"))
-    }
-}
-
-val statsDbPath: File = rootDir.resolve(providers.environmentVariable("GRIDIRON_STATS_DB").getOrElse("etl/build/stats.db"))
-val bundleStatsDb = tasks.register<BundleStatsDb>("bundleStatsDb") {
-    expectedPath.set(statsDbPath.path)
-    if (statsDbPath.isFile) database.set(statsDbPath)
-}
-androidComponents {
-    onVariants { variant ->
-        variant.sources.assets?.addGeneratedSourceDirectory(bundleStatsDb, BundleStatsDb::outputDir)
-    }
 }

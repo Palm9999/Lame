@@ -8,15 +8,20 @@ import dev.gridiron.core.data.PositionFilter
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.database.QueryExecutor
+import dev.gridiron.core.database.ResultRow
 import dev.gridiron.core.datastore.UserPrefs
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.WeekRange
+import dev.gridiron.core.statquery.CatalogQueries
+import dev.gridiron.core.statquery.SqlQuery
 import dev.gridiron.core.testing.FakePrefsSource
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -26,6 +31,7 @@ import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Assume.assumeTrue
 import org.junit.Before
 import org.junit.Test
@@ -141,5 +147,28 @@ class CompareViewModelTest {
         vm.onEvent(CompareEvent.AddPointToCompare(other.playerId, other.name))
         advanceUntilIdle()
         assertEquals(CompareSlot(other.playerId, scatter.season, scatter.weeks), prefs.current.tray.last())
+    }
+
+    @Test
+    fun `a new data version reloads the catalog and keeps the page`() = runTest(dispatcher) {
+        val slots = twoReceivers()
+        val version = MutableStateFlow(0L)
+        var catalogs = 0
+        val counting = object : QueryExecutor {
+            override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
+                if (query == CatalogQueries.seasons) catalogs++
+                return executor.query(query, map)
+            }
+        }
+        stats = StatsRepository(counting, Locale.US, dataVersion = version)
+        val vm = viewModel(slots)
+        advanceUntilIdle()
+        assertTrue(vm.state.value is CompareUiState.Ready)
+
+        version.value = 1
+        advanceUntilIdle()
+
+        assertEquals(2, catalogs)
+        assertTrue(vm.state.value is CompareUiState.Ready)
     }
 }

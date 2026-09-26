@@ -60,19 +60,6 @@ class SqliteQueryExecutorTest {
         }
     }
 
-    @Test
-    fun `the deferred executor opens once, on first use`() = runTest {
-        var opens = 0
-        val path = fixture()
-        val deferred = DeferredQueryExecutor {
-            opens++
-            SqliteQueryExecutor.openReadOnly(path)
-        }
-        assertEquals(0, opens)
-        repeat(3) { deferred.query(SqlQuery("SELECT COUNT(*) FROM t", emptyList())) { it.long(0) } }
-        assertEquals(1, opens)
-    }
-
     /**
      * Screenshot and ViewModel tests read the real database through JDBC. This
      * checks that stand-in against the device driver: same queries, same cells.

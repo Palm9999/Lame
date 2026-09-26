@@ -1,9 +1,11 @@
 name: Build and test
 
-# Builds the stats database, runs every test against it, renders the Grid
-# screenshots, and builds the installable app. On anything but a pull request
-# it then publishes the APK to a fixed link:
+# Builds a stats database with the same Kotlin code the phone runs, runs every
+# test against it, renders the Grid screenshots, and builds the installable app.
+# The APK carries no data: the phone builds its own stats. On anything but a
+# pull request it then publishes the APK to a fixed link:
 #   https://github.com/Palm9999/Lame/releases/download/app/gridiron.apk
+# The parity job proves the Kotlin ingest reproduces the Python ETL exactly.
 
 on:
   push:
@@ -20,8 +22,8 @@ on:
       - ".github/workflows/ci.yml"
   pull_request:
   schedule:
-    # Tuesdays 10:00 UTC, after Monday Night Football, so each new APK carries
-    # the whole of the previous week's games.
+    # Tuesdays 10:00 UTC, after Monday Night Football: reruns every test against
+    # the week's fresh nflverse data, so an upstream change shows up here first.
     - cron: "0 10 * * 2"
   workflow_dispatch:
 
@@ -53,15 +55,6 @@ jobs:
         working-directory: etl
         run: python -m pytest tests/ -q
 
-      - name: Build the stats database
-        working-directory: etl
-        # The current season and the two before it. A season is "current" from
-        # September; before kickoff its data may not exist yet, hence --skip-missing.
-        run: |
-          SEASONS=$(python -c "import datetime as d; t = d.date.today(); s = t.year if t.month >= 9 else t.year - 1; print(s - 2, s - 1, s)")
-          echo "Seasons: $SEASONS"
-          python -m gridiron_etl.build --seasons $SEASONS --skip-missing --out build/stats.db
-
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
@@ -71,6 +64,14 @@ jobs:
         run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" > /dev/null
 
       - uses: gradle/actions/setup-gradle@v6
+
+      - name: Build the stats database
+        # The current season and the two before it, built by the same Kotlin
+        # code the phone runs. A season nflverse hasn't published is skipped.
+        run: |
+          SEASONS=$(python -c "import datetime as d; t = d.date.today(); s = t.year if t.month >= 9 else t.year - 1; print(s - 2, s - 1, s)")
+          echo "Seasons: $SEASONS"
+          ./gradlew :core:ingest:buildStatsDb -Pseasons="$SEASONS" -Pout=etl/build/stats.db
 
       - name: Test
         run: ./gradlew test
@@ -93,8 +94,33 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           cp app/build/outputs/apk/release/app-release.apk gridiron.apk
-          SEASONS=$(python -c "import sqlite3; print(sqlite3.connect('etl/build/stats.db').execute(\"SELECT value FROM schema_meta WHERE key = 'seasons'\").fetchone()[0])")
-          NOTES="Built $(date -u +%Y-%m-%d) from ${GITHUB_SHA::7}. Seasons: ${SEASONS}. Install gridiron.apk on your phone."
+          NOTES="Built $(date -u +%Y-%m-%d) from ${GITHUB_SHA::7}. Install gridiron.apk on your phone, then tap ☰ → Refresh stats to build the latest stats on the phone."
           gh release view app > /dev/null 2>&1 || gh release create app --title "Gridiron app" --notes "$NOTES"
           gh release edit app --notes "$NOTES"
           gh release upload app gridiron.apk --clobber
+
+  parity:
+    # 2025 is a finished season, so both builds read identical inputs.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: etl/requirements.txt
+      - run: pip install -r etl/requirements.txt
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+      - name: Android SDK platform
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" > /dev/null
+      - uses: gradle/actions/setup-gradle@v6
+      - name: Python build (reference)
+        working-directory: etl
+        run: python -m gridiron_etl.build --seasons 2025 --out build/parity/py.db
+      - name: Kotlin build
+        run: ./gradlew :core:ingest:buildStatsDb -Pseasons=2025 -Pout=etl/build/parity/kt.db
+      - name: Compare
+        run: python etl/tools/parity.py etl/build/parity/py.db etl/build/parity/kt.db
