@@ -1,5 +1,6 @@
 package dev.gridiron.core.ingest
 
+import dev.gridiron.core.ingest.csv.MissingColumnsException
 import dev.gridiron.core.ingest.csv.openInput
 import dev.gridiron.core.ingest.db.INGEST_VERSION
 import dev.gridiron.core.ingest.db.StatsDbWriter
@@ -44,13 +45,15 @@ private val SEASON_INPUTS = listOf(Input.PBP, Input.SNAP_COUNTS, Input.INJURIES,
  * for the Python ETL. A season whose inputs haven't changed since `previous`
  * was built is copied from it instead of downloaded and recomputed.
  *
- * [playersFile] (the player list, kept between builds) must live outside
- * [workDir], which is emptied when a build ends.
+ * [playersFile] and [gamesFile] (the player list and the schedule, kept
+ * between builds so an unchanged one needn't be downloaded again) must live
+ * outside [workDir], which is emptied when a build ends.
  */
 public class IngestPipeline(
     private val fetcher: Fetcher,
     private val workDir: File,
     private val playersFile: File,
+    private val gamesFile: File = playersFile.resolveSibling("games.csv"),
     private val now: () -> Instant = Instant::now,
 ) {
     /**
@@ -103,6 +106,7 @@ public class IngestPipeline(
                 }
                 check(built.isNotEmpty() || reused.isNotEmpty()) { "none of the seasons $seasons has published play-by-play" }
                 writer.writePlayers(players)
+                writer.writeGames(readSchedule((built + reused).toSet()))
                 writer.finish(built + reused, meta, now())
                 onProgress(IngestProgress.Validating)
                 val problems = validateDatabase(writer.connection)
@@ -123,6 +127,33 @@ public class IngestPipeline(
                 is FetchResult.Downloaded -> meta[key] = r.validators.encode()
                 FetchResult.NotModified -> meta[key] = checkNotNull(prior).getValue(key)
                 FetchResult.NotPublished -> error("nflverse's player list isn't available")
+            }
+        }
+
+        /** Null, with a warning, when there's no schedule: projections need it, stats don't. */
+        private suspend fun fetchGames(): File? {
+            val key = Sources.metaKey(Input.GAMES)
+            val known = prior?.get(key)?.let(Validators::decode)?.takeIf { gamesFile.isFile }
+            return when (val r = fetch(Input.GAMES, null, known, gamesFile)) {
+                is FetchResult.Downloaded -> gamesFile.also { meta[key] = r.validators.encode() }
+                FetchResult.NotModified -> gamesFile.also { meta[key] = checkNotNull(prior).getValue(key) }
+                FetchResult.NotPublished -> {
+                    warnings += "nflverse's schedule isn't available right now; no projections this time"
+                    null
+                }
+            }
+        }
+
+        private suspend fun readSchedule(seasons: Set<Int>): List<GameRow> {
+            val file = fetchGames() ?: return emptyList()
+            return try {
+                openInput(file).use { readGames(it, file.name, seasons) }
+            } catch (e: IOException) {
+                warnings += "the schedule file is unreadable (${e.message}); no projections this time"
+                emptyList()
+            } catch (e: MissingColumnsException) {
+                warnings += "${e.message}; no projections this time"
+                emptyList()
             }
         }
 

@@ -41,6 +41,22 @@ class IngestPipelineTest {
             ),
         )
         fetcher.serve(Sources.url(Input.PLAYERS), Fixtures.gzip(csv), version)
+        serveGames()
+    }
+
+    private val gamesHeader = listOf(
+        "game_id", "season", "game_type", "week", "home_team", "away_team", "home_score", "away_score", "spread_line", "total_line",
+    )
+
+    private fun serveGames(version: String = "g1") {
+        val rows = listOf(2023, 2024, 2025).map { season ->
+            mapOf(
+                "game_id" to "${season}_01_BBB_AAA", "season" to season, "game_type" to "REG", "week" to 1,
+                "home_team" to "AAA", "away_team" to "BBB", "home_score" to 20, "away_score" to 17,
+                "spread_line" to 2.5, "total_line" to 41.5,
+            )
+        }
+        fetcher.serve(Sources.url(Input.GAMES), Fixtures.csv(gamesHeader, rows).toByteArray(), version)
     }
 
     private fun ep(season: Int, id: String, vararg values: Pair<String, Any?>): Map<String, Any?> =
@@ -102,8 +118,8 @@ class IngestPipelineTest {
         assertEquals(listOf(2024, 2025), report.built)
         assertEquals(emptyList<Int>(), report.reused)
         val meta = readMeta(out)!!
-        assertEquals("6", meta["schema_version"])
-        assertEquals("1", meta["ingest_version"])
+        assertEquals("7", meta["schema_version"])
+        assertEquals("2", meta["ingest_version"])
         assertEquals("2024,2025", meta["seasons"])
         assertEquals("1", meta["expected_through_week:2025"])
         assertNotNull(meta[Sources.metaKey(Input.PBP, 2025)])
@@ -277,5 +293,46 @@ class IngestPipelineTest {
         job.cancelAndJoin()
         assertFalse(out.exists())
         assertTrue(before.contentEquals(previous.readBytes()))
+    }
+
+    @Test
+    fun `the schedule is stored for the built seasons only`() = runTest {
+        servePlayers()
+        serveSeason(2024)
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+
+        pipeline.build(listOf(2024, 2025), previous = null, out = out)
+
+        assertEquals(listOf(listOf("2024"), listOf("2025")), query(out, "SELECT season FROM game ORDER BY season"))
+        assertNotNull(readMeta(out)!![Sources.metaKey(Input.GAMES)])
+    }
+
+    @Test
+    fun `a missing schedule is a warning, not a failed build`() = runTest {
+        servePlayers()
+        fetcher.remove(Sources.url(Input.GAMES))
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+
+        val report = pipeline.build(listOf(2025), previous = null, out = out)
+
+        assertEquals(listOf(2025), report.built)
+        assertTrue(report.warnings.any { "schedule" in it }, "${report.warnings}")
+        assertEquals(listOf(listOf("0")), query(out, "SELECT COUNT(*) FROM game"))
+    }
+
+    @Test
+    fun `an unchanged schedule is read from the kept copy`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        pipeline.build(listOf(2025), null, File(dir, "first.db"))
+        fetcher.calls.clear()
+
+        val second = File(dir, "second.db")
+        pipeline.build(listOf(2025), File(dir, "first.db"), second)
+
+        assertNotNull(fetcher.calls.single { it.first == Sources.url(Input.GAMES) }.second)
+        assertEquals(listOf(listOf("1")), query(second, "SELECT COUNT(*) FROM game"))
     }
 }

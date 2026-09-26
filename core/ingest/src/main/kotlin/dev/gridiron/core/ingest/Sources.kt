@@ -7,6 +7,7 @@ public enum class Input(public val perSeason: Boolean, public val label: String)
     INJURIES(true, "injury reports"),
     EXPECTED(true, "expected points"),
     PLAYERS(false, "player list"),
+    GAMES(false, "schedule"),
 }
 
 /** Where each input lives: public nflverse and ffopportunity release assets, never this app's repository. */
@@ -23,6 +24,8 @@ public object Sources {
             // ffopportunity publishes no gzip variant of this file.
             Input.EXPECTED -> "$FFOPPORTUNITY/ep_weekly_$season.csv"
             Input.PLAYERS -> "$NFLVERSE/players/players.csv.gz"
+            // Every season since 1999 in one file: opponents, results, lines, starting QBs, coaches.
+            Input.GAMES -> "$NFLVERSE/schedules/games.csv"
         }
     }
 

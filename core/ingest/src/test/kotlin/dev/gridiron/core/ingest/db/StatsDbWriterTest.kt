@@ -1,12 +1,14 @@
 package dev.gridiron.core.ingest.db
 
 import dev.gridiron.core.ingest.Fact
+import dev.gridiron.core.ingest.GameRow
 import dev.gridiron.core.ingest.InjuryRow
 import dev.gridiron.core.ingest.METRICS
 import dev.gridiron.core.ingest.PlayerInfo
 import dev.gridiron.core.ingest.pbp.TeamDefenseRow
 import dev.gridiron.core.ingest.query
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -42,8 +44,8 @@ class StatsDbWriterTest {
         build(file, listOf(2025))
 
         val meta = readMeta(file)!!
-        assertEquals("6", meta["schema_version"])
-        assertEquals("1", meta["ingest_version"])
+        assertEquals("7", meta["schema_version"])
+        assertEquals("2", meta["ingest_version"])
         assertEquals("2025", meta["seasons"])
         assertEquals("3", meta["expected_through_week:2025"])
         assertEquals("2026-09-25T12:00:00Z", meta["built_at"])
@@ -105,5 +107,35 @@ class StatsDbWriterTest {
         val junk = File(dir, "junk.db").apply { writeText("not a database") }
         assertNull(readMeta(junk))
         assertNull(readMeta(File(dir, "missing.db")))
+    }
+
+    @Test
+    fun `games are written with nulls for what isn't known yet`(@TempDir dir: File) {
+        val file = File(dir, "stats.db")
+        StatsDbWriter.create(file).use { w ->
+            w.writeGames(
+                listOf(
+                    GameRow("2026_01_NE_SEA", 2026, 1, "REG", "SEA", "NE", 13, 10, 3.0, 44.5, "outdoors", "q1", "q2", "c1", "c2"),
+                    GameRow("2026_05_KC_BUF", 2026, 5, "REG", "BUF", "KC", null, null, null, null, null, null, null, null, null),
+                ),
+            )
+        }
+        assertEquals(
+            listOf(
+                listOf("2026_01_NE_SEA", "13", "3.0", "q1", "c2"),
+                listOf("2026_05_KC_BUF", null, null, null, null),
+            ),
+            query(file, "SELECT game_id, home_score, spread_line, home_qb_id, away_coach FROM game ORDER BY game_id"),
+        )
+    }
+
+    @Test
+    fun `schema 7 drops the Python ETL's projection bookkeeping tables`(@TempDir dir: File) {
+        val file = File(dir, "stats.db")
+        StatsDbWriter.create(file).close()
+        val tables = query(file, "SELECT name FROM sqlite_master WHERE type = 'table'").map { it[0] }
+        assertTrue("game" in tables)
+        assertFalse("projection_snapshot" in tables)
+        assertFalse("accuracy_summary" in tables)
     }
 }
