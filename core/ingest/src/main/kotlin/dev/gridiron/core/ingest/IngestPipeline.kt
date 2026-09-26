@@ -18,6 +18,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.io.IOException
 import java.time.Instant
 
 /** What a build is doing, for a progress line. */
@@ -133,7 +134,13 @@ public class IngestPipeline(
                 fetch(input, season, known)
             }
             if (first.getValue(Input.PBP) == FetchResult.NotPublished) {
-                skipped[season] = "play-by-play isn't published yet"
+                if (knownSeason) {
+                    // nflverse replaces a release file by deleting and re-uploading it: never drop a built season over a brief 404.
+                    warnings += "$season: play-by-play is unavailable right now; kept the last build's stats"
+                    reuse(season, writer)
+                } else {
+                    skipped[season] = "play-by-play isn't published yet"
+                }
                 return
             }
             val unchanged = knownSeason && first.all { (input, r) ->
@@ -171,24 +178,26 @@ public class IngestPipeline(
             val defense = TeamDefenseAggregator()
             val pbp = checkNotNull(files[Input.PBP])
             var n = 0
-            openInput(pbp).use { input ->
-                readPlays(input, pbp.name) { play ->
-                    if (++n % 5_000 == 0) job.ensureActive()
-                    players.add(play)
-                    defense.add(play)
+            try {
+                openInput(pbp).use { input ->
+                    readPlays(input, pbp.name) { play ->
+                        if (++n % 5_000 == 0) job.ensureActive()
+                        players.add(play)
+                        defense.add(play)
+                    }
                 }
+            } catch (e: IOException) {
+                throw IOException("$season play-by-play (${pbp.name}) is unreadable: ${e.message}", e)
             }
             val weekly = players.rows().onEach { it.derive() }
 
-            val snaps = files[Input.SNAP_COUNTS]
-            if (snaps != null) {
-                attachSnapShare(weekly, openInput(snaps).use { readSnaps(it, snaps.name) }, crosswalk)
-            } else {
-                warnings += "$season: no snap counts published yet"
-            }
+            val snapsFile = files[Input.SNAP_COUNTS]
+            if (snapsFile == null) warnings += "$season: no snap counts published yet"
+            val snaps = snapsFile?.let { readOptional(season, "snap counts", it) { f -> openInput(f).use { s -> readSnaps(s, f.name) } } }
+            if (snaps != null) attachSnapShare(weekly, snaps, crosswalk)
 
             val expectedFile = files[Input.EXPECTED]
-            val expected = expectedFile?.let { f -> openInput(f).use { readExpected(it, f.name) } }
+            val expected = expectedFile?.let { readOptional(season, "expected points", it) { f -> openInput(f).use { s -> readExpected(s, f.name) } } }
             val (through, coverage) = expectedCoverage(season, weekly, expected)
             meta["expected_through_week:$season"] = through.toString()
             coverage?.let { warnings += it }
@@ -196,20 +205,30 @@ public class IngestPipeline(
                 val problems = crossCheck(weekly, expected, warnings) + fantasyContract(weekly, expected, warnings)
                 if (problems.isNotEmpty()) throw ValidationException(problems.map { "$season: $it" })
                 writer.writeFacts(toFacts(expected.map { it.toPlayerWeek() }))
-            } else {
+            } else if (expectedFile == null) {
                 warnings += "$season: no expected-points data yet; xFP will be missing"
             }
 
             writer.writeFacts(toFacts(weekly))
             writer.writeTeamDefense(defense.rows())
-            val injuries = files[Input.INJURIES]
-            if (injuries != null) {
-                writer.writeInjuries(openInput(injuries).use { readInjuries(it, injuries.name) })
-            } else {
-                warnings += "$season: no injury report published yet"
-            }
+            val injuriesFile = files[Input.INJURIES]
+            if (injuriesFile == null) warnings += "$season: no injury report published yet"
+            injuriesFile?.let { readOptional(season, "injury report", it) { f -> openInput(f).use { s -> readInjuries(s, f.name) } } }
+                ?.let(writer::writeInjuries)
             files.values.forEach { it?.delete() }
             built += season
         }
+
+        /**
+         * Reads an optional file, leaving it out with a warning when it won't
+         * decompress: nflverse has shipped truncated gzips (snap_counts_2012).
+         */
+        private fun <T> readOptional(season: Int, what: String, file: File, read: (File) -> T): T? =
+            try {
+                read(file)
+            } catch (e: IOException) {
+                warnings += "$season: $what file is unreadable (${e.message}); left out"
+                null
+            }
     }
 }

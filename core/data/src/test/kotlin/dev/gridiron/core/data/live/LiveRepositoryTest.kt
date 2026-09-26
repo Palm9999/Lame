@@ -69,6 +69,28 @@ class LiveRepositoryTest {
     }
 
     @Test
+    fun `a live_db that can't be opened never throws to a screen, and the refresh says why`() = runTest {
+        // A directory with something in it where live.db belongs: open fails, and so does the delete-and-recreate.
+        File(dir, "live.db").mkdirs()
+        File(dir, "live.db/keep").writeText("x")
+        serveRecorded()
+
+        val result = live.refresh()
+
+        assertNotNull(result.newsError)
+        assertNotNull(result.injuriesError)
+        assertTrue("live data" in result.message, result.message)
+        assertEquals(result, live.refreshIfStale())
+        assertEquals(emptyList<NewsItem>(), live.news())
+        assertEquals(emptyList<NewsItem>(), live.playerNews("00-0034844"))
+        assertEquals(emptyList<LiveInjury>(), live.injuries())
+        assertEquals(emptyList<InjuryNote>(), live.notes("00-0039900"))
+        assertNull(live.status("00-0039900"))
+        assertNull(live.fetchedAt())
+        assertEquals(emptyMap<String, String>(), live.badges.first())
+    }
+
+    @Test
     fun `refresh stores both feeds and links players through player_xref`() = runTest {
         stats = statsWithXref()
         serveRecorded()

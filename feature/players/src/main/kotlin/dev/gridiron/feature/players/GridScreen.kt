@@ -96,10 +96,11 @@ fun GridRoute(
     onPlayer: (playerId: String, season: Int, week: Int) -> Unit = { _, _, _ -> },
     menu: List<Pair<String, (season: Int) -> Unit>> = emptyList(),
     badges: Flow<Map<String, String>> = flowOf(emptyMap()),
+    recovery: List<Pair<String, () -> Unit>> = emptyList(),
 ) {
     val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges))
     val state by vm.state.collectAsStateWithLifecycle()
-    GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu)
+    GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu, recovery)
 }
 
 @Composable
@@ -111,6 +112,8 @@ fun GridScreen(
     onEditProfiles: () -> Unit = {},
     onPlayer: (playerId: String, season: Int, week: Int) -> Unit = { _, _, _ -> },
     menu: List<Pair<String, (season: Int) -> Unit>> = emptyList(),
+    /** Offered when the database won't open (the ☰ menu needs a season, so it can't show): a way out. */
+    recovery: List<Pair<String, () -> Unit>> = emptyList(),
 ) {
     // A Surface, not a Box with a background: it also sets the content color
     // that every Text inherits. Without it, text defaults to black, which is
@@ -126,11 +129,13 @@ fun GridScreen(
                 Spacer(Modifier.height(12.dp))
                 Text("Opening stats…", style = MaterialTheme.typography.bodyMedium)
             }
-            is GridUiState.Failed -> Text(
-                state.message,
+            is GridUiState.Failed -> Column(
                 Modifier.align(Alignment.Center).padding(24.dp),
-                color = MaterialTheme.colorScheme.error,
-            )
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text(state.message, color = MaterialTheme.colorScheme.error)
+                recovery.forEach { (label, action) -> TextButton(onClick = action) { Text(label) } }
+            }
             is GridUiState.Ready -> GridContent(state, onEvent, onCompare, onEditProfiles, onPlayer, menu)
         }
       }

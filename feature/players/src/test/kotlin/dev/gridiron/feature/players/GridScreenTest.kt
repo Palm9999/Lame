@@ -88,6 +88,23 @@ class GridScreenTest {
     }
 
     @Test
+    fun aDatabaseThatWontOpenStillOffersARefresh() {
+        var refreshed = 0
+        compose.setContent {
+            GridironTheme {
+                GridScreen(
+                    GridUiState.Failed("Couldn't open the stats database: file is not a database"),
+                    onEvent = {},
+                    recovery = listOf("Refresh stats" to { refreshed++ }),
+                )
+            }
+        }
+        compose.onNodeWithText("Couldn't open the stats database: file is not a database").assertIsDisplayed()
+        compose.onNodeWithText("Refresh stats").performClick()
+        assertEquals(1, refreshed)
+    }
+
+    @Test
     fun opportunityLeaders2025() {
         val season = catalog.season(2025)
         show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)))

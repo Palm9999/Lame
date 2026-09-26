@@ -77,6 +77,16 @@ class EspnTest {
     }
 
     @Test
+    fun `entries that all changed shape are a format error, not an empty list`() {
+        // ESPN drops the fields every entry needs: nothing parses, so nothing may be wiped.
+        assertThrows<LiveFormatException> { EspnParser.injuries(recorded("injuries.json").replace("\"links\"", "\"gone\"")) }
+        assertThrows<LiveFormatException> { EspnParser.news(recorded("news.json").replace("\"headline\"", "\"title\"")) }
+        // A genuinely empty list is still fine.
+        assertEquals(emptyList<EspnInjury>(), EspnParser.injuries("""{"injuries": []}"""))
+        assertEquals(emptyList<NewsArticle>(), EspnParser.news("""{"articles": []}"""))
+    }
+
+    @Test
     fun `times parse with and without seconds`() {
         assertEquals(Instant.parse("2026-09-25T21:57:00Z"), parseEspnTime("2026-09-25T21:57Z"))
         assertEquals(Instant.parse("2026-09-25T23:01:03Z"), parseEspnTime("2026-09-25T23:01:03Z"))

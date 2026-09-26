@@ -163,6 +163,54 @@ class IngestPipelineTest {
     }
 
     @Test
+    fun `a truncated optional file is left out with a warning, not a failed build`() = runTest {
+        // nflverse's snap_counts_2012.csv.gz is a header-only gzip with no trailer.
+        servePlayers()
+        serveSeason(2025)
+        fetcher.serve(Sources.url(Input.SNAP_COUNTS, 2025), Fixtures.gzip("x".repeat(500)).copyOf(12), "v1")
+        fetcher.serve(Sources.url(Input.INJURIES, 2025), Fixtures.gzip("x".repeat(500)).copyOf(12), "v1")
+        val out = File(dir, "stats.db")
+
+        val report = pipeline.build(listOf(2025), null, out)
+
+        assertEquals(listOf(2025), report.built)
+        assertTrue(report.warnings.any { it.startsWith("2025: snap counts") && "unreadable" in it }, "${report.warnings}")
+        assertTrue(report.warnings.any { it.startsWith("2025: injury report") && "unreadable" in it }, "${report.warnings}")
+        assertEquals(emptyList<List<String>>(), query(out, "SELECT value FROM player_week_stat WHERE metric_id = 'snap_share'"))
+    }
+
+    @Test
+    fun `a truncated play-by-play file fails the build naming its season`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        fetcher.serve(Sources.url(Input.PBP, 2025), Fixtures.gzip("x".repeat(500)).copyOf(12), "v1")
+        val out = File(dir, "stats.db")
+
+        val e = runCatching { pipeline.build(listOf(2025), null, out) }.exceptionOrNull()
+
+        assertTrue(e?.message.orEmpty().startsWith("2025 play-by-play"), "got $e")
+        assertFalse(out.exists())
+    }
+
+    @Test
+    fun `a built season is kept when its play-by-play briefly disappears`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2025), null, first)
+        fetcher.remove(Sources.url(Input.PBP, 2025))
+
+        val second = File(dir, "second.db")
+        val report = pipeline.build(listOf(2025), first, second)
+
+        assertEquals(listOf(2025), report.reused)
+        assertEquals(emptyMap<Int, String>(), report.skipped)
+        assertEquals(facts(first), facts(second))
+        assertTrue(report.warnings.any { it.startsWith("2025:") && "kept" in it }, "${report.warnings}")
+        assertEquals(readMeta(first)!![Sources.metaKey(Input.PBP, 2025)], readMeta(second)!![Sources.metaKey(Input.PBP, 2025)])
+    }
+
+    @Test
     fun `a season without expected points still builds, at week zero`() = runTest {
         servePlayers()
         serveSeason(2025, expected = false)

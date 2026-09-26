@@ -148,6 +148,10 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 if (refresher != null) add("Refresh stats" to { _: Int -> refresh() })
                             },
                             badges = deps.live?.badges ?: flowOf(emptyMap()),
+                            recovery = buildList {
+                                if (refresher != null) add("Refresh stats" to { refresh() })
+                                if (deps.settings != null) add("Settings" to { backStack.push(SettingsKey) })
+                            },
                         )
                     }
                     entry<CompareKey> {

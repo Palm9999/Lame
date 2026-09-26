@@ -1,5 +1,6 @@
 package dev.gridiron.core.data.live
 
+import androidx.sqlite.SQLiteConnection
 import dev.gridiron.core.data.PlayerDirectory
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +32,10 @@ public data class LiveResult(val newsError: String?, val injuriesError: String?)
  * ESPN injuries and news, kept in [db] and linked to app players through
  * [players]. Each feed updates on its own: if one fails, the other still
  * lands, and the failed one keeps its last data and "fetched at" time.
+ *
+ * Nothing here throws to a screen (a full disk or a bad page in [db] must not
+ * crash the app): reads that fail come back empty, and a refresh that can't
+ * save reports why in its [LiveResult].
  */
 public class LiveRepository(
     private val db: LiveDb,
@@ -56,29 +61,49 @@ public class LiveRepository(
     }
 
     /** Fetches both feeds now. */
-    public suspend fun refresh(): LiveResult = fetching.withLock { fetchAll() }
+    public suspend fun refresh(): LiveResult = fetching.withLock { saving { fetchAll() } }
 
     /** Fetches both feeds unless both arrived within [maxAge]; null when nothing was fetched. */
     public suspend fun refreshIfStale(maxAge: Duration = STALE_AFTER): LiveResult? = fetching.withLock {
         val asOf = fetchedAt()
-        if (asOf != null && Duration.between(asOf, clock()) < maxAge) null else fetchAll()
+        if (asOf != null && Duration.between(asOf, clock()) < maxAge) null else saving { fetchAll() }
     }
 
     /** When both feeds had last arrived: the older of the two times, or null if either never has. */
-    public suspend fun fetchedAt(): Instant? = db.read { c ->
+    public suspend fun fetchedAt(): Instant? = readOr(null) { c ->
         val times = listOf(NEWS_AT, INJURIES_AT).map { c.meta(it)?.toLongOrNull() }
         if (times.any { it == null }) null else Instant.ofEpochMilli(times.filterNotNull().min())
     }
 
-    public suspend fun news(): List<NewsItem> = db.read { it.news(null) }
+    public suspend fun news(): List<NewsItem> = readOr(emptyList()) { it.news(null) }
 
-    public suspend fun playerNews(playerId: String): List<NewsItem> = db.read { it.news(playerId) }
+    public suspend fun playerNews(playerId: String): List<NewsItem> = readOr(emptyList()) { it.news(playerId) }
 
-    public suspend fun status(playerId: String): LiveStatus? = db.read { it.status(playerId) }
+    public suspend fun status(playerId: String): LiveStatus? = readOr(null) { it.status(playerId) }
 
-    public suspend fun notes(playerId: String): List<InjuryNote> = db.read { it.notes(playerId) }
+    public suspend fun notes(playerId: String): List<InjuryNote> = readOr(emptyList()) { it.notes(playerId) }
 
-    public suspend fun injuries(): List<LiveInjury> = db.read { it.injuries() }
+    public suspend fun injuries(): List<LiveInjury> = readOr(emptyList()) { it.injuries() }
+
+    private suspend fun <T> readOr(fallback: T, block: (SQLiteConnection) -> T): T =
+        try {
+            db.read(block)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            fallback
+        }
+
+    /** Runs a fetch whose saving to [db] may fail; the failure becomes both feeds' error. */
+    private suspend fun saving(fetch: suspend () -> LiveResult): LiveResult =
+        try {
+            fetch()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val why = "couldn't save live data (${e.message ?: e::class.simpleName})"
+            LiveResult(why, why)
+        }
 
     private suspend fun fetchAll(): LiveResult {
         val news = fetch(EspnParser.NEWS_URL, EspnParser::news)

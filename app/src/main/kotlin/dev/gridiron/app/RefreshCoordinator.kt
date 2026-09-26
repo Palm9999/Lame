@@ -13,8 +13,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
+import java.nio.channels.FileChannel
 import java.nio.file.Files
 import java.nio.file.StandardCopyOption
+import java.nio.file.StandardOpenOption
 
 /** What a refresh is doing: for the Load stats screen, the refresh bar and the result toast. */
 sealed interface RefreshState {
@@ -124,6 +126,9 @@ class RefreshCoordinator(
             throw e
         }
         try {
+            // The build writes without a journal or syncs: flush it to disk before it replaces
+            // the only copy, so power loss after the rename can't leave a truncated stats.db.
+            FileChannel.open(next.toPath(), StandardOpenOption.WRITE).use { it.force(true) }
             executor.swap {
                 Files.move(next.toPath(), db.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             }

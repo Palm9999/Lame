@@ -41,7 +41,8 @@ public class LiveFormatException(message: String) : Exception(message)
  * ESPN's public (unofficial, keyless) NFL feeds. Parsing walks the JSON tree
  * rather than binding classes, so fields ESPN adds or drops never break it.
  * Entries missing what the app needs are skipped; a response that isn't the
- * expected shape at all is a [LiveFormatException].
+ * expected shape at all, or whose entries all fail to read, is a
+ * [LiveFormatException], so the last good data is kept rather than wiped.
  */
 internal object EspnParser {
     const val NEWS_URL: String = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50"
@@ -57,15 +58,17 @@ internal object EspnParser {
         val articles = root(text, "news")["articles"] as? JsonArray
             ?: throw LiveFormatException("ESPN changed its news format (no articles list)")
         return articles.mapNotNull { (it as? JsonObject)?.let(::article) }
+            .also { if (it.isEmpty() && articles.isNotEmpty()) throw LiveFormatException("ESPN changed its news format (no article could be read)") }
     }
 
     fun injuries(text: String): List<EspnInjury> {
         val teams = root(text, "injuries")["injuries"] as? JsonArray
             ?: throw LiveFormatException("ESPN changed its injuries format (no injuries list)")
-        return teams
-            .flatMap { team -> (team as? JsonObject)?.array("injuries").orEmpty() }
+        val entries = teams.flatMap { team -> (team as? JsonObject)?.array("injuries").orEmpty() }
+        return entries
             .mapNotNull { (it as? JsonObject)?.let(::injury) }
             .distinctBy { it.espnId }
+            .also { if (it.isEmpty() && entries.isNotEmpty()) throw LiveFormatException("ESPN changed its injuries format (no entry could be read)") }
     }
 
     private fun article(a: JsonObject): NewsArticle? {
