@@ -19,4 +19,15 @@ class ProjectionQueriesTest {
         val query = ProjectionQueries.weekly(emptySet(), season = 2026, week = 3)
         assertTrue(query.sql.contains("0 = 1") || query.sql.contains("FALSE"))
     }
+
+    @Test
+    fun `every query binds exactly its placeholders`() {
+        // SqlQuery's init rejects a mismatch, so constructing each is the test.
+        ProjectionQueries.weekAll(2026, 3)
+        ProjectionQueries.rosAll(2026)
+        ProjectionQueries.status()
+        ProjectionQueries.game(2026, 3, "KC")
+        ProjectionQueries.remainingGames(2026, 3, "KC")
+        assertTrue(ProjectionQueries.weekly(setOf("P1"), 2026, 3).sql.contains("dist_family"))
+    }
 }

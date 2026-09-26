@@ -1,5 +1,6 @@
 package dev.gridiron.core.data
 
+import dev.gridiron.core.projections.ForecastStatus
 import dev.gridiron.core.projections.PlayerProjection
 import dev.gridiron.core.projections.ProjectionsRequest
 import dev.gridiron.core.testing.JdbcQueryExecutor
@@ -8,6 +9,7 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.sql.DriverManager
+import java.time.Instant
 
 class ProjectionsRepositoryTest {
 
@@ -40,6 +42,14 @@ class ProjectionsRepositoryTest {
                          metric_id TEXT NOT NULL, mean REAL NOT NULL, variance REAL NOT NULL,
                          PRIMARY KEY (player_id, season, as_of_week, metric_id)) WITHOUT ROWID""",
                 )
+                st.executeUpdate("CREATE TABLE metric (id TEXT PRIMARY KEY, dist_family TEXT)")
+                st.executeUpdate("CREATE TABLE player (player_id TEXT PRIMARY KEY, full_name TEXT NOT NULL, position TEXT, team TEXT)")
+                st.executeUpdate("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
+                st.executeUpdate(
+                    """CREATE TABLE game (game_id TEXT PRIMARY KEY, season INTEGER NOT NULL, week INTEGER NOT NULL,
+                         game_type TEXT NOT NULL, home_team TEXT NOT NULL, away_team TEXT NOT NULL,
+                         spread_line REAL, total_line REAL)""",
+                )
                 insertProjectionRows.forEach { st.executeUpdate(it) }
             }
         }
@@ -68,6 +78,85 @@ class ProjectionsRepositoryTest {
             val repo = ProjectionsRepository(executor)
             val result = repo.projections(ProjectionsRequest(emptySet(), season = 2026, week = 3))
             assertEquals(emptyList<PlayerProjection>(), result)
+        }
+    }
+
+    @Test
+    fun `projections carry each stat's distribution family`() = runTest {
+        jdbcFixtureWithSchema(
+            listOf(
+                "INSERT INTO metric VALUES ('targets', 'negbinom')",
+                "INSERT INTO player_week_projection VALUES ('P1', 2026, 3, 'targets', 'final', 7.2, 4.0)",
+                "INSERT INTO player_week_projection VALUES ('P1', 2026, 3, 'mystery', 'final', 1.0, 1.0)",
+            ),
+        ).use { executor ->
+            val final = ProjectionsRepository(executor).projections(ProjectionsRequest(setOf("P1"), 2026, 3)).single().final
+            assertEquals("negbinom", final.single { it.metricId == "targets" }.family)
+            assertEquals(null, final.single { it.metricId == "mystery" }.family)
+        }
+    }
+
+    @Test
+    fun `status reads the forecast's outcome, build time and upcoming week`() = runTest {
+        jdbcFixtureWithSchema(
+            listOf(
+                "INSERT INTO schema_meta VALUES ('forecast_status', 'ok')",
+                "INSERT INTO schema_meta VALUES ('forecast_built_at', '2026-09-22T11:02:00Z')",
+                "INSERT INTO schema_meta VALUES ('forecast_week:2026', '4')",
+                "INSERT INTO schema_meta VALUES ('seasons', '2026')",
+            ),
+        ).use { executor ->
+            val status = ProjectionsRepository(executor).status()
+            assertEquals("ok", status.status)
+            assertEquals(Instant.parse("2026-09-22T11:02:00Z"), status.builtAt)
+            assertEquals(mapOf(2026 to 4), status.upcoming)
+        }
+    }
+
+    @Test
+    fun `a database built before projections existed has no status`() = runTest {
+        jdbcFixtureWithSchema(emptyList()).use { executor ->
+            assertEquals(ForecastStatus(null, null, emptyMap()), ProjectionsRepository(executor).status())
+        }
+    }
+
+    @Test
+    fun `weekAll and rosAll list final projections with who each player is`() = runTest {
+        jdbcFixtureWithSchema(
+            listOf(
+                "INSERT INTO player VALUES ('P1', 'Pat One', 'WR', 'KC')",
+                "INSERT INTO player_week_projection VALUES ('P1', 2026, 4, 'targets', 'baseline', 6.0, 3.0)",
+                "INSERT INTO player_week_projection VALUES ('P1', 2026, 4, 'targets', 'final', 7.0, 4.0)",
+                "INSERT INTO player_ros_projection VALUES ('P1', 2026, 2, 'targets', 90.0, 40.0)",
+                "INSERT INTO player_ros_projection VALUES ('P1', 2026, 3, 'targets', 80.0, 35.0)",
+            ),
+        ).use { executor ->
+            val repo = ProjectionsRepository(executor)
+            val week = repo.weekAll(2026, 4).single()
+            assertEquals("Pat One", week.name)
+            assertEquals("WR", week.position)
+            assertEquals(listOf(7.0), week.components.map { it.mean })
+            assertEquals(listOf(80.0), repo.rosAll(2026).single().components.map { it.mean })
+        }
+    }
+
+    @Test
+    fun `a game's line and the games left are read from the team's side`() = runTest {
+        jdbcFixtureWithSchema(
+            listOf(
+                "INSERT INTO game VALUES ('g4', 2026, 4, 'REG', 'BUF', 'KC', 2.5, 47.5)",
+                "INSERT INTO game VALUES ('g5', 2026, 5, 'REG', 'KC', 'DEN', NULL, NULL)",
+                "INSERT INTO game VALUES ('g19', 2026, 19, 'WC', 'KC', 'MIA', NULL, NULL)",
+            ),
+        ).use { executor ->
+            val repo = ProjectionsRepository(executor)
+            val line = repo.game(2026, 4, "KC")!!
+            assertEquals("BUF", line.opponent)
+            assertEquals(false, line.home)
+            assertEquals(-2.5, line.favoredBy)
+            assertEquals(47.5, line.total)
+            assertEquals(null, repo.game(2026, 6, "KC"))
+            assertEquals(2, repo.remainingGames(2026, 4, "KC"))
         }
     }
 }

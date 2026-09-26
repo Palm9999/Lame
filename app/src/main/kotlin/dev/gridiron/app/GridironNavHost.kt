@@ -161,8 +161,9 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                         ScoringListRoute(deps.scoring, onEdit = { backStack.push(ScoringEditKey(it)) }, onBack = back)
                     }
                     entry<ScoringEditKey> { key -> ScoringEditRoute(key.profileId, deps.scoring, onDone = back) }
-                    // Unreachable until the on-device projections follow-up: no menu item or row tap leads here.
-                    entry<ProjectionsKey> { key -> ProjectionsRoute(key.playerId, key.season, key.week, deps.projections, onBack = back) }
+                    entry<ProjectionsKey> { key ->
+                        ProjectionsRoute(key.playerId, key.season, key.week, deps.projections, deps.scoring, deps.players, onBack = back)
+                    }
                     entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, onBack = back) }
                     entry<InjuriesKey> { key ->
                         InjuriesRoute(key.season, currentSeason(), deps.teams, deps.live, onBack = back, onPlayer = { backStack.push(PlayerKey(it)) })

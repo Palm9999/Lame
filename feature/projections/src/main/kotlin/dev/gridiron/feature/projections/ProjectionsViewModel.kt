@@ -10,11 +10,11 @@ import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.ScoringRule
 import dev.gridiron.core.projections.AttributedFactor
-import dev.gridiron.core.projections.DistributionFamily
 import dev.gridiron.core.projections.DistributionSpec
 import dev.gridiron.core.projections.ProjectionsRequest
 import dev.gridiron.core.projections.SimulationResult
 import dev.gridiron.core.projections.attributeFactors
+import dev.gridiron.core.projections.familyOf
 import dev.gridiron.core.projections.score
 import dev.gridiron.core.projections.simulate
 import dev.gridiron.core.projections.tdDependence
@@ -100,9 +100,8 @@ public class ProjectionsViewModel(
                     return@launch
                 }
 
-                // Today's ETL only ships a final-stage row for a handful of
-                // metrics; most components stay baseline-only. Merge each
-                // component's baseline value forward when there's no
+                // A component the final stage left untouched may have no final row;
+                // merge each component's baseline value forward when there's no
                 // final-stage override, so an unfinished component still
                 // counts at its baseline value instead of vanishing from
                 // scoring (which would misattribute the whole delta to
@@ -129,12 +128,8 @@ public class ProjectionsViewModel(
                 val tdPoints = score(finalMap.filterKeys { it in tdComponents }, profile, position)
                 val tdDependenceValue = tdDependence(tdPoints, finalPoints)
 
-                // Every component simulated as Gamma pending per-metric dist_family
-                // wiring (see the note below this block) -- the same fallback
-                // Task 6's drawOne() already uses for NEGBINOM/BINOMIAL, so this is
-                // a real, defined distribution choice today, not a stub.
                 val distributions = mergedComponents.map {
-                    DistributionSpec(Component(it.metricId), DistributionFamily.GAMMA, it.mean, it.variance)
+                    DistributionSpec(Component(it.metricId), familyOf(it.family), it.mean, it.variance)
                 }
                 val floorCeiling = withContext(simulationDispatcher) { simulate(distributions, profile, position) }
 
