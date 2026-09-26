@@ -31,7 +31,7 @@
 
 ## Next step
 
-**Execute Plan 1, Task 4: Derived rates and the long fact shape** (`docs/superpowers/plans/2026-09-25-kotlin-ingest.md`), natively, with the `executing-plans` skill.
+**Execute Plan 1, Task 5: Upstream sources and an HTTP fetcher that asks "changed since?"** (`docs/superpowers/plans/2026-09-25-kotlin-ingest.md`), natively, with the `executing-plans` skill.
 
 1. Follow the task's steps exactly: failing test, implementation, passing test, commit.
 2. Tick the task under **Execution progress** below.
@@ -49,7 +49,9 @@ Plan 2 depends on all of Plan 1. Start Plan 2 only after Plan 1's Task 12 (the p
   - No rulings. A throwaway dump of all 81 `Metric` rows diffed identical to Python's `METRICS` on every field, case preserved.
 - [x] Task 3: Play-by-play reader and per player-week aggregation (commit 8dce2dd; `./gradlew :core:ingest:test` → 36/36 pass, 22 of them new).
   - No rulings. The brief's code blocks were written verbatim, and the tests were watched failing (unresolved `Play`) before the implementation went in.
-- Tasks 4–12 not started.
+- [x] Task 4: Derived rates and the long fact shape (commit 8e7c954; `./gradlew :core:ingest:test` → 52/52 pass, 16 of them new).
+  - No rulings. The brief's code blocks were written verbatim, and the tests were watched failing (unresolved `weeklyPlayerStats`, `toFacts`, `Fact`) before the implementation went in.
+- Tasks 5–12 not started.
 
 The executing-plans ledger lives in git-ignored `.superpowers/` and does not survive the container. Rulings are copied here so the final reviewer sees them.
 
