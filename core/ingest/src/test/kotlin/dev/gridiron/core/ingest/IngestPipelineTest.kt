@@ -15,6 +15,7 @@ import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
+import java.io.IOException
 import java.time.Instant
 
 class IngestPipelineTest {
@@ -322,6 +323,35 @@ class IngestPipelineTest {
         assertEquals(listOf(2025), report.built)
         assertTrue(report.warnings.any { "schedule" in it }, "${report.warnings}")
         assertEquals(listOf(listOf("0")), query(out, "SELECT COUNT(*) FROM game"))
+    }
+
+    @Test
+    fun `a schedule download error is a warning, not a failed build`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        fetcher.onFetch = { url -> if (url == Sources.url(Input.GAMES)) throw IOException("HTTP 503") }
+        val out = File(dir, "stats.db")
+
+        val report = pipeline.build(listOf(2025), previous = null, out = out)
+
+        assertEquals(listOf(2025), report.built)
+        assertTrue(report.warnings.any { "schedule" in it }, "${report.warnings}")
+        assertEquals("no schedule", report.forecast)
+    }
+
+    @Test
+    fun `a schedule download error falls back to the kept copy`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        pipeline.build(listOf(2025), null, File(dir, "first.db"))
+        fetcher.onFetch = { url -> if (url == Sources.url(Input.GAMES)) throw IOException("HTTP 503") }
+
+        val second = File(dir, "second.db")
+        val report = pipeline.build(listOf(2025), File(dir, "first.db"), second)
+
+        assertTrue(report.warnings.any { "schedule" in it }, "${report.warnings}")
+        assertEquals(listOf(listOf("1")), query(second, "SELECT COUNT(*) FROM game"))
+        assertNotNull(readMeta(second)!![Sources.metaKey(Input.GAMES)])
     }
 
     @Test

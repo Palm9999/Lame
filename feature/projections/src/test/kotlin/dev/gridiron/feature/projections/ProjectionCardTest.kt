@@ -21,12 +21,13 @@ private class CardRow(private val columns: List<Any?>) : ResultRow {
 }
 
 /** Answers the card's queries by what they read. KC is at BUF in week 4, three games left. */
-private class CardExecutor(private val status: String = "ok") : QueryExecutor {
+private class CardExecutor(private val status: String = "ok", private val bye: Boolean = false) : QueryExecutor {
     override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
         val sql = query.sql
         val rows: List<List<Any?>> = when {
             "schema_meta" in sql -> listOf(listOf("forecast_status", status), listOf("forecast_week:2026", "4"))
             "player_week_projection_factor" in sql -> emptyList()
+            "FROM player_week_projection" in sql && bye -> emptyList()
             "FROM player_week_projection" in sql -> listOf(
                 listOf("W1", "receptions", "final", 5.0, 5.0, "binomial"),
                 listOf("W1", "receiving_yards", "final", 60.0, 900.0, "gamma"),
@@ -36,6 +37,7 @@ private class CardExecutor(private val status: String = "ok") : QueryExecutor {
                 listOf("W1", "receiving_yards", 480.0, 5000.0, "gamma"),
             )
             "COUNT(*)" in sql -> listOf(listOf(3L))
+            "FROM game" in sql && bye -> emptyList()
             "FROM game" in sql -> listOf(listOf("BUF", "KC", 2.5, 47.5))
             else -> emptyList()
         }
@@ -64,6 +66,14 @@ class ProjectionCardTest {
         val card = loadProjectionCard(ProjectionsRepository(CardExecutor()), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = "IR")!!
         assertTrue(card.out)
         assertEquals(0.0, card.points, 0.0)
+    }
+
+    @Test
+    fun `on a bye the card says so and keeps rest of season`() = runTest {
+        val card = loadProjectionCard(ProjectionsRepository(CardExecutor(bye = true)), "W1", "KC", ScoringPresets.PPR, Position.WR, null)!!
+        assertTrue(card.bye)
+        assertNull(card.matchup)
+        assertEquals(88.0, card.rosPoints!!, 1e-9)
     }
 
     @Test

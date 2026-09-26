@@ -37,6 +37,8 @@ public data class ProjectionCard(
     val rosPerGame: Double?,
     /** ESPN lists him Out or on IR. */
     val out: Boolean,
+    /** His team has no game this week; only rest of season counts. */
+    val bye: Boolean = false,
 )
 
 private val OUT_ABBRS = setOf("O", "IR")
@@ -44,7 +46,8 @@ private val OUT_ABBRS = setOf("O", "IR")
 /**
  * The card for [playerId] in the latest season's upcoming week, scored with
  * [profile]; null when the forecast has nothing for him (it failed, it's the
- * off-season, or he has no projection this week).
+ * off-season, or he has no projection this week). On his team's bye the card
+ * carries only rest of season.
  */
 public suspend fun loadProjectionCard(
     repository: ProjectionsRepository,
@@ -57,14 +60,18 @@ public suspend fun loadProjectionCard(
     val status = repository.status()
     if (status.status != "ok") return null
     val (season, week) = status.upcoming.maxByOrNull { it.key }?.toPair() ?: return null
-    val final = repository.projections(ProjectionsRequest(setOf(playerId), season, week)).firstOrNull()?.final
-    if (final.isNullOrEmpty()) return null
-    val out = injuryAbbr in OUT_ABBRS
-    val points = projectPoints(final, profile, position)
+    val final = repository.projections(ProjectionsRequest(setOf(playerId), season, week)).firstOrNull()?.final.orEmpty()
     val game = team?.let { repository.game(season, week, it) }
     val ros = repository.rosProjections(RosProjectionsRequest(setOf(playerId), season)).firstOrNull()
     val rosPoints = ros?.let { r -> score(r.components.associate { Component(it.metricId) to it.mean }, profile, position) }
     val gamesLeft = team?.let { repository.remainingGames(season, week, it) } ?: 0
+    val rosPerGame = rosPoints?.takeIf { gamesLeft > 0 }?.let { it / gamesLeft }
+    if (final.isEmpty()) {
+        if (team == null || game != null || rosPoints == null) return null
+        return ProjectionCard(season, week, null, null, 0.0, 0.0, 0.0, rosPoints, rosPerGame, out = false, bye = true)
+    }
+    val out = injuryAbbr in OUT_ABBRS
+    val points = projectPoints(final, profile, position)
     return ProjectionCard(
         season = season,
         week = week,
@@ -74,7 +81,7 @@ public suspend fun loadProjectionCard(
         floor = if (out) 0.0 else points.floor,
         ceiling = if (out) 0.0 else points.ceiling,
         rosPoints = rosPoints,
-        rosPerGame = rosPoints?.takeIf { gamesLeft > 0 }?.let { it / gamesLeft },
+        rosPerGame = rosPerGame,
         out = out,
     )
 }
@@ -97,13 +104,15 @@ private fun onePlace(value: Double): String = String.format(Locale.US, "%.1f", v
 /** The Player page's projection card; tapping it opens the waterfall. */
 @Composable
 public fun ThisWeekCard(card: ProjectionCard, onOpen: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().clickable(onClick = onOpen).padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(modifier.fillMaxWidth().clickable(enabled = !card.bye, onClick = onOpen).padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
             listOfNotNull("Week ${card.week}", card.matchup, card.line).joinToString(" · "),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        if (card.out) {
+        if (card.bye) {
+            Text("Bye this week", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        } else if (card.out) {
             Text("Out this week", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
         } else {
             Text("${onePlace(card.points)} pts", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
@@ -113,6 +122,6 @@ public fun ThisWeekCard(card: ProjectionCard, onOpen: () -> Unit, modifier: Modi
             val perGame = card.rosPerGame?.let { " (${onePlace(it)} per game)" }.orEmpty()
             Text("Rest of season ${onePlace(ros)} pts$perGame", style = MaterialTheme.typography.bodySmall)
         }
-        Text("See why →", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        if (!card.bye) Text("See why →", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
     }
 }

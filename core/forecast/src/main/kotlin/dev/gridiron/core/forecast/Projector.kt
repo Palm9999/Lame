@@ -128,10 +128,13 @@ internal class Projector(
         val all = inputs.history[player.playerId].orEmpty()
         val before = all.takeWhile { it.order < state.order }
         val team = teamFor(player, all, before, state.season, state.week, kind) ?: return null
-        val game = gameOf[Triple(team, state.season, state.week)] ?: return null // a bye
+        val game = gameOf[Triple(team, state.season, state.week)]
+        // A past bye has nothing to project. An upcoming bye has no weekly rows, but its later games still make rest of season.
+        if (game == null && kind != WeekKind.UPCOMING) return null
         val ctx = PlayerContext(player.position, state.season, state.week, before, regimeBreak(player, team, before, state.season, state.week))
         val volume = teamVolume(teamHistory[team].orEmpty().takeWhile { it.order < state.order }, state.leagueTeam)
         val prepared = Prepared(player, team, model.project(ctx, rates, volume), volume.passRate)
+        if (game == null) return prepared
         val (afterMatchup, final) = finalFor(state, prepared, game)
         val cv = K.EMPIRICAL_CV.getValue(player.position)
         when (kind) {

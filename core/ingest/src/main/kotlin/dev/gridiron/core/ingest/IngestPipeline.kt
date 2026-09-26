@@ -171,11 +171,25 @@ public class IngestPipeline(
             }
         }
 
-        /** Null, with a warning, when there's no schedule: projections need it, stats don't. */
+        /**
+         * Null, with a warning, when there's no schedule: projections need it,
+         * stats don't. A download that fails falls back to the kept copy.
+         */
         private suspend fun fetchGames(): File? {
             val key = Sources.metaKey(Input.GAMES)
             val known = prior?.get(key)?.let(Validators::decode)?.takeIf { gamesFile.isFile }
-            return when (val r = fetch(Input.GAMES, null, known, gamesFile)) {
+            val result = try {
+                fetch(Input.GAMES, null, known, gamesFile)
+            } catch (e: IOException) {
+                if (known == null) {
+                    warnings += "couldn't download nflverse's schedule (${e.message}); no projections this time"
+                    return null
+                }
+                warnings += "couldn't download nflverse's schedule (${e.message}); using the last one"
+                meta[key] = checkNotNull(prior).getValue(key)
+                return gamesFile
+            }
+            return when (val r = result) {
                 is FetchResult.Downloaded -> gamesFile.also { meta[key] = r.validators.encode() }
                 FetchResult.NotModified -> gamesFile.also { meta[key] = checkNotNull(prior).getValue(key) }
                 FetchResult.NotPublished -> {

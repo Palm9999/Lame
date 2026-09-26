@@ -40,4 +40,12 @@ class ThisWeekCardTest {
         compose.setContent { GridironTheme { ThisWeekCard(card.copy(out = true, points = 0.0), onOpen = {}) } }
         compose.onNodeWithText("Out this week").assertIsDisplayed()
     }
+
+    @Test
+    fun `a bye reads Bye, with rest of season and no waterfall link`() {
+        compose.setContent { GridironTheme { ThisWeekCard(card.copy(matchup = null, line = null, bye = true), onOpen = {}) } }
+        compose.onNodeWithText("Bye this week").assertIsDisplayed()
+        compose.onNodeWithText("Rest of season 88.0 pts (29.3 per game)").assertIsDisplayed()
+        compose.onNodeWithText("See why →").assertDoesNotExist()
+    }
 }

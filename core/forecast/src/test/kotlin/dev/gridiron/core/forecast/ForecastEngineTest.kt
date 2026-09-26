@@ -20,7 +20,7 @@ class ForecastEngineTest {
      * are played. 2025 week 3 is next: AAA-DDD has a line, BBB-CCC doesn't.
      * In 2025 week 4 only AAA-CCC play: BBB and DDD are on bye.
      */
-    private fun league(name: String, allPlayed: Boolean = false, wrA2025Week2Targets: Double = 9.0): TestDb {
+    private fun league(name: String, allPlayed: Boolean = false, wrA2025Week2Targets: Double = 9.0, playedThrough: Int = 2): TestDb {
         val db = TestDb(File(dir, name))
         for (team in teams) {
             val letter = team.first()
@@ -36,7 +36,7 @@ class ForecastEngineTest {
         for (season in listOf(2024, 2025)) {
             for ((w, pairs) in schedule.withIndex()) {
                 val week = w + 1
-                val played = season == 2024 || week <= 2 || allPlayed
+                val played = season == 2024 || week <= playedThrough || allPlayed
                 for ((home, away) in pairs) {
                     val line = season == 2025 && week == 3 && home == "AAA"
                     db.game(
@@ -57,7 +57,7 @@ class ForecastEngineTest {
             playWeek(db, "CCC", 2025, 4, wrA2025Week2Targets)
         }
         db.meta("expected_through_week:2024", "3")
-        db.meta("expected_through_week:2025", if (allPlayed) "4" else "2")
+        db.meta("expected_through_week:2025", if (allPlayed) "4" else "$playedThrough")
         return db
     }
 
@@ -156,6 +156,24 @@ class ForecastEngineTest {
                 listOf(listOf("2")),
                 db.query("SELECT DISTINCT as_of_week FROM player_ros_projection"),
             )
+        }
+    }
+
+    @Test
+    fun `a team on bye in the upcoming week keeps its rest of season`() {
+        league("a.db", playedThrough = 3).use { db ->
+            db.game(2025, 5, "BBB", "DDD", played = false, spread = null, total = null, homeCoach = "Coach BBB", awayCoach = "Coach DDD")
+            run(db)
+            // Week 4 is next and BBB is on bye: no week-4 rows, but week 5 still counts.
+            assertEquals(
+                emptyList<List<String?>>(),
+                db.query("SELECT metric_id FROM player_week_projection WHERE player_id = 'WR_B' AND season = 2025 AND week = 4"),
+            )
+            val ros = db.query(
+                "SELECT mean FROM player_ros_projection WHERE player_id = 'WR_B' AND season = 2025 AND as_of_week = 3 AND metric_id = 'targets'",
+            )
+            assertEquals(1, ros.size)
+            assertTrue(ros.single()[0]!!.toDouble() > 0.0)
         }
     }
 
