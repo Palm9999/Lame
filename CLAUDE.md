@@ -16,6 +16,12 @@ pip install -r requirements.txt
 # Build the stats database (required before running Android code)
 python -m gridiron_etl.build --seasons 2024 2025 2026 --out build/stats.db
 
+# Same database, built by the Kotlin code the phone runs
+./gradlew :core:ingest:buildStatsDb -Pseasons="2024 2025 2026" -Pout=etl/build/stats.db
+
+# Prove the two agree (CI runs this for 2025)
+python etl/tools/parity.py etl/build/parity/py.db etl/build/parity/kt.db
+
 # Run ETL tests
 python -m pytest tests/ -q
 ```
@@ -54,6 +60,7 @@ export GRIDIRON_STATS_DB=etl/build/stats.db
 - `:core:database` — Read-only SQLite access via the bundled driver; wraps the JDBC executor
 - `:core:testing` — Test fixtures: JDBC executor over the real database. Proves results match what the phone's SQLite driver will return
 - `:core:projections` — Pure `score()` (the in-memory twin of `StatQueryBuilder`'s SQL scoring), factor attribution, and single-player Monte Carlo (floor/ceiling) for the Projections feature
+- `:core:ingest` — Builds `stats.db` from nflverse and ffopportunity: a streaming CSV reader, Kotlin ports of the ETL's transforms and validation, and a pipeline that re-downloads only files whose ETag changed and copies unchanged seasons from the previous build. Runs on the phone and on the JVM (`./gradlew :core:ingest:buildStatsDb -Pseasons="2025" -Pout=etl/build/stats.db`); CI's parity job holds it to the Python ETL's values
 
 **Android Modules**:
 - `:app` — App entry point; ships `stats.db` inside the APK and copies it on first launch

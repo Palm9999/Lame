@@ -178,6 +178,10 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
             st.bindText(2, v)
         }
         connection.execSQL("ANALYZE")
+        // The bundled driver is built with STAT4; Python's sqlite3 isn't. Its
+        // samples steer scored grids off the metric index onto a primary-key
+        // scan (2x slower), so keep only sqlite_stat1, as the ETL does.
+        connection.execSQL("DROP TABLE IF EXISTS sqlite_stat4")
     }
 
     fun factCount(): Long = connection.prepare("SELECT COUNT(*) FROM player_week_stat").use {

@@ -60,6 +60,14 @@ class StatsDbWriterTest {
     }
 
     @Test
+    fun `statistics match the Python ETL's, with no sqlite_stat4 to steer the planner off the metric index`() {
+        val file = File(dir, "stats.db")
+        build(file, listOf(2025))
+        assertEquals(1, query(file, "SELECT name FROM sqlite_master WHERE name = 'sqlite_stat1'").size)
+        assertEquals(emptyList<List<String?>>(), query(file, "SELECT name FROM sqlite_master WHERE name = 'sqlite_stat4'"))
+    }
+
+    @Test
     fun `facts for players nflverse doesn't list are dropped`() {
         val file = File(dir, "stats.db")
         StatsDbWriter.create(file).use { w ->

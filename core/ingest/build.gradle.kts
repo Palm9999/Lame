@@ -12,3 +12,14 @@ dependencies {
 
     testImplementation(libs.kotlinx.coroutines.test)
 }
+
+// ./gradlew :core:ingest:buildStatsDb -Pseasons="2024 2025" -Pout=etl/build/stats.db
+tasks.register<JavaExec>("buildStatsDb") {
+    group = "gridiron"
+    description = "Builds stats.db from nflverse with the on-device ingest code."
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("dev.gridiron.core.ingest.cli.IngestCliKt")
+    val seasons = providers.gradleProperty("seasons").orElse("").get().split(" ").filter { it.isNotBlank() }
+    val out = rootDir.resolve(providers.gradleProperty("out").orElse("etl/build/stats.db").get())
+    args = listOf("--seasons") + seasons + listOf("--out", out.path)
+}
