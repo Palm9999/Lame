@@ -5,7 +5,7 @@
 - Every session starts by reading this file, runs the next 4 tasks from **Next step**, then updates this file (tick each task, record rulings), commits, pushes, and stops.
 - Keep replies short. Ask a question only when blocked, one line at a time.
 
-**Branch:** `claude/dreamy-euler-phbdq1`. It restarted from the merged live-data-refresh work (PR #3, merge 9dabb9a). Draft PR #4 (https://github.com/Palm9999/Lame/pull/4) carries this project. Sub-project 1's code (Tasks 1–12 plus review fixes) is on it.
+**Branch:** `claude/dreamy-euler-phbdq1`, restarted from `claude/relaxed-hypatia-73hhub` after PR #4 merged (merge 3938c84). Sub-project 1 (Tasks 1–12, the review fixes and the layer-2 fix) is merged: https://github.com/Palm9999/Lame/pull/4. Each new sub-project goes in a new PR from this branch.
 
 ## Where things stand
 
@@ -25,12 +25,15 @@
   - Two of the Important issues are fixed (commit 44d16f0).
   - The Critical issue and the third Important one both come from layer 2's design, so they need a spec amendment rather than a code fix.
 - [x] **Layer-2 fix designed** (user's choice: next session). It's the spec's "Amendment: layer 2", planned in `docs/superpowers/plans/2026-09-26-projection-share-fix.md` (2 tasks, full code).
+- [x] **Layer-2 fix built** (commits 3097c75, 63fcdc1; see "Layer-2 fix" under Execution progress). Real data now has one passer per team and team totals at real volume.
+- [x] **PR #4 merged** (2026-09-26, merge 3938c84, CI green). The user merged after the fix's self-review, without a fresh review.
 
-- [x] **Layer-2 fix built** (Tasks 1–2 of the fix plan; see "Layer-2 fix: execution progress" below). Real data now has one passer per team and team totals at real volume.
+## Next step: plan sub-project 2 (accuracy page)
 
-## Next step
-
-Sub-project 1 is complete; merge PR #4 when CI is green, then plan sub-project 2 (accuracy page, spec §4) with writing-plans in a fresh session.
+1. Read spec §4 (accuracy page) of `docs/superpowers/specs/2026-09-26-projection-model-design.md`, plus the "Amendment: layer 2" section.
+2. Write its plan with the writing-plans skill, in a fresh session. Use the same format as `2026-09-26-projection-engine.md`: full code, tests first, 4 tasks per session.
+3. Present the plan for approval, then stop.
+4. The backtest should re-measure the model against the season-to-date average (see "The accuracy gap" below). That gate belongs to this sub-project.
 
 **Things to know:**
 - **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
@@ -39,14 +42,12 @@ Sub-project 1 is complete; merge PR #4 when CI is green, then plan sub-project 2
   - Player page scoring runs on the main thread.
   - The list's scoring time was never measured.
   - Screens don't reload after a refresh swap until reopened.
+  - `Rates.passShare` (`League.kt`) no longer has a caller.
 - **A timing test flakes under full parallel builds.** `:core:statquery`'s "scoring a full season … is fast" test fails under a full parallel `./gradlew build`. It's a known CPU-contention flake: run that module alone to confirm green.
 - **Warnings are errors**, and explicit API mode is on in JVM modules.
 - **Tracking.** The `.superpowers/` ledger doesn't survive the container. Rulings go in this file.
 
-**PR #4 watch:**
-- This session is subscribed.
-- Self check-ins: `trig_01LbtqsUqJrVwC6d3Bq3H6Jp` (2026-09-26 22:32 UTC) and `trig_01PKEqFesGyPyqfsHvpQKpbq` (21:11 UTC). Re-arm every 3–6 hours while the PR only waits on the user; say nothing if nothing changed.
-- CI failures on PR #4 are ours to fix.
+**PR #4:** merged. The watch and its check-ins are cancelled.
 
 ## Projection engine: execution progress
 
