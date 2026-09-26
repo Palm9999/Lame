@@ -31,14 +31,18 @@
 
 ## Next step
 
-**Execute Plan 1, Task 10: Validation** (then Tasks 11 and 12, which finish Plan 1, then Plan 2 Task 1) (`docs/superpowers/plans/2026-09-25-kotlin-ingest.md`), natively, with the `executing-plans` skill.
+**Execute Plan 2, Tasks 2–5** (`docs/superpowers/plans/2026-09-25-live-refresh-app.md`), natively, with the `executing-plans` skill:
+- Task 2: Screens reload on a new data version
+- Task 3: A seasons choice in preferences
+- Task 4: Reading ESPN's news and injuries
+- Task 5: The `live.db` store
 
 1. For each of the next 4 tasks, follow the task's steps exactly: failing test, implementation, passing test, commit.
 2. Tick each task under **Execution progress** below.
 3. Set this section to the task after the batch.
 4. Commit, push, and stop.
 
-Plan 2 depends on all of Plan 1. Start Plan 2 only after Plan 1's Task 12 (the parity gate) is green.
+First, check that CI's new `parity` job passed on commit 2249afc or later. Plan 1 Task 12's parity gate was green locally (`parity: OK`); CI is the gate of record.
 
 ## Execution progress
 
@@ -62,8 +66,19 @@ Plan 2 depends on all of Plan 1. Start Plan 2 only after Plan 1's Task 12 (the p
   - No rulings. Code written verbatim; the four test classes watched failing (unresolved readers and `TeamDefenseAggregator`) first.
 - [x] Task 9: The database writer (commit 0de55c0; `./gradlew :core:ingest:test` → 80/80 pass, 5 new).
   - No rulings. Code written verbatim; `StatsDbWriterTest` watched failing (unresolved `StatsDbWriter`, `readMeta`) first.
-- Tasks 10–12 not started.
+- [x] Task 10: Validation (commit 2d1da60; `./gradlew :core:ingest:test` → 101/101 pass, 21 new).
+  - No rulings. Code written verbatim; both test classes watched failing (unresolved `crossCheck`, `FUMBLE_POLICY`, `validateDatabase`) first.
+- [x] Task 11: The ingest pipeline (commit d88e6f6; `./gradlew :core:ingest:test` → 110/110 pass, 9 new).
+  - No rulings. Code written verbatim; `IngestPipelineTest` watched failing (unresolved `IngestPipeline`) first.
+- [x] Task 12: CLI, parity gate and CI switch (commit 2249afc; `etl` pytest 118/118; `./gradlew :core:ingest:test` → 111/111; parity for 2025: **OK** on all 5 tables, 274,373 facts; `./gradlew test` green on a Kotlin-built 2024–2026 DB).
+  - Ruling: `buildStatsDb` used `the<SourceSetContainer>()`. Inside `tasks.register<JavaExec>` that resolves against the task and fails configuration, so the task uses the project's `sourceSets["main"]` accessor instead. Cost if wrong: none.
+  - Ruling: the first parity run had 1 `snap_share` mismatch. The cause was the Python ETL reading a stale `~/.cache/gridiron/snap_counts_2025.csv` (0.12, where upstream now says 0.13), not the port. With `--force`, the result was `parity: OK`. Cost if wrong: none, because CI runners have no cache.
+  - Ruling (a code change beyond the brief): bundled SQLite's `ANALYZE` writes `sqlite_stat4`, and Python's doesn't. `sqlite_stat4` steered scored grids off `idx_pws_metric_season_week`, which failed 2 contract tests (index unused; 524 ms against a 250 ms budget). `StatsDbWriter.finish` now drops `sqlite_stat4`, with a new `StatsDbWriterTest` test (RED→GREEN). Cost if wrong: the planner loses the stat4 samples, which matches the Python-built DB the app shipped before.
+  - Ruling: the "scoring a full season … is fast" timing test (250 ms budget) fails under a full parallel `./gradlew build` in this 4-CPU container, with the **Python**-built DB too (395 ms). So it's CPU contention, not the port. Verified instead: `./gradlew test` (CI's command) is green with the Kotlin DB (median 242 ms), and so is `./gradlew build -x :core:statquery:test`. Cost if wrong: the margin is thin, so the test may flake on a slow CI runner. That thin margin was already there before this work.
 
 The executing-plans ledger lives in git-ignored `.superpowers/` and does not survive the container. Rulings are copied here so the final reviewer sees them.
 
-**Plan 2** (`2026-09-25-live-refresh-app.md`): tasks 1–11 not started.
+**Plan 2** (`2026-09-25-live-refresh-app.md`):
+- [x] Task 1: `ReopenableQueryExecutor` (commit 39ea0ea; `./gradlew :core:database:test :app:compileDebugKotlin` → green, 4/4 new tests).
+  - Ruling: `runCurrent()` is `@ExperimentalCoroutinesApi` and fails `-Werror`, so the one test that uses it has `@OptIn(ExperimentalCoroutinesApi::class)`, the repo's existing pattern (see `GridViewModelTest`). Cost if wrong: none.
+- Tasks 2–11 not started.
