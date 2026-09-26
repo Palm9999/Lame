@@ -25,15 +25,20 @@
   11. Removing `etl.yml` and the benchmark, plus docs
 
   Its ESPN test fixtures are real responses recorded 2026-09-25, cut down and embedded in Task 4.
-- [ ] The user has reviewed neither plan and has not chosen an execution method. For the previous project they chose subagent-driven development.
+- [x] **Plans reviewed and approved** by the user (2026-09-26). **Execution method: native.**
+  - Each session implements one task itself with the `executing-plans` skill: no per-task subagents or reviewers.
+  - After Plan 2's last task, one fresh reviewer on the most capable model checks the whole branch.
 
 ## Next step
 
-**Get the user's review of both plans and their choice of execution method.** Once they have answered, record the method here.
+**Execute Plan 1, Task 1** (`docs/superpowers/plans/2026-09-25-kotlin-ingest.md`), natively, with the `executing-plans` skill.
 
-Then execute **Plan 1, Task 1**, one task per session. With subagent-driven development, the ledger is at `.superpowers/sdd/2026-09-25-kotlin-ingest/progress.md`. It is git-ignored, so also tick tasks below.
+1. Follow the task's steps exactly: failing test, implementation, passing test, commit.
+2. Tick the task under **Execution progress** below.
+3. Set this section to the next task.
+4. Commit, push, and stop.
 
-Plan 2 depends on all of Plan 1. Execute Plan 2 only after Plan 1's Task 12 (the parity gate) is green.
+Plan 2 depends on all of Plan 1. Start Plan 2 only after Plan 1's Task 12 (the parity gate) is green.
 
 ## Execution progress
 
