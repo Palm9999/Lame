@@ -43,18 +43,26 @@
 - [x] **Final whole-branch review** (Opus, 2026-09-27): "with fixes". 0 Critical, 2 Important (plus 1 Minor re-graded to Important), 7 Minor. Fixed in commit 2ff2be2 (see below).
 - [x] **PR #7 merged** (753e1f1); PR #9 merged (e188dc2).
 - [x] **Sub-project 4 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`.
+- [x] **Plan revised for the user's rulings** (2026-09-27). The user overturned four of the first draft's rulings: editable points-allowed tiers (ESPN's by default), a one-time prefs migration instead of `fallback`, K and D/ST chips on the Grid, and a CI gate that covers K and D/ST. The plan grew from 9 to 11 tasks.
 - [ ] **Plan approved; execution method** (the user decides).
 
-## Next step: review the sub-project 4 (K/DST) plan
+## Next step: approve the revised sub-project 4 (K/DST) plan
 
 1. **PR #7 (sub-project 3, props) is merged** (753e1f1). **PR #9 (deferred minors, plus rosters) is merged** (e188dc2).
-2. **Sub-project 4 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`, on draft PR #10.
-   - 9 tasks, full code, tests first. Session A = Tasks 1–4 (kicking and D/ST facts, Python parity, scoring), Session B = Tasks 5–8 (kicker and D/ST models, walk-forward, phone), Session C = Task 9 (fit K/DST range widening on real data, docs), then the final whole-branch review.
-   - 13 rulings are at the end of the plan ("Plan self-review"). The ones most worth a look: points allowed stored as one-hot tier facts; `ScoringRule.fallback` so old profiles score K/DST with defaults; Yahoo-style default values on the spec's tiers; the accuracy page measures K/DST but the CI gate stays QB–TE.
-3. **Next: the user reviews the plan and picks an execution method** (subagent-driven or native). Then Session A runs Tasks 1–4.
-4. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape: enter it in ☰ → Settings → Betting props, then Refresh stats. The toast should say "Props moved N projections"; Settings shows credits left.
-5. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
-6. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
+2. **Sub-project 4 plan, revised** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`, on draft PR #10. It has 11 tasks, with full code and tests written first.
+   - **Session A** = Tasks 1–4: kicking and D/ST facts, Python parity, and scoring with each profile's own points-allowed tiers.
+   - **Session B** = Tasks 5–8: prefs migration and the tier editor, the Grid's K and D/ST chips, the kicker and D/ST models.
+   - **Session C** = Tasks 9–11: the walk-forward, the phone, the gate at six positions (tuning K/D/ST constants if needed) and range widening, and docs. Then the final whole-branch review.
+3. **The user's rulings (2026-09-27), now in the plan:**
+   - **Tiers:** points allowed are stored as a number, and each profile's editable tiers score them, ESPN's by default (0, 1–6, 7–13, 14–17, 18–21, 22–27, 28–34, 35–45, 46+: 5, 4, 3, 1, 0, −1, −4, −5, −5). Projections store a mean and spread, and the phone scores the tiers in expectation (per game for rest of season).
+   - **Old profiles:** migrated once (prefs `formatVersion` 2) to the K/D/ST defaults and ESPN's tiers. There's no fallback.
+   - **Gate:** covers K and D/ST. If either loses, Task 11 tunes its constants (up to 8 rebuilds, then it asks).
+   - **Grid:** K and D/ST chips with their own packs (Kicking, Defense). Every other chip leaves them out.
+   - The other rulings are listed at the end of the plan. Worth a look: the kicking defaults (3/4/5, −1, 1, −1) are the common values, not checked against ESPN's, and ESPN's yards-allowed and blocked-kick D/ST scoring isn't modeled.
+4. **Next: the user approves the revised plan and picks an execution method** (subagent-driven or native). Then Session A runs Tasks 1–4.
+5. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape: enter it in ☰ → Settings → Betting props, then Refresh stats. The toast should say "Props moved N projections"; Settings shows credits left.
+6. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
+7. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
 
 ## Deferred minors fixed (2026-09-27)
 
