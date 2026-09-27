@@ -12,6 +12,7 @@ import dev.gridiron.core.model.WeekRange
  * @property columns Displayed columns, in display order.
  * @property sort Sort keys in priority order. Empty means the first column, descending.
  * @property positions Empty means every position.
+ * @property excludedPositions Never these positions. Players with no position are kept.
  * @property teams Team abbreviations. Empty means every team.
  * @property playerIds Only these players. Applied after percentiles, like [filters], so it never moves a percentile.
  * @property filters Narrow the view. Applied to values as displayed, so per-game
@@ -33,6 +34,7 @@ public data class StatQuerySpec(
     val columns: List<StatColumn>,
     val sort: List<Sort> = emptyList(),
     val positions: Set<Position> = emptySet(),
+    val excludedPositions: Set<Position> = emptySet(),
     val teams: Set<String> = emptySet(),
     val playerIds: Set<String> = emptySet(),
     val filters: List<Filter> = emptyList(),

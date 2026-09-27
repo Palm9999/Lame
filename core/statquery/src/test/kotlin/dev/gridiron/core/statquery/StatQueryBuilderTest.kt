@@ -230,6 +230,20 @@ class StatQueryBuilderTest {
         }
 
         @Test
+        fun `excluded positions leave those players out and keep players with no position`() {
+            db.player("wr1", "Wideout", position = "WR")
+            db.player("k1", "Place Kicker", position = "K")
+            db.player("d1", "KC D/ST", position = "DST")
+            listOf("wr1", "k1", "d1").forEach { db.week(it, 1, C.TARGETS to 1) }
+            db.conn.createStatement().use { it.executeUpdate("INSERT INTO player VALUES ('x1', 'Unknown Spot', 'unknown spot', NULL, 'AAA', NULL)") }
+            db.week("x1", 1, C.TARGETS to 1)
+
+            val rows = db.grid(spec(TARGETS).copy(excludedPositions = setOf(Position.K, Position.DST)))
+
+            assertEquals(setOf("wr1", "x1"), rows.map { it.playerId }.toSet())
+        }
+
+        @Test
         fun `between is inclusive at both ends`() {
             listOf("a" to 4, "b" to 5, "c" to 7, "d" to 8).forEach { (id, t) ->
                 db.player(id, id)

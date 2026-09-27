@@ -3,6 +3,7 @@ package dev.gridiron.core.data
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.doubleOrNull
 import dev.gridiron.core.database.textOrNull
+import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.statquery.Aggregate
 import dev.gridiron.core.statquery.CatalogQueries
@@ -19,6 +20,9 @@ import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import java.util.Locale
+
+/** Kickers and team defenses: listed only under their own chips (or their own packs), never among the offense. */
+private val UNITS: Set<Position> = setOf(Position.K, Position.DST)
 
 public class StatsRepository(
     private val executor: QueryExecutor,
@@ -126,13 +130,17 @@ public class StatsRepository(
         val searching = request.name.isNotBlank()
         // A roster is the user's own pick, so like a search it lists everyone on it, ranked or not.
         val listing = searching || request.onlyPlayers != null
-        val snap = request.minSnapShare?.let { Filter(StatColumn.SNAP_SHARE, Condition.AtLeast(it)) }
+        // A K or D/ST pack is its chip's, even if a request pairs it with another chip.
+        val chip = request.pack.unit ?: request.positions
+        val units = chip == PositionFilter.K || chip == PositionFilter.DST
+        val snap = request.minSnapShare?.takeUnless { units }?.let { Filter(StatColumn.SNAP_SHARE, Condition.AtLeast(it)) }
         return StatQuerySpec(
             season = request.season.season,
             weeks = request.weeks,
             columns = request.pack.columns,
             sort = listOf(Sort(request.sort, request.direction)),
-            positions = request.positions.positions,
+            positions = chip.positions,
+            excludedPositions = if (units) emptySet() else UNITS,
             teams = request.teams,
             playerIds = request.onlyPlayers.orEmpty(),
             // Unlike the sample qualifier, these are the user's own choices, so a search keeps them.

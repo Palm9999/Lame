@@ -129,6 +129,16 @@ class GridScreenTest {
     }
 
     @Test
+    fun teamDefensesShowTheirOwnPackAndNoSnapChip() {
+        val season = catalog.season(2025)
+        show(ready(GridRequest(season, season.defaultWeeks, StatPack.DEFENSE, positions = PositionFilter.DST)))
+        compose.onNodeWithText("Defense").assertIsDisplayed()
+        compose.onNodeWithText("Opportunity").assertDoesNotExist()
+        compose.onNodeWithTag("chip:snaps").assertDoesNotExist()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/grid_dst.png")
+    }
+
+    @Test
     fun everyControlIsOnScreenWithoutScrolling() {
         val season = catalog.season(2025)
         show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)))

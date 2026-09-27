@@ -437,6 +437,10 @@ private class SqlWriter {
             val codes = spec.positions.sortedBy { it.ordinal }
             conditions += "position IN (${codes.joinToString(", ") { text(it.code) }})"
         }
+        if (spec.excludedPositions.isNotEmpty()) {
+            val codes = spec.excludedPositions.sortedBy { it.ordinal }
+            conditions += "(position IS NULL OR position NOT IN (${codes.joinToString(", ") { text(it.code) }}))"
+        }
         if (spec.teams.isNotEmpty()) {
             conditions += "team IN (${spec.teams.sorted().joinToString(", ") { text(it) }})"
         }
