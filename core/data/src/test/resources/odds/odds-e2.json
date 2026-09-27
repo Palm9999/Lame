@@ -1,0 +1,25 @@
+{
+  "id": "e2", "sport_key": "americanfootball_nfl", "sport_title": "NFL", "commence_time": "2026-10-04T17:00:00Z",
+  "home_team": "Los Angeles Rams", "away_team": "San Francisco 49ers",
+  "bookmakers": [
+    {"key": "draftkings", "title": "DraftKings", "markets": [
+      {"key": "player_reception_yds", "last_update": "2026-10-02T15:00:00Z", "outcomes": [
+        {"name": "Over", "description": "Puka Nacua", "price": 1.87, "point": 84.5},
+        {"name": "Under", "description": "Puka Nacua", "price": 1.95, "point": 84.5}
+      ]},
+      {"key": "player_anytime_td", "last_update": "2026-10-02T15:00:00Z", "outcomes": [
+        {"name": "Yes", "description": "Puka Nacua", "price": 2.3},
+        {"name": "Yes", "description": "Christian McCaffrey", "price": 1.62}
+      ]}
+    ]},
+    {"key": "fanduel", "title": "FanDuel", "markets": [
+      {"key": "player_reception_yds", "last_update": "2026-10-02T15:05:00Z", "outcomes": [
+        {"name": "Over", "description": "Puka Nacua", "price": 1.9, "point": 85.5},
+        {"name": "Under", "description": "Puka Nacua", "price": 1.9, "point": 85.5}
+      ]},
+      {"key": "player_rush_attempts", "last_update": "2026-10-02T15:05:00Z", "outcomes": [
+        {"name": "Over", "description": "Christian McCaffrey", "price": 1.9, "point": 17.5}
+      ]}
+    ]}
+  ]
+}

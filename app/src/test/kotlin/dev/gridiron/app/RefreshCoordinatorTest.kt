@@ -4,6 +4,7 @@ import dev.gridiron.core.data.live.LiveResult
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.ReopenableQueryExecutor
 import dev.gridiron.core.database.ResultRow
+import dev.gridiron.core.forecast.PropsSnapshot
 import dev.gridiron.core.ingest.IngestProgress
 import dev.gridiron.core.ingest.IngestReport
 import dev.gridiron.core.ingest.ValidationException
@@ -21,6 +22,7 @@ import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
 import java.io.File
+import java.io.IOException
 import java.net.UnknownHostException
 
 /** The coordinator with a fake build and a fake database connection: only files and flows are real. */
@@ -43,11 +45,13 @@ class RefreshCoordinatorTest {
     }
     private val report = IngestReport(listOf(2026), listOf(2025), emptyMap(), emptyList(), 10L)
 
-    /** The `previous` file each build was given. */
+    /** The `previous` file and the props snapshot each build was given. */
     private val builds = mutableListOf<File?>()
+    private val snapshots = mutableListOf<PropsSnapshot?>()
 
     private fun TestScope.coordinator(
         live: (suspend () -> LiveResult)? = null,
+        props: (suspend () -> PropsFetch)? = null,
         build: suspend (out: File, onProgress: (IngestProgress) -> Unit) -> IngestReport = { out, _ ->
             out.writeText("new")
             report
@@ -55,13 +59,15 @@ class RefreshCoordinatorTest {
     ) = RefreshCoordinator(
         dir = tmp.root,
         executor = executor,
-        stats = StatsBuilder { _, previous, out, onProgress ->
+        stats = StatsBuilder { _, previous, out, snapshot, onProgress ->
             builds += previous
+            snapshots += snapshot
             build(out, onProgress)
         },
         seasons = { listOf(2025, 2026) },
         scope = this,
         live = live,
+        props = props,
         millis = { 0L },
     )
 
@@ -215,5 +221,44 @@ class RefreshCoordinatorTest {
         refresher.acknowledge()
 
         assertEquals(RefreshState.Idle, refresher.state.value)
+    }
+
+    @Test
+    fun propsAreFetchedBeforeTheBuildAndHandedToIt() = runTest {
+        val order = mutableListOf<String>()
+        val snapshot = PropsSnapshot(emptyList())
+        val refresher = coordinator(
+            props = {
+                order += "props"
+                PropsFetch(snapshot, null)
+            },
+            build = { out, _ ->
+                order += "build"
+                out.writeText("new")
+                report
+            },
+        )
+
+        refresher.refresh()
+        advanceUntilIdle()
+
+        assertEquals(listOf("props", "build"), order)
+        assertEquals(listOf<PropsSnapshot?>(snapshot), snapshots)
+        assertEquals(RefreshState.Finished("Stats updated for 2025, 2026 in 0 s.", ok = true), refresher.state.value)
+    }
+
+    @Test
+    fun aPropsFailureStillBuildsAndTheToastSaysWhy() = runTest {
+        val refresher = coordinator(props = { throw IOException("offline") })
+
+        refresher.refresh()
+        advanceUntilIdle()
+
+        assertEquals(listOf<PropsSnapshot?>(null), snapshots)
+        assertEquals("new", db.readText())
+        assertEquals(
+            RefreshState.Finished("Stats updated for 2025, 2026 in 0 s. Props not updated: offline.", ok = true),
+            refresher.state.value,
+        )
     }
 }

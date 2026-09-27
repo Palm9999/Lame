@@ -2,6 +2,10 @@ package dev.gridiron.core.ingest
 
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 import androidx.sqlite.execSQL
+import dev.gridiron.core.forecast.PropEvent
+import dev.gridiron.core.forecast.PropQuote
+import dev.gridiron.core.forecast.PropsOutcome
+import dev.gridiron.core.forecast.PropsSnapshot
 import dev.gridiron.core.ingest.db.readMeta
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
@@ -11,6 +15,7 @@ import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNotNull
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -384,6 +389,21 @@ class IngestPipelineTest {
         assertTrue(IngestProgress.Projecting(2025, 1) in progress, "$progress")
         // 2025 week 1 is projected from 2024's games; 2024 week 1 has nothing before it.
         assertEquals(listOf(listOf("2025", "1")), query(out, "SELECT DISTINCT season, week FROM player_week_projection"))
+    }
+
+    @Test
+    fun `props go to the forecast, and the report says how they went`() = runTest {
+        servePlayers()
+        serveSeason(2024)
+        serveSeason(2025)
+        val props = PropsSnapshot(listOf(PropEvent("AAA", "BBB", listOf(PropQuote("dk", "player_receptions", "Nobody Known", 4.5, 1.9, 1.9)))))
+
+        val with = pipeline.build(listOf(2024, 2025), previous = null, out = File(dir, "a.db"), props = props)
+        val without = pipeline.build(listOf(2024, 2025), previous = null, out = File(dir, "b.db"))
+
+        // Both seasons are played, so there's no upcoming week to blend: the one name is unmatched.
+        assertEquals(PropsOutcome(blended = 0, unmatched = 1), with.props)
+        assertNull(without.props)
     }
 
     @Test

@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -108,5 +109,17 @@ class UserPrefsStoreTest {
         assertEquals(null, withStore { it.prefs.first() }.seasons)
         withStore { store -> store.update { it.copy(seasons = SeasonChoice(listOf(2026, 2024), 2026)) } }
         assertEquals(SeasonChoice(listOf(2024, 2026), 2026), withStore { it.prefs.first() }.seasons)
+    }
+
+    @Test
+    fun `the Odds API key survives a restart`() {
+        withStore { it.update { p -> p.copy(oddsApiKey = "abc123") } }
+        assertEquals("abc123", withStore { it.prefs.first().oddsApiKey })
+    }
+
+    @Test
+    fun `a file from before the key existed reads as no key`() {
+        file.writeText("""{"formatVersion": 1}""")
+        assertNull(withStore { it.prefs.first().oddsApiKey })
     }
 }

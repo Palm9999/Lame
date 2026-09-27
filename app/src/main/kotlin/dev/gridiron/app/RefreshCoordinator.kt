@@ -2,6 +2,7 @@ package dev.gridiron.app
 
 import dev.gridiron.core.data.live.LiveResult
 import dev.gridiron.core.database.ReopenableQueryExecutor
+import dev.gridiron.core.forecast.PropsSnapshot
 import dev.gridiron.core.ingest.IngestProgress
 import dev.gridiron.core.ingest.IngestReport
 import kotlinx.coroutines.CancellationException
@@ -45,14 +46,24 @@ interface Refresher {
     fun acknowledge()
 }
 
-/** Plan 1's `IngestPipeline.build`, as a seam the tests can fake. */
+/** What fetching props gave a refresh: the snapshot to blend (null for none) and, when the fetch fell short, why. */
+data class PropsFetch(val snapshot: PropsSnapshot?, val error: String?)
+
+/** `IngestPipeline.build`, as a seam the tests can fake. */
 fun interface StatsBuilder {
-    suspend fun build(seasons: List<Int>, previous: File?, out: File, onProgress: (IngestProgress) -> Unit): IngestReport
+    suspend fun build(
+        seasons: List<Int>,
+        previous: File?,
+        out: File,
+        props: PropsSnapshot?,
+        onProgress: (IngestProgress) -> Unit,
+    ): IngestReport
 }
 
 /**
- * Builds stats on the phone and swaps them in without restarting the app,
- * then refreshes ESPN's injuries and news.
+ * Builds stats on the phone, blending in betting props when the user has an
+ * Odds API key, and swaps them in without restarting the app, then refreshes
+ * ESPN's injuries and news.
  *
  * Runs on [scope] (the application's), so it continues when the user leaves
  * the screen. If the process dies mid-build, `stats.db` is untouched: the new
@@ -65,6 +76,8 @@ class RefreshCoordinator(
     private val seasons: suspend () -> List<Int>,
     private val scope: CoroutineScope,
     private val live: (suspend () -> LiveResult)? = null,
+    /** Fetches the upcoming week's props before the build; null when the app has no props at all (tests). */
+    private val props: (suspend () -> PropsFetch)? = null,
     private val millis: () -> Long = { System.nanoTime() / 1_000_000 },
 ) : Refresher {
     private val db = File(dir, DB_NAME)
@@ -98,7 +111,8 @@ class RefreshCoordinator(
         val start = millis()
         var ok = true
         val statsLine = try {
-            summary(buildAndSwap(), millis() - start)
+            val fetched = fetchProps()
+            summary(buildAndSwap(fetched?.snapshot), millis() - start, fetched?.error)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -118,9 +132,22 @@ class RefreshCoordinator(
         _state.value = RefreshState.Finished(listOfNotNull(statsLine, liveLine).joinToString(" "), ok)
     }
 
-    private suspend fun buildAndSwap(): IngestReport {
+    /** Props for the build. A failure is reported in the toast, never fatal (spec §5: the model's number stands). */
+    private suspend fun fetchProps(): PropsFetch? {
+        val fetch = props ?: return null
+        _state.value = RefreshState.Running("Fetching betting props…")
+        return try {
+            fetch()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            PropsFetch(null, e.message ?: e::class.simpleName ?: "unknown error")
+        }
+    }
+
+    private suspend fun buildAndSwap(snapshot: PropsSnapshot?): IngestReport {
         val report = try {
-            stats.build(seasons(), db.takeIf { it.isFile }, next) { _state.value = RefreshState.Running(progressText(it)) }
+            stats.build(seasons(), db.takeIf { it.isFile }, next, snapshot) { _state.value = RefreshState.Running(progressText(it)) }
         } catch (e: Throwable) {
             next.delete()
             throw e

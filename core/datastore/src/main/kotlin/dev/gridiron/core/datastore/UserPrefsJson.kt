@@ -30,6 +30,7 @@ internal data class UserPrefsDto(
     val resetNotice: Boolean = false,
     val seasons: List<Int>? = null,
     val seasonsChosenIn: Int? = null,
+    val oddsApiKey: String? = null,
 )
 
 @Serializable
@@ -82,7 +83,14 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
     }
     val tray = tray.mapNotNull { s -> orNull { CompareSlot(s.playerId, s.season, WeekRange(s.firstWeek, s.lastWeek)) } }
     val choice = seasons?.let { s -> seasonsChosenIn?.let { SeasonChoice(s.distinct().sorted(), it) } }
-    return UserPrefs(profiles, activeProfileId ?: UserPrefs.DEFAULT.activeProfileId, tray, resetNotice, choice)
+    return UserPrefs(
+        profiles,
+        activeProfileId ?: UserPrefs.DEFAULT.activeProfileId,
+        tray,
+        resetNotice,
+        choice,
+        oddsApiKey?.takeIf { it.isNotBlank() },
+    )
 }
 
 internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
@@ -101,6 +109,7 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     resetNotice = resetNotice,
     seasons = seasons?.seasons,
     seasonsChosenIn = seasons?.chosenIn,
+    oddsApiKey = oddsApiKey,
 )
 
 internal object UserPrefsSerializer : Serializer<UserPrefs> {
