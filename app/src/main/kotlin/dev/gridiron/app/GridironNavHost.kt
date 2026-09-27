@@ -172,7 +172,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back,
                         )
                     }
-                    entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, onBack = back) }
+                    entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, deps.scoring, onBack = back) }
                     entry<InjuriesKey> { key ->
                         InjuriesRoute(key.season, currentSeason(), deps.teams, deps.live, onBack = back, onPlayer = { backStack.push(PlayerKey(it)) })
                     }
