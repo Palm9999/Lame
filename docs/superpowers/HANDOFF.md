@@ -36,14 +36,20 @@
 - [x] **Final whole-branch review** (Opus, 2026-09-27): "ready with fixes". 0 Critical, 1 Important, 8 Minor. Fixed in commit 4fdf023 (see below).
 - [ ] **PR #5 merged.** Waiting on the user.
 
-## Next step: plan sub-project 3
+## Next step: review the sub-project 3 plan, then Session A
 
-1. PR #5 (sub-project 2) is merged (e9463af).
-2. **Calibration is fixed** (user's choice: approach A, fitted on 2024 and 2025 pooled). See "Range calibration" under Execution progress. The follow-up PR carries it.
-3. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows, and whether the numbers match the gate table below under PPR. If it's over about 10 s, record it here (the fix would be caching per season and profile).
-4. The deferred minors below (the user decides which).
-5. Then plan sub-project 3 (Odds API props) with writing-plans, in a fresh session.
-6. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plan).
+1. PRs #5 (accuracy) and #6 (range calibration) are merged (594867a).
+2. **Sub-project 3 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-props.md`. It has 6 tasks with full code and tests first. Its rulings are at the end ("Plan self-review").
+   - **Session A** = Tasks 1–4: the prop math, the forecast's blend, the Odds API client and parser, and props in `live.db` within the credit budget.
+   - **Session B** = Tasks 5–6: the key in Settings, and wiring props from Refresh into the forecast, plus docs. Then the final whole-branch review.
+3. **Waiting on the user:** review the plan and choose the execution method (native was used for sub-projects 1 and 2).
+4. **Two judgment calls in the plan for the user to confirm.** Props can't be backtested, so neither can be fitted:
+   - The market's weight in the blend is about two thirds (`MARKET_VARIANCE_RATIO` 0.5).
+   - A Yes-only anytime-TD price is discounted by 8% (`ONE_SIDED_OVERROUND` 1.08).
+5. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape.
+6. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should now read about 78–83%.
+7. The deferred minors below (the user decides which).
+8. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
 
 **Things to know:**
 - **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
