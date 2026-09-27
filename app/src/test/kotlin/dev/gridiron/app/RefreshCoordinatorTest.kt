@@ -261,4 +261,20 @@ class RefreshCoordinatorTest {
             refresher.state.value,
         )
     }
+
+    @Test
+    fun aFailedBuildStillSaysWhyPropsWerentUpdated() = runTest {
+        db.writeText("old")
+        val refresher = coordinator(
+            props = { PropsFetch(null, "the Odds API refused the key") },
+            build = { _, _ -> throw ValidationException(listOf("no games")) },
+        )
+
+        refresher.refresh()
+        advanceUntilIdle()
+
+        val state = refresher.state.value as RefreshState.Finished
+        assertFalse(state.ok)
+        assertTrue(state.message, state.message.endsWith("Props not updated: the Odds API refused the key."))
+    }
 }

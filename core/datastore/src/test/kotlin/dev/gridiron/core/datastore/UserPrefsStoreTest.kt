@@ -122,4 +122,12 @@ class UserPrefsStoreTest {
         file.writeText("""{"formatVersion": 1}""")
         assertNull(withStore { it.prefs.first().oddsApiKey })
     }
+
+    @Test
+    fun `the Odds API key never shows when prefs are printed`() {
+        val prefs = UserPrefs.DEFAULT.copy(oddsApiKey = "abc123secret")
+        assertFalse("abc123secret" in prefs.toString(), prefs.toString())
+        assertTrue("oddsApiKey=…" in prefs.toString(), prefs.toString())
+        assertTrue("oddsApiKey=null" in UserPrefs.DEFAULT.toString())
+    }
 }

@@ -27,6 +27,11 @@ public data class UserPrefs(
             ?: profiles.firstOrNull { it.id == activeProfileId }
             ?: ScoringPresets.PPR
 
+    /** Like the generated one, but the key shows only as set or not: prefs must be safe to log. */
+    override fun toString(): String =
+        "UserPrefs(profiles=$profiles, activeProfileId=$activeProfileId, tray=$tray, resetNotice=$resetNotice, " +
+            "seasons=$seasons, oddsApiKey=${if (oddsApiKey == null) "null" else "…"})"
+
     public companion object {
         public val DEFAULT: UserPrefs = UserPrefs(emptyList(), ScoringPresets.PPR.id, emptyList())
     }

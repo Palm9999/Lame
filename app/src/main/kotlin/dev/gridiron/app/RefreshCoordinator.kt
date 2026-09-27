@@ -110,14 +110,15 @@ class RefreshCoordinator(
     private suspend fun run() {
         val start = millis()
         var ok = true
+        // Never throws but to cancel, so a failed build below can still say why props weren't updated.
+        val fetched = fetchProps()
         val statsLine = try {
-            val fetched = fetchProps()
             summary(buildAndSwap(fetched?.snapshot), millis() - start, fetched?.error)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             ok = false
-            describeFailure(e, kept = db.isFile)
+            describeFailure(e, kept = db.isFile) + fetched?.error?.let { " Props not updated: $it." }.orEmpty()
         }
         val liveLine = live?.let { fetch ->
             _state.value = RefreshState.Running("Fetching injuries and news…")

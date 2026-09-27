@@ -85,10 +85,25 @@ class SettingsScreenTest {
     fun propsStatusShowsUnderTheKey() {
         compose.setContent {
             GridironTheme {
-                SettingsScreen(SettingsRepository(FakePrefsSource()) { 2026 }, onBack = {}, props = flowOf(PropsStatus(412, null, null)))
+                SettingsScreen(
+                    SettingsRepository(FakePrefsSource(UserPrefs.DEFAULT.copy(oddsApiKey = "k"))) { 2026 },
+                    onBack = {},
+                    props = flowOf(PropsStatus(412, null, null)),
+                )
             }
         }
         compose.onNodeWithText("412 Odds API credits left.").assertExists()
+    }
+
+    @Test
+    fun withoutAKeySettingsAsksForOne() {
+        compose.setContent {
+            GridironTheme {
+                SettingsScreen(SettingsRepository(FakePrefsSource()) { 2026 }, onBack = {}, props = flowOf(PropsStatus(2, null, "out of credits")))
+            }
+        }
+        compose.onNodeWithText("Add a key to blend the coming week's props into projections.").assertExists()
+        compose.onNodeWithText("2 Odds API credits left.", substring = true).assertDoesNotExist()
     }
 
     @Test
@@ -103,5 +118,10 @@ class SettingsScreenTest {
             propsStatusText(PropsStatus(2, null, "out of Odds API credits (2 left)"), ZoneOffset.UTC, Locale.US),
         )
         assertEquals("Props are fetched on the next refresh.", propsStatusText(PropsStatus(null, null, null), ZoneOffset.UTC, Locale.US))
+        // Without a key, the last key's credits and error no longer apply.
+        assertEquals(
+            "Add a key to blend the coming week's props into projections.",
+            propsStatusText(PropsStatus(2, at, "out of Odds API credits (2 left)"), ZoneOffset.UTC, Locale.US, hasKey = false),
+        )
     }
 }
