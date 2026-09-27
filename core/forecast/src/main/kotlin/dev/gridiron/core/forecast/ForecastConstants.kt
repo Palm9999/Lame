@@ -57,6 +57,13 @@ internal object K {
     const val VARIANCE_EXPONENT = 0.75
     val EMPIRICAL_CV: Map<String, Double> = mapOf("QB" to 0.40, "RB" to 0.57, "WR" to 0.70, "TE" to 0.77)
 
+    // Props (spec §5). Props can't be backtested (no historical props), so these are judgments, not fits.
+    // The market's variance is this share of layer 7's for its mean: markets are sharper than the model, so
+    // with equal means the market gets 1 / (1 + 0.5) = two thirds of the weight.
+    const val MARKET_VARIANCE_RATIO = 0.5
+    // A book that offers only Yes on an anytime TD can't be de-vigged; its implied chance is divided by this.
+    const val ONE_SIDED_OVERROUND = 1.08
+
     // Storage: past weeks keep only players the model gave at least this many reference points.
     const val PAST_WEEK_MIN_POINTS = 1.0
     // The upcoming week and rest of season keep players above this.
