@@ -29,4 +29,39 @@ class ProjectedPointsTest {
         assertEquals(5 + 6 + 2.4, points.points, 1e-9)
         assertTrue(points.floor < points.points && points.points < points.ceiling, "$points")
     }
+
+    @Test
+    fun `each position's range is widened around the points by its calibration factor`() {
+        assertEquals(4.4 to 17.0, calibratedRange(10.0, 6.0, 15.0, Position.QB).let { round(it.first) to round(it.second) })
+        assertEquals(10.0 - 1.52 * 4 to 10.0 + 1.52 * 5, calibratedRange(10.0, 6.0, 15.0, Position.WR))
+        // No calibration data for other positions: the simulation's own range.
+        assertEquals(6.0 to 15.0, calibratedRange(10.0, 6.0, 15.0, null))
+        assertEquals(6.0 to 15.0, calibratedRange(10.0, 6.0, 15.0, Position.K))
+    }
+
+    @Test
+    fun `a widened floor stops at zero, or at the simulation's own floor when that is below zero`() {
+        assertEquals(0.0, calibratedRange(5.0, 1.0, 12.0, Position.RB).first)
+        assertEquals(-1.0, calibratedRange(5.0, -1.0, 12.0, Position.RB).first)
+    }
+
+    @Test
+    fun `projected points carry the calibrated range`() {
+        val components = listOf(
+            ProjectionComponent("receptions", 5.0, 6.0, "binomial"),
+            ProjectionComponent("receiving_yards", 60.0, 900.0, "gamma"),
+            ProjectionComponent("receiving_tds", 0.4, 0.4, "poisson"),
+        )
+        val raw = simulate(
+            components.map { DistributionSpec(dev.gridiron.core.statquery.Component(it.metricId), familyOf(it.family), it.mean, it.variance) },
+            ScoringPresets.PPR,
+            Position.WR,
+        )
+
+        val points = projectPoints(components, ScoringPresets.PPR, Position.WR)
+
+        assertEquals(calibratedRange(points.points, raw.p10, raw.p90, Position.WR), points.floor to points.ceiling)
+    }
+
+    private fun round(x: Double) = Math.round(x * 1e9) / 1e9
 }

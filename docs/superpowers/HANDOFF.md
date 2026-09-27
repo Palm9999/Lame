@@ -36,13 +36,14 @@
 - [x] **Final whole-branch review** (Opus, 2026-09-27): "ready with fixes". 0 Critical, 1 Important, 8 Minor. Fixed in commit 4fdf023 (see below).
 - [ ] **PR #5 merged.** Waiting on the user.
 
-## Next step: merge sub-project 2, then plan sub-project 3
+## Next step: plan sub-project 3
 
-1. CI on the draft PR (https://github.com/Palm9999/Lame/pull/5, watched). Merging is the user's decision.
-2. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows, and whether the numbers match the gate table below under PPR. Over about 10 s → record it here (the fix would be caching per season and profile).
-3. The deferred minors below (the user decides which).
-4. Then sub-project 3 (Odds API props) needs its plan. Worth weighing first: floor to ceiling holds only 54–66% of scores against the spec's target of about 80%.
-5. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (commands are in the plan).
+1. PR #5 (sub-project 2) is merged (e9463af).
+2. **Calibration is fixed** (user's choice: approach A, fitted on 2024 and 2025 pooled). See "Range calibration" under Execution progress. The follow-up PR carries it.
+3. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows, and whether the numbers match the gate table below under PPR. If it's over about 10 s, record it here (the fix would be caching per season and profile).
+4. The deferred minors below (the user decides which).
+5. Then plan sub-project 3 (Odds API props) with writing-plans, in a fresh session.
+6. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plan).
 
 **Things to know:**
 - **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
@@ -56,7 +57,24 @@
 - **Warnings are errors**, and explicit API mode is on in JVM modules.
 - **Tracking.** The `.superpowers/` ledger doesn't survive the container. Rulings go in this file.
 
-**PR #4:** merged. The watch and its check-ins are cancelled.
+**PRs #4 and #5:** merged. Their watches and check-ins are cancelled.
+
+## Range calibration (2026-09-27)
+
+- **Problem.** The floor-to-ceiling range held only 53–66% of real games, against the spec's target of about 80%.
+- **Cause.** The simulation draws each stat independently, and `poisson` TD counts ignore the stored variance. So scaling the variances (`EMPIRICAL_CV`) alone tops out: at 2.4× the spread, QB still held only about 72%, and RB needed more than 2.4×.
+- **Choice.** The user chose approach A: a per-position factor that moves the floor and ceiling away from the projection, fitted on 2024 and 2025 pooled. The rejected alternative, B, fitted each stat's spread from past misses; it needed more constants and QB still fell short.
+- **Constants** (`RANGE_WIDENING` in `ProjectedPoints.kt`): QB 1.40, RB 1.59, WR 1.52, TE 1.40. The floor stops at zero, or at the simulation's own floor when that is below zero. Positions with no factor keep the simulation's range. The widening is applied on the phone, so stored projections and `FORECAST_VERSION` are unchanged.
+- **Where it applies.** `projectPoints` covers the list, the Player page card and the accuracy page. The waterfall uses the same `calibratedRange`.
+- **Tests.** `ProjectedPointsTest` (3 new tests) and `ProjectionsViewModelTest` (the waterfall's floor and ceiling), each watched failing first.
+- **Real data** (`etl/build/accuracy.db`; AccuracyGateTest's table; MAE unchanged):
+
+  | Season | QB | RB | WR | TE |
+  |---|---|---|---|---|
+  | 2024 held | 79% (was 63%) | 80% (was 53%) | 77% (was 55%) | 76% (was 60%) |
+  | 2025 held | 78% (was 64%) | 78% (was 54%) | 81% (was 61%) | 83% (was 66%) |
+
+- **Caveat.** The 2025 figures are partly in-sample, because 2025 was used in the fit. The user accepted that.
 
 ## Projection accuracy: execution progress
 

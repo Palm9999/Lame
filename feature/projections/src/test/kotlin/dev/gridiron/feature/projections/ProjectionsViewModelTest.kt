@@ -5,7 +5,12 @@ import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.ResultRow
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
+import dev.gridiron.core.projections.DistributionFamily
+import dev.gridiron.core.projections.DistributionSpec
+import dev.gridiron.core.projections.calibratedRange
+import dev.gridiron.core.projections.simulate
 import dev.gridiron.core.statquery.Bind
+import dev.gridiron.core.statquery.Component
 import dev.gridiron.core.statquery.SqlQuery
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -127,6 +132,42 @@ class ProjectionsViewModelTest {
         assertEquals(3.0, loaded.baseline, 1e-9)
         assertEquals(3.0, loaded.final, 1e-9)
         assertEquals(1.0, loaded.tdDependence, 1e-9)
+    }
+
+    @Test
+    fun `the waterfall's floor and ceiling are the position's calibrated range`() = runTest(dispatcher) {
+        val executor = object : QueryExecutor {
+            override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
+                val rows: List<ResultRow> = if (query.sql.contains("player_week_projection_factor")) {
+                    emptyList()
+                } else {
+                    listOf(
+                        FakeResultRow(listOf("P1", "receptions", "final", 5.0, 6.0, "binomial")),
+                        FakeResultRow(listOf("P1", "receiving_yards", "final", 60.0, 900.0, "gamma")),
+                        FakeResultRow(listOf("P1", "receiving_tds", "final", 0.4, 0.4, "poisson")),
+                    )
+                }
+                return rows.map(map)
+            }
+        }
+        val viewModel = ProjectionsViewModel(ProjectionsRepository(executor), dispatcher)
+
+        viewModel.load("P1", season = 2026, week = 3, ScoringPresets.PPR, Position.WR)
+        advanceUntilIdle()
+
+        val loaded = viewModel.state.value as ProjectionsUiState.Loaded
+        val raw = simulate(
+            listOf(
+                DistributionSpec(Component("receptions"), DistributionFamily.BINOMIAL, 5.0, 6.0),
+                DistributionSpec(Component("receiving_yards"), DistributionFamily.GAMMA, 60.0, 900.0),
+                DistributionSpec(Component("receiving_tds"), DistributionFamily.POISSON, 0.4, 0.4),
+            ),
+            ScoringPresets.PPR,
+            Position.WR,
+        )
+        val (floor, ceiling) = calibratedRange(loaded.final, raw.p10, raw.p90, Position.WR)
+        assertEquals(floor, loaded.floorCeiling.p10, 1e-9)
+        assertEquals(ceiling, loaded.floorCeiling.p90, 1e-9)
     }
 
     @Test
