@@ -14,6 +14,7 @@ import dev.gridiron.core.projections.DistributionSpec
 import dev.gridiron.core.projections.ProjectionsRequest
 import dev.gridiron.core.projections.SimulationResult
 import dev.gridiron.core.projections.attributeFactors
+import dev.gridiron.core.projections.calibratedRange
 import dev.gridiron.core.projections.familyOf
 import dev.gridiron.core.projections.score
 import dev.gridiron.core.projections.simulate
@@ -131,7 +132,9 @@ public class ProjectionsViewModel(
                 val distributions = mergedComponents.map {
                     DistributionSpec(Component(it.metricId), familyOf(it.family), it.mean, it.variance)
                 }
-                val floorCeiling = withContext(simulationDispatcher) { simulate(distributions, profile, position) }
+                val simulated = withContext(simulationDispatcher) { simulate(distributions, profile, position) }
+                val (floor, ceiling) = calibratedRange(finalPoints, simulated.p10, simulated.p90, position)
+                val floorCeiling = simulated.copy(p10 = floor, p90 = ceiling)
 
                 if (currentRequestKey != requestKey) return@launch // re-check after the CPU-bound simulate() call
                 _state.value = ProjectionsUiState.Loaded(

@@ -120,7 +120,7 @@ Seven layers:
    - **Implied-points multiplier.** Implied points relative to the league average scale TD rates most, yards less and attempts least; the elasticities are constants in `ForecastConstants`.
    - **Pass-rate shift.** Pass rate moves 0.6 percentage points per point of spread, toward passing for the underdog.
    - **Missing lines.** With no line posted, this layer is a no-op with note "No line yet".
-7. **Distributions.** The variance of each component follows `σ = a·μ^0.75`, calibrated so the CV at μ=10 equals the position's empirical CV: QB 0.40, RB 0.57, WR 0.70, TE 0.77. The distribution family and zero-inflation come from `metric`.
+7. **Distributions.** The variance of each component follows `σ = a·μ^0.75`, calibrated so the CV at μ=10 equals the position's empirical CV: QB 0.40, RB 0.57, WR 0.70, TE 0.77. The distribution family and zero-inflation come from `metric`. *(Amended 2026-09-27.)* The phone then widens each position's floor and ceiling away from the projection by a fitted factor (`RANGE_WIDENING` in `:core:projections`): QB 1.40, RB 1.59, WR 1.52, TE 1.40. The simulation alone held only 53–66% of real games, because it draws each stat independently and TD counts ignore the stored variance. The factors were fitted on the pooled 2024 and 2025 backtests, and the range now holds 76–83% at each position in both seasons.
 
 **Stages and factors.**
 - `baseline` is the output of layers 1–4.
