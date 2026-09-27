@@ -143,6 +143,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             onPlayer = { id, _, _ -> backStack.push(PlayerKey(id)) },
                             menu = buildList<Pair<String, (Int) -> Unit>> {
                                 add("Projections" to { s: Int -> backStack.push(ProjectionListKey(s)) })
+                                add("Projection accuracy" to { s: Int -> backStack.push(AccuracyKey(s)) })
                                 if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
                                 add("Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) })
                                 add("Team defense" to { s: Int -> backStack.push(DefenseKey(s)) })
