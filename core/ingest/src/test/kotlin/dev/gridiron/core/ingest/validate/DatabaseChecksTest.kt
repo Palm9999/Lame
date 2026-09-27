@@ -63,4 +63,11 @@ class DatabaseChecksTest {
     fun `a week with no target share fails`() {
         assertTrue(problems("g" to 1.0).any { "weeks with no target_share rows" in it })
     }
+
+    @Test
+    fun `more kicks made than tried fail`() {
+        val p = problems("g" to 1.0, "target_share" to 0.2, "fg_att_50" to 1.0, "fg_made_50" to 2.0)
+        assertTrue(p.any { "50+ field goals made within tries" in it }, "$p")
+        assertEquals(emptyList<String>(), problems("g" to 1.0, "target_share" to 0.2, "fg_att_50" to 2.0, "fg_made_50" to 1.0, "xp_att" to 3.0, "xp_made" to 2.0, "xp_missed" to 1.0))
+    }
 }

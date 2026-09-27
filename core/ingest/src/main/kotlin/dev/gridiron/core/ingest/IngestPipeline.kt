@@ -11,6 +11,7 @@ import dev.gridiron.core.ingest.csv.openInput
 import dev.gridiron.core.ingest.db.INGEST_VERSION
 import dev.gridiron.core.ingest.db.StatsDbWriter
 import dev.gridiron.core.ingest.db.readMeta
+import dev.gridiron.core.ingest.pbp.KickingAggregator
 import dev.gridiron.core.ingest.pbp.PlayerWeekAggregator
 import dev.gridiron.core.ingest.pbp.TeamDefenseAggregator
 import dev.gridiron.core.ingest.pbp.derive
@@ -282,6 +283,7 @@ public class IngestPipeline(
             onProgress(IngestProgress.Crunching(season))
             val players = PlayerWeekAggregator()
             val defense = TeamDefenseAggregator()
+            val kicking = KickingAggregator()
             val pbp = checkNotNull(files[Input.PBP])
             var n = 0
             try {
@@ -290,6 +292,7 @@ public class IngestPipeline(
                         if (++n % 5_000 == 0) job.ensureActive()
                         players.add(play)
                         defense.add(play)
+                        kicking.add(play)
                     }
                 }
             } catch (e: IOException) {
@@ -316,6 +319,8 @@ public class IngestPipeline(
             }
 
             writer.writeFacts(toFacts(weekly))
+            // Kickers are keyed like players, so one who also ran a play keeps both sets of facts under one `g`.
+            writer.writeFacts(toFacts(kicking.rows()))
             writer.writeTeamDefense(defense.rows())
             val injuriesFile = files[Input.INJURIES]
             if (injuriesFile == null) {

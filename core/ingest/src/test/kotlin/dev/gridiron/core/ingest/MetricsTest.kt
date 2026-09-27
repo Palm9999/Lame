@@ -24,7 +24,7 @@ class MetricsTest {
     @Test
     fun `ids are unique and every Python metric is here`() {
         assertEquals(METRICS.size, byId.size)
-        assertEquals(81, METRICS.size)
+        assertEquals(93, METRICS.size)
     }
 
     @Test
@@ -72,6 +72,8 @@ class MetricsTest {
             "carries", "rushing_yards", "rushing_tds", "rushing_tds_40", "rushing_tds_50", "rushing_first_downs", "rushing_2pt",
             "targets", "receptions", "receiving_yards", "receiving_tds", "receiving_tds_40", "receiving_tds_50",
             "receiving_first_downs", "receiving_2pt", "fumbles_lost",
+            "fg_att", "fg_made", "fg_att_0_39", "fg_att_40_49", "fg_att_50", "fg_made_0_39", "fg_made_40_49", "fg_made_50",
+            "fg_missed", "xp_att", "xp_made", "xp_missed",
         )
         for (id in projected) {
             assertTrue(byId.getValue(id).distFamily in setOf("negbinom", "binomial", "gamma", "poisson"), id)
@@ -82,5 +84,21 @@ class MetricsTest {
         assertEquals("poisson", byId.getValue("receiving_tds").distFamily)
         assertEquals(null, byId.getValue("target_share").distFamily)
         assertEquals(projected.toSet(), DIST_FAMILIES.keys)
+    }
+
+    @Test
+    fun `kicking metrics are sparse, kicker-only counts, and only the Grid's are visible`() {
+        val visible = listOf("fg_made", "fg_att", "fg_made_50", "xp_made", "xp_att")
+        val kicking = visible + listOf(
+            "fg_att_0_39", "fg_att_40_49", "fg_att_50", "fg_made_0_39", "fg_made_40_49", "fg_missed", "xp_missed",
+        )
+        for (id in kicking) {
+            val m = byId.getValue(id)
+            assertEquals(id !in visible, m.isInternal, id)
+            assertTrue(id in SPARSE_METRIC_IDS, id)
+            assertEquals(listOf("K"), m.positions, id)
+            assertEquals("kicking", m.group, id)
+            assertEquals("poisson", m.distFamily, id)
+        }
     }
 }

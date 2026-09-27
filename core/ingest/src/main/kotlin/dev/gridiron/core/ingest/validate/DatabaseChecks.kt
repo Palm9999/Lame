@@ -57,6 +57,12 @@ internal val COHERENCE_CHECKS: List<CoherenceCheck> = listOf(
     CoherenceCheck("40+ receiving TDs within receiving TDs", "receiving_tds_40", "receiving_tds", "a <= b"),
     CoherenceCheck("receiving first downs within receptions", "receiving_first_downs", "receptions", "a <= b"),
     CoherenceCheck("rushing first downs within carries", "rushing_first_downs", "carries", "a <= b"),
+    CoherenceCheck("field goals made within tries", "fg_made", "fg_att", "a <= b"),
+    CoherenceCheck("0-39 field goals made within tries", "fg_made_0_39", "fg_att_0_39", "a <= b"),
+    CoherenceCheck("40-49 field goals made within tries", "fg_made_40_49", "fg_att_40_49", "a <= b"),
+    CoherenceCheck("50+ field goals made within tries", "fg_made_50", "fg_att_50", "a <= b"),
+    CoherenceCheck("extra points made within tries", "xp_made", "xp_att", "a <= b"),
+    CoherenceCheck("extra points missed within tries", "xp_missed", "xp_att", "a <= b"),
 )
 
 /**
