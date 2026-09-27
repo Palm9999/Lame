@@ -21,7 +21,7 @@ TABLES: dict[str, tuple[list[str], list[str]]] = {
                         "computed", "dist_family", "zero_inflated"]),
     "team_week_defense": (["team", "season", "week"],
                           ["points_allowed", "yards_allowed", "sacks", "interceptions",
-                           "fumbles_recovered", "defensive_tds"]),
+                           "fumbles_recovered", "defensive_tds", "safeties", "kick_return_tds"]),
     "injury_report": (["player_id", "season", "week"],
                       ["team", "name", "position", "status", "injury", "practice"]),
 }

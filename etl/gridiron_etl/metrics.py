@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass, replace
 from typing import Literal
 
 Tier = Literal["A", "B", "C", "D"]
-Group = Literal["volume", "efficiency", "fantasy", "context", "passing", "usage"]
+Group = Literal["volume", "efficiency", "fantasy", "context", "passing", "usage", "kicking", "defense"]
 
 
 @dataclass(frozen=True)
@@ -252,6 +252,42 @@ _M: list[Metric] = [
         ]
     ],
 
+    # ---------------- Kicking (sparse; the Grid's Kicking pack shows five) ----------------
+    *[
+        Metric(mid, name, abbr or mid.upper(), "kicking", definition,
+               positions=("K",), decimals=0, internal=abbr is None, sparse=True)
+        for mid, abbr, name, definition in [
+            ("fg_att", "FGA", "FG Attempts", "Field goal tries, any distance, blocked kicks included."),
+            ("fg_made", "FGM", "FGs Made", "Field goals made, any distance."),
+            ("fg_att_0_39", None, "FG Attempts 0-39", "Field goal tries from 39 yards or closer, blocked kicks included."),
+            ("fg_att_40_49", None, "FG Attempts 40-49", "Field goal tries from 40 to 49 yards, blocked kicks included."),
+            ("fg_att_50", None, "FG Attempts 50+", "Field goal tries from 50 yards or farther, blocked kicks included."),
+            ("fg_made_0_39", None, "FGs Made 0-39", "Field goals made from 39 yards or closer."),
+            ("fg_made_40_49", None, "FGs Made 40-49", "Field goals made from 40 to 49 yards."),
+            ("fg_made_50", "FG50", "FGs Made 50+", "Field goals made from 50 yards or farther."),
+            ("fg_missed", None, "FGs Missed", "Field goals missed or blocked, any distance."),
+            ("xp_att", "XPA", "XP Attempts", "Extra point kicks tried."),
+            ("xp_made", "XPM", "XPs Made", "Extra point kicks made."),
+            ("xp_missed", None, "XPs Missed", "Extra point kicks missed, blocked or aborted."),
+        ]
+    ],
+
+    # ---------------- Team defense (D/ST pseudo-players; the Grid's Defense pack) ----------------
+    *[
+        Metric(mid, name, abbr, "defense", definition,
+               positions=("DST",), decimals=0, sparse=True)
+        for mid, abbr, name, definition in [
+            ("dst_sacks", "SACK", "D/ST Sacks", "Sacks by the team's defense."),
+            ("dst_interceptions", "DINT", "D/ST Interceptions", "Passes the team's defense intercepted."),
+            ("dst_fumble_recoveries", "FR", "D/ST Fumble Recoveries", "Opponent fumbles the team recovered."),
+            ("dst_tds", "DTD", "D/ST TDs", "Touchdowns by the defense or on a return: interceptions, fumbles, punts, kickoffs and blocked kicks."),
+            ("dst_safeties", "SAF", "D/ST Safeties", "Safeties the team's defense scored."),
+        ]
+    ],
+    Metric("points_allowed", "Points Allowed", "PA", "defense",
+           "Points the opponent scored, however it scored them.",
+           positions=("DST",), higher_is_better=False, decimals=0),
+
     # ---------------- Internal range-aggregation components ----------------
     *[
         Metric(mid, name, mid.upper(), "context", definition,
@@ -297,6 +333,13 @@ DIST_FAMILIES: dict[str, str] = {
         "receiving_tds", "receiving_tds_40", "receiving_tds_50", "receiving_first_downs",
         "receiving_2pt", "fumbles_lost",
     )},
+    **{m: "poisson" for m in (
+        "fg_att", "fg_made", "fg_att_0_39", "fg_att_40_49", "fg_att_50", "fg_made_0_39", "fg_made_40_49",
+        "fg_made_50", "fg_missed", "xp_att", "xp_made", "xp_missed",
+        "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties",
+    )},
+    "dst_sacks": "negbinom",
+    "points_allowed": "normal",
 }
 
 METRICS: dict[str, Metric] = {

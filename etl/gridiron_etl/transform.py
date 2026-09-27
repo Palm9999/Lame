@@ -471,3 +471,59 @@ def expected_components(ep: pl.DataFrame) -> pl.DataFrame:
         *[pl.col(src).fill_null(0.0).cast(pl.Float64).alias(dst)
           for src, dst in EXPECTED_COLUMNS.items()],
     )
+
+
+_KICK_COLUMNS = ["season", "week", "season_type", "posteam", "kicker_player_id",
+                 "field_goal_attempt", "field_goal_result", "kick_distance",
+                 "extra_point_attempt", "extra_point_result"]
+
+# Field goal distance buckets, shortest first. Mirrors core/ingest's fgBucket.
+_FG_BUCKETS = ("0_39", "40_49", "50")
+
+
+def kicking_stats(pbp_path: Path) -> pl.DataFrame:
+    """Kicker-weeks from the full play-by-play file (load_pbp keeps only scrimmage plays)."""
+    lf = pl.scan_csv(pbp_path, infer_schema_length=20_000)
+    return kicking_from(lf.select(_KICK_COLUMNS))
+
+
+def kicking_from(lf: pl.LazyFrame) -> pl.DataFrame:
+    """One row per kicker-week: field goals by distance, misses and extra points.
+
+    Blocked or missed field goals are misses; an extra point that isn't good
+    (failed, blocked, aborted) is a miss. A field goal with no distance counts
+    as short. Every row has g = 1. Reproduced by core/ingest's KickingAggregator.
+    """
+    num = lambda c: pl.col(c).cast(pl.Float64, strict=False).fill_null(0)  # noqa: E731
+    fg = num("field_goal_attempt") == 1
+    xp = num("extra_point_attempt") == 1
+    dist = pl.col("kick_distance").cast(pl.Float64, strict=False).fill_null(0)
+    made = (pl.col("field_goal_result") == "made").fill_null(False)
+    good = (pl.col("extra_point_result") == "good").fill_null(False)
+    bucket = {"0_39": dist < 40, "40_49": (dist >= 40) & (dist < 50), "50": dist >= 50}
+    count = lambda cond: cond.sum().cast(pl.Float64)  # noqa: E731
+    return (
+        lf.filter(
+            pl.col("season_type").is_in(["REG", "POST"])
+            & pl.col("posteam").is_not_null()
+            & pl.col("kicker_player_id").is_not_null()
+            & (fg | xp)
+        )
+        .group_by(["season", "week", "posteam", "kicker_player_id"])
+        .agg(
+            fg_att=count(fg),
+            fg_made=count(fg & made),
+            *[count(fg & bucket[b]).alias(f"fg_att_{b}") for b in _FG_BUCKETS],
+            *[count(fg & bucket[b] & made).alias(f"fg_made_{b}") for b in _FG_BUCKETS],
+            fg_missed=count(fg & ~made),
+            xp_att=count(xp),
+            xp_made=count(xp & good),
+            xp_missed=count(xp & ~good),
+        )
+        .rename({"posteam": "team", "kicker_player_id": "player_id"})
+        .with_columns(
+            pl.col("season", "week").cast(pl.Int64),
+            g=pl.lit(1.0),
+        )
+        .collect()
+    )

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import polars as pl
 
-_DEF_COLUMNS = ["season", "week", "season_type", "game_id", "defteam", "play_type",
+_DEF_COLUMNS = ["season", "week", "season_type", "game_id", "posteam", "defteam", "play_type", "safety",
                 "yards_gained", "sack", "interception", "fumble_lost", "touchdown",
                 "td_team", "home_team", "away_team", "total_home_score", "total_away_score"]
 
@@ -36,8 +36,19 @@ def team_defense_from(lf: pl.LazyFrame) -> pl.DataFrame:
             interceptions=num("interception").sum(),
             fumbles_recovered=num("fumble_lost").sum(),
             defensive_tds=(num("touchdown") * (pl.col("td_team") == pl.col("defteam")).fill_null(False)).sum(),
+            safeties=num("safety").sum(),
         )
         .rename({"defteam": "team"})
+    )
+
+    # nflverse lists the receiving team as posteam on a kickoff, so a return TD
+    # is posteam's. Punt return TDs score for defteam: already defensive_tds.
+    returns = (
+        lf.filter(pl.col("posteam").is_not_null() & (pl.col("play_type") == "kickoff")
+                  & (pl.col("td_team") == pl.col("posteam")))
+        .group_by(["posteam", "season", "week"])
+        .agg(kick_return_tds=num("touchdown").sum())
+        .rename({"posteam": "team"})
     )
 
     games = lf.group_by(["game_id", "season", "week"]).agg(
@@ -51,10 +62,46 @@ def team_defense_from(lf: pl.LazyFrame) -> pl.DataFrame:
 
     return (
         points.join(plays, on=["team", "season", "week"], how="left")
+        .join(returns, on=["team", "season", "week"], how="left")
         .with_columns(pl.col("season", "week").cast(pl.Int64))
         .fill_null(0)
         .sort(["season", "week", "team"])
         .collect()
+    )
+
+
+def dst_weekly(defense: pl.DataFrame) -> pl.DataFrame:
+    """Each team-week as its D/ST pseudo-player's week (core/ingest's dstWeeks).
+
+    Points allowed are stored as a number; the scoring profile's own tiers score them.
+    """
+    return defense.select(
+        player_id=pl.concat_str([pl.lit("DST_"), pl.col("team")]),
+        season=pl.col("season").cast(pl.Int64),
+        week=pl.col("week").cast(pl.Int64),
+        team=pl.col("team"),
+        g=pl.lit(1.0),
+        dst_sacks=pl.col("sacks").cast(pl.Float64),
+        dst_interceptions=pl.col("interceptions").cast(pl.Float64),
+        dst_fumble_recoveries=pl.col("fumbles_recovered").cast(pl.Float64),
+        dst_tds=(pl.col("defensive_tds") + pl.col("kick_return_tds")).cast(pl.Float64),
+        dst_safeties=pl.col("safeties").cast(pl.Float64),
+        points_allowed=pl.col("points_allowed").cast(pl.Float64),
+    )
+
+
+def dst_players(teams_: list[str]) -> pl.DataFrame:
+    """A player row per team's D/ST: "KC D/ST", position DST (core/ingest's dstPlayer)."""
+    return pl.DataFrame(
+        {
+            "player_id": [f"DST_{t}" for t in teams_],
+            "full_name": [f"{t} D/ST" for t in teams_],
+            "position": ["DST"] * len(teams_),
+            "team": list(teams_),
+            "pfr_player_id": [None] * len(teams_),
+        },
+        schema={"player_id": pl.String, "full_name": pl.String, "position": pl.String,
+                "team": pl.String, "pfr_player_id": pl.String},
     )
 
 

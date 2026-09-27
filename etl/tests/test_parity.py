@@ -20,7 +20,8 @@ def _db(path, value: float, team: str = "AAA"):
                              computed INTEGER, dist_family TEXT, zero_inflated INTEGER);
         CREATE TABLE team_week_defense (team TEXT, season INTEGER, week INTEGER, points_allowed REAL,
                                         yards_allowed REAL, sacks REAL, interceptions REAL,
-                                        fumbles_recovered REAL, defensive_tds REAL);
+                                        fumbles_recovered REAL, defensive_tds REAL,
+                                        safeties REAL, kick_return_tds REAL);
         CREATE TABLE injury_report (player_id TEXT, season INTEGER, week INTEGER, team TEXT, name TEXT,
                                     position TEXT, status TEXT, injury TEXT, practice TEXT);
         INSERT INTO schema_meta VALUES ('seasons', '2025');
