@@ -64,6 +64,16 @@ internal object K {
     // A book that offers only Yes on an anytime TD can't be de-vigged; its implied chance is divided by this.
     const val ONE_SIDED_OVERROUND = 1.08
 
+    // K model (spec §6). Judgments, not fits: field goal accuracy is noisy, so a kicker's own mix and
+    // make rates need many kicks to move off the league's. The accuracy page measures the result.
+    // Fewer lined team-games than this and field goal and extra point tries are flat averages.
+    const val KICK_MIN_FIT_ROWS = 64
+    const val KICK_MIX_K = 20.0 // field goal tries
+    const val KICK_MAKE_K = 30.0 // tries in the bucket
+    const val XP_MAKE_K = 60.0 // extra point tries
+    // Without a line, a team's expected points: its recent scoring, shrunk this many games toward the league's.
+    const val TEAM_POINTS_K_GAMES = 4.0
+
     // Storage: past weeks keep only players the model gave at least this many reference points.
     const val PAST_WEEK_MIN_POINTS = 1.0
     // The upcoming week and rest of season keep players above this.
