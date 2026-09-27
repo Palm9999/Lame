@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 
 /**
- * Which seasons the phone builds. Changes take effect on the next refresh: an
+ * Which seasons the phone builds, and the Odds API key. Changes take effect on the next refresh: an
  * added season is fetched and crunched, and a removed season's rows are left
  * out of the new database.
  */
@@ -38,6 +38,15 @@ public class SettingsRepository(
             }
         }
         return changed
+    }
+
+    /** The user's Odds API key; null when none is set. */
+    public val oddsApiKey: Flow<String?> = prefs.prefs.map { it.oddsApiKey }.distinctUntilChanged()
+
+    /** Saves [key], trimmed; a blank one removes the key. */
+    public suspend fun setOddsApiKey(key: String) {
+        val clean = key.trim().takeIf { it.isNotEmpty() }
+        prefs.update { it.copy(oddsApiKey = clean) }
     }
 
     public companion object {

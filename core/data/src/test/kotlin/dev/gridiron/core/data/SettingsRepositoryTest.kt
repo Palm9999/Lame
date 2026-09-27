@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -69,5 +70,18 @@ class SettingsRepositoryTest {
     fun `seasons outside the range are dropped, and an empty result falls back to the default`() = runTest {
         val (settings, _) = repo(SeasonChoice(listOf(2030), 2030))
         assertEquals(listOf(2024, 2025, 2026), settings.seasons.first())
+    }
+
+    @Test
+    fun `the Odds API key is saved trimmed, and a blank one removes it`() = runTest {
+        val (settings, prefs) = repo()
+        assertNull(settings.oddsApiKey.first())
+
+        settings.setOddsApiKey("  abc123 \n")
+        assertEquals("abc123", settings.oddsApiKey.first())
+        assertEquals("abc123", prefs.current.oddsApiKey)
+
+        settings.setOddsApiKey("   ")
+        assertNull(settings.oddsApiKey.first())
     }
 }

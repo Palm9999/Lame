@@ -13,6 +13,8 @@ import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.live.LiveDb
 import dev.gridiron.core.data.live.LiveRepository
+import dev.gridiron.core.data.live.PropsRepository
+import dev.gridiron.core.data.live.UrlConnectionHttpClient
 import dev.gridiron.core.data.live.UrlConnectionHttpGet
 import dev.gridiron.core.database.ReopenableQueryExecutor
 import dev.gridiron.core.database.SqliteQueryExecutor
@@ -29,8 +31,8 @@ import java.io.File
 /**
  * The app's object graph, by hand. Stats are built on the phone into
  * `noBackupFilesDir/stats.db` (an existing install's database stays until the
- * first build replaces it); ESPN's injuries and news live beside it in
- * `live.db`.
+ * first build replaces it). ESPN's injuries and news, and the Odds API's
+ * props, live beside it in `live.db`.
  */
 class GridironApplication : Application() {
     // Outlives every screen: preferences are written on it and refreshes run on it.
@@ -47,19 +49,31 @@ class GridironApplication : Application() {
     private val prefs by lazy { UserPrefsStore.create(File(filesDir, "user_prefs.json"), appScope) }
     private val settings by lazy { SettingsRepository(prefs) { currentSeason() } }
     private val players by lazy { PlayerDirectory(executor) }
-    private val live by lazy { LiveRepository(LiveDb(File(noBackupFilesDir, "live.db")), UrlConnectionHttpGet(), players) }
+    // One connection to live.db, shared by ESPN's feeds and the props.
+    private val liveDb by lazy { LiveDb(File(noBackupFilesDir, "live.db")) }
+    private val live by lazy { LiveRepository(liveDb, UrlConnectionHttpGet(), players) }
+    private val propsRepo by lazy { PropsRepository(liveDb, UrlConnectionHttpClient()) }
 
     private val refresher by lazy {
         RefreshCoordinator(
             dir = noBackupFilesDir,
             executor = executor,
-            stats = { seasons, previous, out, onProgress ->
+            stats = { seasons, previous, out, props, onProgress ->
                 IngestPipeline(HttpFetcher(), File(noBackupFilesDir, "ingest-work"), File(noBackupFilesDir, "players.csv.gz"))
-                    .build(seasons, previous, out, onProgress)
+                    .build(seasons, previous, out, props, onProgress)
             },
             seasons = { settings.seasons.first() },
             scope = appScope,
             live = { live.refresh() },
+            props = {
+                val key = settings.oddsApiKey.first()
+                if (key == null) {
+                    PropsFetch(null, null)
+                } else {
+                    val error = propsRepo.refresh(key)
+                    PropsFetch(propsRepo.snapshot(), error)
+                }
+            },
         )
     }
 
@@ -77,6 +91,7 @@ class GridironApplication : Application() {
             settings = settings,
             refresher = refresher,
             rosters = RosterRepository(prefs),
+            props = propsRepo,
         )
     }
 }

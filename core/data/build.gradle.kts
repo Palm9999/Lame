@@ -6,6 +6,7 @@ dependencies {
     api(projects.core.database)
     api(projects.core.datastore)
     api(projects.core.projections)
+    api(projects.core.forecast)
     api(libs.kotlinx.collections.immutable)
     implementation(libs.kotlinx.serialization.json)
     implementation(libs.androidx.sqlite.bundled)

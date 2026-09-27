@@ -1,5 +1,6 @@
 package dev.gridiron.app
 
+import dev.gridiron.core.forecast.PropsOutcome
 import dev.gridiron.core.ingest.IngestProgress
 import dev.gridiron.core.ingest.IngestReport
 import dev.gridiron.core.ingest.ValidationException
@@ -78,5 +79,26 @@ class RefreshTextTest {
 
         assertEquals("Stats updated for 2026 in 5 s.", summary(ok, 5_000))
         assertEquals("Stats updated for 2026 in 5 s. Projections unavailable: failed: disk I/O error.", summary(missing, 5_000))
+    }
+
+    @Test
+    fun `the summary says how props went`() {
+        val ok = IngestReport(listOf(2026), emptyList(), emptyMap(), emptyList(), 1L)
+
+        assertEquals(
+            "Stats updated for 2026 in 5 s. Props moved 38 projections; 5 names didn't match a player.",
+            summary(ok.copy(props = PropsOutcome(38, 5)), 5_000),
+        )
+        assertEquals("Stats updated for 2026 in 5 s. Props moved 1 projection.", summary(ok.copy(props = PropsOutcome(1, 0)), 5_000))
+        assertEquals(
+            "Stats updated for 2026 in 5 s. Props moved 0 projections; 1 name didn't match a player.",
+            summary(ok.copy(props = PropsOutcome(0, 1)), 5_000),
+        )
+        // Props given but empty (the off-season): nothing to say.
+        assertEquals("Stats updated for 2026 in 5 s.", summary(ok.copy(props = PropsOutcome(0, 0)), 5_000))
+        assertEquals(
+            "Stats updated for 2026 in 5 s. Props not updated: out of Odds API credits (2 left).",
+            summary(ok, 5_000, propsError = "out of Odds API credits (2 left)"),
+        )
     }
 }

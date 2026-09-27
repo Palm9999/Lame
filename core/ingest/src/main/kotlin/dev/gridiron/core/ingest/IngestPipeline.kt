@@ -3,6 +3,8 @@ package dev.gridiron.core.ingest
 import dev.gridiron.core.forecast.FORECAST_OK
 import dev.gridiron.core.forecast.FORECAST_VERSION
 import dev.gridiron.core.forecast.Forecast
+import dev.gridiron.core.forecast.PropsOutcome
+import dev.gridiron.core.forecast.PropsSnapshot
 import dev.gridiron.core.forecast.SeasonCopy
 import dev.gridiron.core.ingest.csv.MissingColumnsException
 import dev.gridiron.core.ingest.csv.openInput
@@ -44,6 +46,8 @@ public data class IngestReport(
     public val facts: Long,
     /** "ok", or why the new database has no projections (the stats are fine either way). */
     public val forecast: String = FORECAST_OK,
+    /** How props went in the forecast; null when none were given, or the forecast failed. */
+    public val props: PropsOutcome? = null,
 ) {
     public val projectionsOk: Boolean get() = forecast == FORECAST_OK
 }
@@ -68,12 +72,14 @@ public class IngestPipeline(
 ) {
     /**
      * Writes a complete, validated database to [out], or throws and leaves no
-     * [out] behind. [previous] is only ever read.
+     * [out] behind. [previous] is only ever read. [props], when given, are
+     * blended into the upcoming week's projections.
      */
     public suspend fun build(
         seasons: List<Int>,
         previous: File?,
         out: File,
+        props: PropsSnapshot? = null,
         onProgress: (IngestProgress) -> Unit = {},
     ): IngestReport = withContext(Dispatchers.IO) {
         require(previous == null || previous.canonicalFile != out.canonicalFile) { "out must differ from previous" }
@@ -81,7 +87,7 @@ public class IngestPipeline(
         out.delete()
         workDir.mkdirs()
         try {
-            Run(prior, previous, coroutineContext.job, onProgress).build(seasons.distinct().sorted(), out)
+            Run(prior, previous, props, coroutineContext.job, onProgress).build(seasons.distinct().sorted(), out)
         } catch (t: Throwable) {
             out.delete()
             throw t
@@ -93,6 +99,7 @@ public class IngestPipeline(
     private inner class Run(
         private val prior: Map<String, String>?,
         private val previous: File?,
+        private val props: PropsSnapshot?,
         private val job: Job,
         private val onProgress: (IngestProgress) -> Unit,
     ) {
@@ -121,23 +128,24 @@ public class IngestPipeline(
                 onProgress(IngestProgress.Validating)
                 val problems = validateDatabase(writer.connection)
                 if (problems.isNotEmpty()) throw ValidationException(problems)
-                val forecast = forecast(writer)
-                IngestReport(built.sorted(), reused.sorted(), skipped.toMap(), warnings.toList(), writer.factCount(), forecast)
+                val (forecast, propsOutcome) = forecast(writer)
+                IngestReport(built.sorted(), reused.sorted(), skipped.toMap(), warnings.toList(), writer.factCount(), forecast, propsOutcome)
             }
         }
 
-        /** Projections for the new database. A failure leaves none and says why; it never fails the build. */
-        private fun forecast(writer: StatsDbWriter): String = try {
-            Forecast.run(writer.connection, now(), forecastCopy()) { season, week ->
+        /** Projections for the new database, and how props went. A failure leaves none and says why; it never fails the build. */
+        private fun forecast(writer: StatsDbWriter): Pair<String, PropsOutcome?> = try {
+            val report = Forecast.run(writer.connection, now(), forecastCopy(), props) { season, week ->
                 job.ensureActive()
                 onProgress(IngestProgress.Projecting(season, week))
-            }.status
+            }
+            report.status to report.props
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             val reason = e.message ?: e::class.simpleName ?: "unknown error"
             Forecast.fail(writer.connection, now(), reason)
-            "failed: $reason"
+            "failed: $reason" to null
         }
 
         /**

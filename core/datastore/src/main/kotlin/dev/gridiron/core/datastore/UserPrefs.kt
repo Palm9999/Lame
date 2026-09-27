@@ -13,6 +13,7 @@ import dev.gridiron.core.model.ScoringProfile
  *   so the app can say so once; cleared when the notice has been shown.
  * @property seasons The seasons to build; null means the default (the current season and the two before it).
  * @property rosters The user's fantasy teams, in the order created.
+ * @property oddsApiKey The user's key for The Odds API (spec §5); null when none is set. Sent only to api.the-odds-api.com.
  */
 public data class UserPrefs(
     val profiles: List<ScoringProfile>,
@@ -21,6 +22,7 @@ public data class UserPrefs(
     val resetNotice: Boolean = false,
     val seasons: SeasonChoice? = null,
     val rosters: List<Roster> = emptyList(),
+    val oddsApiKey: String? = null,
 ) {
     /** The active profile, falling back to PPR if its id no longer exists. */
     public val active: ScoringProfile

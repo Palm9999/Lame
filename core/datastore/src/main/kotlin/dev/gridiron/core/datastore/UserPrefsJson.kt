@@ -32,6 +32,7 @@ internal data class UserPrefsDto(
     val seasons: List<Int>? = null,
     val seasonsChosenIn: Int? = null,
     val rosters: List<RosterDto> = emptyList(),
+    val oddsApiKey: String? = null,
 )
 
 @Serializable
@@ -89,7 +90,15 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
     val choice = seasons?.let { s -> seasonsChosenIn?.let { SeasonChoice(s.distinct().sorted(), it) } }
     val rosters = rosters.mapNotNull { r -> orNull { Roster(r.id, r.name, r.playerIds.filter { it.isNotBlank() }.distinct()) } }
         .distinctBy { it.id }
-    return UserPrefs(profiles, activeProfileId ?: UserPrefs.DEFAULT.activeProfileId, tray, resetNotice, choice, rosters)
+    return UserPrefs(
+        profiles,
+        activeProfileId ?: UserPrefs.DEFAULT.activeProfileId,
+        tray,
+        resetNotice,
+        choice,
+        rosters = rosters,
+        oddsApiKey = oddsApiKey?.takeIf { it.isNotBlank() },
+    )
 }
 
 internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
@@ -109,6 +118,7 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     seasons = seasons?.seasons,
     seasonsChosenIn = seasons?.chosenIn,
     rosters = rosters.map { RosterDto(it.id, it.name, it.playerIds) },
+    oddsApiKey = oddsApiKey,
 )
 
 internal object UserPrefsSerializer : Serializer<UserPrefs> {

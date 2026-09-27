@@ -1,0 +1,6 @@
+[
+  {"id": "e4", "sport_key": "americanfootball_nfl", "sport_title": "NFL", "commence_time": "2026-09-27T17:00:00Z", "home_team": "Buffalo Bills", "away_team": "Miami Dolphins"},
+  {"id": "e1", "sport_key": "americanfootball_nfl", "sport_title": "NFL", "commence_time": "2026-10-02T00:15:00Z", "home_team": "Kansas City Chiefs", "away_team": "Los Angeles Chargers"},
+  {"id": "e2", "sport_key": "americanfootball_nfl", "sport_title": "NFL", "commence_time": "2026-10-04T17:00:00Z", "home_team": "Los Angeles Rams", "away_team": "San Francisco 49ers"},
+  {"id": "e3", "sport_key": "americanfootball_nfl", "sport_title": "NFL", "commence_time": "2026-10-09T00:15:00Z", "home_team": "Washington Commanders", "away_team": "New York Giants"}
+]
