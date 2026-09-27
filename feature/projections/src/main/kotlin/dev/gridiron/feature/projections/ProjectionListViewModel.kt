@@ -41,6 +41,8 @@ public enum class PositionTab(public val label: String, public val codes: Set<St
     WR("WR", setOf("WR")),
     TE("TE", setOf("TE")),
     FLEX("FLEX", setOf("RB", "WR", "TE")),
+    K("K", setOf("K")),
+    DST("D/ST", setOf("DST")),
 }
 
 public sealed interface ProjectionListState {

@@ -8,8 +8,8 @@ import dev.gridiron.core.statquery.Components
 import dev.gridiron.core.statquery.RULE_INPUTS
 import kotlin.math.abs
 
-/** The positions the backtest measures, in the page's order. */
-public val ACCURACY_POSITIONS: List<String> = listOf("QB", "RB", "WR", "TE")
+/** The positions the backtest measures, in the page's order. CI's gate holds every one to beating the season-to-date average. */
+public val ACCURACY_POSITIONS: List<String> = listOf("QB", "RB", "WR", "TE", "K", "DST")
 
 /** A player-week counts only when the model projected at least this many points (spec §4). */
 public const val ACCURACY_MIN_POINTS: Double = 5.0
@@ -88,7 +88,8 @@ private class Sample(
  * [projected] holds [season]'s past weeks only. [played] holds the weeks
  * actually played, and must include the previous season, because the
  * last-four average reaches back into it. A position with nothing to count
- * is left out.
+ * is left out. [widening] is for fitting the range factors; everyone else
+ * uses [RANGE_WIDENING].
  */
 public fun backtest(
     season: Int,
@@ -96,6 +97,7 @@ public fun backtest(
     played: List<PlayedWeek>,
     profile: ScoringProfile,
     draws: Int = BACKTEST_DRAWS,
+    widening: Map<Position, Double> = RANGE_WIDENING,
 ): List<PositionAccuracy> {
     val positionOf = projected.associate { it.playerId to it.position }
     // Each projected player's games, oldest first, with the points he scored in each.
@@ -117,9 +119,8 @@ public fun backtest(
         val seasonToDate = earlier.filter { (game, _) -> game.season == season }.map { it.second }
         if (seasonToDate.isEmpty()) continue // his first game of the season
         val position = Position.fromCode(p.position)
-        val means = p.components.associate { Component(it.metricId) to it.mean }
-        if (score(means, profile, position) < ACCURACY_MIN_POINTS) continue
-        val model = projectPoints(p.components, profile, position, draws)
+        if (projectedScore(p.components, profile, position) < ACCURACY_MIN_POINTS) continue
+        val model = projectPoints(p.components, profile, position, draws, widening)
         samples.getOrPut(p.position) { mutableListOf() } += Sample(
             actual = mine[at].second,
             model = model.points,

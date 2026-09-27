@@ -86,10 +86,12 @@ class AccuracyRepositoryTest {
                 projected("w", 2025, 3, 6.0) + // didn't play
                 projected("w", 2025, 4, 4.0) + // 8 against 8
                 projected("w", 2025, 5, 7.0) +
-                // A kicker who played twice isn't measured.
+                // A kicker is measured too, on his own row.
                 played("k", 2025, 1, 9.0) + played("k", 2025, 2, 9.0) + projected("k", 2025, 2, 9.0),
         ).use { executor ->
-            val wr = AccuracyRepository(executor).backtest(2025, ScoringPresets.PPR).single()
+            val results = AccuracyRepository(executor).backtest(2025, ScoringPresets.PPR)
+            assertEquals(listOf("WR", "K"), results.map { it.position })
+            val wr = results.first()
 
             assertEquals("WR", wr.position)
             assertEquals(2, wr.playerWeeks)

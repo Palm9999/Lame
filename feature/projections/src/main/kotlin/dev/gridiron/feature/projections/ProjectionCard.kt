@@ -17,8 +17,7 @@ import dev.gridiron.core.projections.GameLine
 import dev.gridiron.core.projections.ProjectionsRequest
 import dev.gridiron.core.projections.RosProjectionsRequest
 import dev.gridiron.core.projections.projectPoints
-import dev.gridiron.core.projections.score
-import dev.gridiron.core.statquery.Component
+import dev.gridiron.core.projections.projectedScore
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -68,7 +67,7 @@ public suspend fun loadProjectionCard(
     val final = repository.projections(ProjectionsRequest(setOf(playerId), season, week)).firstOrNull()?.final.orEmpty()
     val game = team?.let { repository.game(season, week, it) }
     val ros = repository.rosProjections(RosProjectionsRequest(setOf(playerId), season)).firstOrNull()
-    val rosPoints = ros?.let { r -> withContext(compute) { score(r.components.associate { Component(it.metricId) to it.mean }, profile, position) } }
+    val rosPoints = ros?.let { r -> withContext(compute) { projectedScore(r.components, profile, position) } }
     val gamesLeft = team?.let { repository.remainingGames(season, week, it) } ?: 0
     val rosPerGame = rosPoints?.takeIf { gamesLeft > 0 }?.let { it / gamesLeft }
     if (final.isEmpty()) {

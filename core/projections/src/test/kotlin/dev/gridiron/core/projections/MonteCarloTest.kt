@@ -1,10 +1,12 @@
 package dev.gridiron.core.projections
 
+import dev.gridiron.core.model.PointsAllowedTier
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.statquery.Components
 import java.util.SplittableRandom
 import kotlin.math.abs
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -91,5 +93,35 @@ class MonteCarloTest {
         val a = simulate(distributions, ScoringPresets.PPR, Position.WR, draws = 5_000, seed = 7L)
         val b = simulate(distributions, ScoringPresets.PPR, Position.WR, draws = 5_000, seed = 7L)
         assertTrue(a == b, "same seed must reproduce identical percentiles: $a vs $b")
+    }
+
+    private val twoTiers = ScoringPresets.PPR.copy(
+        id = "u1", name = "Two tiers",
+        pointsAllowedTiers = listOf(PointsAllowedTier(0, 10.0), PointsAllowedTier(21, -4.0)),
+    )
+
+    @Test
+    fun `each simulated game's points allowed land in one tier`() {
+        val game = listOf(
+            DistributionSpec(Components.POINTS_ALLOWED, DistributionFamily.NORMAL, mean = 20.0, variance = 100.0),
+            DistributionSpec(Components.GAMES, DistributionFamily.GAMMA, mean = 1.0, variance = 0.0),
+        )
+        val result = simulate(game, twoTiers, Position.DST, draws = 2_000)
+        // About half the games allow 20 or fewer (+10), the rest 21 or more (-4): nothing in between.
+        assertEquals(-4.0, result.p10, 1e-9)
+        assertEquals(10.0, result.p90, 1e-9)
+        assertTrue(result.p50 == -4.0 || result.p50 == 10.0, "p50 was ${result.p50}")
+    }
+
+    @Test
+    fun `rest of season simulates each of its games`() {
+        val twoGames = listOf(
+            DistributionSpec(Components.POINTS_ALLOWED, DistributionFamily.NORMAL, mean = 40.0, variance = 200.0),
+            DistributionSpec(Components.GAMES, DistributionFamily.GAMMA, mean = 2.0, variance = 0.0),
+        )
+        val result = simulate(twoGames, twoTiers, Position.DST, draws = 2_000)
+        // Two games of 20 ± 10: 20, 6 or -8 in all. The tier of their sum, 40, would always be -4.
+        assertEquals(-8.0, result.p10, 1e-9)
+        assertEquals(20.0, result.p90, 1e-9)
     }
 }

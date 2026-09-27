@@ -74,7 +74,7 @@ class AccuracyScreenTest {
     fun `a position with nothing to count says so instead of vanishing`() {
         compose.setContent { GridironTheme { AccuracyScreen(loaded, onSeason = {}, onBack = {}) } }
 
-        compose.onNodeWithText("Nothing to measure at QB, RB, TE.").assertExists()
+        compose.onNodeWithText("Nothing to measure at QB, RB, TE, K, D/ST.").assertExists()
     }
 
     @Test

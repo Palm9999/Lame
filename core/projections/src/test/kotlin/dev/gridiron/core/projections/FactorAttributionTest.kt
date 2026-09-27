@@ -4,6 +4,7 @@ import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.statquery.Components
 import kotlin.math.abs
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
@@ -37,5 +38,12 @@ class FactorAttributionTest {
         attributed.forEach {
             assertTrue(it.points.isFinite(), "factor ${it.factor} produced a non-finite value: ${it.points}")
         }
+    }
+
+    @Test
+    fun `factors can split points the caller already scored`() {
+        val factors = listOf(ProjectionFactor("matchup", 0.2, null), ProjectionFactor("game_script", 0.1, null))
+        val split = attributeFactors(baselinePoints = 6.0, finalPoints = 9.0, factors = factors)
+        assertEquals(listOf(2.0, 1.0), split.map { it.points })
     }
 }

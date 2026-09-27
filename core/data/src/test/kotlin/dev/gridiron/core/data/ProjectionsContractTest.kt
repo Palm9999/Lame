@@ -5,9 +5,8 @@ import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.projections.ListedProjection
 import dev.gridiron.core.projections.projectPoints
-import dev.gridiron.core.projections.score
+import dev.gridiron.core.projections.projectedScore
 import dev.gridiron.core.statquery.Bind
-import dev.gridiron.core.statquery.Component
 import dev.gridiron.core.statquery.SqlQuery
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
@@ -16,7 +15,6 @@ import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
-import kotlin.math.sqrt
 
 /**
  * The phone's projection reads, end to end, against the database CI builds
@@ -102,13 +100,8 @@ class ProjectionsContractTest {
                 assertTrue(allowed.mean in 10.0..40.0 && allowed.variance in 25.0..400.0, "${d.name}: $allowed")
                 assertEquals(1.0, d.components.single { it.metricId == "g" }.mean, 0.0, d.name)
             }
-            // Scored as the phone will (Task 10's projectedScore): tiers in expectation, never the tier of the mean.
-            fun points(p: ListedProjection): Double {
-                val means = p.components.filter { it.metricId != "points_allowed" }.associate { Component(it.metricId) to it.mean }
-                val allowed = p.components.firstOrNull { it.metricId == "points_allowed" }
-                return score(means, ScoringPresets.PPR, Position.fromCode(p.position!!)) +
-                    (allowed?.let { ScoringPresets.PPR.expectedPointsAllowedPoints(it.mean, sqrt(it.variance)) } ?: 0.0)
-            }
+            // Scored as the phone does: tiers in expectation, never the tier of the mean.
+            fun points(p: ListedProjection): Double = projectedScore(p.components, ScoringPresets.PPR, Position.fromCode(p.position!!))
             fun top(position: String) = listed.filter { it.position == position }.map(::points).sortedDescending().take(12).average()
             // Loose bands under the default kicking and D/ST scoring: a broken model lands far outside them.
             assertTrue(top("K") in 6.0..12.0, "K1-12 average ${top("K")}")
