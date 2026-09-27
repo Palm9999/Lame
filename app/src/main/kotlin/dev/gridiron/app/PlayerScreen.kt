@@ -80,7 +80,7 @@ fun PlayerRoute(
     rosterRepo: RosterRepository? = null,
     onManageRosters: () -> Unit = {},
 ) {
-    val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList()) }.collectAsState(initial = emptyList())
+    val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList<Roster>()) }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val version by (live?.changes ?: NO_CHANGES).collectAsState()
     val profile by remember(scoring) { scoring?.active ?: flowOf(null) }.collectAsState(initial = null)

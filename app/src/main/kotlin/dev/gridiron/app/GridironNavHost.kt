@@ -37,6 +37,7 @@ import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.RosterRepository
+import dev.gridiron.core.model.Roster
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
@@ -154,7 +155,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 if (refresher != null) add("Refresh stats" to { _: Int -> refresh() })
                             },
                             badges = deps.live?.badges ?: flowOf(emptyMap()),
-                            rosters = deps.rosters?.rosters ?: flowOf(emptyList()),
+                            rosters = deps.rosters?.rosters ?: flowOf(emptyList<Roster>()),
                             recovery = buildList {
                                 if (refresher != null) add("Refresh stats" to { refresh() })
                                 if (deps.settings != null) add("Settings" to { backStack.push(SettingsKey) })
