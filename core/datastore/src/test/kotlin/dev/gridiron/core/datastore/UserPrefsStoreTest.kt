@@ -3,6 +3,7 @@ package dev.gridiron.core.datastore
 import dev.gridiron.core.model.BonusStat
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.Position
+import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.ScoringRule
 import dev.gridiron.core.model.WeekRange
@@ -109,6 +110,28 @@ class UserPrefsStoreTest {
         assertEquals(null, withStore { it.prefs.first() }.seasons)
         withStore { store -> store.update { it.copy(seasons = SeasonChoice(listOf(2026, 2024), 2026)) } }
         assertEquals(SeasonChoice(listOf(2024, 2026), 2026), withStore { it.prefs.first() }.seasons)
+    }
+
+    @Test
+    fun `rosters survive a reopen, and an older file has none`() {
+        assertEquals(emptyList<Roster>(), withStore { it.prefs.first() }.rosters)
+        val rosters = listOf(Roster("r1", "Home league", listOf("p1", "p2")), Roster("r2", "Work", emptyList()))
+        withStore { store -> store.update { it.copy(rosters = rosters) } }
+        assertEquals(rosters, withStore { it.prefs.first() }.rosters)
+    }
+
+    @Test
+    fun `invalid rosters are dropped and duplicate players collapsed`() {
+        file.writeText(
+            """
+            {"formatVersion":1,"rosters":[
+              {"id":"r1","name":" ","playerIds":["p1"]},
+              {"id":"r2","name":"Home","playerIds":["p1","p1"," ","p2"]},
+              {"id":"r2","name":"Copy","playerIds":[]}
+            ]}
+            """.trimIndent(),
+        )
+        assertEquals(listOf(Roster("r2", "Home", listOf("p1", "p2"))), withStore { it.prefs.first() }.rosters)
     }
 
     @Test

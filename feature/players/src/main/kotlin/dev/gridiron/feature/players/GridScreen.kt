@@ -70,6 +70,7 @@ import dev.gridiron.core.data.weeksLabel
 import dev.gridiron.core.designsystem.HeaderStyle
 import dev.gridiron.core.designsystem.NumberStyle
 import dev.gridiron.core.designsystem.heatColor
+import dev.gridiron.core.model.Roster
 import dev.gridiron.core.statquery.Direction
 import dev.gridiron.core.table.StatTable
 import dev.gridiron.core.table.TableColumn
@@ -77,7 +78,9 @@ import dev.gridiron.core.ui.MetricSheet
 import dev.gridiron.core.ui.ProfileChip
 import dev.gridiron.core.ui.SeasonWeeksSheet
 import dev.gridiron.core.ui.WeeksSheet
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -97,8 +100,9 @@ fun GridRoute(
     menu: List<Pair<String, (season: Int) -> Unit>> = emptyList(),
     badges: Flow<Map<String, String>> = flowOf(emptyMap()),
     recovery: List<Pair<String, () -> Unit>> = emptyList(),
+    rosters: Flow<List<Roster>> = flowOf(emptyList()),
 ) {
-    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges))
+    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges, rosters))
     val state by vm.state.collectAsStateWithLifecycle()
     GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu, recovery)
 }
@@ -209,6 +213,9 @@ private fun GridContent(
                     label = { Text(when (teams.size) { 0 -> "All teams"; 1 -> teams.single(); else -> "${teams.size} teams" }) },
                     modifier = Modifier.testTag("chip:teams"),
                 )
+                if (state.rosters.isNotEmpty()) {
+                    RosterChip(state.rosters, state.rosterId) { onEvent(GridEvent.RosterSelected(it)) }
+                }
                 SnapChip(r.minSnapShare) { onEvent(GridEvent.MinSnapShareSelected(it)) }
                 FilterChip(
                     selected = r.filters.isNotEmpty(),
@@ -248,7 +255,7 @@ private fun GridContent(
                 when {
                     page == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                     page.rows.isEmpty() -> Text(
-                        "No players match.",
+                        if (page.request.onlyPlayers?.isEmpty() == true) "This roster is empty. Add players from their player page." else "No players match.",
                         Modifier.fillMaxWidth().padding(32.dp),
                         style = MaterialTheme.typography.bodyMedium,
                     )
@@ -257,6 +264,7 @@ private fun GridContent(
                         state.heat,
                         state.sparklines,
                         state.badges,
+                        state.rostered,
                         onSort = { onEvent(GridEvent.SortBy(it.column)) },
                         onInfo = { info = it.info },
                         onRowLongClick = { row ->
@@ -383,6 +391,25 @@ private fun ChipRow(content: @Composable () -> Unit) {
 }
 
 @Composable
+private fun RosterChip(rosters: ImmutableList<Roster>, selected: String?, onSelect: (String?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        FilterChip(
+            selected = selected != null,
+            onClick = { open = true },
+            label = { Text(rosters.firstOrNull { it.id == selected }?.name ?: "All players") },
+            modifier = Modifier.testTag("chip:roster"),
+        )
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(text = { Text("All players") }, onClick = { open = false; onSelect(null) })
+            for (roster in rosters) {
+                DropdownMenuItem(text = { Text(roster.name) }, onClick = { open = false; onSelect(roster.id) })
+            }
+        }
+    }
+}
+
+@Composable
 private fun SnapChip(share: Double?, onSelect: (Double?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     fun label(s: Double?) = if (s == null) "Any snaps" else "${(s * 100).toInt()}%+ snaps"
@@ -441,6 +468,7 @@ private fun PlayerTable(
     heat: Boolean,
     sparklines: ImmutableMap<String, SparklineData>,
     badges: ImmutableMap<String, String>,
+    rostered: ImmutableSet<String>,
     onSort: (ColumnUi) -> Unit,
     onInfo: (ColumnUi) -> Unit,
     onRowLongClick: (GridRowUi) -> Unit,
@@ -497,6 +525,9 @@ private fun PlayerTable(
                 )
                 Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (row.playerId in rostered) {
+                            Text("★ ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                        }
                         Text(
                             row.name,
                             Modifier.weight(1f, fill = false),
@@ -539,6 +570,7 @@ private fun PlayerTable(
         rowDescription = { row ->
             buildString {
                 append(row.name)
+                if (row.playerId in rostered) append(" (on your roster)")
                 badges[row.playerId]?.let { append(" (injury status ").append(it).append(')') }
                 append(", ").append(row.detail).append(". ")
                 page.columns.forEachIndexed { i, col ->
