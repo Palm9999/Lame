@@ -31,14 +31,16 @@
   - 4 tasks, one session (Session A = Tasks 1–4), full code, tests first. Rulings are at the end of the plan ("Plan self-review").
   - Re-measured before planning, on a fresh 2024–2025 Kotlin build: the model now beats the season-to-date average at every position for 2025 under PPR (MAE model / season avg / last 4: QB 6.42 / 7.14 / 7.07, RB 5.88 / 6.01 / 6.18, WR 5.40 / 5.79 / 5.81, TE 4.87 / 5.19 / 5.42). So the CI gate passes without tuning. RB's margin is thin (0.13).
   - 2024, which has no 2023 history in that build, still loses at WR and TE. The plan uses that to show the gate can fail.
-- [ ] **Plan approved; execution method chosen.** Waiting on the user.
+- [x] **Plan approved; execution method: native** (2026-09-27).
+- [x] **Sub-project 2 built** (Session A, Tasks 1–4; see "Projection accuracy: execution progress").
+- [ ] **Final whole-branch review** (a fresh reviewer on the most capable model), then its fix pass.
 
-## Next step: sub-project 2, Session A (after approval)
+## Next step: sub-project 2's final review
 
-1. The user reviews `docs/superpowers/plans/2026-09-27-projection-accuracy.md` and picks an execution method. Native was used for sub-project 1.
-2. Run Tasks 1–4 with the `executing-plans` skill, recording each task below under "Projection accuracy: execution progress".
-3. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (commands are in the plan).
-4. Draft PR for this sub-project: https://github.com/Palm9999/Lame/pull/5 (watched).
+1. Run the final whole-branch review (`executing-plans` "Final Review") over a503a94..HEAD, with the plan's Review Focus and the rulings below. Fix Critical and Important findings in one pass, each RED→GREEN.
+2. Wait for CI on the draft PR (https://github.com/Palm9999/Lame/pull/5, watched): the parity job now runs the accuracy gate.
+3. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows, and whether the numbers match the gate table below under PPR. Over about 10 s → record it here (the fix would be caching per season and profile, out of this plan's scope).
+4. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (commands are in the plan).
 
 **Things to know:**
 - **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
@@ -56,7 +58,28 @@
 
 ## Projection accuracy: execution progress
 
-Not started.
+**Session A** (2026-09-27). After Task 4: `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` → BUILD SUCCESSFUL (the timing flake didn't show); `./gradlew :app:assembleRelease` → BUILD SUCCESSFUL.
+
+- [x] Task 1: The backtest (commit a4b8cfe; `./gradlew :core:projections:test` → 26/26 pass).
+  - Watched failing first (unresolved `ProjectedWeek`, `PlayedWeek`, `errorStats`).
+  - Ruling: Step 4 says 7 new `BacktestTest` tests; the brief's file has 6, and all 6 ran and pass. A count typo in the plan. Cost if wrong: none.
+- [x] Task 2: The repository, the contract test and CI's accuracy gate (commit a4d296d; `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew :core:data:test :core:projections:test` → pass, the gate skipped).
+  - Watched failing first (unresolved `seasons`, `backtest`).
+  - Ruling: `AccuracyRepositoryTest`'s fixture gives 10 yards per catch, so week 2 (8 catches, a TD) scores 22, not the 24 the brief assumed (copied from Task 1's 100-yard fixture). The code returned model MAE 5.0 and last-4 MAE 9.5, and hand arithmetic agrees. Only the comments and those two expected values changed; the assertions and sample rules are the brief's, and `playerWeeks = 2` still pins the upcoming-week and didn't-play exclusions. Cost if wrong: none.
+  - `AccuracyContractTest` on the 2024–2026 build: pass, 2.7 s.
+  - Gate on `etl/build/accuracy.db`: 2024 **fails** "at [WR, TE]", as planned. 2025 **passes**, identical to the planning table:
+
+    ```
+    2025, PPR: MAE (bias) by predictor
+    pos       n           model      season avg          last 4   held
+    QB      498    6.42 (-0.19)    7.14 (-0.57)    7.07 (-0.56)    64%
+    RB      804    5.88 (-1.34)    6.01 (-0.31)    6.18 (+0.03)    54%
+    WR     1203    5.40 (-1.03)    5.79 (+0.28)    5.81 (+0.40)    61%
+    TE      455    4.87 (-1.62)    5.19 (-0.15)    5.42 (+0.30)    66%
+    ```
+  - Note for the user: floor to ceiling holds only 54–66% of scores against the spec's target of about 80%, so the model's spread is too narrow. The page shows it; the gate doesn't check it.
+- [x] Task 3: The accuracy page (commit b59b401; `./gradlew :feature:projections:testDebugUnitTest :core:data:test :app:compileDebugKotlin` → 31/31 in projections, Accuracy 8/8). No rulings.
+- [x] Task 4: ☰ → Projection accuracy, and docs (commit 018b1e9; `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew :app:testDebugUnitTest` → 39/39). No rulings.
 
 ## Projection engine: execution progress
 
