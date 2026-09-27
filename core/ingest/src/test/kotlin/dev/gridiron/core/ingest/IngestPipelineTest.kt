@@ -133,12 +133,12 @@ class IngestPipelineTest {
         assertEquals(listOf(2024, 2025), report.built)
         assertEquals(emptyList<Int>(), report.reused)
         val meta = readMeta(out)!!
-        assertEquals("7", meta["schema_version"])
+        assertEquals("8", meta["schema_version"])
         assertEquals("3", meta["ingest_version"])
         assertEquals("2024,2025", meta["seasons"])
         assertEquals("1", meta["expected_through_week:2025"])
         assertNotNull(meta[Sources.metaKey(Input.PBP, 2025)])
-        assertEquals(listOf("QB1", "RB1", "WR1", "WR2"), query(out, "SELECT player_id FROM player ORDER BY 1").map { it[0] })
+        assertEquals(listOf("DST_AAA", "DST_BBB", "QB1", "RB1", "WR1", "WR2"), query(out, "SELECT player_id FROM player ORDER BY 1").map { it[0] })
         assertEquals(listOf(listOf("OLD1")), query(out, "SELECT player_id FROM player_xref WHERE espn_id = '105'"))
         assertEquals(listOf(listOf("0.5")), query(out, "SELECT value FROM player_week_stat WHERE player_id = 'WR1' AND season = 2025 AND metric_id = 'target_share'"))
         assertEquals(listOf(listOf("0.78")), query(out, "SELECT value FROM player_week_stat WHERE player_id = 'WR1' AND season = 2025 AND metric_id = 'snap_share'"))
@@ -509,5 +509,21 @@ class IngestPipelineTest {
             query(out, "SELECT metric_id, value FROM player_week_stat WHERE player_id = 'K1' AND metric_id IN ('g', 'fg_made_40_49', 'xp_made', 'carries') ORDER BY 1"),
         )
         assertEquals(listOf(listOf("K")), query(out, "SELECT position FROM player WHERE player_id = 'K1'"))
+    }
+
+    @Test
+    fun `each team's defense is stored as its D-ST's week`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+
+        pipeline.build(listOf(2025), previous = null, out = out)
+
+        // The fixture's plays score nothing: both defenses allowed 0, a shutout, and nothing else.
+        assertEquals(
+            listOf(listOf("g", "1.0"), listOf("points_allowed", "0.0")),
+            query(out, "SELECT metric_id, value FROM player_week_stat WHERE player_id = 'DST_BBB' ORDER BY 1"),
+        )
+        assertEquals(listOf(listOf("BBB D/ST", "DST", "BBB")), query(out, "SELECT full_name, position, team FROM player WHERE player_id = 'DST_BBB'"))
     }
 }

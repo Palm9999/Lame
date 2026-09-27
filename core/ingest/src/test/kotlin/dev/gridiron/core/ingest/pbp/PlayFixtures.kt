@@ -17,6 +17,7 @@ internal fun play(
     totalHomeScore: Double? = 0.0, totalAwayScore: Double? = 0.0,
     kicker: String? = null, fieldGoalAttempt: Double? = 0.0, fieldGoalResult: String? = null,
     kickDistance: Double? = null, extraPointAttempt: Double? = 0.0, extraPointResult: String? = null,
+    safety: Double? = 0.0,
 ): Play = Play(
     season = season, week = week, seasonType = seasonType, gameId = gameId, posteam = posteam,
     defteam = defteam, playType = playType, passAttempt = passAttempt, completePass = completePass,
@@ -31,6 +32,7 @@ internal fun play(
     totalHomeScore = totalHomeScore, totalAwayScore = totalAwayScore,
     kicker = kicker, fieldGoalAttempt = fieldGoalAttempt, fieldGoalResult = fieldGoalResult,
     kickDistance = kickDistance, extraPointAttempt = extraPointAttempt, extraPointResult = extraPointResult,
+    safety = safety,
 )
 
 internal fun target(

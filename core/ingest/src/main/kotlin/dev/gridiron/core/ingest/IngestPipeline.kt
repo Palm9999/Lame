@@ -321,7 +321,9 @@ public class IngestPipeline(
             writer.writeFacts(toFacts(weekly))
             // Kickers are keyed like players, so one who also ran a play keeps both sets of facts under one `g`.
             writer.writeFacts(toFacts(kicking.rows()))
-            writer.writeTeamDefense(defense.rows())
+            val defenseRows = defense.rows()
+            writer.writeTeamDefense(defenseRows)
+            writer.writeFacts(toFacts(dstWeeks(defenseRows)))
             val injuriesFile = files[Input.INJURIES]
             if (injuriesFile == null) {
                 warnings += if (season < currentSeason(now().atZone(ZoneOffset.UTC).toLocalDate())) {

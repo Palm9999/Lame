@@ -10,6 +10,9 @@ internal data class TeamDefenseRow(
     val interceptions: Double,
     val fumblesRecovered: Double,
     val defensiveTds: Double,
+    val safeties: Double,
+    /** Kickoffs returned for a TD. Punt return TDs score for defteam, so they're already in [defensiveTds]. */
+    val kickReturnTds: Double,
 )
 
 /** One row per (team, season, week): what the defense allowed and took away. Ports `teams.team_defense_from`. */
@@ -27,6 +30,8 @@ internal class TeamDefenseAggregator {
         var interceptions = 0.0
         var fumbles = 0.0
         var tds = 0.0
+        var safeties = 0.0
+        var kickReturnTds = 0.0
     }
 
     private val games = LinkedHashMap<String, Game>()
@@ -41,12 +46,18 @@ internal class TeamDefenseAggregator {
             g.homeScore = maxOf(g.homeScore, p.totalHomeScore ?: 0.0)
             g.awayScore = maxOf(g.awayScore, p.totalAwayScore ?: 0.0)
         }
+        // nflverse lists the receiving team as posteam on a kickoff, so a return TD is posteam's.
+        val receiving = p.posteam
+        if (p.playType == "kickoff" && receiving != null && p.tdTeam == receiving) {
+            allowed.getOrPut(Triple(receiving, p.season, p.week)) { Allowed() }.kickReturnTds += p.touchdown ?: 0.0
+        }
         val defense = p.defteam ?: return
         val a = allowed.getOrPut(Triple(defense, p.season, p.week)) { Allowed() }
         if (p.playType == "pass" || p.playType == "run") a.yards += p.yardsGained ?: 0.0
         a.sacks += p.sack ?: 0.0
         a.interceptions += p.interception ?: 0.0
         a.fumbles += p.fumbleLost ?: 0.0
+        a.safeties += p.safety ?: 0.0
         if (p.tdTeam != null && p.tdTeam == defense) a.tds += p.touchdown ?: 0.0
     }
 
@@ -64,6 +75,7 @@ internal class TeamDefenseAggregator {
         return TeamDefenseRow(
             team, g.season, g.week, pointsAllowed,
             a?.yards ?: 0.0, a?.sacks ?: 0.0, a?.interceptions ?: 0.0, a?.fumbles ?: 0.0, a?.tds ?: 0.0,
+            a?.safeties ?: 0.0, a?.kickReturnTds ?: 0.0,
         )
     }
 }

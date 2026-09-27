@@ -130,6 +130,16 @@ internal fun validateDatabase(conn: SQLiteConnection): List<String> {
         if (orphan > 0) problems += "coherence: 50+ $kind TDs without a 40+ count in $orphan player-weeks"
     }
 
+    // The profile's tiers score points allowed, so every D/ST week needs it (a shutout stores 0).
+    val unscored = conn.count(
+        """SELECT COUNT(*) FROM (
+             SELECT MAX(metric_id = 'points_allowed') AS scored
+             FROM player_week_stat WHERE player_id LIKE 'DST\_%' ESCAPE '\'
+             GROUP BY player_id, season, week)
+           WHERE scored = 0""",
+    )
+    if (unscored > 0) problems += "D/ST weeks without their points allowed: $unscored"
+
     val computed = conn.prepare(
         "SELECT m.id FROM metric m JOIN player_week_stat s ON s.metric_id = m.id WHERE m.computed = 1 GROUP BY m.id",
     ).use { st -> buildList { while (st.step()) add(st.getText(0)) } }

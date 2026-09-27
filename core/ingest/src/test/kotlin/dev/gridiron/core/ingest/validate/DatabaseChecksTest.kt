@@ -70,4 +70,22 @@ class DatabaseChecksTest {
         assertTrue(p.any { "50+ field goals made within tries" in it }, "$p")
         assertEquals(emptyList<String>(), problems("g" to 1.0, "target_share" to 0.2, "fg_att_50" to 2.0, "fg_made_50" to 1.0, "xp_att" to 3.0, "xp_made" to 2.0, "xp_missed" to 1.0))
     }
+
+    private fun dstProblems(vararg facts: Pair<String, Double>): List<String> =
+        StatsDbWriter.create(File(dir, "d.db")).use { w ->
+            w.writeMetrics(METRICS)
+            w.execute("INSERT INTO player (player_id, full_name, search_name, position, team) VALUES ('p1', 'Test Player', 'test player', 'WR', 'AAA')")
+            w.execute("INSERT INTO player (player_id, full_name, search_name, position, team) VALUES ('DST_AAA', 'AAA D/ST', 'aaa dst', 'DST', 'AAA')")
+            w.execute("INSERT INTO player_week_stat VALUES ('p1', 2025, 1, 'AAA', 'target_share', 0.2)")
+            for ((metric, value) in facts) {
+                w.execute("INSERT INTO player_week_stat VALUES (?, ?, ?, ?, ?, ?)", "DST_AAA", 2025, 1, "AAA", metric, value)
+            }
+            validateDatabase(w.connection)
+        }
+
+    @Test
+    fun `every team defense week has its points allowed`() {
+        assertEquals(emptyList<String>(), dstProblems("g" to 1.0, "points_allowed" to 0.0))
+        assertTrue(dstProblems("g" to 1.0, "dst_sacks" to 2.0).any { "points allowed" in it })
+    }
 }

@@ -116,6 +116,22 @@ private val KICKING: List<Metric> = listOf(
     )
 }
 
+private val TEAM_DEFENSE = listOf("DST")
+
+/** The D/ST pseudo-players' facts: takeaways, scores, and points allowed, which the profile's tiers score. */
+private val DEFENSE: List<Metric> = listOf(
+    Triple("dst_sacks", "SACK", "D/ST Sacks" to "Sacks by the team's defense."),
+    Triple("dst_interceptions", "DINT", "D/ST Interceptions" to "Passes the team's defense intercepted."),
+    Triple("dst_fumble_recoveries", "FR", "D/ST Fumble Recoveries" to "Opponent fumbles the team recovered."),
+    Triple("dst_tds", "DTD", "D/ST TDs" to "Touchdowns by the defense or on a return: interceptions, fumbles, punts, kickoffs and blocked kicks."),
+    Triple("dst_safeties", "SAF", "D/ST Safeties" to "Safeties the team's defense scored."),
+).map { (id, abbr, text) ->
+    Metric(id, text.first, abbr, "defense", text.second, positions = TEAM_DEFENSE, decimals = 0, sparse = true)
+} + Metric(
+    "points_allowed", "Points Allowed", "PA", "defense", "Points the opponent scored, however it scored them.",
+    positions = TEAM_DEFENSE, higherIsBetter = false, decimals = 0,
+)
+
 private val REGISTRY: List<Metric> = listOf(
     // ---------------- Receiving volume ----------------
     Metric("targets", "Targets", "TGT", "volume",
@@ -274,7 +290,7 @@ private val REGISTRY: List<Metric> = listOf(
 } + RANGE_COMPONENTS.map {
     Metric(it.id, it.name, it.id.uppercase(), "context", it.definition,
         positions = ALL_POSITIONS, decimals = it.decimals, isInternal = true)
-} + KICKING
+} + KICKING + DEFENSE
 
 /**
  * The distribution the phone's floor/ceiling simulation draws each projected
@@ -295,6 +311,10 @@ internal val DIST_FAMILIES: Map<String, String> = buildMap {
         "fg_att", "fg_made", "fg_att_0_39", "fg_att_40_49", "fg_att_50", "fg_made_0_39", "fg_made_40_49", "fg_made_50",
         "fg_missed", "xp_att", "xp_made", "xp_missed",
     )) put(id, "poisson")
+    put("dst_sacks", "negbinom")
+    for (id in listOf("dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties")) put(id, "poisson")
+    // One game's points allowed: the simulation draws it from a normal distribution and scores its tier.
+    put("points_allowed", "normal")
 }
 
 internal val METRICS: List<Metric> = REGISTRY.map { it.copy(distFamily = DIST_FAMILIES[it.id] ?: it.distFamily) }

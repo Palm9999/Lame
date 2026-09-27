@@ -27,7 +27,7 @@ internal val PBP_COLUMNS: List<String> = listOf(
     "two_point_conv_result", "touchdown", "td_team", "home_team", "away_team",
     "total_home_score", "total_away_score",
     "kicker_player_id", "field_goal_attempt", "field_goal_result", "kick_distance",
-    "extra_point_attempt", "extra_point_result",
+    "extra_point_attempt", "extra_point_result", "safety",
 )
 
 internal class Play(
@@ -78,6 +78,7 @@ internal class Play(
     val extraPointAttempt: Double?,
     /** "good", "failed", "blocked" or "aborted". */
     val extraPointResult: String?,
+    val safety: Double?,
 ) {
     /** False for kneels and spikes: see [RATE_EXCLUDED_PLAY_TYPES]. */
     val isEfficiency: Boolean get() = playType !in RATE_EXCLUDED_PLAY_TYPES
@@ -107,6 +108,7 @@ private fun CsvRow.toPlay(): Play? {
         kicker = text("kicker_player_id"), fieldGoalAttempt = double("field_goal_attempt"),
         fieldGoalResult = text("field_goal_result"), kickDistance = double("kick_distance"),
         extraPointAttempt = double("extra_point_attempt"), extraPointResult = text("extra_point_result"),
+        safety = double("safety"),
     )
 }
 
