@@ -1,6 +1,7 @@
 package dev.gridiron.core.statquery
 
 import dev.gridiron.core.model.BonusStat
+import dev.gridiron.core.model.PointsAllowedTier
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.ScoringProfile
@@ -178,5 +179,58 @@ class ScoringQueryTest {
         val spec = fantasy(ScoringPresets.PPR, StatColumn.TARGETS)
             .copy(filters = listOf(Filter(FANTASY_POINTS, Condition.AtLeast(5.0))))
         assertEquals(1, db.count(spec))
+    }
+
+    @Test
+    fun `a kicker's week scores field goals by distance, extra points and misses, and no points-allowed tier`() {
+        db.player("k1", "Place Kicker", position = "K")
+        db.week("k1", 1, C.FG_MADE_0_39 to 1, C.FG_MADE_40_49 to 1, C.FG_MADE_50 to 1, C.FG_MISSED to 1, C.XP_MADE to 3, C.XP_MISSED to 1)
+        // 3 + 4 + 5 - 1 + 3 - 1. A tier for his missing points allowed would add ESPN's 5 for a shutout.
+        assertEquals(13.0, db.grid(fantasy(ScoringPresets.PPR)).single().value(FANTASY_POINTS)!!, EPS)
+    }
+
+    @Test
+    fun `a team defense scores takeaways, TDs, safeties and each week's points-allowed tier`() {
+        db.player("DST_KC", "KC D/ST", position = "DST", team = "KC")
+        db.week("DST_KC", 1, C.DST_SACKS to 3, C.DST_INTERCEPTIONS to 1, C.DST_FUMBLE_RECOVERIES to 1, C.DST_TDS to 1, C.DST_SAFETIES to 1, C.POINTS_ALLOWED to 10)
+        db.week("DST_KC", 2, C.DST_SACKS to 1, C.POINTS_ALLOWED to 46)
+        // Week 1: 3 + 2 + 2 + 6 + 2, and 7-13 allowed is 3: 18. Week 2: 1, and 46+ allowed is -5: -4.
+        assertEquals(14.0, db.grid(fantasy(ScoringPresets.PPR)).single().value(FANTASY_POINTS)!!, EPS)
+    }
+
+    @Test
+    fun `each week scores its own tier, never the tier of the weeks' total`() {
+        db.player("DST_KC", "KC D/ST", position = "DST", team = "KC")
+        db.week("DST_KC", 1, C.POINTS_ALLOWED to 17)
+        db.week("DST_KC", 2, C.POINTS_ALLOWED to 18)
+        db.week("DST_KC", 3, C.POINTS_ALLOWED to 0)
+        // 1 + 0 + 5. The total, 35, would be one tier worth -5.
+        assertEquals(6.0, db.grid(fantasy(ScoringPresets.PPR)).single().value(FANTASY_POINTS)!!, EPS)
+    }
+
+    @Test
+    fun `a profile's own tiers score points allowed, and no tiers score none`() {
+        db.player("DST_KC", "KC D/ST", position = "DST", team = "KC")
+        db.week("DST_KC", 1, C.POINTS_ALLOWED to 20)
+        db.week("DST_KC", 2, C.POINTS_ALLOWED to 21)
+        val yahoo = custom().copy(pointsAllowedTiers = listOf(PointsAllowedTier(0, 10.0), PointsAllowedTier(14, 1.0), PointsAllowedTier(21, 0.0)))
+        assertEquals(1.0, db.grid(fantasy(yahoo)).single().value(FANTASY_POINTS)!!, EPS)
+        assertEquals(0.0, db.grid(fantasy(custom())).single().value(FANTASY_POINTS)!!, EPS)
+    }
+
+    @Test
+    fun `a kicker who also ran scores both in the same week`() {
+        db.player("k1", "Place Kicker", position = "K")
+        db.week("k1", 1, C.FG_MADE_0_39 to 1, C.RUSHING_YARDS to 20)
+        // 3 + 2
+        assertEquals(5.0, db.grid(fantasy(ScoringPresets.PPR)).single().value(FANTASY_POINTS)!!, EPS)
+    }
+
+    @Test
+    fun `a profile's own kicking weights replace the presets', zero included`() {
+        db.player("k1", "Place Kicker", position = "K")
+        db.week("k1", 1, C.FG_MADE_50 to 1, C.FG_MISSED to 2)
+        val profile = custom(ScoringRule.FG_MADE_50 to 6.0, ScoringRule.FG_MISSED to 0.0)
+        assertEquals(6.0, db.grid(fantasy(profile)).single().value(FANTASY_POINTS)!!, EPS)
     }
 }

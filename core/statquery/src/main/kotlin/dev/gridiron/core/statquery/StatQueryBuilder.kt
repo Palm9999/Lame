@@ -10,8 +10,19 @@ import dev.gridiron.core.model.ScoringRule
  * `scoring()` CTEs pivot each separately, so a row only ever pays for the
  * branches of the set it belongs to, not all of [SCORING_COMPONENTS].
  */
+/** The offense's rules, in declaration order so equal profiles give identical SQL. */
+private val OFFENSE_RULES: List<ScoringRule> = ScoringRule.entries.filter { it !in SPECIAL_RULES }
+
+private val SPECIAL_RULE_LIST: List<ScoringRule> = ScoringRule.entries.filter { it in SPECIAL_RULES }
+
 private val ACTUAL_COMPONENTS: List<Component> =
-    (RULE_INPUTS.values.flatMap { it.actual }.map { it.component } + BONUS_INPUTS.values.flatten())
+    (OFFENSE_RULES.flatMap { RULE_INPUTS.getValue(it).actual }.map { it.component } + BONUS_INPUTS.values.flatten())
+        .distinct()
+        .sortedBy { it.id }
+
+/** Kicking and team-defense inputs, and points allowed for the tiers: pivoted apart (`ws`), so the offense's pivot stays as narrow as it was. */
+private val SPECIAL_COMPONENTS: List<Component> =
+    (SPECIAL_RULE_LIST.flatMap { RULE_INPUTS.getValue(it).actual }.map { it.component } + Components.POINTS_ALLOWED)
         .distinct()
         .sortedBy { it.id }
 
@@ -23,11 +34,12 @@ private val EXPECTED_COMPONENTS: List<Component> =
  *
  * Query shape:
  *
- *  0. When a fantasy column is planned, `wk` pivots `player_week_stat` to one
- *     row per player-week for every scoring component, `fw` applies the
- *     spec's scoring profile to each week (so per-game bonuses see single
- *     games), and `fsum` totals `fw` per player into fantasy points, expected
- *     fantasy points and FPOE.
+ *  0. When a fantasy column is planned, `wk` pivots the offense's scoring
+ *     components to one row per player-week, `ws` does the same for kicking,
+ *     team-defense and points-allowed components, `fw` and `fs` apply the
+ *     spec's scoring profile to each week (so per-game bonuses and
+ *     points-allowed tiers see single games), and `fsum` totals them per
+ *     player into fantasy points, expected fantasy points and FPOE.
  *  1. `agg` pivots `player_week_stat` to one row per player, summing only the
  *     components the requested columns need. Its predicate is
  *     `metric_id IN (...) AND season = ? AND week BETWEEN ? AND ?`, which is
@@ -237,7 +249,9 @@ private class SqlWriter {
      * Points under [profile]: `wk` pivots actual components per week (bonuses
      * are per-game, so they need weekly granularity), `we` pivots expected
      * components as one range-total per player (no bonus has an expectation,
-     * so xFP is just a linear sum and never needs a weekly breakdown). `fw`
+     * so xFP is just a linear sum and never needs a weekly breakdown). `ws`
+     * pivots kicking, team-defense and points-allowed components the same way
+     * as `wk`, and `fs` scores them with each week's tier. `fw`
      * scores each actual week; `xf` scores each player's expected total
      * directly. `fsum` combines both sides for every player either touched,
      * zero-filling whichever side (if either) a player has no facts for.
@@ -253,6 +267,7 @@ private class SqlWriter {
     fun scoring(spec: StatQuerySpec, profile: ScoringProfile) {
         val wActual = { c: Component -> "COALESCE(wk.w${ACTUAL_COMPONENTS.indexOf(c)}, 0)" }
         val wExpected = { c: Component -> "COALESCE(we.e${EXPECTED_COMPONENTS.indexOf(c)}, 0)" }
+        val wSpecial = { c: Component -> "COALESCE(ws.s${SPECIAL_COMPONENTS.indexOf(c)}, 0)" }
         line("WITH wk AS (")
         line("  SELECT s.player_id, s.week")
         ACTUAL_COMPONENTS.forEachIndexed { i, c ->
@@ -260,6 +275,16 @@ private class SqlWriter {
         }
         line("  FROM player_week_stat s")
         line("  WHERE s.metric_id IN (${ACTUAL_COMPONENTS.joinToString(", ") { text(it.id) }})")
+        line("    AND s.season = ${int(spec.season)}")
+        line("    AND s.week BETWEEN ${int(spec.weeks.first)} AND ${int(spec.weeks.last)}")
+        line("  GROUP BY s.player_id, s.week")
+        line("), ws AS (")
+        line("  SELECT s.player_id, s.week")
+        SPECIAL_COMPONENTS.forEachIndexed { i, c ->
+            line("       , SUM(s.value) FILTER (WHERE s.metric_id = ${text(c.id)}) AS s$i")
+        }
+        line("  FROM player_week_stat s")
+        line("  WHERE s.metric_id IN (${SPECIAL_COMPONENTS.joinToString(", ") { text(it.id) }})")
         line("    AND s.season = ${int(spec.season)}")
         line("    AND s.week BETWEEN ${int(spec.weeks.first)} AND ${int(spec.weeks.last)}")
         line("  GROUP BY s.player_id, s.week")
@@ -275,37 +300,45 @@ private class SqlWriter {
         line("  GROUP BY s.player_id")
         line("), fw AS (")
         line("  SELECT wk.player_id")
-        line("       , ${points(profile, expected = false, wActual)} AS fp")
+        line("       , ${points(profile, OFFENSE_RULES, expected = false, bonuses = true, wActual)} AS fp")
         line("  FROM wk")
         line("  JOIN player p ON p.player_id = wk.player_id")
+        line("), fs AS (")
+        line("  SELECT ws.player_id")
+        line("       , ${points(profile, SPECIAL_RULE_LIST, expected = false, bonuses = false, wSpecial)} + ${tiers(profile)} AS fp")
+        line("  FROM ws")
         line("), xf AS (")
         line("  SELECT we.player_id")
-        line("       , ${points(profile, expected = true, wExpected)} AS xfp")
+        line("       , ${points(profile, OFFENSE_RULES, expected = true, bonuses = false, wExpected)} AS xfp")
         line("  FROM we")
         line("  JOIN player p ON p.player_id = we.player_id")
         line("), players_scored AS (")
         line("  SELECT player_id FROM wk")
         line("  UNION")
         line("  SELECT player_id FROM we")
+        line("  UNION")
+        line("  SELECT player_id FROM ws")
         line("), fsum AS (")
         line("  SELECT players_scored.player_id")
         line("       , COALESCE(fp_agg.fp, 0) AS fp")
         line("       , COALESCE(xf.xfp, 0) AS xfp")
         line("       , COALESCE(fp_agg.fp, 0) - COALESCE(xf.xfp, 0) AS oe")
         line("  FROM players_scored")
-        line("  LEFT JOIN (SELECT player_id, SUM(fp) AS fp FROM fw GROUP BY player_id) fp_agg")
+        line("  LEFT JOIN (SELECT player_id, SUM(fp) AS fp")
+        line("             FROM (SELECT player_id, fp FROM fw UNION ALL SELECT player_id, fp FROM fs)")
+        line("             GROUP BY player_id) fp_agg")
         line("    ON fp_agg.player_id = players_scored.player_id")
         line("  LEFT JOIN xf ON xf.player_id = players_scored.player_id")
         line(")")
     }
 
     /**
-     * One week's points. Every weight is bound, including zeros, so the SQL
-     * shape depends only on the number of bonuses.
+     * One week's points from [rules]. Every weight is bound, including zeros,
+     * so the SQL shape depends only on the number of bonuses and tiers.
      */
-    private fun points(profile: ScoringProfile, expected: Boolean, w: (Component) -> String): String {
+    private fun points(profile: ScoringProfile, rules: List<ScoringRule>, expected: Boolean, bonuses: Boolean, w: (Component) -> String): String {
         val terms = mutableListOf<String>()
-        for (rule in ScoringRule.entries) {
+        for (rule in rules) {
             val inputs = RULE_INPUTS.getValue(rule)
             for (term in if (expected) inputs.expected else inputs.actual) {
                 val weight = if (rule == ScoringRule.RECEPTION) {
@@ -316,8 +349,8 @@ private class SqlWriter {
                 terms += "$weight * ${w(term.component)}"
             }
         }
-        if (!expected) {
-            // Bonuses have no expectation; they only ever add to actual points.
+        if (bonuses) {
+            // Bonuses have no expectation; they only ever add to the offense's actual points.
             for (bonus in profile.yardageBonuses) {
                 val yards = BONUS_INPUTS.getValue(bonus.stat).joinToString(" + ", "(", ")") { w(it) }
                 val lower = int(bonus.min)
@@ -327,6 +360,19 @@ private class SqlWriter {
             }
         }
         return terms.joinToString(" + ", "(", ")")
+    }
+
+    /**
+     * One week's points-allowed tier from the profile's own tiers, checked
+     * highest first. A week with no points allowed (a kicker's) scores none:
+     * the pivot's column is NULL there, while a shutout stores 0.
+     */
+    private fun tiers(profile: ScoringProfile): String {
+        val tiers = profile.pointsAllowedTiers
+        if (tiers.isEmpty()) return "0"
+        val allowed = "ws.s${SPECIAL_COMPONENTS.indexOf(Components.POINTS_ALLOWED)}"
+        val cases = tiers.asReversed().joinToString(" ") { "WHEN $allowed >= ${int(it.min)} THEN ${real(it.points)}" }
+        return "(CASE WHEN $allowed IS NULL THEN 0 $cases ELSE 0 END)"
     }
 
     /** Reception points by position: the TE-premium case. */

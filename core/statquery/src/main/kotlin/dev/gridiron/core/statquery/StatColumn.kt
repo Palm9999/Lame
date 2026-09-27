@@ -77,6 +77,21 @@ public enum class StatColumn(
     SNAP_SHARE("snap_share", Ratio(C.OFFENSE_SNAPS, C.TEAM_OFFENSE_SNAPS)),
     TOTAL_EPA("total_epa", Total(C.TOTAL_EPA)),
 
+    // Kicking (the Grid's K chip)
+    FG_MADE("fg_made", Total(C.FG_MADE)),
+    FG_ATT("fg_att", Total(C.FG_ATT)),
+    FG_MADE_50("fg_made_50", Total(C.FG_MADE_50)),
+    XP_MADE("xp_made", Total(C.XP_MADE)),
+    XP_ATT("xp_att", Total(C.XP_ATT)),
+
+    // Team defense (the Grid's D/ST chip)
+    POINTS_ALLOWED("points_allowed", Total(C.POINTS_ALLOWED), higherIsBetter = false),
+    DST_SACKS("dst_sacks", Total(C.DST_SACKS)),
+    DST_INTERCEPTIONS("dst_interceptions", Total(C.DST_INTERCEPTIONS)),
+    DST_FUMBLE_RECOVERIES("dst_fumble_recoveries", Total(C.DST_FUMBLE_RECOVERIES)),
+    DST_TDS("dst_tds", Total(C.DST_TDS)),
+    DST_SAFETIES("dst_safeties", Total(C.DST_SAFETIES)),
+
     // Fantasy: scored per player-week from the spec's profile.
     FANTASY_POINTS("fantasy_points", Scored(ScoredOutput.FANTASY_POINTS)),
     EXPECTED_FANTASY_POINTS("expected_fantasy_points", Scored(ScoredOutput.EXPECTED_FANTASY_POINTS)),

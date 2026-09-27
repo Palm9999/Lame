@@ -102,6 +102,20 @@ class StatQueryBuilderTest {
 
             assertEquals(1.5 * 0.5 + 0.7 * 1.0, row.value(WOPR)!!, EPS)
         }
+
+        @Test
+        fun `a week with no team targets or air yards at all has no WOPR`() {
+            // A team defense's or a kicker's week: nothing to share, so no rating, not a zero one.
+            db.player("DST_KC", "KC D/ST", position = "DST", team = "KC")
+            db.week("DST_KC", 1, C.DST_SACKS to 2)
+            db.player("rb1", "Pure Runner", position = "RB")
+            db.week("rb1", 1, C.TARGETS to 0, C.TEAM_TARGETS to 30)
+
+            val rows = db.grid(spec(WOPR)).associateBy { it.playerId }
+
+            assertNull(rows.getValue("DST_KC").value(WOPR))
+            assertEquals(0.0, rows.getValue("rb1").value(WOPR)!!, EPS)
+        }
     }
 
     @Nested

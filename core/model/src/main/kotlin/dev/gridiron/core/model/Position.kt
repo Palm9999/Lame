@@ -1,6 +1,6 @@
 package dev.gridiron.core.model
 
-/** Offensive positions as stored in `player.position`. */
+/** Positions as stored in `player.position`: the offense, kickers, and DST (a team's defense and special teams). */
 public enum class Position(public val code: String) {
     QB("QB"),
     RB("RB"),
@@ -8,6 +8,7 @@ public enum class Position(public val code: String) {
     WR("WR"),
     TE("TE"),
     K("K"),
+    DST("DST"),
     ;
 
     public companion object {

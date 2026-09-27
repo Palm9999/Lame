@@ -43,6 +43,9 @@ public sealed interface Aggregate {
      * This is WOPR. Air yards share legitimately leaves [0, 1] because screens
      * carry negative air yards, but a composite *rating* must not go negative,
      * so its inputs are clamped exactly as the ETL clamps them.
+     *
+     * Null when no term has a denominator at all: a team defense's or a
+     * kicker's week has nothing to share, so it has no rating rather than 0.
      */
     public data class ClampedWeightedSum(val terms: List<Term>) : Aggregate {
         init {
@@ -58,10 +61,13 @@ public sealed interface Aggregate {
         override val components: Set<Component>
             get() = terms.flatMapTo(linkedSetOf()) { it.ratio.components }
         override val scalesWithGames: Boolean get() = false
-        override fun toSql(ref: (Component) -> String): String =
-            terms.joinToString(separator = " + ", prefix = "(", postfix = ")") {
+        override fun toSql(ref: (Component) -> String): String {
+            val none = terms.joinToString(" AND ") { "${ref(it.ratio.denominator)} IS NULL" }
+            val sum = terms.joinToString(separator = " + ", prefix = "(", postfix = ")") {
                 "${it.weight} * MIN(MAX(COALESCE(${it.ratio.toSql(ref)}, 0.0), 0.0), 1.0)"
             }
+            return "(CASE WHEN $none THEN NULL ELSE $sum END)"
+        }
     }
 
     /**

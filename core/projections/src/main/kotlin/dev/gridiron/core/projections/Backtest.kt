@@ -4,6 +4,7 @@ import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.statquery.BONUS_INPUTS
 import dev.gridiron.core.statquery.Component
+import dev.gridiron.core.statquery.Components
 import dev.gridiron.core.statquery.RULE_INPUTS
 import kotlin.math.abs
 
@@ -23,9 +24,9 @@ public const val BACKTEST_DRAWS: Int = 250
 /** The short-memory baseline's window, in games played. */
 private const val LAST_GAMES = 4
 
-/** Every stat a real game's fantasy score reads. */
+/** Every stat a real game's fantasy score reads, points allowed (the tiers') included. */
 public val ACTUAL_SCORING_COMPONENTS: List<Component> =
-    (RULE_INPUTS.values.flatMap { inputs -> inputs.actual.map { it.component } } + BONUS_INPUTS.values.flatten())
+    (RULE_INPUTS.values.flatMap { inputs -> inputs.actual.map { it.component } } + BONUS_INPUTS.values.flatten() + Components.POINTS_ALLOWED)
         .distinct()
         .sortedBy { it.id }
 

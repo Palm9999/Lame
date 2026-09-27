@@ -6,12 +6,11 @@ public enum class ScoringGroup(public val label: String) {
     RUSHING("Rushing"),
     RECEIVING("Receiving"),
     TURNOVERS("Turnovers"),
+    KICKING("Kicking"),
+    DEFENSE("Team defense"),
 }
 
-/**
- * Points per unit of one stat. Kicking, team defense and IDP are absent on
- * purpose: the database holds QB, RB, WR and TE stats only.
- */
+/** Points per unit of one stat. IDP is absent on purpose. A D/ST's points allowed are scored by the profile's [ScoringProfile.pointsAllowedTiers], not a rule. */
 public enum class ScoringRule(public val group: ScoringGroup, public val label: String) {
     PASS_YARD(ScoringGroup.PASSING, "Per passing yard"),
     PASS_TD(ScoringGroup.PASSING, "Passing TD"),
@@ -38,6 +37,17 @@ public enum class ScoringRule(public val group: ScoringGroup, public val label: 
     REC_TD_40(ScoringGroup.RECEIVING, "40+ yd TD catch bonus"),
     REC_TD_50(ScoringGroup.RECEIVING, "50+ yd TD catch bonus"),
     FUMBLE_LOST(ScoringGroup.TURNOVERS, "Fumble lost"),
+    FG_MADE_0_39(ScoringGroup.KICKING, "FG made, 0-39 yds"),
+    FG_MADE_40_49(ScoringGroup.KICKING, "FG made, 40-49 yds"),
+    FG_MADE_50(ScoringGroup.KICKING, "FG made, 50+ yds"),
+    FG_MISSED(ScoringGroup.KICKING, "FG missed"),
+    XP_MADE(ScoringGroup.KICKING, "Extra point made"),
+    XP_MISSED(ScoringGroup.KICKING, "Extra point missed"),
+    DST_SACK(ScoringGroup.DEFENSE, "Sack"),
+    DST_INTERCEPTION(ScoringGroup.DEFENSE, "Interception"),
+    DST_FUMBLE_RECOVERY(ScoringGroup.DEFENSE, "Fumble recovery"),
+    DST_TD(ScoringGroup.DEFENSE, "Defensive or return TD"),
+    DST_SAFETY(ScoringGroup.DEFENSE, "Safety"),
 }
 
 public enum class BonusStat(public val label: String) {
@@ -76,6 +86,8 @@ public data class YardageBonus(
  * @property receptionByPosition Reception points by position (TE premium);
  *   positions without an entry use [ScoringRule.RECEPTION].
  * @property basedOn The preset this profile was copied from, for "Reset to preset".
+ * @property pointsAllowedTiers A D/ST's points-allowed tiers, lowest first. The
+ *   first starts at 0, so every game lands in one; empty scores points allowed as nothing.
  */
 public data class ScoringProfile(
     val id: String,
@@ -84,6 +96,7 @@ public data class ScoringProfile(
     val receptionByPosition: Map<Position, Double> = emptyMap(),
     val yardageBonuses: List<YardageBonus> = emptyList(),
     val basedOn: String? = null,
+    val pointsAllowedTiers: List<PointsAllowedTier> = emptyList(),
 ) {
     init {
         require(id.isNotBlank()) { "profile id must not be blank" }
@@ -93,12 +106,37 @@ public data class ScoringProfile(
             "reception overrides apply to RB, WR and TE only: ${receptionByPosition.keys}"
         }
         require(receptionByPosition.values.all { it.isFinite() }) { "reception weights must be finite" }
+        require(pointsAllowedTiers.isEmpty() || pointsAllowedTiers.first().min == 0) {
+            "the lowest points-allowed tier must start at 0: $pointsAllowedTiers"
+        }
+        require(pointsAllowedTiers.zipWithNext().all { (a, b) -> a.min < b.min }) {
+            "points-allowed tiers must start at rising points: $pointsAllowedTiers"
+        }
     }
 
     public fun weight(rule: ScoringRule): Double = weights[rule] ?: 0.0
 
     public fun receptionWeight(position: Position?): Double =
         receptionByPosition[position] ?: weight(ScoringRule.RECEPTION)
+
+    /** A D/ST's points for one game in which the opponent scored [allowed]: the highest tier starting at or below it. */
+    public fun pointsAllowedPoints(allowed: Double): Double =
+        pointsAllowedTiers.lastOrNull { allowed >= it.min }?.points ?: 0.0
+
+    /**
+     * The expected [pointsAllowedPoints] for one game whose points allowed are
+     * about Normal([mean], [sd]) and land on whole points: a tier starting at 7
+     * takes everything from 6.5 up, and anything below the second tier's start
+     * is the first tier. A zero [sd] is the tier of [mean] rounded.
+     */
+    public fun expectedPointsAllowedPoints(mean: Double, sd: Double): Double {
+        if (sd <= 0.0) return pointsAllowedPoints(Math.round(mean).toDouble())
+        return pointsAllowedTiers.indices.sumOf { i ->
+            val from = if (i == 0) 0.0 else normalCdf((pointsAllowedTiers[i].min - 0.5 - mean) / sd)
+            val to = pointsAllowedTiers.getOrNull(i + 1)?.let { normalCdf((it.min - 0.5 - mean) / sd) } ?: 1.0
+            pointsAllowedTiers[i].points * (to - from)
+        }
+    }
 
     public val isPreset: Boolean get() = ScoringPresets.byId(id) != null
 
@@ -107,8 +145,23 @@ public data class ScoringProfile(
     }
 }
 
-/** ESPN's default scoring, in its three reception flavors. Immutable; copy one to customize. */
+/** ESPN's default scoring in its three reception flavors: offense, the common kicking and team-defense values, and ESPN's points-allowed tiers. Immutable; copy one to customize. */
 public object ScoringPresets {
+    /** The common kicking and team-defense values every preset scores, and the version-2 prefs migration writes into older profiles. */
+    public val KICKING_AND_DEFENSE: Map<ScoringRule, Double> = mapOf(
+        ScoringRule.FG_MADE_0_39 to 3.0,
+        ScoringRule.FG_MADE_40_49 to 4.0,
+        ScoringRule.FG_MADE_50 to 5.0,
+        ScoringRule.FG_MISSED to -1.0,
+        ScoringRule.XP_MADE to 1.0,
+        ScoringRule.XP_MISSED to -1.0,
+        ScoringRule.DST_SACK to 1.0,
+        ScoringRule.DST_INTERCEPTION to 2.0,
+        ScoringRule.DST_FUMBLE_RECOVERY to 2.0,
+        ScoringRule.DST_TD to 6.0,
+        ScoringRule.DST_SAFETY to 2.0,
+    )
+
     private fun espn(id: String, name: String, reception: Double) = ScoringProfile(
         id = id,
         name = name,
@@ -125,7 +178,8 @@ public object ScoringPresets {
             ScoringRule.REC_TD to 6.0,
             ScoringRule.REC_2PT to 2.0,
             ScoringRule.FUMBLE_LOST to -2.0,
-        ),
+        ) + KICKING_AND_DEFENSE,
+        pointsAllowedTiers = ESPN_POINTS_ALLOWED,
     )
 
     public val PPR: ScoringProfile = espn("preset:ppr", "PPR", 1.0)

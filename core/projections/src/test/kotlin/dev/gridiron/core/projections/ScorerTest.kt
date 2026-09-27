@@ -34,11 +34,24 @@ class ScorerTest {
     }
 
     @Test
-    fun `an unsupported position (kicker) scores zero without throwing`() {
+    fun `a null position scores without throwing`() {
         val components = mapOf(Components.RECEPTIONS to 5.0)
-        // No ScoringRule reads a kicker-specific component, and Position.K
-        // (if it exists) or a null position must not crash score().
+        // A null position must not crash score(); the reception rule still reads the map.
         val result = score(components, ScoringPresets.PPR, position = null)
         assertEquals(5.0, result, 1e-9) // PPR reception rule still applies to the map's contents
+    }
+
+    @Test
+    fun `kicking and team defense score with the presets' values`() {
+        val kicker = mapOf(Components.FG_MADE_50 to 1.0, Components.FG_MISSED to 1.0, Components.XP_MADE to 2.0)
+        assertEquals(6.0, score(kicker, ScoringPresets.PPR, Position.K), 1e-9)
+        val defense = mapOf(Components.DST_SACKS to 2.0, Components.POINTS_ALLOWED to 0.0)
+        // 2 sacks and a shutout (5).
+        assertEquals(7.0, score(defense, ScoringPresets.STANDARD, Position.DST), 1e-9)
+    }
+
+    @Test
+    fun `a week without points allowed scores no tier`() {
+        assertEquals(3.0, score(mapOf(Components.FG_MADE_0_39 to 1.0), ScoringPresets.PPR, Position.K), 1e-9)
     }
 }
