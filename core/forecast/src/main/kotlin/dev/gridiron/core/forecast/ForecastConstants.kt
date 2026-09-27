@@ -74,6 +74,23 @@ internal object K {
     // Without a line, a team's expected points: its recent scoring, shrunk this many games toward the league's.
     const val TEAM_POINTS_K_GAMES = 4.0
 
+    // D/ST model (spec §6). Judgments, not fits, measured by the accuracy page. A unit's own per-game
+    // rates are recency-weighted and shrunk toward the league's by games: rarer, noisier events harder.
+    const val DST_HALF_LIFE = 6.0
+    val DST_K: Map<String, Double> = mapOf(
+        "dst_sacks" to 6.0, "dst_interceptions" to 12.0, "dst_fumble_recoveries" to 20.0,
+        "dst_tds" to 30.0, "dst_safeties" to 60.0,
+    )
+    const val DST_PA_K = 6.0
+    // What defenses got against an offense, shrunk this many games, and capped to 1 ± DST_CAP of the league's.
+    const val DST_OPP_K = 8.0
+    const val DST_CAP = 0.30
+    // Points allowed are about normal around their mean. Its spread, stored as the projection's variance,
+    // is real team scores' spread around their implied points, measured once this many lined team-games
+    // are in; about 10 points before that.
+    const val PA_SD_DEFAULT = 10.0
+    const val PA_SD_MIN_GAMES = 100
+
     // Storage: past weeks keep only players the model gave at least this many reference points.
     const val PAST_WEEK_MIN_POINTS = 1.0
     // The upcoming week and rest of season keep players above this.
