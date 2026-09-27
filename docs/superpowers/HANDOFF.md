@@ -41,13 +41,17 @@
 - [x] **Session A built** (Tasks 1–4; see "Projection props: execution progress").
 - [x] **Session B built** (Tasks 5–6; see "Projection props: execution progress").
 - [x] **Final whole-branch review** (Opus, 2026-09-27): "with fixes". 0 Critical, 2 Important (plus 1 Minor re-graded to Important), 7 Minor. Fixed in commit 2ff2be2 (see below).
-- [ ] **PR #7 merge** (the user decides).
+- [x] **PR #7 merged** (753e1f1); PR #9 merged (e188dc2).
+- [x] **Sub-project 4 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`.
+- [ ] **Plan approved; execution method** (the user decides).
 
-## Next step: plan sub-project 4 (K/DST)
+## Next step: review the sub-project 4 (K/DST) plan
 
-1. **PR #7 (sub-project 3, props) is merged** (753e1f1).
-2. **The deferred minors are fixed and merged** as PR #9 (e188dc2). See "Deferred minors fixed" below. PR #9 also carried PR #8 (rosters, from another session): ☰ → Rosters, Player page toggles, and the Grid's roster chip.
-3. **Next: sub-project 4 (K/DST)** needs its plan. The spec is §6 of `docs/superpowers/specs/2026-09-26-projection-model-design.md`; write the plan with writing-plans in a fresh session.
+1. **PR #7 (sub-project 3, props) is merged** (753e1f1). **PR #9 (deferred minors, plus rosters) is merged** (e188dc2).
+2. **Sub-project 4 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`, on draft PR #10.
+   - 9 tasks, full code, tests first. Session A = Tasks 1–4 (kicking and D/ST facts, Python parity, scoring), Session B = Tasks 5–8 (kicker and D/ST models, walk-forward, phone), Session C = Task 9 (fit K/DST range widening on real data, docs), then the final whole-branch review.
+   - 13 rulings are at the end of the plan ("Plan self-review"). The ones most worth a look: points allowed stored as one-hot tier facts; `ScoringRule.fallback` so old profiles score K/DST with defaults; Yahoo-style default values on the spec's tiers; the accuracy page measures K/DST but the CI gate stays QB–TE.
+3. **Next: the user reviews the plan and picks an execution method** (subagent-driven or native). Then Session A runs Tasks 1–4.
 4. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape: enter it in ☰ → Settings → Betting props, then Refresh stats. The toast should say "Props moved N projections"; Settings shows credits left.
 5. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
 6. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
