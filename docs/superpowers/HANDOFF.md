@@ -38,7 +38,7 @@
 1. The user reviews `docs/superpowers/plans/2026-09-27-projection-accuracy.md` and picks an execution method. Native was used for sub-project 1.
 2. Run Tasks 1–4 with the `executing-plans` skill, recording each task below under "Projection accuracy: execution progress".
 3. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (commands are in the plan).
-4. Draft PR for this sub-project: see the PR link recorded below once opened.
+4. Draft PR for this sub-project: https://github.com/Palm9999/Lame/pull/5 (watched).
 
 **Things to know:**
 - **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
