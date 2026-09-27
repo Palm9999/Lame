@@ -14,26 +14,38 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.SettingsRepository
+import dev.gridiron.core.data.live.PropsStatus
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import java.time.ZoneId
+import java.util.Locale
 
-/** The seasons the phone builds, newest first. Changes apply on the next refresh. */
+/**
+ * The Odds API key and how props went, then the seasons the phone builds,
+ * newest first. Changes apply on the next refresh.
+ */
 @Composable
-fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit) {
+fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit, props: Flow<PropsStatus>? = null) {
     val selected by settings.seasons.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
@@ -43,6 +55,7 @@ fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit) {
                 TextButton(onClick = onBack) { Text("← Back") }
                 Text("Settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
+            PropsSection(settings, props)
             Text(
                 "Seasons",
                 Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -81,3 +94,52 @@ fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit) {
         }
     }
 }
+
+/** The Odds API key, and how the last props fetch went. */
+@Composable
+private fun PropsSection(settings: SettingsRepository, props: Flow<PropsStatus>?) {
+    val saved by settings.oddsApiKey.collectAsState(initial = null)
+    var draft by remember(saved) { mutableStateOf(saved.orEmpty()) }
+    val scope = rememberCoroutineScope()
+    Text(
+        "Betting props",
+        Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+    )
+    Text(
+        "With a free key from the-odds-api.com, each refresh blends the coming week's player props into the projections. " +
+            "The key is sent only to The Odds API.",
+        Modifier.padding(horizontal = 16.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            modifier = Modifier.weight(1f).testTag("oddsKey"),
+            label = { Text("Odds API key") },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+        )
+        TextButton(onClick = { scope.launch { settings.setOddsApiKey(draft) } }, modifier = Modifier.testTag("saveOddsKey")) { Text("Save") }
+    }
+    val status = props?.collectAsState(initial = null)?.value
+    if (status != null) {
+        Text(
+            propsStatusText(status),
+            Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+/** One line on props, e.g. "412 Odds API credits left. Props fetched Sep 28, 3:10 PM." */
+internal fun propsStatusText(status: PropsStatus, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String =
+    listOfNotNull(
+        status.creditsLeft?.let { "$it Odds API credits left." },
+        status.fetchedAt?.let { "Props fetched ${formatWhen(it, zone, locale)}." },
+        status.error?.let { "Last refresh: $it." },
+    ).joinToString(" ").ifEmpty { "Props are fetched on the next refresh." }
