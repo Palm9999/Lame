@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.projections.ACCURACY_MIN_POINTS
+import dev.gridiron.core.projections.ACCURACY_POSITIONS
 import dev.gridiron.core.projections.ErrorStats
 import dev.gridiron.core.projections.PositionAccuracy
 
@@ -82,12 +83,29 @@ private fun Measured(state: AccuracyState.Loaded, onSeason: (Int) -> Unit) {
                 for (s in state.seasons) FilterChip(selected = s == state.season, onClick = { onSeason(s) }, label = { Text("$s") })
             }
         }
+        if (state.season == state.seasons.minOrNull()) {
+            item {
+                Text(
+                    "${state.season} is the oldest season built, so its projections start without last season's history " +
+                        "and run less accurate. Add the season before it in Settings to measure it fairly.",
+                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         if (state.positions.isEmpty()) {
             item {
-                Text("No player-weeks to measure in ${state.season} yet.", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+                Text("No player-weeks to measure in ${state.season}.", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
             }
         }
         items(state.positions, key = { it.position }) { PositionTable(it) }
+        val missing = ACCURACY_POSITIONS - state.positions.map { it.position }.toSet()
+        if (state.positions.isNotEmpty() && missing.isNotEmpty()) {
+            item {
+                Text("Nothing to measure at ${missing.joinToString()}.", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
+            }
+        }
         item {
             Text(
                 "Counts weeks where the model projected at least ${ACCURACY_MIN_POINTS.toInt()} points and the player played, " +

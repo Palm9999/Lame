@@ -28,6 +28,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import java.time.Instant
+import java.time.ZoneOffset
 
 /** What a build is doing, for a progress line. */
 public sealed interface IngestProgress {
@@ -317,7 +318,13 @@ public class IngestPipeline(
             writer.writeFacts(toFacts(weekly))
             writer.writeTeamDefense(defense.rows())
             val injuriesFile = files[Input.INJURIES]
-            if (injuriesFile == null) warnings += "$season: no injury report published yet"
+            if (injuriesFile == null) {
+                warnings += if (season < currentSeason(now().atZone(ZoneOffset.UTC).toLocalDate())) {
+                    "$season: nflverse has no injury report for this season"
+                } else {
+                    "$season: no injury report published yet"
+                }
+            }
             injuriesFile?.let { readOptional(season, "injury report", it) { f -> openInput(f).use { s -> readInjuries(s, f.name) } } }
                 ?.let(writer::writeInjuries)
             files.values.forEach { it?.delete() }

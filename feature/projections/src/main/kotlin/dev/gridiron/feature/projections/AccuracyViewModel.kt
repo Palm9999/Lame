@@ -63,7 +63,7 @@ public class AccuracyViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                AccuracyState.Unavailable("Couldn't measure accuracy: ${e.message}.")
+                AccuracyState.Unavailable("Couldn't measure accuracy: ${e.message ?: e::class.simpleName}.")
             }
             if (next is AccuracyState.Loaded) shown = Triple(next.season, profile, dataVersion)
             _state.value = next

@@ -51,6 +51,12 @@ class CsvTest {
     }
 
     @Test
+    fun `a missing column names the publisher that changed the file`() {
+        assertEquals("ffopportunity changed column(s) a, b in ep_weekly_2025.csv", MissingColumnsException("ep_weekly_2025.csv", listOf("a", "b")).message)
+        assertEquals("nflverse changed column(s) epa in play_by_play_2025.csv.gz", MissingColumnsException("play_by_play_2025.csv.gz", listOf("epa")).message)
+    }
+
+    @Test
     fun `an absent optional column reads as null`() {
         var present = true
         val out = mutableListOf<String?>()

@@ -272,6 +272,18 @@ class IngestPipelineTest {
         assertTrue(report.facts > 0)
     }
     @Test
+    fun `a past season without an injury report doesn't say one is coming`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        fetcher.remove(Sources.url(Input.INJURIES, 2025))
+
+        val report = pipeline.build(listOf(2025), previous = null, out = File(dir, "stats.db"))
+
+        // 2025 is over (a build always runs in 2026 or later), so nflverse won't publish one.
+        assertTrue(report.warnings.contains("2025: nflverse has no injury report for this season"), "${report.warnings}")
+    }
+
+    @Test
     fun `a renamed player shows the new name even in a copied season`() = runTest {
         servePlayers()
         serveSeason(2025)

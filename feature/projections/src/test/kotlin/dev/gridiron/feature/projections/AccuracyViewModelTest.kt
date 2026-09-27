@@ -142,6 +142,19 @@ class AccuracyViewModelTest {
     }
 
     @Test
+    fun `an error with no message still says what went wrong`() = runTest(dispatcher) {
+        val executor = object : QueryExecutor {
+            override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> = throw IllegalStateException()
+        }
+        val vm = AccuracyViewModel(AccuracyRepository(executor), dispatcher)
+
+        vm.load(2025, ScoringPresets.PPR)
+        advanceUntilIdle()
+
+        assertEquals("Couldn't measure accuracy: IllegalStateException.", (vm.state.value as AccuracyState.Unavailable).message)
+    }
+
+    @Test
     fun `a superseded load is cancelled, not left running`() = runTest(dispatcher) {
         val executor = AccuracyExecutor(ok, firstWeeks = listOf(listOf(2024, 2), listOf(2025, 1)), projected = projected, facts = facts)
         val vm = AccuracyViewModel(AccuracyRepository(executor), dispatcher)

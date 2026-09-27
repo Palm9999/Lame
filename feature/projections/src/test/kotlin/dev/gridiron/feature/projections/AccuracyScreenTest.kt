@@ -66,8 +66,27 @@ class AccuracyScreenTest {
     fun `a season with nothing to measure says so and still offers the others`() {
         compose.setContent { GridironTheme { AccuracyScreen(loaded.copy(positions = emptyList()), onSeason = {}, onBack = {}) } }
 
-        compose.onNodeWithText("No player-weeks to measure in 2025 yet.").assertIsDisplayed()
+        compose.onNodeWithText("No player-weeks to measure in 2025.").assertIsDisplayed()
         compose.onNodeWithText("2024").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a position with nothing to count says so instead of vanishing`() {
+        compose.setContent { GridironTheme { AccuracyScreen(loaded, onSeason = {}, onBack = {}) } }
+
+        compose.onNodeWithText("Nothing to measure at QB, RB, TE.").assertExists()
+    }
+
+    @Test
+    fun `the oldest built season warns that it starts without last season`() {
+        compose.setContent { GridironTheme { AccuracyScreen(loaded.copy(season = 2024), onSeason = {}, onBack = {}) } }
+        compose.onNodeWithText("2024 is the oldest season built", substring = true).assertExists()
+    }
+
+    @Test
+    fun `a later season has no such warning`() {
+        compose.setContent { GridironTheme { AccuracyScreen(loaded, onSeason = {}, onBack = {}) } }
+        compose.onNodeWithText("is the oldest season built", substring = true).assertDoesNotExist()
     }
 
     @Test

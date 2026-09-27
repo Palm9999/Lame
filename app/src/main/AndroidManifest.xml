@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Data ships inside the app; the network is only for "Refresh stats". -->
+    <!-- Stats are built on the phone from nflverse at "Refresh stats"; ESPN news and injuries and, with the
+         user's key, Odds API props are fetched live. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:name=".GridironApplication"

@@ -5,11 +5,14 @@ import java.io.InputStream
 import java.io.Reader
 import java.util.zip.GZIPInputStream
 
-/** A column the build needs is missing from an upstream file: nflverse renamed or dropped it. */
+/** A column the build needs is missing from an upstream file: its publisher renamed or dropped it. */
 public class MissingColumnsException(
     public val source: String,
     public val missing: List<String>,
-) : IllegalStateException("nflverse changed column(s) ${missing.joinToString()} in $source")
+) : IllegalStateException("${publisher(source)} changed column(s) ${missing.joinToString()} in $source")
+
+/** Who publishes [source]: ffopportunity's expected-points files are `ep_*`; everything else is nflverse's. */
+private fun publisher(source: String): String = if (source.startsWith("ep_")) "ffopportunity" else "nflverse"
 
 /**
  * The current data row. Only requested columns are held. An empty field, or a

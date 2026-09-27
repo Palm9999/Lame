@@ -263,7 +263,7 @@ private fun GridContent(
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             onEvent(GridEvent.AddToCompare(row.playerId, row.name))
                         },
-                        // Tap opens the projection for the week after the latest data.
+                        // Tap opens the player's page (status, news and this week's projection).
                         onRowClick = { row -> onPlayer(row.playerId, r.season.season, r.season.lastWeek + 1) },
                     )
                 }
