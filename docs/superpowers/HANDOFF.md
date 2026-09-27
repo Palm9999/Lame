@@ -37,24 +37,19 @@
 - [x] **PR #5 merged** (2026-09-27).
 - [x] **Range calibration fixed and merged** (PR #6, 594867a). See "Range calibration" below.
 - [x] **Sub-project 3 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-props.md`, on draft PR #7.
-- [ ] **Plan approved, and an execution method chosen.** Waiting on the user.
+- [x] **Plan approved; execution method: native** (2026-09-27). The user kept both judgment calls: `MARKET_VARIANCE_RATIO` 0.5 and `ONE_SIDED_OVERROUND` 1.08.
+- [x] **Session A built** (Tasks 1–4; see "Projection props: execution progress").
+- [ ] **Session B** (Tasks 5–6), then the final whole-branch review.
 
-## Next step: review the sub-project 3 plan, then Session A
+## Next step: Session B (Tasks 5–6), then the final review
 
-1. PRs #5 (accuracy) and #6 (range calibration) are merged (594867a).
-2. **Sub-project 3 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-props.md`. It has 6 tasks with full code and tests first. Its rulings are at the end ("Plan self-review").
-   - **Session A** = Tasks 1–4: the prop math, the forecast's blend, the Odds API client and parser, and props in `live.db` within the credit budget.
-   - **Session B** = Tasks 5–6: the key in Settings, and wiring props from Refresh into the forecast, plus docs. Then the final whole-branch review.
-3. **Waiting on the user:** review the plan and choose the execution method (native was used for sub-projects 1 and 2).
-   - Draft PR #7 (https://github.com/Palm9999/Lame/pull/7) carries the plan and will carry the code. CI is green on the plan commit, the PR is watched, and a check-in is scheduled.
-   - PRs #4, #5 and #6 are merged; their watches and check-ins are cancelled.
-4. **Two judgment calls in the plan for the user to confirm.** Props can't be backtested, so neither can be fitted:
-   - The market's weight in the blend is about two thirds (`MARKET_VARIANCE_RATIO` 0.5).
-   - A Yes-only anytime-TD price is discounted by 8% (`ONE_SIDED_OVERROUND` 1.08).
-5. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape.
-6. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should now read about 78–83%.
-7. The deferred minors below (the user decides which).
-8. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
+1. **Session B** = Tasks 5–6 of `docs/superpowers/plans/2026-09-27-projection-props.md`: the key in Settings, and wiring props from Refresh into the forecast, plus docs. Native execution (`executing-plans`), as in Session A.
+2. Then the **final whole-branch review** (fresh reviewer, most capable model) over the whole of PR #7 (base 594867a), with the plan's Review Focus and the rulings below.
+3. Draft PR #7 (https://github.com/Palm9999/Lame/pull/7) carries the plan and Session A's code, and is watched.
+4. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape.
+5. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should now read about 78–83%.
+6. The deferred minors below (the user decides).
+7. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
 
 **Things to know:**
 - **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
@@ -68,7 +63,18 @@
 - **Warnings are errors**, and explicit API mode is on in JVM modules.
 - **Tracking.** The `.superpowers/` ledger doesn't survive the container. Rulings go in this file.
 
-**PRs #4, #5 and #6:** merged. **PR #7** (sub-project 3) is open as a draft and watched.
+**PRs #4, #5 and #6:** merged. **PR #7** (sub-project 3) is open as a draft and watched; it carries Session A's code.
+
+## Projection props: execution progress
+
+**Session A** (2026-09-27). After Task 4: `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` → BUILD SUCCESSFUL.
+
+- [x] Task 1: The prop math (commit 67af351; `./gradlew :core:forecast:test` → 62/62, `PropMathTest` 10/10). Watched failing first (unresolved `normalizeName`, …). No rulings.
+- [x] Task 2: The forecast blends props into the upcoming week (commit f6db6d3; `./gradlew :core:forecast:test :core:ingest:test` → forecast 72/72, `MarketTest` 7/7 and 3 new `ForecastEngineTest` tests). Watched failing first (unresolved `PropCandidate`, `Forecast.run` had no `props`). `FORECAST_VERSION` is 3.
+  - Ruling: the plan changed only `run()`'s final `ProjectionOutcome`, but the early "no schedule" return builds one too and needs the new argument. It reports every prop name as unmatched when props were given, like "no upcoming week". Cost if wrong: a count in the toast for a build with no schedule.
+- [x] Task 3: The Odds API client and parser (commit e4ada44; `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew :core:data:test` → 137 pass, 1 skipped; `OddsTest` 7/7, `UrlConnectionHttpClientTest` 3/3). Watched failing first (unresolved `OddsApi`, …). No rulings.
+- [x] Task 4: Props in `live.db` within the credit budget (commit bf7b432; `./gradlew :core:data:test --tests "dev.gridiron.core.data.live.*"` → pass, `PropsRepositoryTest` 8/8). Watched failing first (unresolved `PropsRepository`, …). No rulings.
+- **Plan rulings to carry** (from the plan's self-review): fixtures hand-built, with anytime TD assumed `Yes`/`No`; market weight about two thirds (`MARKET_VARIANCE_RATIO` 0.5); a one-sided anytime-TD price divided by 1.08; only priced stats move; the fetch week runs to the Wednesday (00:00 UTC) after its first kickoff; props pruned 12 hours after kickoff; rest of season includes the blended week; `live.db` keeps `user_version` 1; `FORECAST_VERSION` 3.
 
 ## Range calibration (2026-09-27)
 
