@@ -107,7 +107,7 @@ private fun LiveInjuriesRoute(
             emptyList()
         }
         groups = injuryReport(live.injuries(), official)
-        asOf = live.fetchedAt()
+        asOf = live.injuriesFetchedAt()
     }
     LiveInjuriesScreen(groups, asOf, error, onBack, onPlayer)
 }

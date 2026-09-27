@@ -241,7 +241,18 @@ public class IngestPipeline(
                 r == FetchResult.NotModified ||
                     (r == FetchResult.NotPublished && prior?.containsKey(Sources.metaKey(input, season)) != true)
             }
-            if (unchanged) reuse(season, writer) else crunch(season, first, writer, crosswalk)
+            if (unchanged) {
+                try {
+                    reuse(season, writer)
+                    return
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // A damaged previous database would otherwise fail every refresh: rebuild the season instead.
+                    warnings += "$season: couldn't copy it from the last build (${e.message}); rebuilt it"
+                }
+            }
+            crunch(season, first, writer, crosswalk)
         }
 
         private fun reuse(season: Int, writer: StatsDbWriter) {

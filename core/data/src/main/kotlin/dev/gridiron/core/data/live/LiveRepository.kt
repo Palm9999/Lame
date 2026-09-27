@@ -69,6 +69,12 @@ public class LiveRepository(
         if (asOf != null && Duration.between(asOf, clock()) < maxAge) null else saving { fetchAll() }
     }
 
+    /** When ESPN's news last arrived, or null if it never has. */
+    public suspend fun newsFetchedAt(): Instant? = readOr(null) { c -> c.meta(NEWS_AT)?.toLongOrNull()?.let(Instant::ofEpochMilli) }
+
+    /** When ESPN's injuries last arrived, or null if they never have. */
+    public suspend fun injuriesFetchedAt(): Instant? = readOr(null) { c -> c.meta(INJURIES_AT)?.toLongOrNull()?.let(Instant::ofEpochMilli) }
+
     /** When both feeds had last arrived: the older of the two times, or null if either never has. */
     public suspend fun fetchedAt(): Instant? = readOr(null) { c ->
         val times = listOf(NEWS_AT, INJURIES_AT).map { c.meta(it)?.toLongOrNull() }

@@ -51,7 +51,7 @@ fun NewsRoute(live: LiveRepository, onBack: () -> Unit, onPlayer: (String) -> Un
     LaunchedEffect(Unit) { error = live.refreshIfStale()?.newsError }
     LaunchedEffect(version) {
         items = live.news()
-        asOf = live.fetchedAt()
+        asOf = live.newsFetchedAt()
     }
     val uri = LocalUriHandler.current
     NewsScreen(items, asOf, error, onBack, onOpen = { uri.openSafely(it) }, onPlayer = onPlayer)

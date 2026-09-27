@@ -255,6 +255,22 @@ class IngestPipelineTest {
         assertTrue(fetcher.calls.all { (_, previous) -> previous == null })
     }
 
+
+    @Test
+    fun `a previous database whose stats can't be copied has that season rebuilt, not the refresh failed`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2025), null, first)
+        // Its meta still reads, but the stats table is gone: a damaged file the copy can't use.
+        BundledSQLiteDriver().open(first.path).use { it.execSQL("DROP TABLE player_week_stat") }
+
+        val report = pipeline.build(listOf(2025), first, File(dir, "second.db"))
+
+        assertEquals(listOf(2025), report.built)
+        assertEquals(emptyList<Int>(), report.reused)
+        assertTrue(report.facts > 0)
+    }
     @Test
     fun `a renamed player shows the new name even in a copied season`() = runTest {
         servePlayers()

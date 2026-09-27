@@ -183,4 +183,15 @@ class LiveRepositoryTest {
         live.refresh()
         assertEquals(before + 1, live.changes.value)
     }
+
+    @Test
+    fun `each feed keeps its own fetch time, so injuries show their as-of when news failed`() = runTest {
+        responses[EspnParser.INJURIES_URL] = { recorded("injuries.json") }
+
+        live.refresh()
+
+        assertEquals(now, live.injuriesFetchedAt())
+        assertNull(live.newsFetchedAt())
+        assertNull(live.fetchedAt()) // "both feeds" still needs both
+    }
 }

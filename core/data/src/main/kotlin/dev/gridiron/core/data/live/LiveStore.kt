@@ -97,7 +97,12 @@ internal fun SQLiteConnection.saveNews(articles: List<NewsArticle>, playerIds: M
  */
 internal fun SQLiteConnection.saveInjuries(injuries: List<EspnInjury>, playerIds: Map<String, String>, now: Instant) {
     prepare("SELECT comment FROM injury_note WHERE espn_id = ? ORDER BY noted_at DESC LIMIT 1").use { latest ->
-        prepare("INSERT OR IGNORE INTO injury_note (espn_id, noted_at, player_id, status, comment) VALUES (?, ?, ?, ?, ?)").use { add ->
+        // A changed comment ESPN dates the same as the last one replaces it rather than being dropped.
+        prepare(
+            """INSERT INTO injury_note (espn_id, noted_at, player_id, status, comment) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT (espn_id, noted_at) DO UPDATE SET player_id = excluded.player_id, status = excluded.status,
+                   comment = excluded.comment""",
+        ).use { add ->
             for (i in injuries) {
                 val comment = i.shortComment ?: continue
                 latest.reset()

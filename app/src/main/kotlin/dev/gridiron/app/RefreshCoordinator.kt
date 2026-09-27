@@ -79,6 +79,8 @@ class RefreshCoordinator(
     /** Fetches the upcoming week's props before the build; null when the app has no props at all (tests). */
     private val props: (suspend () -> PropsFetch)? = null,
     private val millis: () -> Long = { System.nanoTime() / 1_000_000 },
+    /** The build's download folder; its files are only ever left behind by a killed process. */
+    workDir: File? = null,
 ) : Refresher {
     private val db = File(dir, DB_NAME)
     private val next = File(dir, "$DB_NAME.new")
@@ -94,6 +96,12 @@ class RefreshCoordinator(
     override val legacyData: StateFlow<Boolean> = _legacy.asStateFlow()
 
     private var job: Job? = null
+
+    init {
+        // No refresh runs yet, so a stats.db.new or a download here was left by a process Android killed mid-build.
+        next.delete()
+        workDir?.listFiles()?.forEach { it.delete() }
+    }
 
     @Synchronized
     override fun refresh(): Boolean {

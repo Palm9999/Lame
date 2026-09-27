@@ -53,12 +53,14 @@ class GridironApplication : Application() {
     private val live by lazy { LiveRepository(liveDb, UrlConnectionHttpGet(), players) }
     private val propsRepo by lazy { PropsRepository(liveDb, UrlConnectionHttpClient()) }
 
+    private val workDir by lazy { File(noBackupFilesDir, "ingest-work") }
+
     private val refresher by lazy {
         RefreshCoordinator(
             dir = noBackupFilesDir,
             executor = executor,
             stats = { seasons, previous, out, props, onProgress ->
-                IngestPipeline(HttpFetcher(), File(noBackupFilesDir, "ingest-work"), File(noBackupFilesDir, "players.csv.gz"))
+                IngestPipeline(HttpFetcher(), workDir, File(noBackupFilesDir, "players.csv.gz"))
                     .build(seasons, previous, out, props, onProgress)
             },
             seasons = { settings.seasons.first() },
@@ -73,6 +75,7 @@ class GridironApplication : Application() {
                     PropsFetch(propsRepo.snapshot(), error)
                 }
             },
+            workDir = workDir,
         )
     }
 
