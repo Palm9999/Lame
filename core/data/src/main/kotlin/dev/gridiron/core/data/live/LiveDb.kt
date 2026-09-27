@@ -29,6 +29,13 @@ private val LIVE_SCHEMA = listOf(
         espn_id TEXT NOT NULL, noted_at INTEGER NOT NULL, player_id TEXT, status TEXT NOT NULL,
         comment TEXT NOT NULL, PRIMARY KEY (espn_id, noted_at)) WITHOUT ROWID""",
     "CREATE INDEX IF NOT EXISTS idx_injury_note_player ON injury_note (player_id)",
+    """CREATE TABLE IF NOT EXISTS prop_event (
+        id TEXT PRIMARY KEY, commence INTEGER NOT NULL, home TEXT NOT NULL, away TEXT NOT NULL,
+        fetched_at INTEGER) WITHOUT ROWID""",
+    """CREATE TABLE IF NOT EXISTS prop_line (
+        event_id TEXT NOT NULL, book TEXT NOT NULL, market TEXT NOT NULL, player TEXT NOT NULL,
+        point REAL NOT NULL, over REAL, under REAL,
+        PRIMARY KEY (event_id, book, market, player, point)) WITHOUT ROWID""",
 )
 
 /**
