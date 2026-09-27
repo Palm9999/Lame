@@ -46,7 +46,7 @@
 - [x] **Plan revised for the user's rulings** (2026-09-27). The user overturned four of the first draft's rulings: editable points-allowed tiers (ESPN's by default), a one-time prefs migration instead of `fallback`, K and D/ST chips on the Grid, and a CI gate that covers K and D/ST. The plan grew from 9 to 11 tasks.
 - [ ] **Plan approved; execution method** (the user decides).
 
-## Next step: approve the revised sub-project 4 (K/DST) plan
+## Next step: sub-project 4 (K/DST) Session A, Tasks 1–4
 
 1. **PR #7 (sub-project 3, props) is merged** (753e1f1). **PR #9 (deferred minors, plus rosters) is merged** (e188dc2).
 2. **Sub-project 4 plan, revised** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`, on draft PR #10. It has 11 tasks, with full code and tests written first.
@@ -59,7 +59,7 @@
    - **Gate:** covers K and D/ST. If either loses, Task 11 tunes its constants (up to 8 rebuilds, then it asks).
    - **Grid:** K and D/ST chips with their own packs (Kicking, Defense). Every other chip leaves them out.
    - The other rulings are listed at the end of the plan. Worth a look: the kicking defaults (3/4/5, −1, 1, −1) are the common values, not checked against ESPN's, and ESPN's yards-allowed and blocked-kick D/ST scoring isn't modeled.
-4. **Next: the user approves the revised plan and picks an execution method** (subagent-driven or native). Then Session A runs Tasks 1–4.
+4. **Plan approved; execution method: native** (the user, 2026-09-27). The next session runs Session A (Tasks 1–4) itself with the `executing-plans` skill, then ticks each task and records its rulings here. One fresh reviewer on the most capable model checks the whole branch after Task 11.
 5. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape: enter it in ☰ → Settings → Betting props, then Refresh stats. The toast should say "Props moved N projections"; Settings shows credits left.
 6. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
 7. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
