@@ -46,12 +46,12 @@
 - [x] **Plan revised for the user's rulings** (2026-09-27). The user overturned four of the first draft's rulings: editable points-allowed tiers (ESPN's by default), a one-time prefs migration instead of `fallback`, K and D/ST chips on the Grid, and a CI gate that covers K and D/ST. The plan grew from 9 to 11 tasks.
 - [x] **Plan approved; execution method: native** (the user, 2026-09-27).
 - [x] **Session A built** (Tasks 1–4; see "K and D/ST: execution progress").
-- [ ] **Session B** (Tasks 5–8).
+- [x] **Session B built** (Tasks 5–8; see "K and D/ST: execution progress").
 - [ ] **Session C** (Tasks 9–11), then the final whole-branch review.
 
-## Next step: sub-project 4 (K/DST) Session B, Tasks 5–8
+## Next step: sub-project 4 (K/DST) Session C, Tasks 9–11
 
-**Start here.** Run Session B (Tasks 5–8) with the `executing-plans` skill: prefs migration and the tier editor, the Grid's K and D/ST chips, the kicker and D/ST models. Session A's results and rulings are under "K and D/ST: execution progress" below. **The branch's CI is red on one test until Task 5** (see Session A's last ruling); Task 5 turns it green.
+**Start here.** Run Session C (Tasks 9–11) with the `executing-plans` skill: the walk-forward, the phone, then the gate at six positions and range widening, and docs. Then the final whole-branch review on the most capable model. Sessions A and B's results and rulings are under "K and D/ST: execution progress" below. The ledger (`.superpowers/sdd/2026-09-27-projection-kdst/progress.md`) survives only while this container does.
 
 
 1. **PR #7 (sub-project 3, props) is merged** (753e1f1). **PR #9 (deferred minors, plus rosters) is merged** (e188dc2).
@@ -84,6 +84,17 @@
   - Ruling: `ScoringProfileTest` pinned 25 rules; it's now 36. Cost if wrong: none, test-only.
   - Ruling (a real bug the contract test found): D/ST and kick-only weeks have no `team_targets` or `team_air_yards`, and WOPR turned missing ratios into 0, so the Grid showed a D/ST's WOPR as 0.00 where nothing is stored. WOPR is now null when none of its terms has a denominator. Offense weeks always store `team_targets`, so their values don't change. Test: `a week with no team targets or air yards at all has no WOPR`, seen failing first. Cost if wrong: a kicker or D/ST shows "—" instead of 0.00 WOPR.
   - Ruling: the whole suite has one failure, `UserPrefsStoreTest`'s `profiles, active id and tray survive a reopen`. Presets now carry tiers, and prefs only save them from Task 5 (`ProfileDto.pointsAllowed`, whose failing test is Task 5's Step 1). It's left red rather than pulling Task 5 forward, which would make that test pass before its code. Cost if wrong: the branch's CI is red on this one test until Session B's Task 5.
+
+**Session B (2026-09-27), Tasks 5–8.** Base b5a7a95. After Task 8, `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` → BUILD SUCCESSFUL. Session A's red `UserPrefsStoreTest` test is green.
+
+- [x] **Task 5, saved tiers, migration and tier editor** (e86e1a2). Prefs `FORMAT_VERSION` 2, `ProfileDto.pointsAllowed`, the one-time migration, the Points allowed section in the scoring editor. `:core:datastore:test` and `:feature:scoring:testDebugUnitTest` green; `scoring_4_tiers.png` and `scoring_2_editor_dark.png` checked (nothing clipped).
+  - Ruling: `UserPrefsStoreTest`'s `unknown rules and invalid entries are dropped, the rest kept` wrote a version-1 file, so the migration added the K/D/ST defaults to its expected weights. The plan missed it. Its file is now version 2, so it still tests dropping unknown entries (the migration has its own test). Cost if wrong: none, test-only.
+  - Ruling: the plan's `editingTiersAndSavingPersistsThemInOrder` kept a tier starting at 21, but ESPN's tiers start at 18 (18–21 scores 0). It now keeps 0, 14 and 18 and expects (18, 0.0). The code is as planned. Cost if wrong: none, test-only.
+- [x] **Task 6, K and D/ST chips on the Grid** (6b36d21). `excludedPositions`, the Kicking and Defense packs, `PositionFilter.K`/`DST`, chips that bring their packs, no snap chip under K and D/ST. `:core:statquery`, `:core:data` (real data) and `:feature:players` tests green; the Grid's screenshots re-recorded and checked (`grid_dst.png` is new).
+  - Ruling: `RealDatabaseContractTest`'s `scoring a full season for every player is fast` fails in this container (median about 300 ms against the 250 ms local budget; CI's is 1,000 ms). It fails the same way at pre-Task-4 code on this database (about 297 ms) and on the older pre-K/DST `accuracy.db` (about 283 ms), so it's this container's slower CPU, not a regression. The task's completion run used `CI=1` for the CI budget. Cost if wrong: a real scoring slowdown hides behind a slow machine; CI's budget still guards it.
+  - Note: `stats.db` wasn't rebuilt in this task. No ingest code changed since Task 4's rebuild.
+- [x] **Task 7, kicker inputs and model** (711c4d9). `Kicker.kt`, `UNIT_POSITIONS`, `ForecastInputs.units`/`unitHistory`, K model constants. `KickerTest` 6/6, `InputsTest` 3/3.
+- [x] **Task 8, D/ST model** (1fcb6c0). `Defense.kt`, D/ST constants. `DefenseTest` 5/5.
 
 ## Deferred minors fixed (2026-09-27)
 
