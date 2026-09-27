@@ -11,6 +11,7 @@ import dev.gridiron.core.projections.PositionAccuracy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,13 +42,21 @@ public class AccuracyViewModel(
     private val _state = MutableStateFlow<AccuracyState>(AccuracyState.Loading)
     public val state: StateFlow<AccuracyState> = _state.asStateFlow()
 
-    // A load superseded by a newer one (another season, a profile switch) must not overwrite it.
-    private var latest = 0
+    // The season and profile asked for last, and the season that request showed:
+    // asking again for either (a rotation re-emits the profile) keeps the page.
+    private var requested: Pair<Int, ScoringProfile>? = null
+    private var shown: Pair<Int, ScoringProfile>? = null
+    private var job: Job? = null
 
     public fun load(season: Int, profile: ScoringProfile) {
-        val request = ++latest
+        val key = season to profile
+        if (key == requested || key == shown) return
+        requested = key
+        shown = null
+        // A superseded load (another season, a profile switch) stops rather than finishing unseen.
+        job?.cancel()
         _state.value = AccuracyState.Loading
-        viewModelScope.launch {
+        job = viewModelScope.launch {
             val next = try {
                 build(season, profile)
             } catch (e: CancellationException) {
@@ -55,7 +64,8 @@ public class AccuracyViewModel(
             } catch (e: Exception) {
                 AccuracyState.Unavailable("Couldn't measure accuracy: ${e.message}.")
             }
-            if (request == latest) _state.value = next
+            if (next is AccuracyState.Loaded) shown = next.season to profile
+            _state.value = next
         }
     }
 

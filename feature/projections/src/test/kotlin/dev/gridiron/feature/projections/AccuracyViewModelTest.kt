@@ -31,7 +31,11 @@ private class AccuracyExecutor(
     private val projected: List<List<Any?>> = emptyList(),
     private val facts: List<List<Any?>> = emptyList(),
 ) : QueryExecutor {
+    /** How many backtests read the played weeks: one per computation. */
+    var statReads = 0
+
     override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
+        if ("FROM player_week_stat" in query.sql) statReads++
         val rows = when {
             "schema_meta" in query.sql -> meta.map { listOf(it.first, it.second) }
             "MIN(week)" in query.sql -> firstWeeks
@@ -99,6 +103,41 @@ class AccuracyViewModelTest {
         val loaded = vm.state.value as AccuracyState.Loaded
         assertEquals(2025, loaded.season)
         assertEquals(listOf(2024, 2025), loaded.seasons)
+    }
+
+    @Test
+    fun `asking again for the season on screen keeps it without recomputing`() = runTest(dispatcher) {
+        // Rotating the phone re-emits the active profile, and the route asks again.
+        val executor = AccuracyExecutor(ok, firstWeeks = listOf(listOf(2025, 1)), projected = projected, facts = facts)
+        val vm = AccuracyViewModel(AccuracyRepository(executor), dispatcher)
+
+        vm.load(2025, ScoringPresets.PPR)
+        advanceUntilIdle()
+        vm.load(2025, ScoringPresets.PPR)
+        assertEquals(2025, (vm.state.value as AccuracyState.Loaded).season)
+        advanceUntilIdle()
+
+        assertEquals(1, executor.statReads)
+        // The Grid's season fell back to 2025; tapping the 2025 chip is the same season.
+        val fellBack = AccuracyViewModel(AccuracyRepository(executor), dispatcher)
+        fellBack.load(2026, ScoringPresets.PPR)
+        advanceUntilIdle()
+        fellBack.load(2025, ScoringPresets.PPR)
+        advanceUntilIdle()
+        assertEquals(2, executor.statReads)
+    }
+
+    @Test
+    fun `a superseded load is cancelled, not left running`() = runTest(dispatcher) {
+        val executor = AccuracyExecutor(ok, firstWeeks = listOf(listOf(2024, 2), listOf(2025, 1)), projected = projected, facts = facts)
+        val vm = AccuracyViewModel(AccuracyRepository(executor), dispatcher)
+
+        vm.load(2024, ScoringPresets.PPR)
+        vm.load(2025, ScoringPresets.PPR)
+        advanceUntilIdle()
+
+        assertEquals(1, executor.statReads)
+        assertEquals(2025, (vm.state.value as AccuracyState.Loaded).season)
     }
 
     @Test
