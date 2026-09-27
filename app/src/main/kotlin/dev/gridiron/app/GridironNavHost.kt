@@ -168,17 +168,23 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                     }
                     entry<ScoringEditKey> { key -> ScoringEditRoute(key.profileId, deps.scoring, onDone = back) }
                     entry<ProjectionsKey> { key ->
-                        ProjectionsRoute(key.playerId, key.season, key.week, deps.projections, deps.scoring, deps.players, onBack = back)
+                        ProjectionsRoute(
+                            key.playerId, key.season, key.week, deps.projections, deps.scoring, deps.players, onBack = back,
+                            dataVersion = deps.stats.dataVersion,
+                        )
                     }
                     entry<ProjectionListKey> { key ->
                         ProjectionListRoute(
                             key.season, deps.projections, deps.scoring, deps.live?.badges ?: flowOf(emptyMap()),
-                            onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back,
+                            onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
                         )
                     }
-                    entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, deps.scoring, onBack = back) }
+                    entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, deps.scoring, onBack = back, dataVersion = deps.stats.dataVersion) }
                     entry<InjuriesKey> { key ->
-                        InjuriesRoute(key.season, currentSeason(), deps.teams, deps.live, onBack = back, onPlayer = { backStack.push(PlayerKey(it)) })
+                        InjuriesRoute(
+                            key.season, currentSeason(), deps.teams, deps.live, onBack = back,
+                            onPlayer = { backStack.push(PlayerKey(it)) }, dataVersion = deps.stats.dataVersion,
+                        )
                     }
                     entry<NewsKey> {
                         deps.live?.let { NewsRoute(it, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
@@ -188,9 +194,10 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             key.playerId, deps.players, deps.live, onBack = back,
                             projections = deps.projections, scoring = deps.scoring,
                             onProjection = { season, week -> backStack.push(ProjectionsKey(key.playerId, season, week)) },
+                            dataVersion = deps.stats.dataVersion,
                         )
                     }
-                    entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back) }
+                    entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }
                     entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back, props = deps.props?.status) } }
                 },
             )

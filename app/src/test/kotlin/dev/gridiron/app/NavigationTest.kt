@@ -4,6 +4,7 @@ import android.os.Looper
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -193,7 +194,11 @@ class NavigationTest {
         settle()
 
         compose.onNodeWithContentDescription(first, substring = true).performClick()
-        settle()
+        // The page scores this week's projection off the main thread: wait for it to land.
+        compose.waitUntil(timeoutMillis = 30_000) {
+            settle()
+            compose.onAllNodesWithTag("playerName").fetchSemanticsNodes().isNotEmpty()
+        }
 
         compose.onNodeWithTag("playerName").assertTextEquals(first)
         compose.onNodeWithText("Live injuries and news aren't available.").assertExists()

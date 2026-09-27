@@ -23,6 +23,8 @@ import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.model.Position
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
 /** Hosts [WaterfallCard] for one player's week, scored with the active profile and the player's own position. */
 @Composable
@@ -35,12 +37,16 @@ public fun ProjectionsRoute(
     players: PlayerDirectory?,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Bumped when a refresh swaps in new stats: the waterfall loads again. */
+    dataVersion: Flow<Long> = flowOf(0L),
 ) {
     val vm: ProjectionsViewModel = viewModel(factory = ProjectionsViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
     val profile by scoring.active.collectAsStateWithLifecycle(initialValue = null)
 
-    LaunchedEffect(playerId, season, week, profile) {
+    val version by dataVersion.collectAsStateWithLifecycle(initialValue = 0L)
+
+    LaunchedEffect(playerId, season, week, profile, version) {
         val active = profile ?: return@LaunchedEffect
         val position = players?.header(playerId)?.position?.let(Position::fromCode)
         vm.load(playerId, season, week, active, position)

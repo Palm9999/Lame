@@ -44,6 +44,7 @@ import dev.gridiron.feature.projections.ProjectionCard
 import dev.gridiron.feature.projections.ThisWeekCard
 import dev.gridiron.feature.projections.loadProjectionCard
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -70,12 +71,15 @@ fun PlayerRoute(
     projections: ProjectionsRepository? = null,
     scoring: ScoringRepository? = null,
     onProjection: (season: Int, week: Int) -> Unit = { _, _ -> },
+    /** Bumped when a refresh swaps in new stats: the page loads again. */
+    dataVersion: Flow<Long> = NO_CHANGES,
 ) {
     val version by (live?.changes ?: NO_CHANGES).collectAsState()
+    val stats by dataVersion.collectAsState(initial = 0L)
     val profile by remember(scoring) { scoring?.active ?: flowOf(null) }.collectAsState(initial = null)
     var page by remember(playerId) { mutableStateOf<PlayerPage?>(null) }
     LaunchedEffect(Unit) { live?.refreshIfStale() }
-    LaunchedEffect(playerId, version, profile) {
+    LaunchedEffect(playerId, version, stats, profile) {
         val header = players?.header(playerId)
         val status = live?.status(playerId)
         val active = profile

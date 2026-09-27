@@ -19,6 +19,9 @@ import dev.gridiron.core.projections.RosProjectionsRequest
 import dev.gridiron.core.projections.projectPoints
 import dev.gridiron.core.projections.score
 import dev.gridiron.core.statquery.Component
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import kotlin.math.abs
 
@@ -56,6 +59,8 @@ public suspend fun loadProjectionCard(
     profile: ScoringProfile,
     position: Position?,
     injuryAbbr: String?,
+    /** Where the scoring and the simulation run: never the main thread. */
+    compute: CoroutineDispatcher = Dispatchers.Default,
 ): ProjectionCard? {
     val status = repository.status()
     if (status.status != "ok") return null
@@ -63,7 +68,7 @@ public suspend fun loadProjectionCard(
     val final = repository.projections(ProjectionsRequest(setOf(playerId), season, week)).firstOrNull()?.final.orEmpty()
     val game = team?.let { repository.game(season, week, it) }
     val ros = repository.rosProjections(RosProjectionsRequest(setOf(playerId), season)).firstOrNull()
-    val rosPoints = ros?.let { r -> score(r.components.associate { Component(it.metricId) to it.mean }, profile, position) }
+    val rosPoints = ros?.let { r -> withContext(compute) { score(r.components.associate { Component(it.metricId) to it.mean }, profile, position) } }
     val gamesLeft = team?.let { repository.remainingGames(season, week, it) } ?: 0
     val rosPerGame = rosPoints?.takeIf { gamesLeft > 0 }?.let { it / gamesLeft }
     if (final.isEmpty()) {
@@ -71,7 +76,7 @@ public suspend fun loadProjectionCard(
         return ProjectionCard(season, week, null, null, 0.0, 0.0, 0.0, rosPoints, rosPerGame, out = false, bye = true)
     }
     val out = injuryAbbr in OUT_ABBRS
-    val points = projectPoints(final, profile, position)
+    val points = withContext(compute) { projectPoints(final, profile, position) }
     return ProjectionCard(
         season = season,
         week = week,
