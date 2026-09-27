@@ -5,6 +5,7 @@ import androidx.datastore.core.Serializer
 import dev.gridiron.core.model.BonusStat
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.Position
+import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.ScoringRule
 import dev.gridiron.core.model.WeekRange
@@ -30,6 +31,7 @@ internal data class UserPrefsDto(
     val resetNotice: Boolean = false,
     val seasons: List<Int>? = null,
     val seasonsChosenIn: Int? = null,
+    val rosters: List<RosterDto> = emptyList(),
 )
 
 @Serializable
@@ -47,6 +49,9 @@ internal data class BonusDto(val stat: String, val min: Int, val maxExclusive: I
 
 @Serializable
 internal data class SlotDto(val playerId: String, val season: Int, val firstWeek: Int, val lastWeek: Int)
+
+@Serializable
+internal data class RosterDto(val id: String, val name: String, val playerIds: List<String> = emptyList())
 
 internal const val FORMAT_VERSION = 1
 
@@ -82,7 +87,9 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
     }
     val tray = tray.mapNotNull { s -> orNull { CompareSlot(s.playerId, s.season, WeekRange(s.firstWeek, s.lastWeek)) } }
     val choice = seasons?.let { s -> seasonsChosenIn?.let { SeasonChoice(s.distinct().sorted(), it) } }
-    return UserPrefs(profiles, activeProfileId ?: UserPrefs.DEFAULT.activeProfileId, tray, resetNotice, choice)
+    val rosters = rosters.mapNotNull { r -> orNull { Roster(r.id, r.name, r.playerIds.filter { it.isNotBlank() }.distinct()) } }
+        .distinctBy { it.id }
+    return UserPrefs(profiles, activeProfileId ?: UserPrefs.DEFAULT.activeProfileId, tray, resetNotice, choice, rosters)
 }
 
 internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
@@ -101,6 +108,7 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     resetNotice = resetNotice,
     seasons = seasons?.seasons,
     seasonsChosenIn = seasons?.chosenIn,
+    rosters = rosters.map { RosterDto(it.id, it.name, it.playerIds) },
 )
 
 internal object UserPrefsSerializer : Serializer<UserPrefs> {

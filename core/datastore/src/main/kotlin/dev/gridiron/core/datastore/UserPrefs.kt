@@ -1,6 +1,7 @@
 package dev.gridiron.core.datastore
 
 import dev.gridiron.core.model.CompareSlot
+import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.ScoringProfile
 
@@ -11,6 +12,7 @@ import dev.gridiron.core.model.ScoringProfile
  * @property resetNotice Set when an unreadable file was replaced with defaults,
  *   so the app can say so once; cleared when the notice has been shown.
  * @property seasons The seasons to build; null means the default (the current season and the two before it).
+ * @property rosters The user's fantasy teams, in the order created.
  */
 public data class UserPrefs(
     val profiles: List<ScoringProfile>,
@@ -18,6 +20,7 @@ public data class UserPrefs(
     val tray: List<CompareSlot>,
     val resetNotice: Boolean = false,
     val seasons: SeasonChoice? = null,
+    val rosters: List<Roster> = emptyList(),
 ) {
     /** The active profile, falling back to PPR if its id no longer exists. */
     public val active: ScoringProfile
