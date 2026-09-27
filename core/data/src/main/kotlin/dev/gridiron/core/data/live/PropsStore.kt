@@ -42,7 +42,7 @@ internal fun SQLiteConnection.propFetchTimes(): Map<String, Instant?> =
         buildMap { while (st.step()) put(st.getText(0), if (st.isNull(1)) null else Instant.ofEpochMilli(st.getLong(1))) }
     }
 
-/** Replaces one game's lines with [quotes] and marks it fetched at [at]. */
+/** Replaces one game's lines with [quotes] and, when there are any, marks it fetched at [at]. */
 internal fun SQLiteConnection.saveLines(eventId: String, quotes: List<PropQuote>, at: Instant) {
     prepare("DELETE FROM prop_line WHERE event_id = ?").use {
         it.bindText(1, eventId)
@@ -62,6 +62,7 @@ internal fun SQLiteConnection.saveLines(eventId: String, quotes: List<PropQuote>
             st.step()
         }
     }
+    if (quotes.isEmpty()) return
     prepare("UPDATE prop_event SET fetched_at = ? WHERE id = ?").use {
         it.bindLong(1, at.toEpochMilli())
         it.bindText(2, eventId)

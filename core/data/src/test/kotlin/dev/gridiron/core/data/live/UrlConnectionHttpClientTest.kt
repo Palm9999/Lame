@@ -57,6 +57,22 @@ class UrlConnectionHttpClientTest {
     }
 
     @Test
+    fun `a redirect is returned, not followed, so the key never reaches another host`() = runTest {
+        var followed = false
+        server.createContext("/elsewhere") { ex ->
+            followed = true
+            ex.sendResponseHeaders(200, -1)
+            ex.close()
+        }
+        respond("/moved", 302, "", mapOf("Location" to url("/elsewhere")))
+
+        val response = UrlConnectionHttpClient().get(url("/moved?apiKey=SECRET123"))
+
+        assertEquals(302, response.code)
+        assertFalse(followed)
+    }
+
+    @Test
     fun `no response at all is an IOException that doesn't repeat the URL`() = runTest {
         val dead = url("/events?apiKey=SECRET123")
         server.stop(0)

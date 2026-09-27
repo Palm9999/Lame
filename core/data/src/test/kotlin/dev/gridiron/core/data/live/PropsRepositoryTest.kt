@@ -81,11 +81,12 @@ class PropsRepositoryTest {
 
         now = now.plus(Duration.ofHours(23))
         assertNull(props.refresh(KEY))
-        assertEquals(listOf(events), urls)
+        // e1 had no props yet, so it's asked again; e2's are fresh.
+        assertEquals(listOf(events, odds("e1")), urls)
 
         now = now.plus(Duration.ofHours(2))
         props.refresh(KEY)
-        assertEquals(listOf(events, events, odds("e1"), odds("e2")), urls)
+        assertEquals(listOf(events, odds("e1"), events, odds("e1"), odds("e2")), urls)
     }
 
     @Test
@@ -96,7 +97,8 @@ class PropsRepositoryTest {
 
         assertEquals("out of Odds API credits (2 left)", error)
         assertEquals(listOf(events, odds("e1")), urls)
-        assertEquals(PropsStatus(creditsLeft = 2, fetchedAt = now, error = error), props.status.first())
+        // e1 had no props posted, so none have arrived yet.
+        assertEquals(PropsStatus(creditsLeft = 2, fetchedAt = null, error = error), props.status.first())
     }
 
     @Test
@@ -160,6 +162,32 @@ class PropsRepositoryTest {
         assertEquals(Instant.parse("2026-10-07T00:00:00Z"), nextWednesday(Instant.parse("2026-10-02T00:15:00Z")))
         // A Wednesday game (Christmas) starts a week that runs to the next Wednesday.
         assertEquals(Instant.parse("2026-12-30T00:00:00Z"), nextWednesday(Instant.parse("2026-12-23T18:00:00Z")))
+    }
+
+    @Test
+    fun `a game with no props yet is asked again on the next refresh, once they're posted`() = runTest {
+        serveWeek()
+        props.refresh(KEY)
+        responses[odds("e1")] = { ok(recorded("odds-e2.json").replace("\"e2\"", "\"e1\""), 460) }
+        urls.clear()
+
+        now = now.plus(Duration.ofHours(2))
+        assertNull(props.refresh(KEY))
+
+        assertEquals(listOf(events, odds("e1")), urls)
+        assertEquals(2, props.snapshot()!!.events.size)
+    }
+
+    @Test
+    fun `a game's props are dropped 12 hours after kickoff even when the Odds API refuses the key`() = runTest {
+        serveWeek()
+        props.refresh(KEY)
+        responses[events] = { HttpResponse(401, recorded("error.json")) }
+
+        now = Instant.parse("2026-10-04T17:00:00Z").plus(Duration.ofHours(13))
+        props.refresh(KEY)
+
+        assertNull(props.snapshot())
     }
 
     private companion object {

@@ -107,13 +107,12 @@ public class PropsRepository(
 
     private suspend fun fetch(key: String): String? {
         val now = clock()
+        // Before any call, so finished games go even when the Odds API can't be reached.
+        db.write { it.pruneProps(now.minus(PRUNE_AFTER)) }
         val listing = call(OddsApi.eventsUrl(key))
         problem(listing)?.let { return it }
         val week = upcomingWeek(OddsApi.events(listing.body), now)
-        db.write { c ->
-            c.pruneProps(now.minus(PRUNE_AFTER))
-            c.saveEvents(week)
-        }
+        db.write { it.saveEvents(week) }
         val fetched = db.read { it.propFetchTimes() }
         for (event in week.sortedBy { it.commence }) {
             val last = fetched[event.id]
@@ -126,7 +125,8 @@ public class PropsRepository(
             val quotes = OddsApi.quotes(response.body)
             db.write { c ->
                 c.saveLines(event.id, quotes, now)
-                c.setMeta(FETCHED_AT, now.toEpochMilli().toString())
+                // An empty answer costs nothing, and props are often posted mid-week: ask again next refresh.
+                if (quotes.isNotEmpty()) c.setMeta(FETCHED_AT, now.toEpochMilli().toString())
             }
         }
         return null

@@ -37,7 +37,9 @@ public fun interface HttpClient {
 
 /**
  * [HttpClient] over the JDK's connection. Its [IOException]s name only the
- * host: a URL can carry an API key, so it never goes into a message.
+ * host: a URL can carry an API key, so it never goes into a message. A
+ * redirect is returned as it is, never followed, so the key stays with the
+ * host it was meant for.
  */
 public class UrlConnectionHttpClient(
     private val connectTimeoutMs: Int = 15_000,
@@ -50,6 +52,8 @@ public class UrlConnectionHttpClient(
             try {
                 connection.connectTimeout = connectTimeoutMs
                 connection.readTimeout = readTimeoutMs
+                // A redirect would carry the key in its query to wherever it points.
+                connection.instanceFollowRedirects = false
                 connection.setRequestProperty("Accept-Encoding", "gzip")
                 val code = connection.responseCode
                 val stream = if (code < 400) connection.inputStream else connection.errorStream
