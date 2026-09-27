@@ -46,7 +46,7 @@
 ## Next step: plan sub-project 4 (K/DST)
 
 1. **PR #7 (sub-project 3, props) is merged** (753e1f1).
-2. **The deferred minors are fixed** (this session; the user chose all four batches). See "Deferred minors fixed" below. They're on the branch's new PR, and merging it is the user's call.
+2. **The deferred minors are fixed and merged** as PR #9 (e188dc2). See "Deferred minors fixed" below. PR #9 also carried PR #8 (rosters, from another session): ☰ → Rosters, Player page toggles, and the Grid's roster chip.
 3. **Next: sub-project 4 (K/DST)** needs its plan. The spec is §6 of `docs/superpowers/specs/2026-09-26-projection-model-design.md`; write the plan with writing-plans in a fresh session.
 4. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape: enter it in ☰ → Settings → Betting props, then Refresh stats. The toast should say "Props moved N projections"; Settings shows credits left.
 5. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
@@ -103,7 +103,7 @@ Four batches, each test-first (every new test was seen failing against the old c
 - **Warnings are errors**, and explicit API mode is on in JVM modules.
 - **Tracking.** The `.superpowers/` ledger doesn't survive the container. Rulings go in this file.
 
-**PRs #4–#7:** merged; their watches and check-ins are cancelled.
+**PRs #4–#9:** merged; their watches and check-ins are cancelled. The branch is reset onto the merged base (e188dc2).
 
 ## Projection props: execution progress
 
