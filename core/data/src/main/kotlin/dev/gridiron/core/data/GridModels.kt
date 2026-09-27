@@ -61,6 +61,8 @@ public data class GridRequest(
     val teams: Set<String> = emptySet(),
     val minSnapShare: Double? = null,
     val filters: List<Filter> = emptyList(),
+    /** Only these players (a roster); null shows everyone, an empty set no one. */
+    val onlyPlayers: Set<String>? = null,
 ) {
     init {
         require(filters.size <= MAX_FILTERS) { "at most $MAX_FILTERS filters, got ${filters.size}" }

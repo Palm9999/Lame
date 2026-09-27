@@ -412,6 +412,25 @@ class GridViewModelTest {
         badges.value = emptyMap()
         assertEquals(emptyMap<String, String>(), ready(vm).badges)
     }
+
+    @Test
+    fun `choosing a roster narrows the grid, and deleting it shows everyone again`() = runTest(dispatcher) {
+        val rosters = MutableStateFlow<List<dev.gridiron.core.model.Roster>>(emptyList())
+        val vm = GridViewModel(repo, ScoringRepository(prefs), CompareTrayRepository(prefs), rosters = rosters)
+        val ids = ready(vm).page!!.rows.take(2).map { it.playerId }
+        rosters.value = listOf(dev.gridiron.core.model.Roster("r1", "Home", ids))
+        assertEquals(ids.toSet(), ready(vm).rostered)
+
+        vm.onEvent(GridEvent.RosterSelected("r1"))
+        advanceUntilIdle()
+        assertEquals("r1", ready(vm).rosterId)
+        assertEquals(ids.toSet(), ready(vm).page!!.rows.map { it.playerId }.toSet())
+
+        rosters.value = emptyList()
+        advanceUntilIdle()
+        assertEquals(null, ready(vm).rosterId)
+        assertEquals(null, ready(vm).request.onlyPlayers)
+    }
 }
 
 /** State transitions, without coroutines or a database. */

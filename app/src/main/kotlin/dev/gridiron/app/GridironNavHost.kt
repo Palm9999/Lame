@@ -36,6 +36,7 @@ import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
@@ -69,6 +70,7 @@ data class Deps(
     val settings: SettingsRepository? = null,
     /** Builds stats on the phone. Null in tests, which read a prebuilt database. */
     val refresher: Refresher? = null,
+    val rosters: RosterRepository? = null,
 )
 
 /**
@@ -146,11 +148,13 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 add("Projection accuracy" to { s: Int -> backStack.push(AccuracyKey(s)) })
                                 if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
                                 add("Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) })
+                                if (deps.rosters != null) add("Rosters" to { _: Int -> backStack.push(RostersKey) })
                                 add("Team defense" to { s: Int -> backStack.push(DefenseKey(s)) })
                                 if (deps.settings != null) add("Settings" to { _: Int -> backStack.push(SettingsKey) })
                                 if (refresher != null) add("Refresh stats" to { _: Int -> refresh() })
                             },
                             badges = deps.live?.badges ?: flowOf(emptyMap()),
+                            rosters = deps.rosters?.rosters ?: flowOf(emptyList()),
                             recovery = buildList {
                                 if (refresher != null) add("Refresh stats" to { refresh() })
                                 if (deps.settings != null) add("Settings" to { backStack.push(SettingsKey) })
@@ -185,9 +189,14 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             key.playerId, deps.players, deps.live, onBack = back,
                             projections = deps.projections, scoring = deps.scoring,
                             onProjection = { season, week -> backStack.push(ProjectionsKey(key.playerId, season, week)) },
+                            rosterRepo = deps.rosters,
+                            onManageRosters = { backStack.push(RostersKey) },
                         )
                     }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back) }
+                    entry<RostersKey> {
+                        deps.rosters?.let { RostersScreen(it, deps.players, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
+                    }
                     entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back) } }
                 },
             )

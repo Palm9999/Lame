@@ -143,7 +143,7 @@ To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI 
 - Only 39 of ~450 catalogued metrics are implemented (play-by-play and snap count; Next Gen Stats, FTN charting, injuries/schedules are wired but not yet transformed)
 - Pre-aggregated season rollups are specified but not built (next performance target for the common full-season view)
 - Hilt dependency injection and Navigation 3 architecture arrive with the second feature
-- User database (`user.db`) for presets and rosters not yet implemented
+- Saved Grid presets not yet implemented. Rosters are stored in the `:core:datastore` prefs JSON (`UserPrefs.rosters`), not a `user.db`: ☰ → Rosters manages them, the Player page toggles membership, and the Grid's roster chip narrows to one (`GridRequest.onlyPlayers`) and stars rostered players
 - APK signing uses a committed keystore (`app/gridiron.keystore`, intentional for a never-published personal app)
 - **Grid entry points**: tapping a Grid row opens the Player page (ESPN status, injury notes, tagged news, and a "This week" projection card that opens the waterfall); the ☰ menu opens Projections (the upcoming week or rest of season by position, scored with the active profile), Projection accuracy, News, Injury report (ESPN's live list with nflverse practice for the current season; the official list for past seasons), Team defense, Settings and Refresh stats.
 - **ESPN's endpoints are unofficial and keyless**; a shape change shows as "Not updated: ESPN changed its … format" with the last data kept. Parsing lives in `core/data/.../live/Espn.kt`, tested against recorded responses in `core/data/src/test/resources/espn/`.

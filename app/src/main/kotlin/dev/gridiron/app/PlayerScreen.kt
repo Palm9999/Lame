@@ -12,7 +12,10 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -23,6 +26,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -34,12 +38,14 @@ import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerHeader
 import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.live.InjuryNote
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.LiveStatus
 import dev.gridiron.core.data.live.NewsItem
 import dev.gridiron.core.model.Position
+import dev.gridiron.core.model.Roster
 import dev.gridiron.feature.projections.ProjectionCard
 import dev.gridiron.feature.projections.ThisWeekCard
 import dev.gridiron.feature.projections.loadProjectionCard
@@ -47,6 +53,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import java.time.Instant
 
 /** Everything the Player page shows. */
@@ -70,7 +77,11 @@ fun PlayerRoute(
     projections: ProjectionsRepository? = null,
     scoring: ScoringRepository? = null,
     onProjection: (season: Int, week: Int) -> Unit = { _, _ -> },
+    rosterRepo: RosterRepository? = null,
+    onManageRosters: () -> Unit = {},
 ) {
+    val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList()) }.collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
     val version by (live?.changes ?: NO_CHANGES).collectAsState()
     val profile by remember(scoring) { scoring?.active ?: flowOf(null) }.collectAsState(initial = null)
     var page by remember(playerId) { mutableStateOf<PlayerPage?>(null) }
@@ -100,7 +111,14 @@ fun PlayerRoute(
         )
     }
     val uri = LocalUriHandler.current
-    PlayerScreen(playerId, page, liveAvailable = live != null, onBack = onBack, onOpen = { uri.openSafely(it) }, onProjection = onProjection)
+    PlayerScreen(
+        playerId, page, liveAvailable = live != null, onBack = onBack, onOpen = { uri.openSafely(it) }, onProjection = onProjection,
+        rosters = if (rosterRepo != null) rosters else null,
+        onRosterToggle = { id, on ->
+            rosterRepo?.let { repo -> scope.launch { if (on) repo.add(id, playerId) else repo.remove(id, playerId) } }
+        },
+        onManageRosters = onManageRosters,
+    )
 }
 
 @Composable
@@ -111,6 +129,10 @@ fun PlayerScreen(
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
     onProjection: (season: Int, week: Int) -> Unit = { _, _ -> },
+    /** The user's rosters, or null to hide the section. */
+    rosters: List<Roster>? = null,
+    onRosterToggle: (rosterId: String, on: Boolean) -> Unit = { _, _ -> },
+    onManageRosters: () -> Unit = {},
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -139,6 +161,10 @@ fun PlayerScreen(
                 page.projection?.let { card ->
                     item { SectionTitle("This week") }
                     item { ThisWeekCard(card, onOpen = { onProjection(card.season, card.week) }) }
+                }
+                rosters?.let { list ->
+                    item { SectionTitle("Rosters") }
+                    item { RosterToggles(playerId, list, onRosterToggle, onManageRosters) }
                 }
                 item { SectionTitle("Status") }
                 item {
@@ -195,6 +221,23 @@ fun PlayerScreen(
                 }
             }
         }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RosterToggles(playerId: String, rosters: List<Roster>, onToggle: (String, Boolean) -> Unit, onManage: () -> Unit) {
+    FlowRow(Modifier.padding(horizontal = 16.dp)) {
+        for (roster in rosters) {
+            val on = playerId in roster.playerIds
+            FilterChip(
+                selected = on,
+                onClick = { onToggle(roster.id, !on) },
+                label = { Text(roster.name) },
+                modifier = Modifier.padding(end = 8.dp).testTag("roster:${roster.id}"),
+            )
+        }
+        TextButton(onClick = onManage) { Text(if (rosters.isEmpty()) "Create a roster" else "Manage") }
     }
 }
 
