@@ -2,6 +2,8 @@ package dev.gridiron.core.datastore
 
 import dev.gridiron.core.model.BonusStat
 import dev.gridiron.core.model.CompareSlot
+import dev.gridiron.core.model.ESPN_POINTS_ALLOWED
+import dev.gridiron.core.model.PointsAllowedTier
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringPresets
@@ -80,7 +82,7 @@ class UserPrefsStoreTest {
     fun `unknown rules and invalid entries are dropped, the rest kept`() {
         file.writeText(
             """
-            {"formatVersion":1,"activeProfileId":"u2","profiles":[
+            {"formatVersion":2,"activeProfileId":"u2","profiles":[
               {"id":"u1","name":" ","weights":{"PASS_TD":6.0}},
               {"id":"u2","name":"Keeper","weights":{"PASS_TD":6.0,"KICK_FG_50":5.0},
                "receptionByPosition":{"TE":1.5,"K":9.0},
@@ -152,5 +154,48 @@ class UserPrefsStoreTest {
         assertFalse("abc123secret" in prefs.toString(), prefs.toString())
         assertTrue("oddsApiKey=…" in prefs.toString(), prefs.toString())
         assertTrue("oddsApiKey=null" in UserPrefs.DEFAULT.toString())
+    }
+
+    @Test
+    fun `a profile saved before kicking and defense scoring gets the defaults once`() {
+        file.writeText(
+            """{"formatVersion": 1, "profiles": [{"id": "u1", "name": "Old league", "weights": {"PASS_TD": 6.0}}], "activeProfileId": "u1"}""",
+        )
+        val migrated = withStore { it.prefs.first() }.profiles.single()
+
+        assertEquals(6.0, migrated.weight(ScoringRule.PASS_TD))
+        for ((rule, value) in ScoringPresets.KICKING_AND_DEFENSE) assertEquals(value, migrated.weight(rule), rule.name)
+        assertEquals(ESPN_POINTS_ALLOWED, migrated.pointsAllowedTiers)
+    }
+
+    @Test
+    fun `after the migration, a zeroed rule and no tiers stay that way`() {
+        file.writeText("""{"formatVersion": 1, "profiles": [{"id": "u1", "name": "Old league"}], "activeProfileId": "u1"}""")
+        withStore { store ->
+            store.update { p ->
+                val old = p.profiles.single()
+                p.copy(profiles = listOf(old.copy(weights = old.weights + (ScoringRule.FG_MISSED to 0.0) - ScoringRule.DST_SAFETY, pointsAllowedTiers = emptyList())))
+            }
+        }
+        val reread = withStore { it.prefs.first() }.profiles.single()
+
+        assertEquals(0.0, reread.weight(ScoringRule.FG_MISSED))
+        assertEquals(0.0, reread.weight(ScoringRule.DST_SAFETY))
+        assertEquals(emptyList<PointsAllowedTier>(), reread.pointsAllowedTiers)
+        assertTrue(file.readText().contains("\"formatVersion\":2"), file.readText())
+    }
+
+    @Test
+    fun `a profile's tiers survive a reopen, and invalid tiers are dropped with the profile kept`() {
+        val tiers = listOf(PointsAllowedTier(0, 10.0), PointsAllowedTier(14, 1.0), PointsAllowedTier(21, 0.0))
+        withStore { store -> store.update { it.copy(profiles = listOf(espnLeague.copy(pointsAllowedTiers = tiers))) } }
+        assertEquals(tiers, withStore { it.prefs.first() }.profiles.single().pointsAllowedTiers)
+
+        file.writeText(
+            """{"formatVersion": 2, "profiles": [{"id": "u1", "name": "Odd", "pointsAllowed": [{"min": 7, "points": 3.0}]}]}""",
+        )
+        val odd = withStore { it.prefs.first() }.profiles.single()
+        assertEquals("Odd", odd.name)
+        assertEquals(emptyList<PointsAllowedTier>(), odd.pointsAllowedTiers)
     }
 }

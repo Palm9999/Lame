@@ -147,6 +147,31 @@ private fun EditingContent(state: EditState.Editing, onEvent: (EditEvent) -> Uni
                     }
                 }
             }
+            item(key = "tiersHeader") {
+                GroupHeader("Points allowed")
+                Text(
+                    "Each tier runs from its start up to the next tier's. 0, 1 and 7 mean 0, 1–6 and 7–13 points allowed.",
+                    Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            items(state.tiers, key = { "tier:${it.key}" }) { draft ->
+                TierRow(
+                    draft = draft,
+                    errors = state.errors,
+                    enabled = !state.readOnly,
+                    onChange = { onEvent(EditEvent.TierChanged(draft.key, it)) },
+                    onRemove = { onEvent(EditEvent.TierRemoved(draft.key)) },
+                )
+            }
+            if (!state.readOnly) {
+                item(key = "addTier") {
+                    TextButton(onClick = { onEvent(EditEvent.TierAdded) }, modifier = Modifier.padding(horizontal = 8.dp).testTag("addTier")) {
+                        Text("+ Add tier")
+                    }
+                }
+            }
 
             item(key = "bonusesHeader") {
                 GroupHeader("Yardage bonuses")
@@ -290,5 +315,45 @@ private fun BonusCard(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun TierRow(
+    draft: TierDraft,
+    errors: Map<FieldKey, String>,
+    enabled: Boolean,
+    onChange: (TierDraft) -> Unit,
+    onRemove: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        OutlinedTextField(
+            value = draft.min,
+            onValueChange = { onChange(draft.copy(min = it)) },
+            label = { Text("From") },
+            suffix = { Text("pts") },
+            singleLine = true,
+            enabled = enabled,
+            isError = errors[FieldKey.TierMin(draft.key)] != null,
+            supportingText = errors[FieldKey.TierMin(draft.key)]?.let { { Text(it) } },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.weight(1f).testTag("tier:min:${draft.key}"),
+        )
+        OutlinedTextField(
+            value = draft.points,
+            onValueChange = { onChange(draft.copy(points = it)) },
+            label = { Text("Scores") },
+            singleLine = true,
+            enabled = enabled,
+            isError = errors[FieldKey.TierPoints(draft.key)] != null,
+            supportingText = errors[FieldKey.TierPoints(draft.key)]?.let { { Text(it) } },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            modifier = Modifier.weight(1f).testTag("tier:points:${draft.key}"),
+        )
+        if (enabled) TextButton(onClick = onRemove, modifier = Modifier.testTag("tier:remove:${draft.key}")) { Text("Remove") }
     }
 }
