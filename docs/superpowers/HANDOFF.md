@@ -43,13 +43,53 @@
 - [x] **Final whole-branch review** (Opus, 2026-09-27): "with fixes". 0 Critical, 2 Important (plus 1 Minor re-graded to Important), 7 Minor. Fixed in commit 2ff2be2 (see below).
 - [ ] **PR #7 merge** (the user decides).
 
-## Next step: merge PR #7, then sub-project 4
+## Next step: plan sub-project 4 (K/DST)
 
-1. **Sub-project 3 is built and reviewed.** Nothing from its plan is left. Draft PR #7 (https://github.com/Palm9999/Lame/pull/7) is watched; merging it is the user's call.
-2. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape: enter it in ☰ → Settings → Betting props, then Refresh stats. The toast should say "Props moved N projections"; Settings shows credits left.
-3. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
-4. The deferred minors below (the user decides), then **sub-project 4 (K/DST)**, which needs its own plan.
-5. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
+1. **PR #7 (sub-project 3, props) is merged** (753e1f1).
+2. **The deferred minors are fixed** (this session; the user chose all four batches). See "Deferred minors fixed" below. They're on the branch's new PR, and merging it is the user's call.
+3. **Next: sub-project 4 (K/DST)** needs its plan. The spec is §6 of `docs/superpowers/specs/2026-09-26-projection-model-design.md`; write the plan with writing-plans in a fresh session.
+4. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape: enter it in ☰ → Settings → Betting props, then Refresh stats. The toast should say "Props moved N projections"; Settings shows credits left.
+5. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
+6. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
+
+## Deferred minors fixed (2026-09-27)
+
+Four batches, each test-first (every new test was seen failing against the old code). After all four: `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` → BUILD SUCCESSFUL; `:app:assembleRelease lint` → BUILD SUCCESSFUL; the 2025 accuracy gate passes with an unchanged table.
+
+- [x] **Screens** (commit f9d9cad):
+  - The Player page, Team defense, the official and live Injury reports, the Projections list, the waterfall and the accuracy page reload when a refresh swaps in new stats (`dataVersion`, the executor's version flow).
+  - The Player page's scoring runs on `Dispatchers.Default` (`loadProjectionCard(…, compute)`).
+  - `ListScreen` no longer turns a superseded load's cancellation into an error.
+  - Ruling: `NavigationTest`'s Player page check now waits for the off-main-thread scoring, like its accuracy check already did.
+- [x] **Props polish** (commit 0992054):
+  - The unmatched count is names no single player matched, including every name in a game that isn't this week's. A matched player with no usable quote is neither blended nor unmatched.
+  - A receptions market that passes the targets raises the targets to match, so no catch rate tops 100%.
+  - `UserPrefs.toString()` shows the key as "…".
+  - Without a key, Settings asks for one instead of showing the last key's credits and error.
+  - A failed stats build's toast still says why props weren't updated.
+  - Ruling: `FORECAST_VERSION` stays 3. Only the upcoming week changes, and it's recomputed on every refresh.
+- [x] **Refresh robustness** (commit d4c09e0):
+  - A season the previous database can't supply (readable meta, damaged tables) is rebuilt with a warning instead of failing every refresh. The failed copy closes its transaction and deletes its rows first.
+  - A `DETACH` that fails after a failed copy is added as suppressed and no longer hides the cause.
+  - A killed build's `stats.db.new` and `ingest-work` files are deleted when the app starts.
+  - The News and Injury report "as of" use their own feed's time.
+  - A changed injury comment that ESPN dates the same as the last one replaces it.
+  - Ruling: `ATTACH` is not opened read-only. That needs URI filenames in the bundled driver, and the copy only reads from it. Cost if wrong: none today.
+- [x] **Wording and cleanup** (commit e385888):
+  - The accuracy page says "No player-weeks to measure in 2024." (no "yet") and names positions with nothing to count. It warns that the oldest built season starts without last season's history.
+  - An error with no message reads "…: IllegalStateException." instead of "…: null."
+  - Column errors name ffopportunity for `ep_*` files.
+  - A past season with no injury report says nflverse has none, instead of "yet".
+  - Stale comments in `GridScreen.kt` and `AndroidManifest.xml` are fixed.
+  - The unused `Rates.passShare` is removed.
+  - CLAUDE.md is updated: the `:app` Settings line, the reload list, the accuracy timing, and data attribution (ESPN, The Odds API, ffopportunity).
+- **Still deferred** (judgment calls, not bugs):
+  - The accuracy page's Unavailable state has no season chips.
+  - "Appeared" means a recorded play.
+  - `AccuracyContractTest`'s 15 s budget.
+  - Small waste in the backtest.
+  - The 250 ms statquery timing margin.
+  - Two same-name players count as one unmatched name.
 
 **Things to know:**
 - **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
@@ -63,7 +103,7 @@
 - **Warnings are errors**, and explicit API mode is on in JVM modules.
 - **Tracking.** The `.superpowers/` ledger doesn't survive the container. Rulings go in this file.
 
-**PRs #4, #5 and #6:** merged. **PR #7** (sub-project 3) is open as a draft and watched; it carries the whole sub-project and the review fixes.
+**PRs #4–#7:** merged; their watches and check-ins are cancelled.
 
 ## Projection props: execution progress
 
