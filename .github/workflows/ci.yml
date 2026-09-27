@@ -5,7 +5,8 @@ name: Build and test
 # The APK carries no data: the phone builds its own stats. On anything but a
 # pull request it then publishes the APK to a fixed link:
 #   https://github.com/Palm9999/Lame/releases/download/app/gridiron.apk
-# The parity job proves the Kotlin ingest reproduces the Python ETL exactly.
+# The parity job proves the Kotlin ingest reproduces the Python ETL exactly,
+# and gates the projection model: it must beat a season-to-date average.
 
 on:
   push:
@@ -124,3 +125,18 @@ jobs:
         run: ./gradlew :core:ingest:buildStatsDb -Pseasons=2025 -Pout=etl/build/parity/kt.db
       - name: Compare
         run: python etl/tools/parity.py etl/build/parity/py.db etl/build/parity/kt.db
+      - name: Accuracy gate
+        # Spec §4: on a 2024–2025 build, the model's 2025 PPR error must be
+        # below the season-to-date average's at QB, RB, WR and TE.
+        env:
+          GRIDIRON_STATS_DB: etl/build/accuracy.db
+          GRIDIRON_ACCURACY_GATE: "2025"
+        run: |
+          ./gradlew :core:ingest:buildStatsDb -Pseasons="2024 2025" -Pout=etl/build/accuracy.db
+          rm -f core/data/build/reports/accuracy-gate.txt
+          ./gradlew :core:data:test --tests "dev.gridiron.core.data.AccuracyGateTest"
+          # A skipped test passes too: only a written table proves the gate ran.
+          test -s core/data/build/reports/accuracy-gate.txt || { echo "The accuracy gate was skipped."; exit 1; }
+      - name: Accuracy table
+        if: always()
+        run: cat core/data/build/reports/accuracy-gate.txt || echo "No accuracy table was written."

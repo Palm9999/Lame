@@ -5,7 +5,7 @@
 - Every session starts by reading this file, runs the next 4 tasks from **Next step**, then updates this file (tick each task, record rulings), commits, pushes, and stops.
 - Keep replies short. Ask a question only when blocked, one line at a time.
 
-**Branch:** `claude/dreamy-euler-phbdq1`. It restarted from the merged live-data-refresh work (PR #3, merge 9dabb9a). Draft PR #4 (https://github.com/Palm9999/Lame/pull/4) carries this project. Sub-project 1's code (Tasks 1–12 plus review fixes) is on it.
+**Branch:** `claude/dreamy-euler-phbdq1`, restarted from `claude/relaxed-hypatia-73hhub` after PR #4 merged (merge 3938c84). Sub-project 1 (Tasks 1–12, the review fixes and the layer-2 fix) is merged: https://github.com/Palm9999/Lame/pull/4. Each new sub-project goes in a new PR from this branch.
 
 ## Where things stand
 
@@ -25,28 +25,86 @@
   - Two of the Important issues are fixed (commit 44d16f0).
   - The Critical issue and the third Important one both come from layer 2's design, so they need a spec amendment rather than a code fix.
 - [x] **Layer-2 fix designed** (user's choice: next session). It's the spec's "Amendment: layer 2", planned in `docs/superpowers/plans/2026-09-26-projection-share-fix.md` (2 tasks, full code).
+- [x] **Layer-2 fix built** (commits 3097c75, 63fcdc1; see "Layer-2 fix" under Execution progress). Real data now has one passer per team and team totals at real volume.
+- [x] **PR #4 merged** (2026-09-26, merge 3938c84, CI green). The user merged after the fix's self-review, without a fresh review.
+- [x] **Sub-project 2 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-accuracy.md`.
+  - 4 tasks, one session (Session A = Tasks 1–4), full code, tests first. Rulings are at the end of the plan ("Plan self-review").
+  - Re-measured before planning, on a fresh 2024–2025 Kotlin build: the model now beats the season-to-date average at every position for 2025 under PPR (MAE model / season avg / last 4: QB 6.42 / 7.14 / 7.07, RB 5.88 / 6.01 / 6.18, WR 5.40 / 5.79 / 5.81, TE 4.87 / 5.19 / 5.42). So the CI gate passes without tuning. RB's margin is thin (0.13).
+  - 2024, which has no 2023 history in that build, still loses at WR and TE. The plan uses that to show the gate can fail.
+- [x] **Plan approved; execution method: native** (2026-09-27).
+- [x] **Sub-project 2 built** (Session A, Tasks 1–4; see "Projection accuracy: execution progress").
+- [x] **Final whole-branch review** (Opus, 2026-09-27): "ready with fixes". 0 Critical, 1 Important, 8 Minor. Fixed in commit 4fdf023 (see below).
+- [ ] **PR #5 merged.** Waiting on the user.
 
-- [x] **Layer-2 fix built** (Tasks 1–2 of the fix plan; see "Layer-2 fix: execution progress" below). Real data now has one passer per team and team totals at real volume.
+## Next step: merge sub-project 2, then plan sub-project 3
 
-## Next step
-
-Sub-project 1 is complete; merge PR #4 when CI is green, then plan sub-project 2 (accuracy page, spec §4) with writing-plans in a fresh session.
+1. CI on the draft PR (https://github.com/Palm9999/Lame/pull/5, watched). Merging is the user's decision.
+2. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows, and whether the numbers match the gate table below under PPR. Over about 10 s → record it here (the fix would be caching per season and profile).
+3. The deferred minors below (the user decides which).
+4. Then sub-project 3 (Odds API props) needs its plan. Worth weighing first: floor to ceiling holds only 54–66% of scores against the spec's target of about 80%.
+5. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (commands are in the plan).
 
 **Things to know:**
 - **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
-- **The accuracy gap was measured before the fix.** The reviewer's quick 2025 backtest had the model's error larger than a season-to-date average's at every position (QB 6.99 vs 6.62, RB 5.52 vs 5.23, WR 5.13 vs 4.99, TE 4.86 vs 4.85). The fix targets the causes, but nobody has re-run the backtest since; the real gate is sub-project 2's.
+- **The accuracy gap was measured before the fix.** The reviewer's quick 2025 backtest had the model's error larger than a season-to-date average's at every position (QB 6.99 vs 6.62, RB 5.52 vs 5.23, WR 5.13 vs 4.99, TE 4.86 vs 4.85). It was re-measured after the fix while planning sub-project 2, and the model now leads at every position (see above); sub-project 2's CI gate holds it there.
 - **Deferred Minor findings** (the user decides):
   - Player page scoring runs on the main thread.
   - The list's scoring time was never measured.
   - Screens don't reload after a refresh swap until reopened.
+  - `Rates.passShare` (`League.kt`) no longer has a caller.
 - **A timing test flakes under full parallel builds.** `:core:statquery`'s "scoring a full season … is fast" test fails under a full parallel `./gradlew build`. It's a known CPU-contention flake: run that module alone to confirm green.
 - **Warnings are errors**, and explicit API mode is on in JVM modules.
 - **Tracking.** The `.superpowers/` ledger doesn't survive the container. Rulings go in this file.
 
-**PR #4 watch:**
-- This session is subscribed.
-- Self check-ins: `trig_01LbtqsUqJrVwC6d3Bq3H6Jp` (2026-09-26 22:32 UTC) and `trig_01PKEqFesGyPyqfsHvpQKpbq` (21:11 UTC). Re-arm every 3–6 hours while the PR only waits on the user; say nothing if nothing changed.
-- CI failures on PR #4 are ours to fix.
+**PR #4:** merged. The watch and its check-ins are cancelled.
+
+## Projection accuracy: execution progress
+
+**Session A** (2026-09-27). After Task 4: `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` → BUILD SUCCESSFUL (the timing flake didn't show); `./gradlew :app:assembleRelease` → BUILD SUCCESSFUL.
+
+- [x] Task 1: The backtest (commit a4b8cfe; `./gradlew :core:projections:test` → 26/26 pass).
+  - Watched failing first (unresolved `ProjectedWeek`, `PlayedWeek`, `errorStats`).
+  - Ruling: Step 4 says 7 new `BacktestTest` tests; the brief's file has 6, and all 6 ran and pass. A count typo in the plan. Cost if wrong: none.
+- [x] Task 2: The repository, the contract test and CI's accuracy gate (commit a4d296d; `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew :core:data:test :core:projections:test` → pass, the gate skipped).
+  - Watched failing first (unresolved `seasons`, `backtest`).
+  - Ruling: `AccuracyRepositoryTest`'s fixture gives 10 yards per catch, so week 2 (8 catches, a TD) scores 22, not the 24 the brief assumed (copied from Task 1's 100-yard fixture). The code returned model MAE 5.0 and last-4 MAE 9.5, and hand arithmetic agrees. Only the comments and those two expected values changed; the assertions and sample rules are the brief's, and `playerWeeks = 2` still pins the upcoming-week and didn't-play exclusions. Cost if wrong: none.
+  - `AccuracyContractTest` on the 2024–2026 build: pass, 2.7 s.
+  - Gate on `etl/build/accuracy.db`: 2024 **fails** "at [WR, TE]", as planned. 2025 **passes**, identical to the planning table:
+
+    ```
+    2025, PPR: MAE (bias) by predictor
+    pos       n           model      season avg          last 4   held
+    QB      498    6.42 (-0.19)    7.14 (-0.57)    7.07 (-0.56)    64%
+    RB      804    5.88 (-1.34)    6.01 (-0.31)    6.18 (+0.03)    54%
+    WR     1203    5.40 (-1.03)    5.79 (+0.28)    5.81 (+0.40)    61%
+    TE      455    4.87 (-1.62)    5.19 (-0.15)    5.42 (+0.30)    66%
+    ```
+  - Note for the user: floor to ceiling holds only 54–66% of scores against the spec's target of about 80%, so the model's spread is too narrow. The page shows it; the gate doesn't check it.
+- [x] Task 3: The accuracy page (commit b59b401; `./gradlew :feature:projections:testDebugUnitTest :core:data:test :app:compileDebugKotlin` → 31/31 in projections, Accuracy 8/8). No rulings.
+- [x] Task 4: ☰ → Projection accuracy, and docs (commit 018b1e9; `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew :app:testDebugUnitTest` → 39/39). No rulings.
+
+**Final whole-branch review** (a503a94..c6ba3ab; Opus). Verdict: "ready with fixes". It agreed with both executor rulings. It confirmed every Review Focus case on real data and in CI, that the gate is deterministic (model points are the scored means, and the simulation is seeded), that there's no NaN path, and that every SQL value is bound.
+
+- **Fixed** (commit 4fdf023, each RED→GREEN; `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` and `:app:assembleRelease` green):
+  - **Important:** the page recomputed the whole backtest on every rotation, and a superseded load kept running. A repeat request for the season on screen (or for the one the Grid's season fell back to) now keeps it, and a new request cancels the old one. Tests: `AccuracyViewModelTest` "asking again for the season on screen keeps it without recomputing" and "a superseded load is cancelled, not left running".
+  - **Re-graded Minor → Important:** a skipped gate passed CI, and the spec says the gate is never skipped. The step now deletes the table first and fails without one. The step's script with the gate variable unset: exit 0 before, exit 1 after; with 2025: exit 0.
+- **Rulings:**
+  - A cancelled load stops at its next suspension point, but a `backtest()` loop already running finishes (its result is dropped). The dedupe removes the rotation case, which leaves only a season tap mid-load. Cost if wrong: one extra 1–3 s of CPU.
+  - Declined to judge by the reviewer; each stands:
+    - The calibration shortfall belongs to sub-project 1's variances; the page reports it.
+    - Last 4 may include last season's playoff games: they are games played.
+    - A postponed game pinning the upcoming week is the forecast's rule.
+    - The page not reloading after a refresh swap is the existing deferred minor.
+    - Phone timing and memory are the user's checkpoint.
+    - `accuracy_summary` in the Python schema: nothing reads it.
+- **Deferred minors (the user decides):**
+  - "Appeared" means a recorded play (a `g` row). A player on the field with no touch or target is left out. The 2025 upper bound is 45 WR, 9 RB, 7 TE and 2 QB player-weeks, some of them healthy scratches. The plan's evidence for the rule was circular (snaps attach only to rows with plays), and the footnote says "the player played".
+  - "No player-weeks to measure in 2024 yet." says "yet" for a finished season, and a single position with nothing to count just disappears.
+  - An exception's Unavailable state drops the season chips, and a null message reads "…: null."
+  - The oldest built season (no prior-season history) is offered without a caveat. The model loses there at WR and TE.
+  - CLAUDE.md says "a few seconds on a phone", which hasn't been measured.
+  - `AccuracyContractTest`'s 15 s budget runs inside the parallel build (it measured 2.7 s).
+  - Small waste: `status()` is read up to three times per load, `score(means)` runs twice per sample, and played weeks are grouped for every player.
 
 ## Projection engine: execution progress
 

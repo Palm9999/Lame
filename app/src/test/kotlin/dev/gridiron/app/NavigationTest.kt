@@ -4,6 +4,7 @@ import android.os.Looper
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -199,15 +200,23 @@ class NavigationTest {
     }
 
     @Test
-    fun theMenuNoLongerOffersProjections() {
+    fun theMenuOpensProjectionAccuracy() {
         compose.setContent { GridironTheme { GridironNavHost(deps) } }
         settle()
 
         compose.onNodeWithTag("menu").performClick()
         compose.waitForIdle()
-
-        compose.onNodeWithText("Injury report").assertExists()
-        compose.onNodeWithText("Projection accuracy").assertDoesNotExist()
         compose.onNodeWithText("Time a stats build").assertDoesNotExist()
+        compose.onNodeWithText("Projection accuracy").performClick()
+        settle()
+        compose.onNodeWithTag("accuracyTitle").assertExists()
+
+        // The backtest runs on the real database off the main thread: let it finish, so tearDown
+        // doesn't close the database under it, and so the page is known to load, not just open.
+        compose.waitUntil(timeoutMillis = 60_000) {
+            settle()
+            compose.onAllNodesWithText("Scoring every projected week…").fetchSemanticsNodes().isEmpty()
+        }
+        compose.onNodeWithText("Scored with", substring = true).assertExists()
     }
 }

@@ -1,36 +1,144 @@
 package dev.gridiron.feature.projections
 
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import dev.gridiron.core.data.AccuracyRow
-import java.util.Locale
-import kotlin.math.abs
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import dev.gridiron.core.projections.ACCURACY_MIN_POINTS
+import dev.gridiron.core.projections.ErrorStats
+import dev.gridiron.core.projections.PositionAccuracy
 
-/** The trust page: weekly MAE by position, model vs. the two naive baselines,
- * live from week 1 (design spec §4, research doc §5.4). No client-side
- * computation — every number here is read directly from `accuracy_summary`. */
+/**
+ * ☰ → Projection accuracy: how past weeks' projections did against what
+ * players scored, next to two simple baselines (spec §4).
+ */
 @Composable
-public fun AccuracyScreen(rows: List<AccuracyRow>, modifier: Modifier = Modifier) {
-    LazyColumn(modifier = modifier) {
-        items(rows) { row ->
+public fun AccuracyScreen(state: AccuracyState, onSeason: (Int) -> Unit, onBack: () -> Unit) {
+    Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
+        Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onBack) { Text("← Back") }
+                Text(
+                    "Projection accuracy",
+                    Modifier.testTag("accuracyTitle"),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            when (state) {
+                AccuracyState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        CircularProgressIndicator()
+                        Text("Scoring every projected week…", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                is AccuracyState.Unavailable -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                    Text(state.message, style = MaterialTheme.typography.bodyMedium)
+                }
+                is AccuracyState.Loaded -> Measured(state, onSeason)
+            }
+        }
+    }
+}
+
+@Composable
+private fun Measured(state: AccuracyState.Loaded, onSeason: (Int) -> Unit) {
+    LazyColumn(Modifier.fillMaxSize()) {
+        item {
             Text(
-                text = "${row.position} ${row.metricId} (${row.baseline}): " +
-                    "MAE ${oneDecimal(row.mae)}, n=${row.sampleN}",
+                "Scored with ${state.profile}",
+                Modifier.padding(horizontal = 16.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(
+                Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for (s in state.seasons) FilterChip(selected = s == state.season, onClick = { onSeason(s) }, label = { Text("$s") })
+            }
+        }
+        if (state.positions.isEmpty()) {
+            item {
+                Text("No player-weeks to measure in ${state.season} yet.", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+        items(state.positions, key = { it.position }) { PositionTable(it) }
+        item {
+            Text(
+                "Counts weeks where the model projected at least ${ACCURACY_MIN_POINTS.toInt()} points and the player played, " +
+                    "from the player's second game of the season. Bias is projected minus actual. " +
+                    "Past weeks are projected without betting props.",
+                Modifier.padding(16.dp),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
 }
 
-/**
- * Mirrors `StatFormat.fixed(value, decimals = 1)`: rounds first so a value
- * like -0.04 never renders as "-0.0", and formats with an explicit Locale so
- * output doesn't vary with the device's comma-decimal locale settings.
- */
-private fun oneDecimal(value: Double): String {
-    val rounded = Math.round(value * 10) / 10.0
-    val clean = if (abs(rounded) < 0.05) 0.0 else rounded
-    return String.format(Locale.getDefault(), "%.1f", clean)
+@Composable
+private fun PositionTable(p: PositionAccuracy) {
+    val best = minOf(p.model.mae, p.seasonAverage.mae, p.lastFour.mae)
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Text("${p.position} · ${p.playerWeeks} player-weeks", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Text(
+            "Floor to ceiling held ${percent(p.calibration)} of scores (target about 80%)",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Cells("", "MAE", "Bias", "R²", header = true)
+        Predictor("Model", p.model, best)
+        Predictor("Season avg", p.seasonAverage, best)
+        Predictor("Last 4", p.lastFour, best)
+    }
+}
+
+/** One predictor's row; the lowest MAE of the three is bold. */
+@Composable
+private fun Predictor(label: String, stats: ErrorStats, best: Double) {
+    Cells(label, fixed(stats.mae, 1), signed(stats.bias), r2Text(stats.r2), header = false, boldMae = stats.mae == best)
+}
+
+@Composable
+private fun Cells(label: String, mae: String, bias: String, r2: String, header: Boolean, boldMae: Boolean = false) {
+    val style = if (header) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall
+    val color = if (header) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+    Row(Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+        Text(label, Modifier.weight(1f), style = style, color = color)
+        Text(
+            mae,
+            Modifier.width(56.dp),
+            style = style,
+            color = color,
+            textAlign = TextAlign.End,
+            fontWeight = if (boldMae) FontWeight.Bold else FontWeight.Normal,
+        )
+        Text(bias, Modifier.width(56.dp), style = style, color = color, textAlign = TextAlign.End)
+        Text(r2, Modifier.width(56.dp), style = style, color = color, textAlign = TextAlign.End)
+    }
 }
