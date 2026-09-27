@@ -2,12 +2,22 @@ package dev.gridiron.core.forecast
 
 import kotlin.math.ln
 
-internal class ProjectionOutcome(val status: String, val upcoming: Map<Int, Int>, val weeks: Int)
+internal class ProjectionOutcome(val status: String, val upcoming: Map<Int, Int>, val weeks: Int, val props: PropsOutcome?)
 
 private enum class WeekKind { PAST, UPCOMING, REST }
 
-/** A player's upcoming-week baseline and team: reused, with each remaining week's opponent, for rest of season. */
-private class Prepared(val player: PlayerInfo, val team: String, val baseline: Map<String, Double>, val passRate: Double)
+/**
+ * A player's upcoming-week baseline and team: reused, with each remaining
+ * week's opponent, for rest of season. [upcoming] is the upcoming week's
+ * final projection with props blended in, when he has one.
+ */
+private class Prepared(
+    val player: PlayerInfo,
+    val team: String,
+    val baseline: Map<String, Double>,
+    val passRate: Double,
+    val upcoming: Map<String, Double>? = null,
+)
 
 /**
  * The walk-forward loop over every regular-season week of the built seasons,
@@ -22,6 +32,8 @@ internal class Projector(
     /** Seasons copied from the previous database: their weeks aren't recomputed. */
     private val copied: Set<Int>,
     private val sink: ProjectionSink,
+    /** Props for the upcoming week; null when the user has none. */
+    private val props: PropsSnapshot?,
     private val onWeek: (season: Int, week: Int) -> Unit,
 ) {
     private val model = BaselineModel(inputs.teamGames, inputs.expectedThrough)
@@ -38,10 +50,14 @@ internal class Projector(
     private val chronological: List<PlayerGame> = inputs.history.values.flatten().sortedBy { it.order }
     private val totals = LeagueTotals()
     private var added = 0
+    private var blended = 0
+
+    /** Distinct names per event in [props]: whoever isn't blended is unmatched. */
+    private val propNames = props?.events?.sumOf { e -> e.quotes.map { normalizeName(it.player) }.distinct().size } ?: 0
 
     fun run(): ProjectionOutcome {
         val regular = inputs.games.filter { it.regular }
-        if (regular.isEmpty()) return ProjectionOutcome("no schedule", emptyMap(), 0)
+        if (regular.isEmpty()) return ProjectionOutcome("no schedule", emptyMap(), 0, props?.let { PropsOutcome(0, propNames) })
         val latest = regular.maxOf { it.season }
         val upcomingWeek = regular.filter { it.season == latest && !it.played }.minOfOrNull { it.week }
         val weeks = regular.map { it.season to it.week }.distinct().sortedWith(compareBy({ it.first }, { it.second }))
@@ -77,7 +93,7 @@ internal class Projector(
         }
         val status = if (projected == 0) "no games to project from yet" else FORECAST_OK
         val upcomingMap = if (upcoming != null && upcomingWeek != null) mapOf(latest to upcomingWeek) else emptyMap()
-        return ProjectionOutcome(status, upcomingMap, projected)
+        return ProjectionOutcome(status, upcomingMap, projected, props?.let { PropsOutcome(blended, propNames - blended) })
     }
 
     /** What every player's projection for one week shares: league rates, the average team, defense ratings. */
@@ -129,10 +145,21 @@ internal class Projector(
     /**
      * One week's projections, a team at a time: the expected starting QB and
      * the active players, with the team's target and carry shares scaled to
-     * sum to one (spec amendment to layer 2).
+     * sum to one (spec amendment to layer 2). The upcoming week's players are
+     * matched to [props] first.
      */
-    private fun prepareWeek(state: WeekState, kind: WeekKind): List<Prepared> =
-        candidates(state.order).mapNotNull { draft(state, it, kind) }.groupBy { it.team }.flatMap { (team, onTeam) ->
+    private fun prepareWeek(state: WeekState, kind: WeekKind): List<Prepared> {
+        val drafts = candidates(state.order).mapNotNull { draft(state, it, kind) }
+        val market = if (kind == WeekKind.UPCOMING && props != null) {
+            MarketMatch(
+                props,
+                inputs.games.filter { it.season == state.season && it.week == state.week }.map { it.home to it.away },
+                drafts.map { PropCandidate(it.player.playerId, it.player.name, it.team) },
+            )
+        } else {
+            null
+        }
+        return drafts.groupBy { it.team }.flatMap { (team, onTeam) ->
             val starter = expectedStarter(team, onTeam, state, kind)
             val kept = onTeam.filter { d ->
                 if (d.player.position == "QB") d.player.playerId == starter else isActive(d, team, state, kind)
@@ -141,8 +168,9 @@ internal class Projector(
                 kept.associate { d -> d.player.playerId to model.shares(d.ctx, d.rates, starter = d.player.playerId == starter) },
             )
             val volume = teamVolume(teamHistory[team].orEmpty().takeWhile { it.order < state.order }, state.leagueTeam)
-            kept.map { d -> finish(state, d, shares.getValue(d.player.playerId), volume, kind) }
+            kept.map { d -> finish(state, d, shares.getValue(d.player.playerId), volume, kind, market) }
         }
+    }
 
     private fun draft(state: WeekState, player: PlayerInfo, kind: WeekKind): Draft? {
         val rates = state.rates[player.position] ?: return null
@@ -188,7 +216,7 @@ internal class Projector(
         return qbs.maxByOrNull { d -> d.ctx.history.lastOrNull { it.team == team && it.order == latest }?.get("attempts") ?: 0.0 }?.player?.playerId
     }
 
-    private fun finish(state: WeekState, d: Draft, shares: Shares, volume: TeamVolume, kind: WeekKind): Prepared {
+    private fun finish(state: WeekState, d: Draft, shares: Shares, volume: TeamVolume, kind: WeekKind, market: MarketMatch?): Prepared {
         val prepared = Prepared(d.player, d.team, model.project(d.ctx, d.rates, volume, shares), volume.passRate)
         val game = d.game ?: return prepared
         val (afterMatchup, final) = finalFor(state, prepared, game)
@@ -197,10 +225,16 @@ internal class Projector(
             WeekKind.PAST -> if (referencePoints(final) >= K.PAST_WEEK_MIN_POINTS) {
                 emit(d.player.playerId, state.season, state.week, "final", final, cv)
             }
-            WeekKind.UPCOMING -> if (referencePoints(final) >= K.UPCOMING_MIN_POINTS) {
-                emit(d.player.playerId, state.season, state.week, "baseline", prepared.baseline, cv)
-                emit(d.player.playerId, state.season, state.week, "final", final, cv)
-                emitFactors(state, prepared, game, afterMatchup, final)
+            WeekKind.UPCOMING -> {
+                val withProps = market?.quotes(d.player.playerId)?.let { blend(final, it, d.player.position) }
+                val shown = withProps?.components ?: final
+                if (referencePoints(shown) >= K.UPCOMING_MIN_POINTS) {
+                    emit(d.player.playerId, state.season, state.week, "baseline", prepared.baseline, cv)
+                    emit(d.player.playerId, state.season, state.week, "final", shown, cv)
+                    emitFactors(state, prepared, game, afterMatchup, final, withProps)
+                    if (withProps != null) blended++
+                }
+                return Prepared(d.player, d.team, prepared.baseline, prepared.passRate, upcoming = shown)
             }
             WeekKind.REST -> Unit
         }
@@ -249,7 +283,14 @@ internal class Projector(
         return afterMatchup to adjust(afterMatchup) { side, type -> script.multiplier(side, type) }
     }
 
-    private fun emitFactors(state: WeekState, p: Prepared, game: Game, afterMatchup: Map<String, Double>, final: Map<String, Double>) {
+    private fun emitFactors(
+        state: WeekState,
+        p: Prepared,
+        game: Game,
+        afterMatchup: Map<String, Double>,
+        final: Map<String, Double>,
+        withProps: Blended?,
+    ) {
         val baselinePoints = referencePoints(p.baseline)
         val matchupPoints = referencePoints(afterMatchup)
         val id = p.player.playerId
@@ -260,11 +301,15 @@ internal class Projector(
         gameScript(game, p.team, state.leagueImplied, p.passRate)?.let { script ->
             sink.factor(id, state.season, state.week, "game_script", logRatio(referencePoints(final), matchupPoints), script.note)
         }
+        withProps?.let {
+            sink.factor(id, state.season, state.week, "market", logRatio(referencePoints(it.components), referencePoints(final)), it.note)
+        }
     }
 
     private fun addRest(state: WeekState, p: Prepared, season: Int, week: Int, ros: MutableMap<Pair<String, String>, DoubleArray>) {
         val game = gameOf[Triple(p.team, season, week)] ?: return // a bye
-        val final = finalFor(state, p, game).second
+        // The upcoming week itself uses what was stored for it, props included.
+        val final = p.upcoming?.takeIf { week == state.week && season == state.season } ?: finalFor(state, p, game).second
         if (referencePoints(final) < K.UPCOMING_MIN_POINTS) return
         val cv = K.EMPIRICAL_CV.getValue(p.player.position)
         for ((metric, mean) in final) {

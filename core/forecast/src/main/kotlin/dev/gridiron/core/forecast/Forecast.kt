@@ -17,6 +17,8 @@ public data class ForecastReport(
     /** Weeks projected here, not counting copied seasons or rest-of-season weeks. */
     public val weeks: Int,
     public val rows: Long,
+    /** How props went; null when none were given. */
+    public val props: PropsOutcome? = null,
 )
 
 /** Seasons whose weekly projections are copied from [previous] instead of recomputed. */
@@ -27,13 +29,15 @@ private val PROJECTION_TABLES = listOf("player_week_projection", "player_week_pr
 public object Forecast {
     /**
      * Projects the built seasons into [conn]'s (empty) projection tables and
-     * records the outcome in `schema_meta`. [onWeek] is called before each
-     * week and may throw to cancel.
+     * records the outcome in `schema_meta`. [props], when given, are blended
+     * into the upcoming week (spec §5). [onWeek] is called before each week
+     * and may throw to cancel.
      */
     public fun run(
         conn: SQLiteConnection,
         builtAt: Instant,
         copy: SeasonCopy? = null,
+        props: PropsSnapshot? = null,
         onWeek: (season: Int, week: Int) -> Unit = { _, _ -> },
     ): ForecastReport {
         // ATTACH can't run inside a transaction, so copy first.
@@ -41,8 +45,8 @@ public object Forecast {
         val inputs = loadInputs(conn)
         conn.execSQL("BEGIN")
         val report = ProjectionWriter(conn).use { writer ->
-            val outcome = Projector(inputs, copy?.seasons.orEmpty(), writer, onWeek).run()
-            ForecastReport(outcome.status, outcome.upcoming, outcome.weeks, writer.rows)
+            val outcome = Projector(inputs, copy?.seasons.orEmpty(), writer, props, onWeek).run()
+            ForecastReport(outcome.status, outcome.upcoming, outcome.weeks, writer.rows, outcome.props)
         }
         writeMeta(conn, report.status, report.upcoming, builtAt)
         conn.execSQL("COMMIT")

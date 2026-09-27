@@ -2,6 +2,7 @@ package dev.gridiron.core.forecast
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNotEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -81,8 +82,8 @@ class ForecastEngineTest {
         )
     }
 
-    private fun run(db: TestDb, copy: SeasonCopy? = null, onWeek: (Int, Int) -> Unit = { _, _ -> }): ForecastReport =
-        Forecast.run(db.conn, builtAt, copy, onWeek)
+    private fun run(db: TestDb, copy: SeasonCopy? = null, props: PropsSnapshot? = null, onWeek: (Int, Int) -> Unit = { _, _ -> }): ForecastReport =
+        Forecast.run(db.conn, builtAt, copy, props, onWeek)
 
     private fun projections(db: TestDb) =
         db.query("SELECT player_id, season, week, metric_id, stage, mean, variance FROM player_week_projection ORDER BY 1, 2, 3, 4, 5")
@@ -98,6 +99,26 @@ class ForecastEngineTest {
     private fun factors(db: TestDb, player: String) = db.query(
         "SELECT factor FROM player_week_projection_factor WHERE player_id = '$player' AND season = 2025 AND week = 3 ORDER BY factor",
     ).map { it[0] }
+
+    private fun finalMean(db: TestDb, player: String, week: Int, metric: String): Double = db.query(
+        "SELECT mean FROM player_week_projection WHERE player_id = '$player' AND season = 2025 AND week = $week AND stage = 'final' AND metric_id = '$metric'",
+    ).single()[0]!!.toDouble()
+
+    private fun rosMean(db: TestDb, player: String, metric: String): Double = db.query(
+        "SELECT mean FROM player_ros_projection WHERE player_id = '$player' AND season = 2025 AND as_of_week = 2 AND metric_id = '$metric'",
+    ).single()[0]!!.toDouble()
+
+    private val wrAProps = PropsSnapshot(
+        listOf(
+            PropEvent(
+                "AAA", "DDD",
+                listOf(
+                    PropQuote("dk", "player_reception_yds", "Player WR_A", 120.5, 1.9, 1.9),
+                    PropQuote("dk", "player_anytime_td", "Player WR_A", null, 1.5, null),
+                ),
+            ),
+        ),
+    )
 
     @Test
     fun `the upcoming week gets both stages and the waterfall's factors`() {
@@ -321,6 +342,65 @@ class ForecastEngineTest {
                 listOf(listOf("0")),
                 db.query("SELECT COUNT(*) FROM player_week_projection WHERE player_id = 'WR_X' AND season = 2025 AND week = 3"),
             )
+        }
+    }
+
+    @Test
+    fun `props blend into the upcoming week as a market factor, and into rest of season`() {
+        league("a.db").use { plain ->
+            league("b.db").use { priced ->
+                assertNull(run(plain).props)
+                val report = run(priced, props = wrAProps)
+
+                assertEquals(PropsOutcome(blended = 1, unmatched = 0), report.props)
+                val before = finalMean(plain, "WR_A", 3, "receiving_yards")
+                val after = finalMean(priced, "WR_A", 3, "receiving_yards")
+                assertTrue(after > before, "a 120.5-yard line pulls up a ${"%.1f".format(before)}-yard projection: $after")
+                assertTrue(finalMean(priced, "WR_A", 3, "receiving_tds") > finalMean(plain, "WR_A", 3, "receiving_tds"))
+                // The baseline stage is the model's alone.
+                assertEquals(
+                    plain.query("SELECT metric_id, mean FROM player_week_projection WHERE player_id = 'WR_A' AND week = 3 AND stage = 'baseline' ORDER BY 1"),
+                    priced.query("SELECT metric_id, mean FROM player_week_projection WHERE player_id = 'WR_A' AND week = 3 AND stage = 'baseline' ORDER BY 1"),
+                )
+                assertEquals(listOf("game_script", "market", "matchup"), factors(priced, "WR_A"))
+                assertEquals(
+                    "Props: 120.5 rec yds, TD 62%",
+                    priced.query("SELECT note FROM player_week_projection_factor WHERE player_id = 'WR_A' AND season = 2025 AND week = 3 AND factor = 'market'").single()[0],
+                )
+                // Rest of season carries the blended week 3 and an unchanged week 4.
+                assertEquals(after - before, rosMean(priced, "WR_A", "receiving_yards") - rosMean(plain, "WR_A", "receiving_yards"), 1e-9)
+                // Nobody else and no past week moved.
+                val others = "SELECT player_id, season, week, metric_id, stage, mean FROM player_week_projection WHERE NOT (player_id = 'WR_A' AND week = 3) ORDER BY 1, 2, 3, 4, 5"
+                assertEquals(plain.query(others), priced.query(others))
+            }
+        }
+    }
+
+    @Test
+    fun `props for nobody projected, or for a game that isn't this week's, are counted and dropped`() {
+        league("a.db").use { plain ->
+            league("b.db").use { priced ->
+                run(plain)
+                val props = PropsSnapshot(
+                    listOf(
+                        PropEvent("AAA", "DDD", listOf(PropQuote("dk", "player_receptions", "Nobody Here", 4.5, 1.9, 1.9))),
+                        PropEvent("AAA", "BBB", listOf(PropQuote("dk", "player_receptions", "Player WR_B", 4.5, 1.9, 1.9))),
+                    ),
+                )
+
+                val report = run(priced, props = props)
+
+                assertEquals(PropsOutcome(blended = 0, unmatched = 2), report.props)
+                assertEquals(projections(plain), projections(priced))
+                assertEquals(listOf("game_script", "matchup"), factors(priced, "WR_A"))
+            }
+        }
+    }
+
+    @Test
+    fun `props with no upcoming week are all unmatched`() {
+        league("a.db", allPlayed = true).use { db ->
+            assertEquals(PropsOutcome(blended = 0, unmatched = 1), run(db, props = wrAProps).props)
         }
     }
 }
