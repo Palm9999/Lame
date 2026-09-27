@@ -21,13 +21,24 @@ class ForecastEngineTest {
      * are played. 2025 week 3 is next: AAA-DDD has a line, BBB-CCC doesn't.
      * In 2025 week 4 only AAA-CCC play: BBB and DDD are on bye.
      */
-    private fun league(name: String, allPlayed: Boolean = false, wrA2025Week2Targets: Double = 9.0, playedThrough: Int = 2): TestDb {
+    private fun league(
+        name: String,
+        allPlayed: Boolean = false,
+        wrA2025Week2Targets: Double = 9.0,
+        playedThrough: Int = 2,
+        units: Boolean = false,
+        dstA2025Week2Sacks: Double = 2.0,
+    ): TestDb {
         val db = TestDb(File(dir, name))
         for (team in teams) {
             val letter = team.first()
             db.player("QB_$letter", "QB", team)
             db.player("RB_$letter", "RB", team)
             db.player("WR_$letter", "WR", team)
+            if (units) {
+                db.player("K_$letter", "K", team)
+                db.player("DST_$team", "DST", team)
+            }
         }
         val schedule = listOf(
             listOf("AAA" to "BBB", "CCC" to "DDD"),
@@ -48,6 +59,11 @@ class ForecastEngineTest {
                     if (played) {
                         playWeek(db, home, season, week, wrA2025Week2Targets)
                         playWeek(db, away, season, week, wrA2025Week2Targets)
+                        if (units) {
+                            // TestDb's played games end 21-17: the home defense allowed 17, the away one 21.
+                            unitWeek(db, home, season, week, allowed = 17.0, dstA2025Week2Sacks)
+                            unitWeek(db, away, season, week, allowed = 21.0, dstA2025Week2Sacks)
+                        }
                     }
                 }
             }
@@ -56,6 +72,10 @@ class ForecastEngineTest {
         if (allPlayed) {
             playWeek(db, "AAA", 2025, 4, wrA2025Week2Targets)
             playWeek(db, "CCC", 2025, 4, wrA2025Week2Targets)
+            if (units) {
+                unitWeek(db, "AAA", 2025, 4, allowed = 17.0, dstA2025Week2Sacks)
+                unitWeek(db, "CCC", 2025, 4, allowed = 21.0, dstA2025Week2Sacks)
+            }
         }
         db.meta("expected_through_week:2024", "3")
         db.meta("expected_through_week:2025", if (allPlayed) "4" else "$playedThrough")
@@ -81,6 +101,24 @@ class ForecastEngineTest {
             "targets" to wrTargets, "receptions" to 6 * k, "receiving_yards" to 80 * k, "receiving_tds" to 0.5, "x_receiving_tds" to 0.45,
         )
     }
+
+    private fun unitWeek(db: TestDb, team: String, season: Int, week: Int, allowed: Double, dstA2025Week2Sacks: Double) {
+        val k = 1.0 + 0.1 * teams.indexOf(team)
+        db.week(
+            "K_${team.first()}", season, week, team,
+            "fg_att_0_39" to 1.0, "fg_made_0_39" to 1.0, "fg_att_40_49" to k, "fg_made_40_49" to 1.0,
+            "xp_att" to 2.0 * k, "xp_made" to 2.0 * k,
+        )
+        val sacks = if (team == "AAA" && season == 2025 && week == 2) dstA2025Week2Sacks else 2.0 * k
+        db.week(
+            "DST_$team", season, week, team,
+            "dst_sacks" to sacks, "dst_interceptions" to 1.0, "points_allowed" to allowed,
+        )
+    }
+
+    private fun kickers(db: TestDb, season: Int, week: Int): List<String?> = db.query(
+        "SELECT DISTINCT player_id FROM player_week_projection WHERE season = $season AND week = $week AND player_id LIKE 'K%' ORDER BY 1",
+    ).map { it[0] }
 
     private fun run(db: TestDb, copy: SeasonCopy? = null, props: PropsSnapshot? = null, onWeek: (Int, Int) -> Unit = { _, _ -> }): ForecastReport =
         Forecast.run(db.conn, builtAt, copy, props, onWeek)
@@ -409,6 +447,99 @@ class ForecastEngineTest {
     fun `props with no upcoming week are all unmatched`() {
         league("a.db", allPlayed = true).use { db ->
             assertEquals(PropsOutcome(blended = 0, unmatched = 1), run(db, props = wrAProps).props)
+        }
+    }
+
+    @Test
+    fun `kickers and team defenses get the upcoming week's stages and factors, and past weeks' final`() {
+        league("units.db", units = true).use { db ->
+            run(db)
+            fun stages(id: String, week: Int) = db.query(
+                "SELECT DISTINCT stage FROM player_week_projection WHERE player_id = '$id' AND season = 2025 AND week = $week ORDER BY stage",
+            ).map { it[0] }
+            for (id in listOf("K_A", "K_B", "DST_AAA", "DST_BBB")) {
+                assertEquals(listOf("baseline", "final"), stages(id, 3), id)
+                assertEquals(listOf("final"), stages(id, 2), id)
+            }
+            // AAA-DDD has a line: AAA's kicker follows it, and AAA's D/ST faces DDD's implied points.
+            assertEquals(listOf("game_script"), factors(db, "K_A"))
+            assertEquals(listOf("game_script", "matchup"), factors(db, "DST_AAA"))
+            // BBB-CCC has none: no game script, so the final projection is the matchup's.
+            assertEquals(emptyList<String?>(), factors(db, "K_B"))
+            assertEquals(listOf("matchup"), factors(db, "DST_BBB"))
+            assertEquals(
+                db.query("SELECT metric_id, mean FROM player_week_projection WHERE player_id = 'K_B' AND season = 2025 AND week = 3 AND stage = 'baseline' ORDER BY 1"),
+                db.query("SELECT metric_id, mean FROM player_week_projection WHERE player_id = 'K_B' AND season = 2025 AND week = 3 AND stage = 'final' ORDER BY 1"),
+            )
+            val stored = db.query("SELECT mean, variance FROM player_week_projection WHERE player_id LIKE 'K%' OR player_id LIKE 'DST%'")
+            assertTrue(stored.isNotEmpty())
+            for (row in stored) {
+                assertTrue(row[0]!!.toDouble().isFinite() && row[0]!!.toDouble() > 0.0, "$row")
+                assertTrue(row[1]!!.toDouble().isFinite() && row[1]!!.toDouble() >= 0.0, "$row")
+            }
+        }
+    }
+
+    @Test
+    fun `a team defense's points allowed carry the measured spread, one game at a time`() {
+        league("allowed.db", units = true).use { db ->
+            run(db)
+            val rows = db.query(
+                "SELECT player_id, week, stage, mean, variance FROM player_week_projection " +
+                    "WHERE player_id LIKE 'DST%' AND metric_id = 'points_allowed'",
+            )
+            assertTrue(rows.size >= 8, "$rows")
+            // The synthetic league has too few lined games to measure the spread: the default.
+            for (row in rows) {
+                assertTrue(row[3]!!.toDouble() in 5.0..40.0, "$row")
+                assertEquals(K.PA_SD_DEFAULT * K.PA_SD_DEFAULT, row[4]!!.toDouble(), 1e-9, "$row")
+            }
+            val games = db.query("SELECT DISTINCT mean, variance FROM player_week_projection WHERE player_id LIKE 'DST%' AND metric_id = 'g'")
+            assertEquals(listOf(listOf("1.0", "0.0")), games)
+            assertEquals(emptyList<List<String?>>(), db.query("SELECT metric_id FROM player_week_projection WHERE metric_id LIKE 'pa\\_%' ESCAPE '\\'"))
+        }
+    }
+
+    @Test
+    fun `rest of season for kickers and defenses sums the remaining games and skips byes`() {
+        league("unit-ros.db", units = true).use { db ->
+            run(db)
+            // BBB is on bye in week 4: its rest of season is week 3 alone.
+            assertEquals(finalMean(db, "DST_BBB", 3, "dst_sacks"), rosMean(db, "DST_BBB", "dst_sacks"), 1e-9)
+            assertEquals(finalMean(db, "K_B", 3, "xp_made"), rosMean(db, "K_B", "xp_made"), 1e-9)
+            // AAA plays weeks 3 and 4: two games, whose points allowed sum.
+            assertTrue(rosMean(db, "DST_AAA", "dst_sacks") > 1.5 * finalMean(db, "DST_AAA", 3, "dst_sacks"))
+            assertEquals(2.0, rosMean(db, "DST_AAA", "g"), 1e-9)
+            assertEquals(1.0, rosMean(db, "DST_BBB", "g"), 1e-9)
+            assertTrue(rosMean(db, "DST_AAA", "points_allowed") > 1.5 * finalMean(db, "DST_AAA", 3, "points_allowed"))
+        }
+    }
+
+    @Test
+    fun `a later week's stats never change an earlier kicker's or defense's projection`() {
+        val before = league("u1.db", units = true).use { db -> run(db); projections(db) }
+        val after = league("u2.db", units = true, dstA2025Week2Sacks = 9.0).use { db -> run(db); projections(db) }
+        val throughWeek2 = { row: List<String?> -> order(row[1]!!.toInt(), row[2]!!.toInt()) <= order(2025, 2) }
+
+        assertEquals(before.filter(throughWeek2), after.filter(throughWeek2))
+        val dstAWeek3 = { row: List<String?> -> row[0] == "DST_AAA" && row[1] == "2025" && row[2] == "3" }
+        assertNotEquals(before.filter(dstAWeek3), after.filter(dstAWeek3))
+    }
+
+    @Test
+    fun `each team has one kicker, never one kicker for two teams, and a released kicker isn't his old team's`() {
+        league("kickers.db", units = true).use { db ->
+            // AAA signed K_A2 for 2025; nflverse now lists K_A on BBB, where he hasn't kicked.
+            db.player("K_A2", "K", "AAA")
+            db.exec("UPDATE player SET team = 'BBB' WHERE player_id = 'K_A'")
+            db.exec("UPDATE player_week_stat SET player_id = 'K_A2' WHERE player_id = 'K_A' AND season = 2025")
+            run(db)
+
+            // Upcoming: each team's listed kicker with the latest kick. BBB keeps K_B, who kicked for it last week.
+            assertEquals(listOf("K_A2", "K_B", "K_C", "K_D"), kickers(db, 2025, 3))
+            // Week 2: whoever kicked. Week 1: K_A2 has no kick before it, so AAA's is its last kicker, K_A.
+            assertEquals(listOf("K_A2", "K_B", "K_C", "K_D"), kickers(db, 2025, 2))
+            assertEquals(listOf("K_A", "K_B", "K_C", "K_D"), kickers(db, 2025, 1))
         }
     }
 }

@@ -42,3 +42,9 @@ internal fun gameScript(game: Game, team: String, leagueImplied: Double, passRat
     val scripted = (usual - K.PASS_RATE_PER_POINT * favoredBy).coerceIn(K.PASS_RATE_MIN, K.PASS_RATE_MAX)
     return GameScript(implied, leagueImplied, ratio, scripted / usual, (1 - scripted) / (1 - usual))
 }
+
+/** A team's average implied points in [season]: half its average posted total, or [K.LEAGUE_IMPLIED_DEFAULT] before any. */
+internal fun averageImplied(games: List<Game>, season: Int): Double {
+    val totals = games.filter { it.season == season && it.regular }.mapNotNull { it.total }
+    return if (totals.isEmpty()) K.LEAGUE_IMPLIED_DEFAULT else totals.average() / 2
+}

@@ -4,7 +4,8 @@ import kotlin.math.ln
 
 internal class ProjectionOutcome(val status: String, val upcoming: Map<Int, Int>, val weeks: Int, val props: PropsOutcome?)
 
-private enum class WeekKind { PAST, UPCOMING, REST }
+/** Where a week sits relative to the upcoming one: projected and kept, projected with factors, or rest of season only. */
+internal enum class WeekKind { PAST, UPCOMING, REST }
 
 /**
  * A player's upcoming-week baseline and team: reused, with each remaining
@@ -21,7 +22,8 @@ private class Prepared(
 
 /**
  * The walk-forward loop over every regular-season week of the built seasons,
- * oldest first, each projected only from the games before it. Past weeks
+ * oldest first, each projected only from the games before it. Kickers and
+ * D/STs are projected alongside by [UnitProjector]. Past weeks
  * keep their final projection, for the accuracy backtest. The upcoming week
  * keeps both stages and the waterfall's factors. Every week from the upcoming
  * one on is summed into rest of season, using what's known as of the upcoming
@@ -45,6 +47,7 @@ internal class Projector(
             put(Triple(g.away, g.season, g.week), g)
         }
     }
+    private val units = UnitProjector(inputs, gameOf, sink)
     private val teamsIn: Map<Int, Set<String>> =
         inputs.games.groupBy { it.season }.mapValues { (_, games) -> games.flatMap { listOf(it.home, it.away) }.toSet() }
     private val chronological: List<PlayerGame> = inputs.history.values.flatten().sortedBy { it.order }
@@ -78,6 +81,7 @@ internal class Projector(
                 val (state, prepared) = upcoming ?: continue
                 onWeek(season, week)
                 for (p in prepared) addRest(state, p, season, week, ros)
+                units.rest(season, week, ros)
                 continue
             }
             advanceTo(order(season, week))
@@ -86,6 +90,7 @@ internal class Projector(
             projected++
             val state = WeekState(season, week)
             val prepared = prepareWeek(state, kind)
+            units.week(season, week, kind, ros)
             if (kind == WeekKind.UPCOMING) {
                 upcoming = state to prepared
                 for (p in prepared) addRest(state, p, season, week, ros)
@@ -119,8 +124,7 @@ internal class Projector(
                     gameOf[Triple(tg.team, tg.season, tg.week)]?.let { g -> MatchupGame(tg, g.opponentOf(tg.team), g.isHome(tg.team)) }
                 },
             )
-            val totalsPosted = inputs.games.filter { it.season == season && it.regular }.mapNotNull { it.total }
-            leagueImplied = if (totalsPosted.isEmpty()) K.LEAGUE_IMPLIED_DEFAULT else totalsPosted.average() / 2
+            leagueImplied = averageImplied(inputs.games, season)
         }
     }
 

@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 3
+public const val FORECAST_VERSION: Int = 4
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -53,9 +53,9 @@ internal object K {
     const val PASS_RATE_MIN = 0.30
     const val PASS_RATE_MAX = 0.80
 
-    // Layer 7, spread: sigma = a * mu^0.75, CV at mu = 10 by position (projections.py EMPIRICAL_CV).
+    // Layer 7, spread: sigma = a * mu^0.75, CV at mu = 10 by position (projections.py EMPIRICAL_CV; K and DST from spec §6).
     const val VARIANCE_EXPONENT = 0.75
-    val EMPIRICAL_CV: Map<String, Double> = mapOf("QB" to 0.40, "RB" to 0.57, "WR" to 0.70, "TE" to 0.77)
+    val EMPIRICAL_CV: Map<String, Double> = mapOf("QB" to 0.40, "RB" to 0.57, "WR" to 0.70, "TE" to 0.77, "K" to 0.52, "DST" to 0.85)
 
     // Props (spec §5). Props can't be backtested (no historical props), so these are judgments, not fits.
     // The market's variance is this share of layer 7's for its mean: markets are sharper than the model, so
