@@ -34,7 +34,10 @@
 - [x] **Plan approved; execution method: native** (2026-09-27).
 - [x] **Sub-project 2 built** (Session A, Tasks 1–4; see "Projection accuracy: execution progress").
 - [x] **Final whole-branch review** (Opus, 2026-09-27): "ready with fixes". 0 Critical, 1 Important, 8 Minor. Fixed in commit 4fdf023 (see below).
-- [ ] **PR #5 merged.** Waiting on the user.
+- [x] **PR #5 merged** (2026-09-27).
+- [x] **Range calibration fixed and merged** (PR #6, 594867a). See "Range calibration" below.
+- [x] **Sub-project 3 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-props.md`, on draft PR #7.
+- [ ] **Plan approved, and an execution method chosen.** Waiting on the user.
 
 ## Next step: review the sub-project 3 plan, then Session A
 
