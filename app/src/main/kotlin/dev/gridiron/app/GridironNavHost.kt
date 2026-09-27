@@ -41,6 +41,7 @@ import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.live.LiveRepository
+import dev.gridiron.core.data.live.PropsRepository
 import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.feature.compare.CompareRoute
 import dev.gridiron.feature.players.GridRoute
@@ -69,6 +70,8 @@ data class Deps(
     val settings: SettingsRepository? = null,
     /** Builds stats on the phone. Null in tests, which read a prebuilt database. */
     val refresher: Refresher? = null,
+    /** Odds API props, for Settings. Null in tests, like [live]. */
+    val props: PropsRepository? = null,
 )
 
 /**
@@ -99,7 +102,7 @@ private fun FirstLoad(deps: Deps, state: RefreshState) {
     BackHandler(enabled = settingsOpen) { settingsOpen = false }
     val settings = deps.settings
     if (settingsOpen && settings != null) {
-        SettingsScreen(settings, onBack = { settingsOpen = false })
+        SettingsScreen(settings, onBack = { settingsOpen = false }, props = deps.props?.status)
     } else {
         LoadStatsScreen(
             state,
@@ -188,7 +191,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                         )
                     }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back) }
-                    entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back) } }
+                    entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back, props = deps.props?.status) } }
                 },
             )
         }

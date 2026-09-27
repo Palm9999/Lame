@@ -47,12 +47,23 @@ internal fun describeFailure(e: Throwable, kept: Boolean): String {
 
 private fun Throwable.causes(): Sequence<Throwable> = generateSequence(this) { it.cause }
 
-/** "Stats updated for 2024, 2025, 2026 in 1 min 5 s." plus any skipped seasons. */
-internal fun summary(report: IngestReport, elapsedMs: Long): String = buildString {
+/**
+ * "Stats updated for 2024, 2025, 2026 in 1 min 5 s." plus any skipped
+ * seasons, missing projections, and how props went.
+ */
+internal fun summary(report: IngestReport, elapsedMs: Long, propsError: String? = null): String = buildString {
     append("Stats updated for ").append((report.built + report.reused).sorted().joinToString(", "))
     append(" in ").append(formatDuration(elapsedMs)).append('.')
     for ((season, why) in report.skipped.toSortedMap()) append(' ').append(season).append(" skipped: ").append(why).append('.')
     if (!report.projectionsOk) append(" Projections unavailable: ").append(report.forecast).append('.')
+    report.props?.takeIf { it.blended > 0 || it.unmatched > 0 }?.let { p ->
+        append(" Props moved ").append(p.blended).append(if (p.blended == 1) " projection" else " projections")
+        if (p.unmatched > 0) {
+            append("; ").append(p.unmatched).append(if (p.unmatched == 1) " name didn't" else " names didn't").append(" match a player")
+        }
+        append('.')
+    }
+    propsError?.let { append(" Props not updated: ").append(it).append('.') }
 }
 
 internal fun formatDuration(ms: Long): String {
