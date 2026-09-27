@@ -39,17 +39,17 @@
 - [x] **Sub-project 3 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-props.md`, on draft PR #7.
 - [x] **Plan approved; execution method: native** (2026-09-27). The user kept both judgment calls: `MARKET_VARIANCE_RATIO` 0.5 and `ONE_SIDED_OVERROUND` 1.08.
 - [x] **Session A built** (Tasks 1–4; see "Projection props: execution progress").
-- [ ] **Session B** (Tasks 5–6), then the final whole-branch review.
+- [x] **Session B built** (Tasks 5–6; see "Projection props: execution progress").
+- [x] **Final whole-branch review** (Opus, 2026-09-27): "with fixes". 0 Critical, 2 Important (plus 1 Minor re-graded to Important), 7 Minor. Fixed in commit 2ff2be2 (see below).
+- [ ] **PR #7 merge** (the user decides).
 
-## Next step: Session B (Tasks 5–6), then the final review
+## Next step: merge PR #7, then sub-project 4
 
-1. **Session B** = Tasks 5–6 of `docs/superpowers/plans/2026-09-27-projection-props.md`: the key in Settings, and wiring props from Refresh into the forecast, plus docs. Native execution (`executing-plans`), as in Session A.
-2. Then the **final whole-branch review** (fresh reviewer, most capable model) over the whole of PR #7 (base 594867a), with the plan's Review Focus and the rulings below.
-3. Draft PR #7 (https://github.com/Palm9999/Lame/pull/7) carries the plan and Session A's code, and is watched.
-4. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape.
-5. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should now read about 78–83%.
-6. The deferred minors below (the user decides).
-7. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
+1. **Sub-project 3 is built and reviewed.** Nothing from its plan is left. Draft PR #7 (https://github.com/Palm9999/Lame/pull/7) is watched; merging it is the user's call.
+2. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape: enter it in ☰ → Settings → Betting props, then Refresh stats. The toast should say "Props moved N projections"; Settings shows credits left.
+3. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
+4. The deferred minors below (the user decides), then **sub-project 4 (K/DST)**, which needs its own plan.
+5. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
 
 **Things to know:**
 - **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
@@ -63,7 +63,7 @@
 - **Warnings are errors**, and explicit API mode is on in JVM modules.
 - **Tracking.** The `.superpowers/` ledger doesn't survive the container. Rulings go in this file.
 
-**PRs #4, #5 and #6:** merged. **PR #7** (sub-project 3) is open as a draft and watched; it carries Session A's code.
+**PRs #4, #5 and #6:** merged. **PR #7** (sub-project 3) is open as a draft and watched; it carries the whole sub-project and the review fixes.
 
 ## Projection props: execution progress
 
@@ -74,6 +74,28 @@
   - Ruling: the plan changed only `run()`'s final `ProjectionOutcome`, but the early "no schedule" return builds one too and needs the new argument. It reports every prop name as unmatched when props were given, like "no upcoming week". Cost if wrong: a count in the toast for a build with no schedule.
 - [x] Task 3: The Odds API client and parser (commit e4ada44; `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew :core:data:test` → 137 pass, 1 skipped; `OddsTest` 7/7, `UrlConnectionHttpClientTest` 3/3). Watched failing first (unresolved `OddsApi`, …). No rulings.
 - [x] Task 4: Props in `live.db` within the credit budget (commit bf7b432; `./gradlew :core:data:test --tests "dev.gridiron.core.data.live.*"` → pass, `PropsRepositoryTest` 8/8). Watched failing first (unresolved `PropsRepository`, …). No rulings.
+
+**Session B** (2026-09-27). After Task 6: `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` → BUILD SUCCESSFUL; `./gradlew :app:assembleRelease` → BUILD SUCCESSFUL; the gate on a fresh 2024–2025 build passes with the MAE table unchanged (QB 6.42, RB 5.88, WR 5.40, TE 4.87; held 78/78/81/83%).
+
+- [x] Task 5: The key in Settings (commit 546cdc5; `:core:datastore:test`, `SettingsRepositoryTest`, `SettingsScreenTest` → pass, 6/6 in Settings). Watched failing first (unresolved `oddsApiKey`, `setOddsApiKey`). No rulings.
+- [x] Task 6: Props flow from Refresh into the forecast; docs (commit b3d9b9a; `:app:testDebugUnitTest` → 45/45; `IngestPipelineTest` 22/22). Watched failing first (`build` had no `props`; then `GridironApplication`'s 4-parameter `stats` lambda). No rulings.
+
+**Final whole-branch review** (594867a..b3d9b9a; Opus). Verdict: "with fixes". It confirmed every Review Focus case, that props touch only the upcoming week, that rest of season and the waterfall stay consistent, and that the key never reaches a message.
+
+- **Fixed** (commit 2ff2be2, each RED→GREEN; `./gradlew test` and `:app:assembleRelease` green):
+  - **Important:** a failed events call (refused key, no network, 5xx) skipped pruning, so a game's props stayed past kickoff and could be blended into a later game between the same two teams. Pruning now runs before any call. Test: "a game's props are dropped 12 hours after kickoff even when the Odds API refuses the key".
+  - **Important:** a game whose props weren't posted yet was stamped fetched and skipped for 24 hours. It's now stamped, and "Props fetched" set, only when quotes arrive; an empty answer costs no credits. Test: "a game with no props yet is asked again on the next refresh, once they're posted".
+    - Ruling: this changes two of the plan's own Task 4 assertions (the 24-hour test and the credits test expected the empty e1 to count as fetched). Cost if wrong: one extra free call per empty game per refresh.
+  - **Important (re-graded from Minor):** `HttpURLConnection` followed redirects, so a redirect would carry the key to another host, against spec §5's "sent only to api.the-odds-api.com". Redirects are now returned, not followed (they show as "answered HTTP 302"). Test: "a redirect is returned, not followed, so the key never reaches another host".
+- **Declined to judge** (all stand, as plan rulings or user-approved judgments): the Gamma CV reading, `MARKET_VARIANCE_RATIO` and `ONE_SIDED_OVERROUND`, Yes/No fixtures, only priced stats move, the fetch window, the 401 wording, preseason events, a same-name player with no history, and the "no schedule" `PropsOutcome`.
+- **Deferred minors** (the user decides):
+  - The "didn't match a player" count also includes matched players with no usable quote or below the minimum points. Two same-name players count as 1.
+  - Settings says "Props are fetched on the next refresh" when no key is set, and an old error and credits line stays after the key is removed.
+  - `UserPrefs` is a data class, so its `toString()` includes the key. Nothing logs it today.
+  - The receptions blend can push receptions above the unchanged targets (a catch rate over 100%).
+  - `CLAUDE.md`'s `:app` line still says "Settings (seasons)", and The Odds API isn't under Data attribution.
+  - When the stats build itself fails, the toast drops the props error. Settings still shows it.
+
 - **Plan rulings to carry** (from the plan's self-review): fixtures hand-built, with anytime TD assumed `Yes`/`No`; market weight about two thirds (`MARKET_VARIANCE_RATIO` 0.5); a one-sided anytime-TD price divided by 1.08; only priced stats move; the fetch week runs to the Wednesday (00:00 UTC) after its first kickoff; props pruned 12 hours after kickoff; rest of season includes the blended week; `live.db` keeps `user_version` 1; `FORECAST_VERSION` 3.
 
 ## Range calibration (2026-09-27)
