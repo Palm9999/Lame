@@ -33,14 +33,16 @@
   - 2024, which has no 2023 history in that build, still loses at WR and TE. The plan uses that to show the gate can fail.
 - [x] **Plan approved; execution method: native** (2026-09-27).
 - [x] **Sub-project 2 built** (Session A, Tasks 1–4; see "Projection accuracy: execution progress").
-- [ ] **Final whole-branch review** (a fresh reviewer on the most capable model), then its fix pass.
+- [x] **Final whole-branch review** (Opus, 2026-09-27): "ready with fixes". 0 Critical, 1 Important, 8 Minor. Fixed in commit 4fdf023 (see below).
+- [ ] **PR #5 merged.** Waiting on the user.
 
-## Next step: sub-project 2's final review
+## Next step: merge sub-project 2, then plan sub-project 3
 
-1. Run the final whole-branch review (`executing-plans` "Final Review") over a503a94..HEAD, with the plan's Review Focus and the rulings below. Fix Critical and Important findings in one pass, each RED→GREEN.
-2. Wait for CI on the draft PR (https://github.com/Palm9999/Lame/pull/5, watched): the parity job now runs the accuracy gate.
-3. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows, and whether the numbers match the gate table below under PPR. Over about 10 s → record it here (the fix would be caching per season and profile, out of this plan's scope).
-4. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (commands are in the plan).
+1. CI on the draft PR (https://github.com/Palm9999/Lame/pull/5, watched). Merging is the user's decision.
+2. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows, and whether the numbers match the gate table below under PPR. Over about 10 s → record it here (the fix would be caching per season and profile).
+3. The deferred minors below (the user decides which).
+4. Then sub-project 3 (Odds API props) needs its plan. Worth weighing first: floor to ceiling holds only 54–66% of scores against the spec's target of about 80%.
+5. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (commands are in the plan).
 
 **Things to know:**
 - **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
@@ -80,6 +82,29 @@
   - Note for the user: floor to ceiling holds only 54–66% of scores against the spec's target of about 80%, so the model's spread is too narrow. The page shows it; the gate doesn't check it.
 - [x] Task 3: The accuracy page (commit b59b401; `./gradlew :feature:projections:testDebugUnitTest :core:data:test :app:compileDebugKotlin` → 31/31 in projections, Accuracy 8/8). No rulings.
 - [x] Task 4: ☰ → Projection accuracy, and docs (commit 018b1e9; `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew :app:testDebugUnitTest` → 39/39). No rulings.
+
+**Final whole-branch review** (a503a94..c6ba3ab; Opus). Verdict: "ready with fixes". It agreed with both executor rulings. It confirmed every Review Focus case on real data and in CI, that the gate is deterministic (model points are the scored means, and the simulation is seeded), that there's no NaN path, and that every SQL value is bound.
+
+- **Fixed** (commit 4fdf023, each RED→GREEN; `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` and `:app:assembleRelease` green):
+  - **Important:** the page recomputed the whole backtest on every rotation, and a superseded load kept running. A repeat request for the season on screen (or for the one the Grid's season fell back to) now keeps it, and a new request cancels the old one. Tests: `AccuracyViewModelTest` "asking again for the season on screen keeps it without recomputing" and "a superseded load is cancelled, not left running".
+  - **Re-graded Minor → Important:** a skipped gate passed CI, and the spec says the gate is never skipped. The step now deletes the table first and fails without one. The step's script with the gate variable unset: exit 0 before, exit 1 after; with 2025: exit 0.
+- **Rulings:**
+  - A cancelled load stops at its next suspension point, but a `backtest()` loop already running finishes (its result is dropped). The dedupe removes the rotation case, which leaves only a season tap mid-load. Cost if wrong: one extra 1–3 s of CPU.
+  - Declined to judge by the reviewer; each stands:
+    - The calibration shortfall belongs to sub-project 1's variances; the page reports it.
+    - Last 4 may include last season's playoff games: they are games played.
+    - A postponed game pinning the upcoming week is the forecast's rule.
+    - The page not reloading after a refresh swap is the existing deferred minor.
+    - Phone timing and memory are the user's checkpoint.
+    - `accuracy_summary` in the Python schema: nothing reads it.
+- **Deferred minors (the user decides):**
+  - "Appeared" means a recorded play (a `g` row). A player on the field with no touch or target is left out. The 2025 upper bound is 45 WR, 9 RB, 7 TE and 2 QB player-weeks, some of them healthy scratches. The plan's evidence for the rule was circular (snaps attach only to rows with plays), and the footnote says "the player played".
+  - "No player-weeks to measure in 2024 yet." says "yet" for a finished season, and a single position with nothing to count just disappears.
+  - An exception's Unavailable state drops the season chips, and a null message reads "…: null."
+  - The oldest built season (no prior-season history) is offered without a caveat. The model loses there at WR and TE.
+  - CLAUDE.md says "a few seconds on a phone", which hasn't been measured.
+  - `AccuracyContractTest`'s 15 s budget runs inside the parallel build (it measured 2.7 s).
+  - Small waste: `status()` is read up to three times per load, `score(means)` runs twice per sample, and played weeks are grouped for every player.
 
 ## Projection engine: execution progress
 
