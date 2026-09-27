@@ -43,6 +43,8 @@
    - **Session A** = Tasks 1–4: the prop math, the forecast's blend, the Odds API client and parser, and props in `live.db` within the credit budget.
    - **Session B** = Tasks 5–6: the key in Settings, and wiring props from Refresh into the forecast, plus docs. Then the final whole-branch review.
 3. **Waiting on the user:** review the plan and choose the execution method (native was used for sub-projects 1 and 2).
+   - Draft PR #7 (https://github.com/Palm9999/Lame/pull/7) carries the plan and will carry the code. CI is green on the plan commit, the PR is watched, and a check-in is scheduled.
+   - PRs #4, #5 and #6 are merged; their watches and check-ins are cancelled.
 4. **Two judgment calls in the plan for the user to confirm.** Props can't be backtested, so neither can be fitted:
    - The market's weight in the blend is about two thirds (`MARKET_VARIANCE_RATIO` 0.5).
    - A Yes-only anytime-TD price is discounted by 8% (`ONE_SIDED_OVERROUND` 1.08).
@@ -63,7 +65,7 @@
 - **Warnings are errors**, and explicit API mode is on in JVM modules.
 - **Tracking.** The `.superpowers/` ledger doesn't survive the container. Rulings go in this file.
 
-**PRs #4 and #5:** merged. Their watches and check-ins are cancelled.
+**PRs #4, #5 and #6:** merged. **PR #7** (sub-project 3) is open as a draft and watched.
 
 ## Range calibration (2026-09-27)
 
