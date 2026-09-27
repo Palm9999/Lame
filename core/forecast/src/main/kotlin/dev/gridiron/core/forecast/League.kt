@@ -54,7 +54,6 @@ internal class Rates(private val sums: Map<String, Double>) {
 
     val targetShare: Double = ratio("targets", "team_targets")
     val carryShare: Double = ratio("carries", "team_carries")
-    val passShare: Double = ratio("attempts", "team_attempts")
     val catchRate: Double = ratio("receptions", "targets")
     val yardsPerTarget: Double = ratio("receiving_yards", "targets")
     val yardsPerCarry: Double = ratio("rushing_yards", "carries")

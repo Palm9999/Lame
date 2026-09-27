@@ -42,14 +42,15 @@ public class AccuracyViewModel(
     private val _state = MutableStateFlow<AccuracyState>(AccuracyState.Loading)
     public val state: StateFlow<AccuracyState> = _state.asStateFlow()
 
-    // The season and profile asked for last, and the season that request showed:
-    // asking again for either (a rotation re-emits the profile) keeps the page.
-    private var requested: Pair<Int, ScoringProfile>? = null
-    private var shown: Pair<Int, ScoringProfile>? = null
+    // The season, profile and stats version asked for last, and what that request showed:
+    // asking again for either (a rotation re-emits the profile) keeps the page. A refresh's
+    // new stats (a new [dataVersion]) always recomputes.
+    private var requested: Triple<Int, ScoringProfile, Long>? = null
+    private var shown: Triple<Int, ScoringProfile, Long>? = null
     private var job: Job? = null
 
-    public fun load(season: Int, profile: ScoringProfile) {
-        val key = season to profile
+    public fun load(season: Int, profile: ScoringProfile, dataVersion: Long = 0L) {
+        val key = Triple(season, profile, dataVersion)
         if (key == requested || key == shown) return
         requested = key
         shown = null
@@ -62,9 +63,9 @@ public class AccuracyViewModel(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                AccuracyState.Unavailable("Couldn't measure accuracy: ${e.message}.")
+                AccuracyState.Unavailable("Couldn't measure accuracy: ${e.message ?: e::class.simpleName}.")
             }
-            if (next is AccuracyState.Loaded) shown = next.season to profile
+            if (next is AccuracyState.Loaded) shown = Triple(next.season, profile, dataVersion)
             _state.value = next
         }
     }

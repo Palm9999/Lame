@@ -52,12 +52,15 @@ internal class Projector(
     private var added = 0
     private var blended = 0
 
-    /** Distinct names per event in [props]: whoever isn't blended is unmatched. */
-    private val propNames = props?.events?.sumOf { e -> e.quotes.map { normalizeName(it.player) }.distinct().size } ?: 0
+    /**
+     * Names in [props] that no projected player matched. Until the upcoming
+     * week is matched (or when there is none), that's every name, one per game.
+     */
+    private var unmatched = props?.events?.sumOf { e -> e.quotes.map { normalizeName(it.player) }.distinct().size } ?: 0
 
     fun run(): ProjectionOutcome {
         val regular = inputs.games.filter { it.regular }
-        if (regular.isEmpty()) return ProjectionOutcome("no schedule", emptyMap(), 0, props?.let { PropsOutcome(0, propNames) })
+        if (regular.isEmpty()) return ProjectionOutcome("no schedule", emptyMap(), 0, props?.let { PropsOutcome(0, unmatched) })
         val latest = regular.maxOf { it.season }
         val upcomingWeek = regular.filter { it.season == latest && !it.played }.minOfOrNull { it.week }
         val weeks = regular.map { it.season to it.week }.distinct().sortedWith(compareBy({ it.first }, { it.second }))
@@ -93,7 +96,7 @@ internal class Projector(
         }
         val status = if (projected == 0) "no games to project from yet" else FORECAST_OK
         val upcomingMap = if (upcoming != null && upcomingWeek != null) mapOf(latest to upcomingWeek) else emptyMap()
-        return ProjectionOutcome(status, upcomingMap, projected, props?.let { PropsOutcome(blended, propNames - blended) })
+        return ProjectionOutcome(status, upcomingMap, projected, props?.let { PropsOutcome(blended, unmatched) })
     }
 
     /** What every player's projection for one week shares: league rates, the average team, defense ratings. */
@@ -155,7 +158,7 @@ internal class Projector(
                 props,
                 inputs.games.filter { it.season == state.season && it.week == state.week }.map { it.home to it.away },
                 drafts.map { PropCandidate(it.player.playerId, it.player.name, it.team) },
-            )
+            ).also { unmatched = it.unmatched }
         } else {
             null
         }

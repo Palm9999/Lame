@@ -261,4 +261,32 @@ class RefreshCoordinatorTest {
             refresher.state.value,
         )
     }
+
+    @Test
+    fun aFailedBuildStillSaysWhyPropsWerentUpdated() = runTest {
+        db.writeText("old")
+        val refresher = coordinator(
+            props = { PropsFetch(null, "the Odds API refused the key") },
+            build = { _, _ -> throw ValidationException(listOf("no games")) },
+        )
+
+        refresher.refresh()
+        advanceUntilIdle()
+
+        val state = refresher.state.value as RefreshState.Finished
+        assertFalse(state.ok)
+        assertTrue(state.message, state.message.endsWith("Props not updated: the Odds API refused the key."))
+    }
+
+    @Test
+    fun aBuildLeftBehindByAKilledProcessIsDeletedAtStart() = runTest {
+        next.writeText("half-written")
+        val work = File(tmp.root, "ingest-work").apply { mkdirs() }
+        val part = File(work, "pbp_2026.csv.gz.part").apply { writeText("partial") }
+
+        RefreshCoordinator(tmp.root, executor, { _, _, _, _, _ -> report }, { listOf(2026) }, this, workDir = work)
+
+        assertFalse(next.exists())
+        assertFalse(part.exists())
+    }
 }

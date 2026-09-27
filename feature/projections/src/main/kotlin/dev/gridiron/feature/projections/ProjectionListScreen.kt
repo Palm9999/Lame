@@ -38,6 +38,7 @@ import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.model.ScoringProfile
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import java.util.Locale
 
 /** ☰ → Projections: the upcoming week or rest of season, by position, scored with the active profile. */
@@ -49,12 +50,15 @@ public fun ProjectionListRoute(
     badges: Flow<Map<String, String>>,
     onPlayer: (String) -> Unit,
     onBack: () -> Unit,
+    /** Bumped when a refresh swaps in new stats: the list loads again. */
+    dataVersion: Flow<Long> = flowOf(0L),
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
     val profile by scoring.active.collectAsStateWithLifecycle<ScoringProfile?>(initialValue = null)
     val injuries by badges.collectAsStateWithLifecycle(initialValue = emptyMap())
-    LaunchedEffect(season, profile) { profile?.let { vm.load(season, it) } }
+    val version by dataVersion.collectAsStateWithLifecycle(initialValue = 0L)
+    LaunchedEffect(season, profile, version) { profile?.let { vm.load(season, it) } }
     ProjectionListScreen(state, injuries, onPlayer, onBack)
 }
 

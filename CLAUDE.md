@@ -62,14 +62,14 @@ GRIDIRON_STATS_DB=etl/build/accuracy.db GRIDIRON_ACCURACY_GATE=2025 ./gradlew :c
 **JVM Modules** (plain Kotlin, platform-independent):
 - `:core:model` — Shared types used across the app
 - `:core:statquery` — Query builder that turns `StatQuerySpec` into SQL. Guarantees rate recomputation, SQL injection safety, determinism, and stable percentiles. Three test tiers: in-memory SQLite, safety/determinism checks, and contract tests against the real ETL database
-- `:core:database` — Read-only SQLite access via the bundled driver. `ReopenableQueryExecutor` closes and reopens the connection when a refresh swaps in a new `stats.db`, and bumps a version flow the Grid and Compare reload on
+- `:core:database` — Read-only SQLite access via the bundled driver. `ReopenableQueryExecutor` closes and reopens the connection when a refresh swaps in a new `stats.db`, and bumps a version flow that every stats screen (Grid, Compare, Player page, Projections, waterfall, accuracy, Injury report, Team defense) reloads on
 - `:core:testing` — Test fixtures: JDBC executor over the real database. Proves results match what the phone's SQLite driver will return
 - `:core:projections` — Pure `score()` (the in-memory twin of `StatQueryBuilder`'s SQL scoring), factor attribution, and single-player Monte Carlo (floor/ceiling, widened per position by `RANGE_WIDENING` so the range holds about 80% of games) for the Projections feature; `backtest()`, which scores the stored past-week projections against real games beside the season-to-date and last-4 averages (MAE, bias, R², floor-to-ceiling calibration)
 - `:core:ingest` — Builds `stats.db` from nflverse and ffopportunity: a streaming CSV reader, Kotlin ports of the ETL's transforms and validation, and a pipeline that re-downloads only files whose ETag changed and copies unchanged seasons from the previous build. It also downloads nflverse's schedule (`games.csv`) into the `game` table and runs `:core:forecast` after validation; a forecast failure leaves the stats and records why. Runs on the phone and on the JVM (`./gradlew :core:ingest:buildStatsDb -Pseasons="2025" -Pout=etl/build/stats.db`); CI's parity job holds it to the Python ETL's values
 - `:core:forecast` — The projection model. Reads a freshly built stats.db and writes weekly, rest-of-season and waterfall-factor projections for QB/RB/WR/TE, walk-forward (each week only from the games before it). Seven layers: team volume, shrunk share (toward the player's last season; starting QB only; each team's shares sum to one), shrunk efficiency, expected TDs, opponent ratings (ridge), game script from nflverse's lines, distributions; then, for the upcoming week only, an inverse-variance blend with betting props when the user has an Odds API key (a `market` factor in the waterfall). Every constant is in `ForecastConstants.kt`; bump `FORECAST_VERSION` when one changes
 
 **Android Modules**:
-- `:app` — App entry point. `RefreshCoordinator` builds `stats.db` on the phone with `:core:ingest` and swaps it in without a restart; News, Player page, live Injury report, Settings (seasons) and Load stats screens
+- `:app` — App entry point. `RefreshCoordinator` builds `stats.db` on the phone with `:core:ingest` and swaps it in without a restart; News, Player page, live Injury report, Settings (seasons, Odds API key) and Load stats screens
 - `:feature:players` — The Grid screen (main UI) and its ViewModel
 - `:core:table` — Frozen-column stat table with shared horizontal scroll state
 - `:core:designsystem` — Theme, dark mode, colorblind-safe heat scale
@@ -143,14 +143,14 @@ To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI 
 - Only 39 of ~450 catalogued metrics are implemented (play-by-play and snap count; Next Gen Stats, FTN charting, injuries/schedules are wired but not yet transformed)
 - Pre-aggregated season rollups are specified but not built (next performance target for the common full-season view)
 - Hilt dependency injection and Navigation 3 architecture arrive with the second feature
-- User database (`user.db`) for presets and rosters not yet implemented
+- Saved Grid presets not yet implemented. Rosters are stored in the `:core:datastore` prefs JSON (`UserPrefs.rosters`), not a `user.db`: ☰ → Rosters manages them, the Player page toggles membership, and the Grid's roster chip narrows to one (`GridRequest.onlyPlayers`) and stars rostered players
 - APK signing uses a committed keystore (`app/gridiron.keystore`, intentional for a never-published personal app)
 - **Grid entry points**: tapping a Grid row opens the Player page (ESPN status, injury notes, tagged news, and a "This week" projection card that opens the waterfall); the ☰ menu opens Projections (the upcoming week or rest of season by position, scored with the active profile), Projection accuracy, News, Injury report (ESPN's live list with nflverse practice for the current season; the official list for past seasons), Team defense, Settings and Refresh stats.
 - **ESPN's endpoints are unofficial and keyless**; a shape change shows as "Not updated: ESPN changed its … format" with the last data kept. Parsing lives in `core/data/.../live/Espn.kt`, tested against recorded responses in `core/data/src/test/resources/espn/`.
 - **Refresh runs in an application-scope coroutine, not WorkManager**: if Android kills the process mid-build, the old database stays and the next refresh starts over.
 - **Projection model sub-project 4 (K/DST) is not built yet.** See `docs/superpowers/specs/2026-09-26-projection-model-design.md`.
 - **Props can't be backtested**, because there are no historical props. The blend's weight (`MARKET_VARIANCE_RATIO`) and the one-sided anytime-TD margin (`ONE_SIDED_OVERROUND`) are judgments, not fits, and the accuracy page and CI gate measure the model alone.
-- **The accuracy page recomputes on every open** (a few seconds on a phone, off the main thread); nothing is cached between visits.
+- **The accuracy page recomputes on every open** and after a refresh (off the main thread; its phone time isn't measured yet); nothing is cached between visits.
 - **Not modeled:** weather (wind is only known after kickoff) and shifting an injured player's share to teammates; an Out/IR player just shows Out, and a player returning from injury isn't projected until he plays again.
 - **K/DST fantasy scoring is out of scope** for `:core:projections`'s `score()` — `ScoringRule` structurally covers QB/RB/WR/TE only
 
@@ -160,4 +160,4 @@ To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI 
 - **Android SDK** — Platform 37, JDK 17+
 - **Gradle caching & configuration cache** enabled (`gradle.properties`)
 - **Build artifact** — APK auto-published to [releases/download/app/gridiron.apk](https://github.com/Palm9999/Lame/releases/download/app/gridiron.apk) on every push and every Tuesday morning
-- **Data attribution** — nflverse (CC BY 4.0), Fantasy Football Calculator ADP, US National Weather Service
+- **Data attribution** — nflverse (CC BY 4.0), ffopportunity, ESPN (news and injuries), The Odds API (player props, with the user's own key), Fantasy Football Calculator ADP, US National Weather Service

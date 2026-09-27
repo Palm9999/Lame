@@ -128,7 +128,7 @@ private fun PropsSection(settings: SettingsRepository, props: Flow<PropsStatus>?
     val status = props?.collectAsState(initial = null)?.value
     if (status != null) {
         Text(
-            propsStatusText(status),
+            propsStatusText(status, hasKey = saved != null),
             Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -136,10 +136,20 @@ private fun PropsSection(settings: SettingsRepository, props: Flow<PropsStatus>?
     }
 }
 
-/** One line on props, e.g. "412 Odds API credits left. Props fetched Sep 28, 3:10 PM." */
-internal fun propsStatusText(status: PropsStatus, zone: ZoneId = ZoneId.systemDefault(), locale: Locale = Locale.getDefault()): String =
-    listOfNotNull(
+/**
+ * One line on props, e.g. "412 Odds API credits left. Props fetched Sep 28,
+ * 3:10 PM." Without a key, the last key's credits and error no longer apply.
+ */
+internal fun propsStatusText(
+    status: PropsStatus,
+    zone: ZoneId = ZoneId.systemDefault(),
+    locale: Locale = Locale.getDefault(),
+    hasKey: Boolean = true,
+): String {
+    if (!hasKey) return "Add a key to blend the coming week's props into projections."
+    return listOfNotNull(
         status.creditsLeft?.let { "$it Odds API credits left." },
         status.fetchedAt?.let { "Props fetched ${formatWhen(it, zone, locale)}." },
         status.error?.let { "Last refresh: $it." },
     ).joinToString(" ").ifEmpty { "Props are fetched on the next refresh." }
+}

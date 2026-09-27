@@ -69,6 +69,16 @@ class LiveStoreTest {
         assertEquals(listOf("Out for the week"), db.read { it.notes("P11") }.map { it.comment })
     }
 
+
+    @Test
+    fun `a changed comment ESPN dates the same as the last one replaces it`() = runTest {
+        val ids = mapOf("10" to "P10")
+        db.write { it.saveInjuries(listOf(injury("10", "Q", "Limited Wednesday")), ids, t0) }
+        db.write { it.saveInjuries(listOf(injury("10", "D", "Did not practice Wednesday")), ids, t0) }
+
+        assertEquals(listOf("Did not practice Wednesday"), db.read { it.notes("P10") }.map { it.comment })
+        assertEquals("Doubtful", db.read { it.notes("P10") }.single().status)
+    }
     @Test
     fun `badges skip active players and players with no app id`() = runTest {
         db.write {

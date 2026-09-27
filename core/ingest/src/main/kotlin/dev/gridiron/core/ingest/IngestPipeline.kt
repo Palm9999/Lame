@@ -28,6 +28,7 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.IOException
 import java.time.Instant
+import java.time.ZoneOffset
 
 /** What a build is doing, for a progress line. */
 public sealed interface IngestProgress {
@@ -241,7 +242,18 @@ public class IngestPipeline(
                 r == FetchResult.NotModified ||
                     (r == FetchResult.NotPublished && prior?.containsKey(Sources.metaKey(input, season)) != true)
             }
-            if (unchanged) reuse(season, writer) else crunch(season, first, writer, crosswalk)
+            if (unchanged) {
+                try {
+                    reuse(season, writer)
+                    return
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // A damaged previous database would otherwise fail every refresh: rebuild the season instead.
+                    warnings += "$season: couldn't copy it from the last build (${e.message}); rebuilt it"
+                }
+            }
+            crunch(season, first, writer, crosswalk)
         }
 
         private fun reuse(season: Int, writer: StatsDbWriter) {
@@ -306,7 +318,13 @@ public class IngestPipeline(
             writer.writeFacts(toFacts(weekly))
             writer.writeTeamDefense(defense.rows())
             val injuriesFile = files[Input.INJURIES]
-            if (injuriesFile == null) warnings += "$season: no injury report published yet"
+            if (injuriesFile == null) {
+                warnings += if (season < currentSeason(now().atZone(ZoneOffset.UTC).toLocalDate())) {
+                    "$season: nflverse has no injury report for this season"
+                } else {
+                    "$season: no injury report published yet"
+                }
+            }
             injuriesFile?.let { readOptional(season, "injury report", it) { f -> openInput(f).use { s -> readInjuries(s, f.name) } } }
                 ?.let(writer::writeInjuries)
             files.values.forEach { it?.delete() }

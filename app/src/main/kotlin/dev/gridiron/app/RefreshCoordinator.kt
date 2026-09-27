@@ -79,6 +79,8 @@ class RefreshCoordinator(
     /** Fetches the upcoming week's props before the build; null when the app has no props at all (tests). */
     private val props: (suspend () -> PropsFetch)? = null,
     private val millis: () -> Long = { System.nanoTime() / 1_000_000 },
+    /** The build's download folder; its files are only ever left behind by a killed process. */
+    workDir: File? = null,
 ) : Refresher {
     private val db = File(dir, DB_NAME)
     private val next = File(dir, "$DB_NAME.new")
@@ -95,6 +97,12 @@ class RefreshCoordinator(
 
     private var job: Job? = null
 
+    init {
+        // No refresh runs yet, so a stats.db.new or a download here was left by a process Android killed mid-build.
+        next.delete()
+        workDir?.listFiles()?.forEach { it.delete() }
+    }
+
     @Synchronized
     override fun refresh(): Boolean {
         if (job?.isActive == true) return false
@@ -110,14 +118,15 @@ class RefreshCoordinator(
     private suspend fun run() {
         val start = millis()
         var ok = true
+        // Never throws but to cancel, so a failed build below can still say why props weren't updated.
+        val fetched = fetchProps()
         val statsLine = try {
-            val fetched = fetchProps()
             summary(buildAndSwap(fetched?.snapshot), millis() - start, fetched?.error)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             ok = false
-            describeFailure(e, kept = db.isFile)
+            describeFailure(e, kept = db.isFile) + fetched?.error?.let { " Props not updated: $it." }.orEmpty()
         }
         val liveLine = live?.let { fetch ->
             _state.value = RefreshState.Running("Fetching injuries and news…")

@@ -125,24 +125,45 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
     /**
      * Copies one season's facts, team defense and injury report out of
      * [previous]. Only valid when [previous] has this [INGEST_VERSION], which
-     * guarantees identical table shapes.
+     * guarantees identical table shapes. If the copy fails (a damaged
+     * [previous]), it throws with nothing of the season left behind, so the
+     * caller can rebuild it.
      */
     fun copySeasonFrom(previous: File, season: Int) {
         connection.prepare("ATTACH DATABASE ? AS prev").use {
             it.bindText(1, previous.path)
             it.step()
         }
+        val tables = listOf("player_week_stat", "team_week_defense", "injury_report")
+        var failure: Throwable? = null
         try {
             transaction {
-                for (table in listOf("player_week_stat", "team_week_defense", "injury_report")) {
+                for (table in tables) {
                     connection.prepare("INSERT OR REPLACE INTO $table SELECT * FROM prev.$table WHERE season = ?").use {
                         it.bindLong(1, season.toLong())
                         it.step()
                     }
                 }
             }
+        } catch (t: Throwable) {
+            failure = t
+            // The journal is off, so ROLLBACK is undefined: close the transaction and remove what the copy
+            // wrote, leaving the season empty for the caller to rebuild.
+            runCatching { connection.execSQL("COMMIT") }
+            for (table in tables) {
+                connection.prepare("DELETE FROM $table WHERE season = ?").use {
+                    it.bindLong(1, season.toLong())
+                    it.step()
+                }
+            }
+            throw t
         } finally {
-            connection.execSQL("DETACH DATABASE prev")
+            // A DETACH that fails after the copy failed must not hide why the copy failed.
+            try {
+                connection.execSQL("DETACH DATABASE prev")
+            } catch (e: Exception) {
+                failure?.addSuppressed(e) ?: throw e
+            }
         }
     }
 

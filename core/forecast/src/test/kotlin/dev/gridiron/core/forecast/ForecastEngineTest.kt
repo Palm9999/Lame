@@ -398,6 +398,14 @@ class ForecastEngineTest {
     }
 
     @Test
+    fun `a matched player whose props can't be used is neither blended nor unmatched`() {
+        league("a.db").use { db ->
+            val oneSided = PropsSnapshot(listOf(PropEvent("AAA", "DDD", listOf(PropQuote("dk", "player_receptions", "Player WR_A", 5.5, 1.9, null)))))
+            assertEquals(PropsOutcome(blended = 0, unmatched = 0), run(db, props = oneSided).props)
+        }
+    }
+
+    @Test
     fun `props with no upcoming week are all unmatched`() {
         league("a.db", allPlayed = true).use { db ->
             assertEquals(PropsOutcome(blended = 0, unmatched = 1), run(db, props = wrAProps).props)

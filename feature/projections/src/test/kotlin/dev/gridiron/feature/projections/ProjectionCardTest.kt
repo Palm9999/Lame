@@ -7,11 +7,13 @@ import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.projections.GameLine
 import dev.gridiron.core.statquery.SqlQuery
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.coroutines.CoroutineContext
 
 private class CardRow(private val columns: List<Any?>) : ResultRow {
     override fun isNull(index: Int): Boolean = columns[index] == null
@@ -59,6 +61,21 @@ class ProjectionCardTest {
         assertEquals(88.0, card.rosPoints!!, 1e-9)
         assertEquals(88.0 / 3, card.rosPerGame!!, 1e-9)
         assertEquals(false, card.out)
+    }
+
+    @Test
+    fun `the scoring runs on the compute dispatcher, not the caller's`() = runTest {
+        var dispatches = 0
+        val compute = object : CoroutineDispatcher() {
+            override fun dispatch(context: CoroutineContext, block: Runnable) {
+                dispatches++
+                block.run()
+            }
+        }
+
+        loadProjectionCard(ProjectionsRepository(CardExecutor()), "W1", "KC", ScoringPresets.PPR, Position.WR, null, compute)
+
+        assertTrue("the simulation never ran on the compute dispatcher", dispatches > 0)
     }
 
     @Test

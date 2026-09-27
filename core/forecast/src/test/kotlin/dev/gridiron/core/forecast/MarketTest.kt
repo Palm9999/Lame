@@ -2,6 +2,7 @@ package dev.gridiron.core.forecast
 
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 class MarketTest {
@@ -86,6 +87,35 @@ class MarketTest {
         assertEquals(tds, rb.components.getValue("rushing_tds"), 1e-12)
         assertEquals(null, rb.components["receiving_tds"])
         assertEquals(marketViews(quotes, K.EMPIRICAL_CV.getValue("TE")).single().mean, te.components.getValue("receiving_tds"), 1e-12)
+    }
+
+    @Test
+    fun `names that match nobody, match two players, or are in no game this week are counted`() {
+        val snapshot = PropsSnapshot(
+            listOf(
+                PropEvent("DET", "GB", listOf(quote("Amon-Ra St. Brown"), quote("Nobody Here"), quote("Nobody Here", ANYTIME_TD))),
+                PropEvent("PIT", "CLE", listOf(quote("Mike Williams"))),
+                PropEvent("BUF", "NYJ", listOf(quote("Josh Allen"))),
+            ),
+        )
+
+        val match = MarketMatch(snapshot, listOf("DET" to "GB", "PIT" to "CLE"), candidates)
+
+        assertEquals(3, match.unmatched)
+    }
+
+    @Test
+    fun `a receptions market above the targets raises the targets, so no catch rate tops 100 percent`() {
+        val final = mapOf("targets" to 6.0, "receptions" to 5.0)
+        val quotes = listOf(PropQuote("dk", "player_receptions", "X", 9.5, 1.9, 1.9))
+
+        val blended = blend(final, quotes, "WR")!!.components
+
+        assertTrue(blended.getValue("receptions") > 6.0, "the market pulls receptions past the targets: $blended")
+        assertEquals(blended.getValue("receptions"), blended.getValue("targets"), 1e-12)
+        // Receptions that stay under the targets leave the targets alone.
+        val modest = blend(final, listOf(PropQuote("dk", "player_receptions", "X", 4.5, 1.9, 1.9)), "WR")!!.components
+        assertEquals(6.0, modest.getValue("targets"))
     }
 
     @Test

@@ -38,11 +38,13 @@ import dev.gridiron.core.data.InjuryRow
 import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.live.LiveRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import java.time.Instant
 
 @Composable
-fun InjuriesScreen(season: Int, teams: TeamsRepository, onBack: () -> Unit) {
-    ListScreen("Injury report · $season", onBack, load = { teams.injuries(season) }) { row: InjuryRow ->
+fun InjuriesScreen(season: Int, teams: TeamsRepository, onBack: () -> Unit, dataVersion: Flow<Long> = flowOf(0L)) {
+    ListScreen("Injury report · $season", onBack, dataVersion, load = { teams.injuries(season) }) { row: InjuryRow ->
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
             Row {
                 Text("${row.name}", Modifier.weight(1f), fontWeight = FontWeight.Bold)
@@ -70,22 +72,32 @@ fun InjuriesRoute(
     live: LiveRepository?,
     onBack: () -> Unit,
     onPlayer: (String) -> Unit,
+    /** Bumped when a refresh swaps in new stats: the official rows load again. */
+    dataVersion: Flow<Long> = flowOf(0L),
 ) {
     if (live != null && season == currentSeason) {
-        LiveInjuriesRoute(season, teams, live, onBack, onPlayer)
+        LiveInjuriesRoute(season, teams, live, onBack, onPlayer, dataVersion)
     } else {
-        InjuriesScreen(season, teams, onBack)
+        InjuriesScreen(season, teams, onBack, dataVersion)
     }
 }
 
 @Composable
-private fun LiveInjuriesRoute(season: Int, teams: TeamsRepository, live: LiveRepository, onBack: () -> Unit, onPlayer: (String) -> Unit) {
+private fun LiveInjuriesRoute(
+    season: Int,
+    teams: TeamsRepository,
+    live: LiveRepository,
+    onBack: () -> Unit,
+    onPlayer: (String) -> Unit,
+    dataVersion: Flow<Long>,
+) {
     val version by live.changes.collectAsState()
+    val stats by dataVersion.collectAsState(initial = 0L)
     var groups by remember { mutableStateOf<List<InjuryGroup>?>(null) }
     var asOf by remember { mutableStateOf<Instant?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { error = live.refreshIfStale()?.injuriesError }
-    LaunchedEffect(version) {
+    LaunchedEffect(version, stats) {
         // Official practice rows are a bonus: the live list shows without them.
         val official = try {
             teams.injuries(season)
@@ -95,7 +107,7 @@ private fun LiveInjuriesRoute(season: Int, teams: TeamsRepository, live: LiveRep
             emptyList()
         }
         groups = injuryReport(live.injuries(), official)
-        asOf = live.fetchedAt()
+        asOf = live.injuriesFetchedAt()
     }
     LiveInjuriesScreen(groups, asOf, error, onBack, onPlayer)
 }
@@ -171,10 +183,11 @@ private fun statusColor(status: String?) = when (status) {
 private val DefenseHeaders = listOf("Team", "PA/g", "YA/g", "Sck", "INT", "FR", "TD")
 
 @Composable
-fun DefenseScreen(season: Int, teams: TeamsRepository, onBack: () -> Unit) {
+fun DefenseScreen(season: Int, teams: TeamsRepository, onBack: () -> Unit, dataVersion: Flow<Long> = flowOf(0L)) {
     ListScreen(
         "Team defense · $season",
         onBack,
+        dataVersion,
         load = { teams.defense(season) },
         header = { DefenseLine(DefenseHeaders, bold = true) },
     ) { d: DefenseRow ->
@@ -203,19 +216,28 @@ private fun DefenseLine(cells: List<String>, bold: Boolean = false) {
     }
 }
 
-/** A titled, back-able list loaded once from the database. */
+/** A titled, back-able list loaded from the database, and again whenever [dataVersion] moves (a refresh swapped in new stats). */
 @Composable
 private fun <T> ListScreen(
     title: String,
     onBack: () -> Unit,
+    dataVersion: Flow<Long>,
     load: suspend () -> List<T>,
     header: (@Composable () -> Unit)? = null,
     row: @Composable (T) -> Unit,
 ) {
     var rows by remember { mutableStateOf<List<T>?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
-    LaunchedEffect(title) {
-        runCatching { load() }.onSuccess { rows = it }.onFailure { error = it.message ?: "Couldn't load" }
+    val version by dataVersion.collectAsState(initial = 0L)
+    LaunchedEffect(title, version) {
+        try {
+            rows = load()
+            error = null
+        } catch (e: CancellationException) {
+            throw e // superseded by a newer load: not an error
+        } catch (e: Exception) {
+            error = e.message ?: "Couldn't load"
+        }
     }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {

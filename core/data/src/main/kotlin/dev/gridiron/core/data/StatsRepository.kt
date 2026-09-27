@@ -52,7 +52,8 @@ public class StatsRepository(
         val q = StatQueryBuilder.grid(spec)
         val layout = q.layout
 
-        val rows = executor.query(q.query) { r ->
+        // An empty roster lists no one; the query would read an empty id set as everyone.
+        val rows = if (request.onlyPlayers?.isEmpty() == true) emptyList() else executor.query(q.query) { r ->
             val games = r.long(GridLayout.GAMES).toInt()
             val position = r.textOrNull(GridLayout.POSITION)
             val team = r.textOrNull(GridLayout.TEAM)
@@ -123,6 +124,8 @@ public class StatsRepository(
 
     private fun spec(request: GridRequest, threshold: SampleThreshold?): StatQuerySpec {
         val searching = request.name.isNotBlank()
+        // A roster is the user's own pick, so like a search it lists everyone on it, ranked or not.
+        val listing = searching || request.onlyPlayers != null
         val snap = request.minSnapShare?.let { Filter(StatColumn.SNAP_SHARE, Condition.AtLeast(it)) }
         return StatQuerySpec(
             season = request.season.season,
@@ -131,12 +134,13 @@ public class StatsRepository(
             sort = listOf(Sort(request.sort, request.direction)),
             positions = request.positions.positions,
             teams = request.teams,
+            playerIds = request.onlyPlayers.orEmpty(),
             // Unlike the sample qualifier, these are the user's own choices, so a search keeps them.
             filters = listOfNotNull(snap) + request.filters,
             qualifiers = listOfNotNull(threshold?.qualifier),
             // A search should find anyone; players below the bar come back unranked.
-            includeUnqualified = searching,
-            minGames = if (searching) 1 else threshold?.minGames ?: 1,
+            includeUnqualified = listing,
+            minGames = if (listing) 1 else threshold?.minGames ?: 1,
             mode = if (request.perGame) ValueMode.PER_GAME else ValueMode.TOTAL,
             percentiles = true,
             name = request.name.takeIf { searching },
@@ -150,5 +154,5 @@ public class StatsRepository(
 
     /** How many players [request] matches, ignoring the page limit. Backs the filter sheet's live count. */
     public suspend fun count(request: GridRequest): Int =
-        executor.query(StatQueryBuilder.count(spec(request, threshold(request)))) { it.long(0).toInt() }.single()
+        if (request.onlyPlayers?.isEmpty() == true) 0 else executor.query(StatQueryBuilder.count(spec(request, threshold(request)))) { it.long(0).toInt() }.single()
 }

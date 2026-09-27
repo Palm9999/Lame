@@ -36,6 +36,8 @@ import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.RosterRepository
+import dev.gridiron.core.model.Roster
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
@@ -70,6 +72,7 @@ data class Deps(
     val settings: SettingsRepository? = null,
     /** Builds stats on the phone. Null in tests, which read a prebuilt database. */
     val refresher: Refresher? = null,
+    val rosters: RosterRepository? = null,
     /** Odds API props, for Settings. Null in tests, like [live]. */
     val props: PropsRepository? = null,
 )
@@ -149,11 +152,13 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 add("Projection accuracy" to { s: Int -> backStack.push(AccuracyKey(s)) })
                                 if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
                                 add("Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) })
+                                if (deps.rosters != null) add("Rosters" to { _: Int -> backStack.push(RostersKey) })
                                 add("Team defense" to { s: Int -> backStack.push(DefenseKey(s)) })
                                 if (deps.settings != null) add("Settings" to { _: Int -> backStack.push(SettingsKey) })
                                 if (refresher != null) add("Refresh stats" to { _: Int -> refresh() })
                             },
                             badges = deps.live?.badges ?: flowOf(emptyMap()),
+                            rosters = deps.rosters?.rosters ?: flowOf(emptyList<Roster>()),
                             recovery = buildList {
                                 if (refresher != null) add("Refresh stats" to { refresh() })
                                 if (deps.settings != null) add("Settings" to { backStack.push(SettingsKey) })
@@ -168,17 +173,23 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                     }
                     entry<ScoringEditKey> { key -> ScoringEditRoute(key.profileId, deps.scoring, onDone = back) }
                     entry<ProjectionsKey> { key ->
-                        ProjectionsRoute(key.playerId, key.season, key.week, deps.projections, deps.scoring, deps.players, onBack = back)
+                        ProjectionsRoute(
+                            key.playerId, key.season, key.week, deps.projections, deps.scoring, deps.players, onBack = back,
+                            dataVersion = deps.stats.dataVersion,
+                        )
                     }
                     entry<ProjectionListKey> { key ->
                         ProjectionListRoute(
                             key.season, deps.projections, deps.scoring, deps.live?.badges ?: flowOf(emptyMap()),
-                            onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back,
+                            onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
                         )
                     }
-                    entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, deps.scoring, onBack = back) }
+                    entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, deps.scoring, onBack = back, dataVersion = deps.stats.dataVersion) }
                     entry<InjuriesKey> { key ->
-                        InjuriesRoute(key.season, currentSeason(), deps.teams, deps.live, onBack = back, onPlayer = { backStack.push(PlayerKey(it)) })
+                        InjuriesRoute(
+                            key.season, currentSeason(), deps.teams, deps.live, onBack = back,
+                            onPlayer = { backStack.push(PlayerKey(it)) }, dataVersion = deps.stats.dataVersion,
+                        )
                     }
                     entry<NewsKey> {
                         deps.live?.let { NewsRoute(it, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
@@ -188,9 +199,15 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             key.playerId, deps.players, deps.live, onBack = back,
                             projections = deps.projections, scoring = deps.scoring,
                             onProjection = { season, week -> backStack.push(ProjectionsKey(key.playerId, season, week)) },
+                            dataVersion = deps.stats.dataVersion,
+                            rosterRepo = deps.rosters,
+                            onManageRosters = { backStack.push(RostersKey) },
                         )
                     }
-                    entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back) }
+                    entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }
+                    entry<RostersKey> {
+                        deps.rosters?.let { RostersScreen(it, deps.players, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
+                    }
                     entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back, props = deps.props?.status) } }
                 },
             )
