@@ -44,9 +44,15 @@
 - [x] **PR #7 merged** (753e1f1); PR #9 merged (e188dc2).
 - [x] **Sub-project 4 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`.
 - [x] **Plan revised for the user's rulings** (2026-09-27). The user overturned four of the first draft's rulings: editable points-allowed tiers (ESPN's by default), a one-time prefs migration instead of `fallback`, K and D/ST chips on the Grid, and a CI gate that covers K and D/ST. The plan grew from 9 to 11 tasks.
-- [ ] **Plan approved; execution method** (the user decides).
+- [x] **Plan approved; execution method: native** (the user, 2026-09-27).
+- [x] **Session A built** (Tasks 1–4; see "K and D/ST: execution progress").
+- [ ] **Session B** (Tasks 5–8).
+- [ ] **Session C** (Tasks 9–11), then the final whole-branch review.
 
-## Next step: sub-project 4 (K/DST) Session A, Tasks 1–4
+## Next step: sub-project 4 (K/DST) Session B, Tasks 5–8
+
+**Start here.** Run Session B (Tasks 5–8) with the `executing-plans` skill: prefs migration and the tier editor, the Grid's K and D/ST chips, the kicker and D/ST models. Session A's results and rulings are under "K and D/ST: execution progress" below. **The branch's CI is red on one test until Task 5** (see Session A's last ruling); Task 5 turns it green.
+
 
 1. **PR #7 (sub-project 3, props) is merged** (753e1f1). **PR #9 (deferred minors, plus rosters) is merged** (e188dc2).
 2. **Sub-project 4 plan, revised** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`, on draft PR #10. It has 11 tasks, with full code and tests written first.
@@ -59,10 +65,25 @@
    - **Gate:** covers K and D/ST. If either loses, Task 11 tunes its constants (up to 8 rebuilds, then it asks).
    - **Grid:** K and D/ST chips with their own packs (Kicking, Defense). Every other chip leaves them out.
    - The other rulings are listed at the end of the plan. Worth a look: the kicking defaults (3/4/5, −1, 1, −1) are the common values, not checked against ESPN's, and ESPN's yards-allowed and blocked-kick D/ST scoring isn't modeled.
-4. **Plan approved; execution method: native** (the user, 2026-09-27). The next session runs Session A (Tasks 1–4) itself with the `executing-plans` skill, then ticks each task and records its rulings here. One fresh reviewer on the most capable model checks the whole branch after Task 11.
+4. **Plan approved; execution method: native** (the user, 2026-09-27). Each session runs its tasks itself with the `executing-plans` skill, then ticks each task and records its rulings here. One fresh reviewer on the most capable model checks the whole branch after Task 11.
 5. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape: enter it in ☰ → Settings → Betting props, then Refresh stats. The toast should say "Props moved N projections"; Settings shows credits left.
 6. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
 7. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
+
+## K and D/ST: execution progress
+
+**Session A (2026-09-27), Tasks 1–4.** Base b27f14d.
+
+- [x] **Task 1, kicking facts** (e5392ab). `KickingAggregator` in `:core:ingest`; 12 kicking metrics (5 visible); `INGEST_VERSION` 3. `:core:ingest:test` green.
+  - Ruling: `MetricsTest`'s `every projected stat has a distribution family …` pinned `DIST_FAMILIES` to the offense's ids, which the plan missed. The kicking ids are added to its list (they're projected in Tasks 7 and 9). Cost if wrong: none, test-only.
+- [x] **Task 2, D/ST facts** (66a4b35). `DST_<TEAM>` players and weeks, `team_week_defense` gains `safeties` and `kick_return_tds`, `SCHEMA_VERSION` 8. `:core:ingest:test` green. The 2024–2026 rebuild validates: 2025 has 570 D/ST weeks (285 games), 1,140 FG tries, 12 safeties, 7 kickoff-return TDs, 32 D/ST players.
+  - Ruling: the same test gets the six D/ST ids and accepts family `normal` (points allowed). Cost if wrong: none, test-only.
+- [x] **Task 3, the Python twin** (3c80af9). ETL pytest 79/79 (69 + 10). 2025 parity is OK on all 5 tables: `player_week_stat` 280,898 rows, `player` 683, `metric` 99, `team_week_defense` 570 on 8 columns.
+  - Note: the first parity run differed on 9 veterans' `player.team`, because the Python cache (`~/.cache/gridiron/players.csv`) was a day old. Refetched, it matched. No code change.
+- [x] **Task 4, scoring** (fe7c043). 11 rules, `PointsAllowedTier`, ESPN's tiers on every preset, the `ws`/`fs` pivot and its tier `CASE`, the tier in `score()`. `:core:model`, `:core:statquery`, `:core:projections` and `:core:data` tests green against the rebuilt database, including the contract tests (odd tiers, kickers and D/STs in the independent scorer) and both timing tests.
+  - Ruling: `ScoringProfileTest` pinned 25 rules; it's now 36. Cost if wrong: none, test-only.
+  - Ruling (a real bug the contract test found): D/ST and kick-only weeks have no `team_targets` or `team_air_yards`, and WOPR turned missing ratios into 0, so the Grid showed a D/ST's WOPR as 0.00 where nothing is stored. WOPR is now null when none of its terms has a denominator. Offense weeks always store `team_targets`, so their values don't change. Test: `a week with no team targets or air yards at all has no WOPR`, seen failing first. Cost if wrong: a kicker or D/ST shows "—" instead of 0.00 WOPR.
+  - Ruling: the whole suite has one failure, `UserPrefsStoreTest`'s `profiles, active id and tray survive a reopen`. Presets now carry tiers, and prefs only save them from Task 5 (`ProfileDto.pointsAllowed`, whose failing test is Task 5's Step 1). It's left red rather than pulling Task 5 forward, which would make that test pass before its code. Cost if wrong: the branch's CI is red on this one test until Session B's Task 5.
 
 ## Deferred minors fixed (2026-09-27)
 
