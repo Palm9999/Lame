@@ -17,6 +17,7 @@ import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TraySlotUi
 import dev.gridiron.core.data.describeSlot
 import dev.gridiron.core.model.CompareSlot
+import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.WeekRange
@@ -25,10 +26,13 @@ import dev.gridiron.core.statquery.Filter
 import dev.gridiron.core.statquery.StatColumn
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -75,6 +79,8 @@ sealed interface GridEvent {
     /** The sheet's complete rows changed; counts them without touching the Grid. */
     data class FilterDraftChanged(val filters: List<Filter>) : GridEvent
     data object FilterSheetClosed : GridEvent
+    /** Shows only roster [id]'s players; null shows everyone. */
+    data class RosterSelected(val id: String?) : GridEvent
 }
 
 sealed interface GridUiState {
@@ -104,6 +110,11 @@ sealed interface GridUiState {
         val draftCount: DraftCount? = null,
         /** ESPN injury letters (Q, D, O, IR, …) by player id; empty when there is no live data. */
         val badges: ImmutableMap<String, String> = persistentMapOf(),
+        val rosters: ImmutableList<Roster> = persistentListOf(),
+        /** The roster the Grid is narrowed to, or null for everyone. */
+        val rosterId: String? = null,
+        /** Everyone on any roster, so the table can mark them. */
+        val rostered: ImmutableSet<String> = persistentSetOf(),
     ) : GridUiState {
         val refreshing: Boolean get() = page?.request != request && error == null
     }
@@ -127,6 +138,8 @@ class GridViewModel(
     countDebounceMillis: Long = 250,
     /** Live injury letters by player id, from ESPN; re-emits after every live refresh. */
     badges: Flow<Map<String, String>> = flowOf(emptyMap()),
+    /** The user's fantasy teams, from [dev.gridiron.core.data.RosterRepository]. */
+    rosters: Flow<List<Roster>> = flowOf(emptyList()),
 ) : ViewModel() {
 
     private sealed interface CatalogLoad {
@@ -152,6 +165,10 @@ class GridViewModel(
     private val draft = MutableStateFlow<List<Filter>?>(null)
     /** Count results tagged with the draft they were computed for, so a stale count never resurfaces after the sheet closes or a newer draft supersedes it. */
     private val draftCount = MutableStateFlow<Pair<List<Filter>, DraftCount>?>(null)
+    private val rosterId = MutableStateFlow<String?>(null)
+    /** The chosen roster's players, kept so a request created later starts narrowed too. */
+    private val onlyPlayers = MutableStateFlow<Set<String>?>(null)
+    private val rosterList = rosters.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val trayUi: Flow<ImmutableList<TraySlotUi>> =
         combine(tray.slots, catalogLoad) { slots, load -> slots to (load as? CatalogLoad.Loaded)?.catalog }
@@ -201,6 +218,16 @@ class GridViewModel(
             } else {
                 base
             }
+        }.combine(combine(rosterList, rosterId, ::Pair)) { base, (list, id) ->
+            if (base is GridUiState.Ready) {
+                base.copy(
+                    rosters = list.toImmutableList(),
+                    rosterId = id,
+                    rostered = list.flatMap { it.playerIds }.toImmutableSet(),
+                )
+            } else {
+                base
+            }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, GridUiState.Loading)
 
     private data class Extras(
@@ -235,7 +262,13 @@ class GridViewModel(
                 request.value = if (current != null) {
                     rebase(current, c)
                 } else {
-                    GridRequest(c.latest, c.latest.defaultWeeks, StatPack.OPPORTUNITY, scoring = scoring.active.first())
+                    GridRequest(
+                        c.latest,
+                        c.latest.defaultWeeks,
+                        StatPack.OPPORTUNITY,
+                        scoring = scoring.active.first(),
+                        onlyPlayers = onlyPlayers.value,
+                    )
                 }
             }
         }
@@ -290,6 +323,17 @@ class GridViewModel(
                     draftCount.value = filters to result
                 }
                 .collect()
+        }
+        viewModelScope.launch {
+            combine(rosterList, rosterId) { list, id ->
+                val roster = id?.let { wanted -> list.firstOrNull { it.id == wanted } }
+                // A deleted roster falls back to everyone.
+                if (id != null && roster == null) rosterId.value = null
+                roster?.playerIds?.toSet()
+            }.collect { ids ->
+                onlyPlayers.value = ids
+                request.update { it?.copy(onlyPlayers = ids) }
+            }
         }
         viewModelScope.launch {
             scoring.active.collect { profile -> request.update { it?.copy(scoring = profile) } }
@@ -370,6 +414,10 @@ class GridViewModel(
                 draft.value = null
                 draftCount.value = null
             }
+            is GridEvent.RosterSelected -> {
+                rosterId.value = event.id
+                return
+            }
             else -> Unit
         }
         val c = catalog ?: return
@@ -412,6 +460,7 @@ class GridViewModel(
             is GridEvent.FiltersApplied -> r.copy(filters = event.filters)
             is GridEvent.FilterDraftChanged -> r
             GridEvent.FilterSheetClosed -> r
+            is GridEvent.RosterSelected -> r
         }
 
         /**
@@ -431,9 +480,10 @@ class GridViewModel(
             scoring: ScoringRepository,
             tray: CompareTrayRepository,
             badges: Flow<Map<String, String>> = flowOf(emptyMap()),
+            rosters: Flow<List<Roster>> = flowOf(emptyList()),
         ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { GridViewModel(repository, scoring, tray, badges = badges) }
+                initializer { GridViewModel(repository, scoring, tray, badges = badges, rosters = rosters) }
             }
     }
 }

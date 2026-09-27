@@ -118,6 +118,21 @@ class StatsRepositoryTest {
     }
 
     @Test
+    fun `a roster lists exactly its players, qualified or not, and an empty one lists no one`() = runTest {
+        val season = catalog.season(2025)
+        val base = GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)
+        val qualified = repo.grid(base, catalog).rows.map { it.playerId }.toSet()
+        val below = repo.grid(base.copy(name = "a"), catalog).rows.first { it.playerId !in qualified }
+        val roster = setOf(qualified.first(), below.playerId)
+
+        val page = repo.grid(base.copy(onlyPlayers = roster), catalog)
+        assertEquals(roster, page.rows.map { it.playerId }.toSet())
+        assertEquals(2, repo.count(base.copy(onlyPlayers = roster)))
+        assertEquals(emptyList<GridRowUi>(), repo.grid(base.copy(onlyPlayers = emptySet()), catalog).rows.toList())
+        assertEquals(0, repo.count(base.copy(onlyPlayers = emptySet())))
+    }
+
+    @Test
     fun `search finds players below the qualifying bar, unranked`() = runTest {
         val season = catalog.season(2025)
         val base = GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)
