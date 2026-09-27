@@ -37,16 +37,21 @@ internal fun Project.configureKotlin() {
  * for tests that run against it (they skip without it). A relative path
  * resolves from the repository root, since tests run with the module as their
  * working directory. The file is a declared input, so rebuilding the database
- * re-runs the tests rather than reporting them up to date.
+ * re-runs the tests rather than reporting them up to date. GRIDIRON_ACCURACY_GATE,
+ * the season CI's accuracy gate checks, is passed on as an input too, so the
+ * gate never comes back from the build cache.
  */
 internal fun Project.configureTests() {
     val statsDb = providers.environmentVariable("GRIDIRON_STATS_DB").orNull?.let { rootDir.resolve(it) }
+    val accuracyGate = providers.environmentVariable("GRIDIRON_ACCURACY_GATE").orNull
     tasks.withType<Test>().configureEach {
         inputs.property("statsDbPath", statsDb?.path ?: "")
+        inputs.property("accuracyGate", accuracyGate ?: "")
         if (statsDb != null) {
             environment("GRIDIRON_STATS_DB", statsDb.path)
             if (statsDb.isFile) inputs.file(statsDb).withPropertyName("statsDb")
         }
+        if (accuracyGate != null) environment("GRIDIRON_ACCURACY_GATE", accuracyGate)
         testLogging {
             events("failed", "skipped")
             exceptionFormat = TestExceptionFormat.FULL
