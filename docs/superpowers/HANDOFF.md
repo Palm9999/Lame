@@ -27,17 +27,22 @@
 - [x] **Layer-2 fix designed** (user's choice: next session). It's the spec's "Amendment: layer 2", planned in `docs/superpowers/plans/2026-09-26-projection-share-fix.md` (2 tasks, full code).
 - [x] **Layer-2 fix built** (commits 3097c75, 63fcdc1; see "Layer-2 fix" under Execution progress). Real data now has one passer per team and team totals at real volume.
 - [x] **PR #4 merged** (2026-09-26, merge 3938c84, CI green). The user merged after the fix's self-review, without a fresh review.
+- [x] **Sub-project 2 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-accuracy.md`.
+  - 4 tasks, one session (Session A = Tasks 1–4), full code, tests first. Rulings are at the end of the plan ("Plan self-review").
+  - Re-measured before planning, on a fresh 2024–2025 Kotlin build: the model now beats the season-to-date average at every position for 2025 under PPR (MAE model / season avg / last 4: QB 6.42 / 7.14 / 7.07, RB 5.88 / 6.01 / 6.18, WR 5.40 / 5.79 / 5.81, TE 4.87 / 5.19 / 5.42). So the CI gate passes without tuning. RB's margin is thin (0.13).
+  - 2024, which has no 2023 history in that build, still loses at WR and TE. The plan uses that to show the gate can fail.
+- [ ] **Plan approved; execution method chosen.** Waiting on the user.
 
-## Next step: plan sub-project 2 (accuracy page)
+## Next step: sub-project 2, Session A (after approval)
 
-1. Read spec §4 (accuracy page) of `docs/superpowers/specs/2026-09-26-projection-model-design.md`, plus the "Amendment: layer 2" section.
-2. Write its plan with the writing-plans skill, in a fresh session. Use the same format as `2026-09-26-projection-engine.md`: full code, tests first, 4 tasks per session.
-3. Present the plan for approval, then stop.
-4. The backtest should re-measure the model against the season-to-date average (see "The accuracy gap" below). That gate belongs to this sub-project.
+1. The user reviews `docs/superpowers/plans/2026-09-27-projection-accuracy.md` and picks an execution method. Native was used for sub-project 1.
+2. Run Tasks 1–4 with the `executing-plans` skill, recording each task below under "Projection accuracy: execution progress".
+3. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (commands are in the plan).
+4. Draft PR for this sub-project: see the PR link recorded below once opened.
 
 **Things to know:**
 - **The Python projection code is gone** (plan Task 12 Step 4, done with the user's go-ahead after the session). Three modules, 14 projection-only tests, the `build.py` stage, the `schema.py` loaders and `numpy` were removed. ETL pytest now passes 69/69 (the 50 removed tests were projection-only), and 2025 parity is OK on all 5 tables.
-- **The accuracy gap was measured before the fix.** The reviewer's quick 2025 backtest had the model's error larger than a season-to-date average's at every position (QB 6.99 vs 6.62, RB 5.52 vs 5.23, WR 5.13 vs 4.99, TE 4.86 vs 4.85). The fix targets the causes, but nobody has re-run the backtest since; the real gate is sub-project 2's.
+- **The accuracy gap was measured before the fix.** The reviewer's quick 2025 backtest had the model's error larger than a season-to-date average's at every position (QB 6.99 vs 6.62, RB 5.52 vs 5.23, WR 5.13 vs 4.99, TE 4.86 vs 4.85). It was re-measured after the fix while planning sub-project 2, and the model now leads at every position (see above); sub-project 2's CI gate holds it there.
 - **Deferred Minor findings** (the user decides):
   - Player page scoring runs on the main thread.
   - The list's scoring time was never measured.
@@ -48,6 +53,10 @@
 - **Tracking.** The `.superpowers/` ledger doesn't survive the container. Rulings go in this file.
 
 **PR #4:** merged. The watch and its check-ins are cancelled.
+
+## Projection accuracy: execution progress
+
+Not started.
 
 ## Projection engine: execution progress
 
