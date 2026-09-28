@@ -41,16 +41,127 @@
 - [x] **Session A built** (Tasks 1–4; see "Projection props: execution progress").
 - [x] **Session B built** (Tasks 5–6; see "Projection props: execution progress").
 - [x] **Final whole-branch review** (Opus, 2026-09-27): "with fixes". 0 Critical, 2 Important (plus 1 Minor re-graded to Important), 7 Minor. Fixed in commit 2ff2be2 (see below).
-- [ ] **PR #7 merge** (the user decides).
+- [x] **PR #7 merged** (753e1f1); PR #9 merged (e188dc2).
+- [x] **Sub-project 4 plan written** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`.
+- [x] **Plan revised for the user's rulings** (2026-09-27). The user overturned four of the first draft's rulings: editable points-allowed tiers (ESPN's by default), a one-time prefs migration instead of `fallback`, K and D/ST chips on the Grid, and a CI gate that covers K and D/ST. The plan grew from 9 to 11 tasks.
+- [x] **Plan approved; execution method: native** (the user, 2026-09-27).
+- [x] **Session A built** (Tasks 1–4; see "K and D/ST: execution progress").
+- [x] **Session B built** (Tasks 5–8; see "K and D/ST: execution progress").
+- [x] **Session C built** (Tasks 9–11; see "K and D/ST: execution progress"). The gate passes at all six positions without tuning.
+- [x] **Final whole-branch review** (Opus, 2026-09-28): "Ready to merge: Yes". 0 Critical, 0 Important, 8 Minor. One Minor was re-graded to Important and fixed (see below).
+- [x] **The review's 7 deferred minors fixed** (2026-09-28, the user's call: "fix the minors then merge"). See "K and D/ST minors fixed" below.
+- [ ] **PR #10 merged** (the user asked for it once CI is green).
 
-## Next step: plan sub-project 4 (K/DST)
+## Next step: nothing planned
 
-1. **PR #7 (sub-project 3, props) is merged** (753e1f1).
-2. **The deferred minors are fixed** (this session; the user chose all four batches). See "Deferred minors fixed" below. They're on the branch's new PR, and merging it is the user's call.
-3. **Next: sub-project 4 (K/DST)** needs its plan. The spec is §6 of `docs/superpowers/specs/2026-09-26-projection-model-design.md`; write the plan with writing-plans in a fresh session.
-4. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape: enter it in ☰ → Settings → Betting props, then Refresh stats. The toast should say "Props moved N projections"; Settings shows credits left.
-5. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
-6. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
+**Start here.** All four sub-projects are built, reviewed and (once PR #10 merges) merged. There's no fifth sub-project in the design. The user picks what's next. The non-blocking phone checks in items 5 and 6 below still stand.
+
+1. **PR #7 (sub-project 3, props) is merged** (753e1f1). **PR #9 (deferred minors, plus rosters) is merged** (e188dc2).
+2. **Sub-project 4 plan, revised** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`, on draft PR #10. It has 11 tasks, with full code and tests written first.
+   - **Session A** = Tasks 1–4: kicking and D/ST facts, Python parity, and scoring with each profile's own points-allowed tiers.
+   - **Session B** = Tasks 5–8: prefs migration and the tier editor, the Grid's K and D/ST chips, the kicker and D/ST models.
+   - **Session C** = Tasks 9–11: the walk-forward, the phone, the gate at six positions (tuning K/D/ST constants if needed) and range widening, and docs. Then the final whole-branch review.
+3. **The user's rulings (2026-09-27), now in the plan:**
+   - **Tiers:** points allowed are stored as a number, and each profile's editable tiers score them, ESPN's by default (0, 1–6, 7–13, 14–17, 18–21, 22–27, 28–34, 35–45, 46+: 5, 4, 3, 1, 0, −1, −4, −5, −5). Projections store a mean and spread, and the phone scores the tiers in expectation (per game for rest of season).
+   - **Old profiles:** migrated once (prefs `formatVersion` 2) to the K/D/ST defaults and ESPN's tiers. There's no fallback.
+   - **Gate:** covers K and D/ST. If either loses, Task 11 tunes its constants (up to 8 rebuilds, then it asks).
+   - **Grid:** K and D/ST chips with their own packs (Kicking, Defense). Every other chip leaves them out.
+   - The other rulings are listed at the end of the plan. Worth a look: the kicking defaults (3/4/5, −1, 1, −1) are the common values, not checked against ESPN's, and ESPN's yards-allowed and blocked-kick D/ST scoring isn't modeled.
+4. **Plan approved; execution method: native** (the user, 2026-09-27). Each session runs its tasks itself with the `executing-plans` skill, then ticks each task and records its rulings here. One fresh reviewer on the most capable model checks the whole branch after Task 11.
+5. **The Odds API fixtures are hand-built** from the v4 docs, because there's no key here. The first refresh with the user's key checks the real shape: enter it in ☰ → Settings → Betting props, then Refresh stats. The toast should say "Props moved N projections"; Settings shows credits left.
+6. **The user checks the build on their phone** (non-blocking): ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
+7. `etl/build/accuracy.db` (2024–2025) and `etl/build/stats.db` (2024–2026) exist in this container. Rebuild them if the container is fresh (the commands are in the plans).
+
+## K and D/ST: execution progress
+
+**Session A (2026-09-27), Tasks 1–4.** Base b27f14d.
+
+- [x] **Task 1, kicking facts** (e5392ab). `KickingAggregator` in `:core:ingest`; 12 kicking metrics (5 visible); `INGEST_VERSION` 3. `:core:ingest:test` green.
+  - Ruling: `MetricsTest`'s `every projected stat has a distribution family …` pinned `DIST_FAMILIES` to the offense's ids, which the plan missed. The kicking ids are added to its list (they're projected in Tasks 7 and 9). Cost if wrong: none, test-only.
+- [x] **Task 2, D/ST facts** (66a4b35). `DST_<TEAM>` players and weeks, `team_week_defense` gains `safeties` and `kick_return_tds`, `SCHEMA_VERSION` 8. `:core:ingest:test` green. The 2024–2026 rebuild validates: 2025 has 570 D/ST weeks (285 games), 1,140 FG tries, 12 safeties, 7 kickoff-return TDs, 32 D/ST players.
+  - Ruling: the same test gets the six D/ST ids and accepts family `normal` (points allowed). Cost if wrong: none, test-only.
+- [x] **Task 3, the Python twin** (3c80af9). ETL pytest 79/79 (69 + 10). 2025 parity is OK on all 5 tables: `player_week_stat` 280,898 rows, `player` 683, `metric` 99, `team_week_defense` 570 on 8 columns.
+  - Note: the first parity run differed on 9 veterans' `player.team`, because the Python cache (`~/.cache/gridiron/players.csv`) was a day old. Refetched, it matched. No code change.
+- [x] **Task 4, scoring** (fe7c043). 11 rules, `PointsAllowedTier`, ESPN's tiers on every preset, the `ws`/`fs` pivot and its tier `CASE`, the tier in `score()`. `:core:model`, `:core:statquery`, `:core:projections` and `:core:data` tests green against the rebuilt database, including the contract tests (odd tiers, kickers and D/STs in the independent scorer) and both timing tests.
+  - Ruling: `ScoringProfileTest` pinned 25 rules; it's now 36. Cost if wrong: none, test-only.
+  - Ruling (a real bug the contract test found): D/ST and kick-only weeks have no `team_targets` or `team_air_yards`, and WOPR turned missing ratios into 0, so the Grid showed a D/ST's WOPR as 0.00 where nothing is stored. WOPR is now null when none of its terms has a denominator. Offense weeks always store `team_targets`, so their values don't change. Test: `a week with no team targets or air yards at all has no WOPR`, seen failing first. Cost if wrong: a kicker or D/ST shows "—" instead of 0.00 WOPR.
+  - Ruling: the whole suite has one failure, `UserPrefsStoreTest`'s `profiles, active id and tray survive a reopen`. Presets now carry tiers, and prefs only save them from Task 5 (`ProfileDto.pointsAllowed`, whose failing test is Task 5's Step 1). It's left red rather than pulling Task 5 forward, which would make that test pass before its code. Cost if wrong: the branch's CI is red on this one test until Session B's Task 5.
+
+**Session B (2026-09-27), Tasks 5–8.** Base b5a7a95. After Task 8, `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` → BUILD SUCCESSFUL. Session A's red `UserPrefsStoreTest` test is green.
+
+- [x] **Task 5, saved tiers, migration and tier editor** (e86e1a2). Prefs `FORMAT_VERSION` 2, `ProfileDto.pointsAllowed`, the one-time migration, the Points allowed section in the scoring editor. `:core:datastore:test` and `:feature:scoring:testDebugUnitTest` green; `scoring_4_tiers.png` and `scoring_2_editor_dark.png` checked (nothing clipped).
+  - Ruling: `UserPrefsStoreTest`'s `unknown rules and invalid entries are dropped, the rest kept` wrote a version-1 file, so the migration added the K/D/ST defaults to its expected weights. The plan missed it. Its file is now version 2, so it still tests dropping unknown entries (the migration has its own test). Cost if wrong: none, test-only.
+  - Ruling: the plan's `editingTiersAndSavingPersistsThemInOrder` kept a tier starting at 21, but ESPN's tiers start at 18 (18–21 scores 0). It now keeps 0, 14 and 18 and expects (18, 0.0). The code is as planned. Cost if wrong: none, test-only.
+- [x] **Task 6, K and D/ST chips on the Grid** (6b36d21). `excludedPositions`, the Kicking and Defense packs, `PositionFilter.K`/`DST`, chips that bring their packs, no snap chip under K and D/ST. `:core:statquery`, `:core:data` (real data) and `:feature:players` tests green; the Grid's screenshots re-recorded and checked (`grid_dst.png` is new).
+  - Ruling: `RealDatabaseContractTest`'s `scoring a full season for every player is fast` fails in this container (median about 300 ms against the 250 ms local budget; CI's is 1,000 ms). It fails the same way at pre-Task-4 code on this database (about 297 ms) and on the older pre-K/DST `accuracy.db` (about 283 ms), so it's this container's slower CPU, not a regression. The task's completion run used `CI=1` for the CI budget. Cost if wrong: a real scoring slowdown hides behind a slow machine; CI's budget still guards it.
+  - Note: `stats.db` wasn't rebuilt in this task. No ingest code changed since Task 4's rebuild.
+- [x] **Task 7, kicker inputs and model** (711c4d9). `Kicker.kt`, `UNIT_POSITIONS`, `ForecastInputs.units`/`unitHistory`, K model constants. `KickerTest` 6/6, `InputsTest` 3/3.
+- [x] **Task 8, D/ST model** (1fcb6c0). `Defense.kt`, D/ST constants. `DefenseTest` 5/5.
+
+**Session C (2026-09-27/28), Tasks 9–11.** Base ac8c8a1. After Task 11: `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` fails only `:core:statquery`'s timing test (container speed, as in Task 6; passes with `CI=1`); `:app:assembleRelease lint` → BUILD SUCCESSFUL.
+
+- [x] **Task 9, the walk-forward** (c129bc1). `UnitProjector` (`Units.kt`), `averageImplied`, `WeekKind` internal, K/DST reference points, CV 0.52/0.85, `FORECAST_VERSION` 4. `:core:forecast:test` 93/93. On the rebuilt 2024–2026 database, 2025 has 543 kicker-weeks and 537 D/ST-weeks projected; `ProjectionsContractTest` 3/3 and `ForecastTimingTest` pass.
+- [x] **Task 10, the phone** (7ef1804). `projectedScore`, `DistributionFamily.NORMAL` (points allowed drawn per game), `attributeFactors(points…)`, `widening`, `ACCURACY_POSITIONS` with K and DST, the K and D/ST tabs.
+  - Ruling: `AccuracyRepositoryTest` asserted a kicker isn't measured; now it asserts rows WR and K. Cost if wrong: none, test-only.
+  - Ruling: the accuracy page printed "DST"; a `positionLabel` shows "D/ST" (copy rule). `AccuracyScreenTest` expects "Nothing to measure at QB, RB, TE, K, D/ST." Cost if wrong: one label.
+- [x] **Task 11, the gate, range widening and docs** (this commit).
+  - **Gate (2025, PPR), all six pass, no tuning:**
+    ```
+    pos       n           model      season avg          last 4   held
+    QB      498    6.42 (-0.19)    7.14 (-0.57)    7.07 (-0.56)    78%
+    RB      804    5.87 (-1.35)    6.01 (-0.31)    6.18 (+0.03)    78%
+    WR     1203    5.40 (-1.02)    5.79 (+0.28)    5.81 (+0.40)    81%
+    TE      455    4.87 (-1.62)    5.19 (-0.15)    5.42 (+0.30)    83%
+    K       493    3.83 (-0.02)    4.09 (+0.14)    4.18 (+0.05)    87%
+    DST     204    4.55 (-0.15)    4.97 (-1.21)    5.15 (-0.98)    79%
+    ```
+  - RB reads 5.87 where this file said 5.88. The base commit e188dc2, built fresh in a worktree, prints the identical table, so it's republished nflverse data, not a regression.
+  - **Range factors** (pooled 2024–2025): D/ST 1.09 (holds 80.0%, 76.5% alone). K gets none: its simulation alone holds 87.1%, and a factor can only widen.
+  - Ruling (a real bug, mine from Task 10): `AccuracyRepository.backtest` took `widening` but never passed it on, so the first fit read "widen 3.00" for D/ST. Fixed, with `the backtest widens ranges by the factors it's given` seen failing first. Cost if wrong: none.
+  - Note: a D/ST-only floor change (letting the widened floor go below zero) was tried first and reverted: it moved the fit from 1.09 to 1.08.
+  - Ruling: CLAUDE.md gains `:feature:scoring` and `:core:datastore` lines, which weren't listed. The metric count is now 51.
+  - Worth knowing: D/ST counts 204 of the 537 D/ST-weeks projected in 2025. The backtest's 5-point bar and its skip of each team's first game account for the rest. Not investigated further.
+
+**Final review (Opus, 2026-09-28).** "Ready to merge: Yes". 0 Critical, 0 Important, 8 Minor.
+- Fixed: Minor 5, re-graded to Important. A D/ST's "TD dependence" on the waterfall could read over 100% or below zero, because its tiers can pull its total near or under zero. `tdDependence` is now a share from 0 to 1, and 0 when the total isn't positive. Test: `td dependence stays a share when a team defense's total is small or below zero`, seen failing first. The whole suite passed afterwards: 773 tests.
+- **Deferred minors** (all fixed 2026-09-28; see "K and D/ST minors fixed"):
+  - D/ST shows as "DST" on the Grid row detail, the Projections list row and the Player page header. The chip, the tab and the accuracy page say "D/ST".
+  - A kicker's game with no field goal or extra point try has no kicker week (5 team-games in 2024, 9 in 2025). His games count is one short, and the backtest skips those 0-point games. A fix needs the Python twin too.
+  - The D/ST accuracy row counts 204 of 537 projected weeks, because the offense's 5-point bar applies to it. Over every D/ST week the model still wins: 4.36 against the season average's 4.84.
+  - The waterfall's D/ST matchup note leaves out the opponent's scoring, which the matchup factor also uses.
+  - A safety is always credited to the defense on the play. That's wrong for a defense tackled in its own end zone on a return. This is rare, and Python has the same rule.
+  - `GridViewModel.kt:435` has a stale duplicated comment.
+  - In the tier editor, "One tier must start at 0" can overwrite a row's more specific "Whole points, 0–99" error.
+
+## K and D/ST minors fixed (2026-09-28)
+
+Each fix is test-first, and every new test was seen failing against the old code. Afterwards:
+- `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` fails only `:core:statquery`'s timing test (container speed, as before); it passes with `CI=1`.
+- `:app:assembleRelease lint` → BUILD SUCCESSFUL.
+- 2025 parity is OK on all 5 tables (`player_week_stat` 280,914 rows).
+- Both databases were rebuilt: `INGEST_VERSION` is 4.
+
+- [x] **D/ST label** (dd37065). `Position.label` shows "D/ST" on the Grid row, the Projections list row and the Player page header. The accuracy page now uses it too.
+- [x] **The D/ST matchup note** (dd37065) gives the opponent's shrunk scoring: "vs KC: scores 24.1 pts, gives up 2.9 sacks, 1.6 turnovers a game".
+  - Ruling: no `FORECAST_VERSION` bump. Factors are only stored for the upcoming week, whose season is always re-forecast. Cost if wrong: none.
+- [x] **Tier editor** (dd37065). The first row's own error ("Whole points, 0–99") is no longer replaced by "One tier must start at 0".
+- [x] **GridViewModel's duplicated comment** removed (dd37065).
+- [x] **Kicker weeks with no try** (this commit, Kotlin and Python). A kickoff by a player who has a field goal or extra point try that season gives him a zero week for the kicking team. That's 4 weeks in 2024 and 8 in 2025.
+  - The two Jets games where the punter kicked off get no kicker week (the punter has no try).
+- [x] **Safeties** (this commit, Kotlin and Python). A safety goes to posteam when posteam's score rose by 2 on the play (a punt returner tackled in his own end zone). Otherwise it goes to the defense.
+  - All 29 safeties in 2024–2025 went to the defense, so no current data changes. The reader now needs `posteam_score` and `posteam_score_post`.
+- [x] **The D/ST accuracy row** (this commit). Every team starts a kicker and a D/ST, so `ACCURACY_EVERY_WEEK` counts all their projected weeks, without the 5-point bar. The accuracy page's footnote says so.
+  - Refit `RANGE_WIDENING` for D/ST over those weeks: 1.09 → 1.22, which holds 80.0% pooled (81% in 2024, 79% in 2025). K still has no factor.
+  - **Gate (2025, PPR), all six pass:**
+    ```
+    pos       n           model      season avg          last 4   held
+    QB      498    6.42 (-0.19)    7.14 (-0.57)    7.07 (-0.56)    78%
+    RB      804    5.87 (-1.35)    6.01 (-0.31)    6.18 (+0.03)    78%
+    WR     1203    5.40 (-1.02)    5.79 (+0.28)    5.81 (+0.40)    81%
+    TE      455    4.87 (-1.62)    5.19 (-0.15)    5.42 (+0.30)    83%
+    K       501    3.88 (+0.02)    4.15 (+0.15)    4.23 (+0.04)    87%
+    DST     505    4.36 (-0.05)    4.84 (-0.12)    5.00 (-0.20)    79%
+    ```
 
 ## Deferred minors fixed (2026-09-27)
 
@@ -103,7 +214,7 @@ Four batches, each test-first (every new test was seen failing against the old c
 - **Warnings are errors**, and explicit API mode is on in JVM modules.
 - **Tracking.** The `.superpowers/` ledger doesn't survive the container. Rulings go in this file.
 
-**PRs #4–#7:** merged; their watches and check-ins are cancelled.
+**PRs #4–#9:** merged; their watches and check-ins are cancelled. The branch is reset onto the merged base (e188dc2).
 
 ## Projection props: execution progress
 

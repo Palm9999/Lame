@@ -111,7 +111,10 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
             continue
         built.append(season)
         lf = transform.load_pbp(pbp_path)
-        defense.append(teams.team_defense(pbp_path))
+        season_defense = teams.team_defense(pbp_path)
+        defense.append(season_defense)
+        frames.append(transform.to_long(teams.dst_weekly(season_defense), metric_ids, sparse_metric_ids()))
+        frames.append(transform.to_long(transform.kicking_stats(pbp_path), metric_ids, sparse_metric_ids()))
         try:
             injury.append(teams.injuries(sources.fetch("injuries", season, cache_dir=cache, force=force)))
         except Exception as exc:  # injury reports are a nice-to-have, not a blocker
@@ -151,6 +154,13 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
 
     if not frames:
         raise RuntimeError(f"none of the seasons {seasons} has published play-by-play")
+    all_defense = pl.concat(defense, how="vertical_relaxed")
+    # Each team's defense is a player (core/ingest adds them in writePlayers).
+    dst = teams.dst_players(sorted(all_defense["team"].unique().to_list()))
+    players = pl.concat(
+        [players, dst.with_columns(search_name=_search_name(pl.col("full_name"))).select(players.columns)],
+        how="vertical_relaxed",
+    )
     long = pl.concat(frames, how="vertical_relaxed")
     # Drop stat lines for ids that aren't in the player table (practice-squad
     # oddities, retired ids) so the foreign key relationship actually holds.
@@ -170,7 +180,7 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
     schema.load_metrics(conn, metric_rows())
     schema.load_players(conn, players)
     n = schema.load_facts(conn, long)
-    log.info("team defense rows: %d", schema.load_team_defense(conn, pl.concat(defense, how="vertical_relaxed")))
+    log.info("team defense rows: %d", schema.load_team_defense(conn, all_defense))
     if injury:
         log.info("injury rows: %d", schema.load_injuries(conn, pl.concat(injury, how="vertical_relaxed")))
 

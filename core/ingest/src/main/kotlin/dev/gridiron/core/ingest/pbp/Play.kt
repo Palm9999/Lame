@@ -26,6 +26,8 @@ internal val PBP_COLUMNS: List<String> = listOf(
     "first_down_pass", "first_down_rush", "fumble_lost", "fumbled_1_player_id",
     "two_point_conv_result", "touchdown", "td_team", "home_team", "away_team",
     "total_home_score", "total_away_score",
+    "kicker_player_id", "field_goal_attempt", "field_goal_result", "kick_distance",
+    "extra_point_attempt", "extra_point_result", "safety", "posteam_score", "posteam_score_post",
 )
 
 internal class Play(
@@ -68,6 +70,18 @@ internal class Play(
     val awayTeam: String?,
     val totalHomeScore: Double?,
     val totalAwayScore: Double?,
+    val kicker: String?,
+    val fieldGoalAttempt: Double?,
+    /** "made", "missed" or "blocked". */
+    val fieldGoalResult: String?,
+    val kickDistance: Double?,
+    val extraPointAttempt: Double?,
+    /** "good", "failed", "blocked" or "aborted". */
+    val extraPointResult: String?,
+    val safety: Double?,
+    /** posteam's score before and after the play: which side a safety scored for. */
+    val posteamScore: Double?,
+    val posteamScorePost: Double?,
 ) {
     /** False for kneels and spikes: see [RATE_EXCLUDED_PLAY_TYPES]. */
     val isEfficiency: Boolean get() = playType !in RATE_EXCLUDED_PLAY_TYPES
@@ -94,6 +108,10 @@ private fun CsvRow.toPlay(): Play? {
         twoPointResult = text("two_point_conv_result"), touchdown = double("touchdown"),
         tdTeam = text("td_team"), homeTeam = text("home_team"), awayTeam = text("away_team"),
         totalHomeScore = double("total_home_score"), totalAwayScore = double("total_away_score"),
+        kicker = text("kicker_player_id"), fieldGoalAttempt = double("field_goal_attempt"),
+        fieldGoalResult = text("field_goal_result"), kickDistance = double("kick_distance"),
+        extraPointAttempt = double("extra_point_attempt"), extraPointResult = text("extra_point_result"),
+        safety = double("safety"), posteamScore = double("posteam_score"), posteamScorePost = double("posteam_score_post"),
     )
 }
 

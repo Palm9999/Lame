@@ -9,6 +9,7 @@ import dev.gridiron.core.ingest.GameRow
 import dev.gridiron.core.ingest.InjuryRow
 import dev.gridiron.core.ingest.Metric
 import dev.gridiron.core.ingest.PlayerInfo
+import dev.gridiron.core.ingest.dstPlayer
 import dev.gridiron.core.ingest.pbp.TeamDefenseRow
 import java.io.File
 import java.time.Instant
@@ -69,7 +70,8 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
 
     fun writeTeamDefense(rows: List<TeamDefenseRow>) = insert(
         """INSERT OR REPLACE INTO team_week_defense (team, season, week, points_allowed, yards_allowed,
-           sacks, interceptions, fumbles_recovered, defensive_tds) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           sacks, interceptions, fumbles_recovered, defensive_tds, safeties, kick_return_tds)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         rows,
     ) { st, r ->
         st.bindText(1, r.team)
@@ -81,6 +83,8 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
         st.bindDouble(7, r.interceptions)
         st.bindDouble(8, r.fumblesRecovered)
         st.bindDouble(9, r.defensiveTds)
+        st.bindDouble(10, r.safeties)
+        st.bindDouble(11, r.kickReturnTds)
     }
 
     fun writeInjuries(rows: List<InjuryRow>) = insert(
@@ -168,7 +172,7 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
     }
 
     /**
-     * Keeps players with stats in `player`, drops facts for ids nflverse doesn't
+     * Keeps players with stats in `player`, each team's D/ST among them, drops facts for ids nflverse doesn't
      * list (as the Python build does), and maps every ESPN id. Returns how many
      * facts were dropped.
      */
@@ -180,7 +184,7 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
                    search_name TEXT NOT NULL, position TEXT, team TEXT, pfr_player_id TEXT, espn_id TEXT)""",
             )
             connection.prepare("INSERT OR IGNORE INTO all_player VALUES (?, ?, ?, ?, ?, ?, ?)").use { st ->
-                for (p in players) {
+                for (p in players + defenseTeams().map(::dstPlayer)) {
                     st.bindText(1, p.playerId)
                     st.bindText(2, p.fullName)
                     st.bindText(3, p.searchName)
@@ -207,6 +211,11 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
         }
         return dropped
     }
+
+    private fun defenseTeams(): List<String> =
+        connection.prepare("SELECT DISTINCT team FROM team_week_defense ORDER BY team").use { st ->
+            buildList { while (st.step()) add(st.getText(0)) }
+        }
 
     /** Indexes, provenance, then ANALYZE so the planner has statistics on the first query. */
     fun finish(seasons: Collection<Int>, meta: Map<String, String>, builtAt: Instant) {

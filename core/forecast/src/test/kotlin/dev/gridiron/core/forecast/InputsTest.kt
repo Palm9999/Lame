@@ -21,7 +21,7 @@ class InputsTest {
             db.week("QB1", 2025, 1, "AAA", "attempts" to 30.0, "passing_yards" to 250.0, "passing_tds" to 2.0)
             db.week("WR1", 2025, 1, "AAA", "targets" to 8.0, "receptions" to 5.0, "x_receiving_tds" to 0.4)
             db.week("WR1", 2025, 2, "AAA", "targets" to 6.0)
-            // Kickers aren't projected: this target must not reach AAA's team total.
+            // Kickers are projected apart from the offense: this target must not reach AAA's team total.
             db.week("K1", 2025, 1, "AAA", "targets" to 1.0)
             db.game(2025, 1, "AAA", "BBB", spread = 3.0, total = 44.0, homeQb = "QB1", homeCoach = "Coach A")
             db.game(2025, 5, "BBB", "AAA", played = false)
@@ -58,5 +58,26 @@ class InputsTest {
         assertEquals(-3.0, game.favoredBy("NE"))
         assertNull(game.copy(total = null).impliedPoints("SEA"))
         assertNull(game.copy(spread = null).impliedPoints("SEA"))
+    }
+
+    @Test
+    fun `kickers and team defenses load apart from the offense`() {
+        TestDb(File(dir, "units.db")).use { db ->
+            db.player("WR1", "WR", "AAA")
+            db.player("K1", "K", "AAA")
+            db.player("DST_AAA", "DST", "AAA")
+            db.week("WR1", 2025, 1, "AAA", "targets" to 5.0)
+            db.week("K1", 2025, 1, "AAA", "fg_att_50" to 1.0, "fg_made_50" to 1.0)
+            db.week("DST_AAA", 2025, 1, "AAA", "dst_sacks" to 3.0, "points_allowed" to 17.0)
+
+            val inputs = loadInputs(db.conn)
+
+            assertEquals(setOf("WR1"), inputs.players.keys)
+            assertEquals(setOf("K1", "DST_AAA"), inputs.units.keys)
+            assertEquals(1.0, inputs.unitHistory.getValue("K1").single()["fg_made_50"])
+            assertEquals(17.0, inputs.unitHistory.getValue("DST_AAA").single()["points_allowed"])
+            assertEquals(3.0, inputs.unitHistory.getValue("DST_AAA").single()["dst_sacks"])
+            assertEquals(setOf("WR1"), inputs.history.keys)
+        }
     }
 }

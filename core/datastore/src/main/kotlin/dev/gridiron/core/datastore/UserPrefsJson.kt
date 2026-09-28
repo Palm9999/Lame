@@ -4,8 +4,11 @@ import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
 import dev.gridiron.core.model.BonusStat
 import dev.gridiron.core.model.CompareSlot
+import dev.gridiron.core.model.ESPN_POINTS_ALLOWED
+import dev.gridiron.core.model.PointsAllowedTier
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.Roster
+import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.ScoringRule
 import dev.gridiron.core.model.WeekRange
@@ -24,7 +27,7 @@ import java.io.OutputStream
 
 @Serializable
 internal data class UserPrefsDto(
-    val formatVersion: Int = FORMAT_VERSION,
+    val formatVersion: Int = 1,
     val profiles: List<ProfileDto> = emptyList(),
     val activeProfileId: String? = null,
     val tray: List<SlotDto> = emptyList(),
@@ -43,7 +46,11 @@ internal data class ProfileDto(
     val receptionByPosition: Map<String, Double> = emptyMap(),
     val bonuses: List<BonusDto> = emptyList(),
     val basedOn: String? = null,
+    val pointsAllowed: List<TierDto> = emptyList(),
 )
+
+@Serializable
+internal data class TierDto(val min: Int, val points: Double)
 
 @Serializable
 internal data class BonusDto(val stat: String, val min: Int, val maxExclusive: Int? = null, val points: Double)
@@ -54,7 +61,8 @@ internal data class SlotDto(val playerId: String, val season: Int, val firstWeek
 @Serializable
 internal data class RosterDto(val id: String, val name: String, val playerIds: List<String> = emptyList())
 
-internal const val FORMAT_VERSION = 1
+/** 2: profiles carry points-allowed tiers, and version-1 profiles gain the kicking and team-defense defaults once. */
+internal const val FORMAT_VERSION = 2
 
 private val json = Json {
     ignoreUnknownKeys = true
@@ -69,12 +77,15 @@ private inline fun <T> orNull(block: () -> T): T? = try {
 }
 
 internal fun UserPrefsDto.toDomain(): UserPrefs {
+    val migrating = formatVersion < 2
     val profiles = profiles.mapNotNull { p ->
         orNull {
+            val weights = p.weights.mapNotNull { (k, v) -> ScoringRule.entries.firstOrNull { it.name == k }?.let { it to v } }.toMap()
             ScoringProfile(
                 id = p.id,
                 name = p.name,
-                weights = p.weights.mapNotNull { (k, v) -> ScoringRule.entries.firstOrNull { it.name == k }?.let { it to v } }.toMap(),
+                // Version 1 predates kicking and team defense: give them the presets' values, once.
+                weights = if (migrating) ScoringPresets.KICKING_AND_DEFENSE + weights else weights,
                 receptionByPosition = p.receptionByPosition
                     .mapNotNull { (k, v) -> Position.fromCode(k)?.takeIf { it in ScoringProfile.RECEPTION_POSITIONS }?.let { it to v } }
                     .toMap(),
@@ -83,6 +94,7 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
                     orNull { YardageBonus(stat, b.min, b.maxExclusive, b.points) }
                 },
                 basedOn = p.basedOn,
+                pointsAllowedTiers = if (migrating) ESPN_POINTS_ALLOWED else tiersOrNone(p.pointsAllowed),
             )
         }
     }
@@ -101,7 +113,15 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
     )
 }
 
+/** A profile's stored tiers, or none when they don't start at 0 and rise: a bad list must not cost the whole profile. */
+private fun tiersOrNone(stored: List<TierDto>): List<PointsAllowedTier> {
+    val tiers = stored.mapNotNull { orNull { PointsAllowedTier(it.min, it.points) } }
+    val valid = tiers.isEmpty() || (tiers.first().min == 0 && tiers.zipWithNext().all { (a, b) -> a.min < b.min })
+    return if (valid && tiers.size == stored.size) tiers else emptyList()
+}
+
 internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
+    formatVersion = FORMAT_VERSION,
     profiles = profiles.map { p ->
         ProfileDto(
             id = p.id,
@@ -110,6 +130,7 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
             receptionByPosition = p.receptionByPosition.mapKeys { it.key.code },
             bonuses = p.yardageBonuses.map { BonusDto(it.stat.name, it.min, it.maxExclusive, it.points) },
             basedOn = p.basedOn,
+            pointsAllowed = p.pointsAllowedTiers.map { TierDto(it.min, it.points) },
         )
     },
     activeProfileId = activeProfileId,

@@ -64,4 +64,20 @@ class ProjectedPointsTest {
     }
 
     private fun round(x: Double) = Math.round(x * 1e9) / 1e9
+
+    @Test
+    fun `points allowed simulate as normal`() {
+        assertEquals(DistributionFamily.NORMAL, familyOf("normal"))
+    }
+
+    @Test
+    fun `a caller can try other widening factors`() {
+        assertEquals(2.0 to 20.0, calibratedRange(10.0, 6.0, 15.0, Position.K, widening = mapOf(Position.K to 2.0)))
+    }
+
+    @Test
+    fun `a D-ST's projected points are its tiers in expectation`() {
+        val week = listOf(ProjectionComponent("points_allowed", 17.6, 100.0, "normal"), ProjectionComponent("g", 1.0, 0.0))
+        assertEquals(ScoringPresets.PPR.expectedPointsAllowedPoints(17.6, 10.0), projectPoints(week, ScoringPresets.PPR, Position.DST).points, 1e-9)
+    }
 }

@@ -33,14 +33,18 @@ internal fun adjust(components: Map<String, Double>, multiplier: (Side, StatType
 /**
  * Fixed full-PPR points, used only to split a projection's change between
  * matchup and game script and to decide which rows are worth storing. The app
- * scores every projection with the user's own profile.
+ * scores every projection with the user's own profile. Kickers' and D/STs'
+ * stats use the presets' values (`ScoringPresets.KICKING_AND_DEFENSE`). Points
+ * allowed need their spread to score, so `UnitProjector` adds their tiers.
  */
 internal fun referencePoints(components: Map<String, Double>): Double {
     fun v(id: String) = components[id] ?: 0.0
     return 0.04 * v("passing_yards") + 4 * v("passing_tds") - 2 * v("interceptions") +
         0.1 * v("rushing_yards") + 6 * v("rushing_tds") +
         v("receptions") + 0.1 * v("receiving_yards") + 6 * v("receiving_tds") +
-        2 * (v("passing_2pt") + v("rushing_2pt") + v("receiving_2pt")) - 2 * v("fumbles_lost")
+        2 * (v("passing_2pt") + v("rushing_2pt") + v("receiving_2pt")) - 2 * v("fumbles_lost") +
+        3 * v("fg_made_0_39") + 4 * v("fg_made_40_49") + 5 * v("fg_made_50") - v("fg_missed") + v("xp_made") - v("xp_missed") +
+        v("dst_sacks") + 2 * (v("dst_interceptions") + v("dst_fumble_recoveries") + v("dst_safeties")) + 6 * v("dst_tds")
 }
 
 internal fun ordinal(n: Int): String {

@@ -2,15 +2,16 @@ package dev.gridiron.core.ingest.db
 
 /**
  * Written into `schema_meta`: the Python ETL's schema 5, plus `player_xref`
- * (6), plus `game`, minus the Python ETL's projection bookkeeping tables (7).
+ * (6), plus `game`, minus the Python ETL's projection bookkeeping tables (7),
+ * plus `team_week_defense`'s safeties and kickoff-return TDs (8).
  */
-public const val SCHEMA_VERSION: Int = 7
+public const val SCHEMA_VERSION: Int = 8
 
 /**
  * Bump whenever a transform, the schema or an input's meaning changes: a build
  * only copies a season out of a previous database built with the same version.
  */
-public const val INGEST_VERSION: Int = 2
+public const val INGEST_VERSION: Int = 4
 
 internal const val SOURCE_NOTE: String = "nflverse-data (CC BY 4.0); ffopportunity expected points (GPL >= 3)"
 
@@ -49,6 +50,7 @@ internal val SCHEMA: List<String> = listOf(
         team TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
         points_allowed REAL NOT NULL, yards_allowed REAL NOT NULL, sacks REAL NOT NULL,
         interceptions REAL NOT NULL, fumbles_recovered REAL NOT NULL, defensive_tds REAL NOT NULL,
+        safeties REAL NOT NULL, kick_return_tds REAL NOT NULL,
         PRIMARY KEY (team, season, week)) WITHOUT ROWID""",
     """CREATE TABLE injury_report (
         player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,

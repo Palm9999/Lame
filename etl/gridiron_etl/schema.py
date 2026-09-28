@@ -21,7 +21,7 @@ import polars as pl
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 DDL = """
 PRAGMA journal_mode = OFF;
@@ -155,6 +155,8 @@ CREATE TABLE team_week_defense (
     interceptions     REAL NOT NULL,
     fumbles_recovered REAL NOT NULL,
     defensive_tds     REAL NOT NULL,
+    safeties          REAL NOT NULL,
+    kick_return_tds   REAL NOT NULL,
     PRIMARY KEY (team, season, week)
 ) WITHOUT ROWID;
 
@@ -285,7 +287,8 @@ def _load_chunked(conn: sqlite3.Connection, table: str, cols: list[str],
 def load_team_defense(conn: sqlite3.Connection, df: pl.DataFrame) -> int:
     return _load_chunked(conn, "team_week_defense",
                           ["team", "season", "week", "points_allowed", "yards_allowed",
-                           "sacks", "interceptions", "fumbles_recovered", "defensive_tds"], df)
+                           "sacks", "interceptions", "fumbles_recovered", "defensive_tds",
+                           "safeties", "kick_return_tds"], df)
 
 
 def load_injuries(conn: sqlite3.Connection, df: pl.DataFrame) -> int:

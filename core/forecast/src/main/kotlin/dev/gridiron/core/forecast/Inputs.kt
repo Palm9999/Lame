@@ -5,6 +5,9 @@ import androidx.sqlite.SQLiteStatement
 
 internal val POSITIONS: List<String> = listOf("QB", "RB", "WR", "TE")
 
+/** Kickers and team defenses: projected by their own models, from their own stats, never counted in team volume. */
+internal val UNIT_POSITIONS: List<String> = listOf("K", "DST")
+
 /** Sorts weeks chronologically across seasons: 2025 week 18 comes before 2026 week 1. */
 internal fun order(season: Int, week: Int): Int = season * 100 + week
 
@@ -80,6 +83,10 @@ internal class ForecastInputs(
     val teamGames: Map<Triple<String, Int, Int>, TeamGame>,
     /** Last week with expected-points data, per season; a missing season has none. */
     val expectedThrough: Map<Int, Int>,
+    /** Kickers and D/STs, by player id. */
+    val units: Map<String, PlayerInfo> = emptyMap(),
+    /** Their weeks, per player id, oldest first. */
+    val unitHistory: Map<String, List<PlayerGame>> = emptyMap(),
 )
 
 private val READ_METRICS = listOf(
@@ -91,8 +98,14 @@ private val READ_METRICS = listOf(
     "x_passing_tds", "x_rushing_tds", "x_receiving_tds",
 )
 
+private val UNIT_METRICS = listOf(
+    "g", "fg_att_0_39", "fg_att_40_49", "fg_att_50", "fg_made_0_39", "fg_made_40_49", "fg_made_50",
+    "fg_missed", "xp_att", "xp_made", "xp_missed",
+    "dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "points_allowed",
+)
+
 internal fun loadInputs(conn: SQLiteConnection): ForecastInputs {
-    val history = readHistory(conn)
+    val history = readHistory(conn, POSITIONS, READ_METRICS)
     val teamGames = HashMap<Triple<String, Int, Int>, TeamGame>()
     for (g in history.values.flatten()) {
         val team = teamGames.getOrPut(Triple(g.team, g.season, g.week)) { TeamGame(g.team, g.season, g.week) }
@@ -104,26 +117,33 @@ internal fun loadInputs(conn: SQLiteConnection): ForecastInputs {
         team.passTds += g["passing_tds"]
         team.rushTds += g["rushing_tds"]
     }
-    return ForecastInputs(readPlayers(conn), history, readGames(conn), teamGames, readExpectedThrough(conn))
+    return ForecastInputs(
+        readPlayers(conn, POSITIONS), history, readGames(conn), teamGames, readExpectedThrough(conn),
+        units = readPlayers(conn, UNIT_POSITIONS),
+        unitHistory = readHistory(conn, UNIT_POSITIONS, UNIT_METRICS),
+    )
 }
 
-private fun readPlayers(conn: SQLiteConnection): Map<String, PlayerInfo> =
-    conn.prepare("SELECT player_id, full_name, position, team FROM player WHERE position IN ('QB', 'RB', 'WR', 'TE')").use { st ->
+private fun readPlayers(conn: SQLiteConnection, positions: List<String>): Map<String, PlayerInfo> =
+    conn.prepare(
+        "SELECT player_id, full_name, position, team FROM player WHERE position IN (${positions.joinToString(",") { "?" }})",
+    ).use { st ->
+        positions.forEachIndexed { i, p -> st.bindText(i + 1, p) }
         buildMap {
             while (st.step()) put(st.getText(0), PlayerInfo(st.getText(0), st.getText(1), st.getText(2), st.textOrNull(3)))
         }
     }
 
-private fun readHistory(conn: SQLiteConnection): Map<String, List<PlayerGame>> {
+private fun readHistory(conn: SQLiteConnection, positions: List<String>, metrics: List<String>): Map<String, List<PlayerGame>> {
     val history = HashMap<String, MutableList<PlayerGame>>()
-    val placeholders = READ_METRICS.joinToString(",") { "?" }
     conn.prepare(
         """SELECT s.player_id, s.season, s.week, s.team, s.metric_id, s.value FROM player_week_stat s
            JOIN player p ON p.player_id = s.player_id
-           WHERE p.position IN ('QB', 'RB', 'WR', 'TE') AND s.team IS NOT NULL AND s.metric_id IN ($placeholders)
+           WHERE p.position IN (${positions.joinToString(",") { "?" }}) AND s.team IS NOT NULL
+             AND s.metric_id IN (${metrics.joinToString(",") { "?" }})
            ORDER BY s.player_id, s.season, s.week""",
     ).use { st ->
-        READ_METRICS.forEachIndexed { i, m -> st.bindText(i + 1, m) }
+        (positions + metrics).forEachIndexed { i, v -> st.bindText(i + 1, v) }
         var key: Triple<String, Int, Int>? = null
         var team = ""
         var stats = HashMap<String, Double>()

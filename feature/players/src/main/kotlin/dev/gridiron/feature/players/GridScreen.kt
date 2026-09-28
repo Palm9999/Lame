@@ -188,7 +188,7 @@ private fun GridContent(
             )
 
             ChipRow {
-                StatPack.entries.forEach { pack ->
+                r.positions.packs.forEach { pack ->
                     FilterChip(
                         selected = r.pack == pack,
                         onClick = { onEvent(GridEvent.PackSelected(pack)) },
@@ -216,7 +216,9 @@ private fun GridContent(
                 if (state.rosters.isNotEmpty()) {
                     RosterChip(state.rosters, state.rosterId) { onEvent(GridEvent.RosterSelected(it)) }
                 }
-                SnapChip(r.minSnapShare) { onEvent(GridEvent.MinSnapShareSelected(it)) }
+                if (r.positions != PositionFilter.K && r.positions != PositionFilter.DST) {
+                    SnapChip(r.minSnapShare) { onEvent(GridEvent.MinSnapShareSelected(it)) }
+                }
                 FilterChip(
                     selected = r.filters.isNotEmpty(),
                     onClick = { showFilters = true },

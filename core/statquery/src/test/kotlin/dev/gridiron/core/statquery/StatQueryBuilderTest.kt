@@ -102,6 +102,20 @@ class StatQueryBuilderTest {
 
             assertEquals(1.5 * 0.5 + 0.7 * 1.0, row.value(WOPR)!!, EPS)
         }
+
+        @Test
+        fun `a week with no team targets or air yards at all has no WOPR`() {
+            // A team defense's or a kicker's week: nothing to share, so no rating, not a zero one.
+            db.player("DST_KC", "KC D/ST", position = "DST", team = "KC")
+            db.week("DST_KC", 1, C.DST_SACKS to 2)
+            db.player("rb1", "Pure Runner", position = "RB")
+            db.week("rb1", 1, C.TARGETS to 0, C.TEAM_TARGETS to 30)
+
+            val rows = db.grid(spec(WOPR)).associateBy { it.playerId }
+
+            assertNull(rows.getValue("DST_KC").value(WOPR))
+            assertEquals(0.0, rows.getValue("rb1").value(WOPR)!!, EPS)
+        }
     }
 
     @Nested
@@ -213,6 +227,20 @@ class StatQueryBuilderTest {
             val flexKc = db.grid(spec(TARGETS).copy(positions = Position.FLEX, teams = setOf("KC")))
 
             assertEquals(setOf("wr1", "te1"), flexKc.map { it.playerId }.toSet())
+        }
+
+        @Test
+        fun `excluded positions leave those players out and keep players with no position`() {
+            db.player("wr1", "Wideout", position = "WR")
+            db.player("k1", "Place Kicker", position = "K")
+            db.player("d1", "KC D/ST", position = "DST")
+            listOf("wr1", "k1", "d1").forEach { db.week(it, 1, C.TARGETS to 1) }
+            db.conn.createStatement().use { it.executeUpdate("INSERT INTO player VALUES ('x1', 'Unknown Spot', 'unknown spot', NULL, 'AAA', NULL)") }
+            db.week("x1", 1, C.TARGETS to 1)
+
+            val rows = db.grid(spec(TARGETS).copy(excludedPositions = setOf(Position.K, Position.DST)))
+
+            assertEquals(setOf("wr1", "x1"), rows.map { it.playerId }.toSet())
         }
 
         @Test

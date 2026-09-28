@@ -52,6 +52,15 @@ class ProjectionListScreenTest {
     }
 
     @Test
+    fun `a team defense's row reads D-ST`() {
+        val defense = ProjectionListState.Loaded(4, null, listOf(ProjectionRow("DST_KC", "Kansas City D/ST", "DST", "KC", 7.0, 1.0, 14.0)), emptyList())
+        compose.setContent { GridironTheme { ProjectionListScreen(defense, emptyMap(), onPlayer = {}, onBack = {}) } }
+
+        compose.onNodeWithText("D/ST").performClick()
+        compose.onNodeWithText("D/ST · KC").assertIsDisplayed()
+    }
+
+    @Test
     fun `an unavailable forecast says why`() {
         compose.setContent {
             GridironTheme { ProjectionListScreen(ProjectionListState.Unavailable("No upcoming games in 2026."), emptyMap(), onPlayer = {}, onBack = {}) }

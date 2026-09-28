@@ -27,6 +27,12 @@ class ScoringProfileTest {
         for (rule in others) {
             assertEquals(ppr.weight(rule), ScoringPresets.STANDARD.weight(rule), rule.name)
         }
+        for (preset in ScoringPresets.all) {
+            for ((rule, value) in ScoringPresets.KICKING_AND_DEFENSE) assertEquals(value, preset.weight(rule), "${preset.id} $rule")
+            assertEquals(ESPN_POINTS_ALLOWED, preset.pointsAllowedTiers, preset.id)
+        }
+        assertEquals(3.0, ppr.weight(ScoringRule.FG_MADE_0_39))
+        assertEquals(6.0, ppr.weight(ScoringRule.DST_TD))
         assertTrue(ScoringPresets.all.all { it.yardageBonuses.isEmpty() && it.isPreset })
         assertEquals(listOf("preset:ppr", "preset:half", "preset:standard"), ScoringPresets.all.map { it.id })
     }
@@ -72,7 +78,7 @@ class ScoringProfileTest {
 
     @Test
     fun `every rule belongs to a group and has a label`() {
-        assertEquals(25, ScoringRule.entries.size)
+        assertEquals(36, ScoringRule.entries.size)
         assertTrue(ScoringRule.entries.all { it.label.isNotBlank() })
         assertEquals(ScoringGroup.TURNOVERS, ScoringRule.FUMBLE_LOST.group)
     }

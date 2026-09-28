@@ -459,6 +459,37 @@ class GridReduceTest {
     }
 
     @Test
+    fun `the K and D-ST chips bring their own pack, and an offense chip brings the offense back`() {
+        val kickers = reduce(GridEvent.PositionsSelected(PositionFilter.K))
+        assertEquals(StatPack.KICKING, kickers.pack)
+        assertEquals(StatColumn.FANTASY_POINTS, kickers.sort)
+
+        val defenses = reduce(GridEvent.PositionsSelected(PositionFilter.K), GridEvent.PositionsSelected(PositionFilter.DST))
+        assertEquals(StatPack.DEFENSE, defenses.pack)
+
+        val back = reduce(GridEvent.PositionsSelected(PositionFilter.DST), GridEvent.PositionsSelected(PositionFilter.RB))
+        assertEquals(StatPack.FANTASY, back.pack)
+        assertEquals(PositionFilter.RB, back.positions)
+
+        // Between offense chips the pack stays.
+        assertEquals(StatPack.OPPORTUNITY, reduce(GridEvent.PositionsSelected(PositionFilter.WR)).pack)
+    }
+
+    @Test
+    fun `a K or D-ST pack brings its chip`() {
+        assertEquals(PositionFilter.DST, reduce(GridEvent.PackSelected(StatPack.DEFENSE)).positions)
+        val offense = reduce(GridEvent.PackSelected(StatPack.KICKING), GridEvent.PackSelected(StatPack.RUSHING))
+        assertEquals(PositionFilter.ALL, offense.positions)
+    }
+
+    @Test
+    fun `each chip offers its packs`() {
+        assertEquals(listOf(StatPack.KICKING), PositionFilter.K.packs)
+        assertEquals(listOf(StatPack.DEFENSE), PositionFilter.DST.packs)
+        assertEquals(StatPack.entries - StatPack.KICKING - StatPack.DEFENSE, PositionFilter.FLEX.packs)
+    }
+
+    @Test
     fun `switching packs resets the sort to the new pack's lead stat`() {
         val r = reduce(GridEvent.SortBy(StatColumn.ADOT), GridEvent.PackSelected(StatPack.PASSING))
         assertEquals(StatColumn.PASSING_YARDS, r.sort)

@@ -40,4 +40,11 @@ class KindsTest {
     fun `ordinals`() {
         assertEquals(listOf("1st", "2nd", "3rd", "4th", "11th", "12th", "13th", "21st", "32nd"), listOf(1, 2, 3, 4, 11, 12, 13, 21, 32).map(::ordinal))
     }
+
+    @Test
+    fun `reference points score kickers' and defenses' stats with the presets' values`() {
+        assertEquals(3.0 + 4.0 + 5.0 - 1.0 + 2.0 - 1.0, referencePoints(mapOf("fg_made_0_39" to 1.0, "fg_made_40_49" to 1.0, "fg_made_50" to 1.0, "fg_missed" to 1.0, "xp_made" to 2.0, "xp_missed" to 1.0)), 1e-12)
+        // Points allowed need their spread, so UnitProjector adds the tiers; referencePoints ignores them.
+        assertEquals(2.0 + 2.0 + 2.0 + 6.0 + 2.0, referencePoints(mapOf("dst_sacks" to 2.0, "dst_interceptions" to 1.0, "dst_fumble_recoveries" to 1.0, "dst_tds" to 1.0, "dst_safeties" to 1.0, "points_allowed" to 20.0, "g" to 1.0)), 1e-12)
+    }
 }

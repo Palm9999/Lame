@@ -16,6 +16,7 @@ import dev.gridiron.core.projections.SimulationResult
 import dev.gridiron.core.projections.attributeFactors
 import dev.gridiron.core.projections.calibratedRange
 import dev.gridiron.core.projections.familyOf
+import dev.gridiron.core.projections.projectedScore
 import dev.gridiron.core.projections.score
 import dev.gridiron.core.projections.simulate
 import dev.gridiron.core.projections.tdDependence
@@ -111,13 +112,12 @@ public class ProjectionsViewModel(
                 val finalByMetric = projection.final.associateBy { it.metricId }
                 val mergedByMetric = baselineByMetric + finalByMetric // final's entries override baseline's per metric id
 
-                val baselineMap = projection.baseline.associate { Component(it.metricId) to it.mean }
                 val finalMap = mergedByMetric.values.associate { Component(it.metricId) to it.mean }
                 val mergedComponents = mergedByMetric.values.toList()
 
-                val baselinePoints = score(baselineMap, profile, position)
-                val finalPoints = score(finalMap, profile, position)
-                val attributed = attributeFactors(baselineMap, finalMap, projection.factors, profile, position)
+                val baselinePoints = projectedScore(projection.baseline, profile, position)
+                val finalPoints = projectedScore(mergedComponents, profile, position)
+                val attributed = attributeFactors(baselinePoints, finalPoints, projection.factors)
 
                 // TD dependence: what share of the final projection comes from
                 // TD-scoring components, via the same rule-input registry the

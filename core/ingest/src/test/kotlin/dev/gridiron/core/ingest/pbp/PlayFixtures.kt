@@ -15,6 +15,9 @@ internal fun play(
     fumbler: String? = null, twoPointResult: String? = null, touchdown: Double? = 0.0,
     tdTeam: String? = null, homeTeam: String? = "AAA", awayTeam: String? = "BBB",
     totalHomeScore: Double? = 0.0, totalAwayScore: Double? = 0.0,
+    kicker: String? = null, fieldGoalAttempt: Double? = 0.0, fieldGoalResult: String? = null,
+    kickDistance: Double? = null, extraPointAttempt: Double? = 0.0, extraPointResult: String? = null,
+    safety: Double? = 0.0, posteamScore: Double? = null, posteamScorePost: Double? = null,
 ): Play = Play(
     season = season, week = week, seasonType = seasonType, gameId = gameId, posteam = posteam,
     defteam = defteam, playType = playType, passAttempt = passAttempt, completePass = completePass,
@@ -27,6 +30,9 @@ internal fun play(
     fumbleLost = fumbleLost, fumbler = fumbler, twoPointResult = twoPointResult,
     touchdown = touchdown, tdTeam = tdTeam, homeTeam = homeTeam, awayTeam = awayTeam,
     totalHomeScore = totalHomeScore, totalAwayScore = totalAwayScore,
+    kicker = kicker, fieldGoalAttempt = fieldGoalAttempt, fieldGoalResult = fieldGoalResult,
+    kickDistance = kickDistance, extraPointAttempt = extraPointAttempt, extraPointResult = extraPointResult,
+    safety = safety, posteamScore = posteamScore, posteamScorePost = posteamScorePost,
 )
 
 internal fun target(
@@ -61,6 +67,16 @@ internal fun kneel(qb: String, yds: Double = -1.0, epa: Double = -0.5, yl: Doubl
 /** A QB spike: a zero-yard incompletion. */
 internal fun spike(qb: String, epa: Double = -0.1): Play =
     play(playType = "qb_spike", passAttempt = 1.0, completePass = 0.0, passer = qb, epa = epa)
+
+/** A field goal try by [kicker] for AAA: [result] is "made", "missed" or "blocked". */
+internal fun fieldGoal(kicker: String, distance: Double?, result: String, seasonType: String = "REG"): Play = play(
+    playType = "field_goal", kicker = kicker, fieldGoalAttempt = 1.0, kickDistance = distance,
+    fieldGoalResult = result, seasonType = seasonType,
+)
+
+/** An extra point try by [kicker] for AAA: [result] is "good", "failed", "blocked" or "aborted". */
+internal fun extraPoint(kicker: String, result: String): Play =
+    play(playType = "extra_point", kicker = kicker, extraPointAttempt = 1.0, extraPointResult = result)
 
 internal fun base(plays: List<Play>): List<PlayerWeek> =
     PlayerWeekAggregator().apply { plays.forEach(::add) }.rows()

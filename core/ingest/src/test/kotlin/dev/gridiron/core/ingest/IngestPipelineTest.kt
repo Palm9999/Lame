@@ -37,7 +37,7 @@ class IngestPipelineTest {
     private val injuryHeader = listOf("gsis_id", "season", "week", "team", "full_name", "position", "report_status", "report_primary_injury", "practice_status")
     private val expectedHeader = listOf("season", "week", "player_id", "posteam") + EXPECTED_COLUMNS.keys + EXPECTED_ACTUAL_COLUMNS
 
-    private fun servePlayers(wr1Name: String = "Wide Receiver One", version: String = "p1") {
+    private fun servePlayers(wr1Name: String = "Wide Receiver One", version: String = "p1", extra: List<Map<String, Any?>> = emptyList()) {
         val csv = Fixtures.csv(
             listOf("gsis_id", "display_name", "position", "latest_team", "pfr_id", "espn_id"),
             listOf(
@@ -46,7 +46,7 @@ class IngestPipelineTest {
                 mapOf("gsis_id" to "WR2", "display_name" to "Receiver Two", "position" to "WR", "latest_team" to "AAA", "pfr_id" to "pWR2", "espn_id" to "103"),
                 mapOf("gsis_id" to "RB1", "display_name" to "Running Back", "position" to "RB", "latest_team" to "AAA", "pfr_id" to "pRB1", "espn_id" to "104"),
                 mapOf("gsis_id" to "OLD1", "display_name" to "Retired Guy", "position" to "WR", "latest_team" to "XXX", "espn_id" to "105"),
-            ),
+            ) + extra,
         )
         fetcher.serve(Sources.url(Input.PLAYERS), Fixtures.gzip(csv), version)
         serveGames()
@@ -71,13 +71,20 @@ class IngestPipelineTest {
         mapOf("season" to season, "week" to 1, "player_id" to id, "posteam" to "AAA") +
             (EXPECTED_COLUMNS.keys + EXPECTED_ACTUAL_COLUMNS).associateWith { 0.0 } + values
 
-    private fun serveSeason(season: Int, version: String = "v1", snapsVersion: String = version, expected: Boolean = true, wr1Receptions: Int = 1) {
+    private fun serveSeason(
+        season: Int,
+        version: String = "v1",
+        snapsVersion: String = version,
+        expected: Boolean = true,
+        wr1Receptions: Int = 1,
+        extraPlays: List<Map<String, Any?>> = emptyList(),
+    ) {
         val plays = listOf(
             Fixtures.pbp("season" to season, "receiver_player_id" to "WR1", "passer_player_id" to "QB1", "pass_attempt" to 1,
                 "complete_pass" to 1, "air_yards" to 10, "receiving_yards" to 15, "passing_yards" to 15, "yards_gained" to 15),
             Fixtures.pbp("season" to season, "receiver_player_id" to "WR2", "passer_player_id" to "QB1", "pass_attempt" to 1, "air_yards" to 5),
             Fixtures.pbp("season" to season, "play_type" to "run", "rusher_player_id" to "RB1", "rushing_yards" to 4, "yards_gained" to 4),
-        )
+        ) + extraPlays
         fetcher.serve(Sources.url(Input.PBP, season), Fixtures.gzip(Fixtures.pbpCsv(plays)), version)
         fetcher.serve(
             Sources.url(Input.SNAP_COUNTS, season),
@@ -126,12 +133,12 @@ class IngestPipelineTest {
         assertEquals(listOf(2024, 2025), report.built)
         assertEquals(emptyList<Int>(), report.reused)
         val meta = readMeta(out)!!
-        assertEquals("7", meta["schema_version"])
-        assertEquals("2", meta["ingest_version"])
+        assertEquals("8", meta["schema_version"])
+        assertEquals("4", meta["ingest_version"])
         assertEquals("2024,2025", meta["seasons"])
         assertEquals("1", meta["expected_through_week:2025"])
         assertNotNull(meta[Sources.metaKey(Input.PBP, 2025)])
-        assertEquals(listOf("QB1", "RB1", "WR1", "WR2"), query(out, "SELECT player_id FROM player ORDER BY 1").map { it[0] })
+        assertEquals(listOf("DST_AAA", "DST_BBB", "QB1", "RB1", "WR1", "WR2"), query(out, "SELECT player_id FROM player ORDER BY 1").map { it[0] })
         assertEquals(listOf(listOf("OLD1")), query(out, "SELECT player_id FROM player_xref WHERE espn_id = '105'"))
         assertEquals(listOf(listOf("0.5")), query(out, "SELECT value FROM player_week_stat WHERE player_id = 'WR1' AND season = 2025 AND metric_id = 'target_share'"))
         assertEquals(listOf(listOf("0.78")), query(out, "SELECT value FROM player_week_stat WHERE player_id = 'WR1' AND season = 2025 AND metric_id = 'snap_share'"))
@@ -475,5 +482,48 @@ class IngestPipelineTest {
 
         assertEquals(listOf(2025), report.built)
         assertEquals("no games to project from yet", report.forecast)
+    }
+
+    @Test
+    fun `a kicker's field goals and extra points are stored beside any play he ran`() = runTest {
+        servePlayers(
+            extra = listOf(
+                mapOf("gsis_id" to "K1", "display_name" to "Place Kicker", "position" to "K", "latest_team" to "AAA", "pfr_id" to "pK1", "espn_id" to "106"),
+            ),
+        )
+        serveSeason(
+            2025,
+            extraPlays = listOf(
+                Fixtures.pbp("play_type" to "field_goal", "kicker_player_id" to "K1", "field_goal_attempt" to 1, "kick_distance" to 47, "field_goal_result" to "made"),
+                Fixtures.pbp("play_type" to "extra_point", "kicker_player_id" to "K1", "extra_point_attempt" to 1, "extra_point_result" to "good"),
+                // A fake field goal: the kicker runs it himself.
+                Fixtures.pbp("play_type" to "run", "rusher_player_id" to "K1", "rushing_yards" to 9, "yards_gained" to 9),
+            ),
+        )
+        val out = File(dir, "stats.db")
+
+        pipeline.build(listOf(2025), previous = null, out = out)
+
+        assertEquals(
+            listOf(listOf("carries", "1.0"), listOf("fg_made_40_49", "1.0"), listOf("g", "1.0"), listOf("xp_made", "1.0")),
+            query(out, "SELECT metric_id, value FROM player_week_stat WHERE player_id = 'K1' AND metric_id IN ('g', 'fg_made_40_49', 'xp_made', 'carries') ORDER BY 1"),
+        )
+        assertEquals(listOf(listOf("K")), query(out, "SELECT position FROM player WHERE player_id = 'K1'"))
+    }
+
+    @Test
+    fun `each team's defense is stored as its D-ST's week`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+
+        pipeline.build(listOf(2025), previous = null, out = out)
+
+        // The fixture's plays score nothing: both defenses allowed 0, a shutout, and nothing else.
+        assertEquals(
+            listOf(listOf("g", "1.0"), listOf("points_allowed", "0.0")),
+            query(out, "SELECT metric_id, value FROM player_week_stat WHERE player_id = 'DST_BBB' ORDER BY 1"),
+        )
+        assertEquals(listOf(listOf("BBB D/ST", "DST", "BBB")), query(out, "SELECT full_name, position, team FROM player WHERE player_id = 'DST_BBB'"))
     }
 }

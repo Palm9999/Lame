@@ -91,4 +91,26 @@ public object Components {
     public val X_RUSHING_FIRST_DOWNS: Component = Component("x_rushing_first_downs")
     public val X_RECEIVING_FIRST_DOWNS: Component = Component("x_receiving_first_downs")
     public val X_INTERCEPTIONS: Component = Component("x_interceptions")
+
+    // Kicking: the kicker's scoring inputs. Internal and sparse, except the
+    // 50+ makes and extra points made, which the Grid's Kicking pack shows too.
+    public val FG_MADE_0_39: Component = Component("fg_made_0_39")
+    public val FG_MADE_40_49: Component = Component("fg_made_40_49")
+    public val FG_MADE_50: Component = Component("fg_made_50")
+    public val FG_MISSED: Component = Component("fg_missed")
+    public val XP_MADE: Component = Component("xp_made")
+    public val XP_MISSED: Component = Component("xp_missed")
+    // Totals the Grid's Kicking pack shows; no rule reads them.
+    public val FG_ATT: Component = Component("fg_att")
+    public val FG_MADE: Component = Component("fg_made")
+    public val XP_ATT: Component = Component("xp_att")
+
+    // Team defense and special teams (D/ST pseudo-players). Sparse, except
+    // points allowed, whose zero is a shutout; the profile's tiers score it.
+    public val DST_SACKS: Component = Component("dst_sacks")
+    public val DST_INTERCEPTIONS: Component = Component("dst_interceptions")
+    public val DST_FUMBLE_RECOVERIES: Component = Component("dst_fumble_recoveries")
+    public val DST_TDS: Component = Component("dst_tds")
+    public val DST_SAFETIES: Component = Component("dst_safeties")
+    public val POINTS_ALLOWED: Component = Component("points_allowed")
 }

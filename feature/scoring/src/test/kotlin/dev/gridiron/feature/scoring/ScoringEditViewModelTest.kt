@@ -1,6 +1,7 @@
 package dev.gridiron.feature.scoring
 
 import dev.gridiron.core.model.BonusStat
+import dev.gridiron.core.model.PointsAllowedTier
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.ScoringRule
@@ -148,5 +149,74 @@ class ScoringEditViewModelTest {
         vm.onEvent(EditEvent.Save)
         advanceUntilIdle()
         assertEquals(1.5, prefs.current.profiles.single().weight(ScoringRule.PASS_TD), 0.0)
+    }
+
+    @Test
+    fun editingTiersAndSavingPersistsThemInOrder() = runTest(dispatcher) {
+        repo.duplicate(ScoringPresets.PPR.id, "Mine")
+        val vm = ScoringEditViewModel("u1", repo)
+        advanceUntilIdle()
+        val drafts = (vm.state.value as EditState.Editing).tiers
+        assertEquals(9, drafts.size)
+        // Keep 0, 14 and 18 (changing 14's points), drop the rest.
+        for (d in drafts.filter { it.min !in setOf("0", "14", "18") }) vm.onEvent(EditEvent.TierRemoved(d.key))
+        val fourteen = (vm.state.value as EditState.Editing).tiers.single { it.min == "14" }
+        vm.onEvent(EditEvent.TierChanged(fourteen.key, fourteen.copy(points = "2")))
+        vm.onEvent(EditEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(PointsAllowedTier(0, 5.0), PointsAllowedTier(14, 2.0), PointsAllowedTier(18, 0.0)),
+            prefs.current.profiles.single().pointsAllowedTiers,
+        )
+    }
+
+    @Test
+    fun oneTierMustStartAtZeroAndNoneRepeat() = runTest(dispatcher) {
+        repo.duplicate(ScoringPresets.PPR.id, "Mine")
+        val vm = ScoringEditViewModel("u1", repo)
+        advanceUntilIdle()
+        val tiers = (vm.state.value as EditState.Editing).tiers
+        val zero = tiers.first()
+        vm.onEvent(EditEvent.TierChanged(zero.key, zero.copy(min = "3")))
+        var s = vm.state.value as EditState.Editing
+        assertEquals("One tier must start at 0", s.errors[FieldKey.TierMin(zero.key)])
+        assertNull(s.profile)
+
+        vm.onEvent(EditEvent.TierChanged(zero.key, zero))
+        vm.onEvent(EditEvent.TierChanged(tiers[2].key, tiers[2].copy(min = "1")))
+        s = vm.state.value as EditState.Editing
+        assertEquals("Another tier starts at 1", s.errors[FieldKey.TierMin(tiers[2].key)])
+
+        vm.onEvent(EditEvent.TierChanged(tiers[2].key, tiers[2].copy(min = "x")))
+        assertEquals("Whole points, 0–99", (vm.state.value as EditState.Editing).errors[FieldKey.TierMin(tiers[2].key)])
+
+        // The first row's own mistake isn't hidden behind the missing 0.
+        vm.onEvent(EditEvent.TierChanged(tiers[2].key, tiers[2]))
+        vm.onEvent(EditEvent.TierChanged(zero.key, zero.copy(min = "x")))
+        assertEquals("Whole points, 0–99", (vm.state.value as EditState.Editing).errors[FieldKey.TierMin(zero.key)])
+    }
+
+    @Test
+    fun aKickingRuleSetToZeroIsSavedAsZero() = runTest(dispatcher) {
+        repo.duplicate(ScoringPresets.PPR.id, "Mine")
+        val vm = ScoringEditViewModel("u1", repo)
+        advanceUntilIdle()
+        vm.onEvent(EditEvent.WeightChanged(ScoringRule.FG_MISSED, "0"))
+        vm.onEvent(EditEvent.Save)
+        advanceUntilIdle()
+        val saved = prefs.current.profiles.single()
+        assertEquals(0.0, saved.weight(ScoringRule.FG_MISSED), 0.0)
+        assertEquals(3.0, saved.weight(ScoringRule.FG_MADE_0_39), 0.0)
+    }
+
+    @Test
+    fun resetToPresetRestoresTheTiers() = runTest(dispatcher) {
+        repo.duplicate(ScoringPresets.PPR.id, "Mine")
+        val vm = ScoringEditViewModel("u1", repo)
+        advanceUntilIdle()
+        (vm.state.value as EditState.Editing).tiers.forEach { vm.onEvent(EditEvent.TierRemoved(it.key)) }
+        vm.onEvent(EditEvent.ResetToPreset)
+        assertEquals(ScoringPresets.PPR.pointsAllowedTiers, (vm.state.value as EditState.Editing).profile!!.pointsAllowedTiers)
     }
 }

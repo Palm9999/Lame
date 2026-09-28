@@ -103,6 +103,12 @@ COHERENCE_CHECKS: tuple[CoherenceCheck, ...] = (
     CoherenceCheck("40+ receiving TDs within receiving TDs", "receiving_tds_40", "receiving_tds", "a <= b"),
     CoherenceCheck("receiving first downs within receptions", "receiving_first_downs", "receptions", "a <= b"),
     CoherenceCheck("rushing first downs within carries", "rushing_first_downs", "carries", "a <= b"),
+    CoherenceCheck("field goals made within tries", "fg_made", "fg_att", "a <= b"),
+    CoherenceCheck("0-39 field goals made within tries", "fg_made_0_39", "fg_att_0_39", "a <= b"),
+    CoherenceCheck("40-49 field goals made within tries", "fg_made_40_49", "fg_att_40_49", "a <= b"),
+    CoherenceCheck("50+ field goals made within tries", "fg_made_50", "fg_att_50", "a <= b"),
+    CoherenceCheck("extra points made within tries", "xp_made", "xp_att", "a <= b"),
+    CoherenceCheck("extra points missed within tries", "xp_missed", "xp_att", "a <= b"),
 )
 
 
@@ -188,6 +194,17 @@ def validate(conn: sqlite3.Connection, strict: bool = True) -> list[str]:
         if orphan:
             problems.append(f"coherence: 50+ {kind} TDs without a 40+ count in {orphan} player-weeks")
 
+    # The profile's tiers score points allowed, so every D/ST week needs it (a shutout stores 0).
+    unscored = conn.execute(
+        """SELECT COUNT(*) FROM (
+             SELECT MAX(metric_id = 'points_allowed') AS scored
+             FROM player_week_stat WHERE player_id LIKE 'DST\\_%' ESCAPE '\\'
+             GROUP BY player_id, season, week)
+           WHERE scored = 0"""
+    ).fetchone()[0]
+    if unscored:
+        problems.append(f"D/ST weeks without their points allowed: {unscored}")
+
     computed = conn.execute(
         "SELECT m.id FROM metric m JOIN player_week_stat s ON s.metric_id = m.id "
         "WHERE m.computed = 1 GROUP BY m.id"
@@ -201,7 +218,7 @@ def validate(conn: sqlite3.Connection, strict: bool = True) -> list[str]:
         raise ValidationError(f"{len(problems)} validation failure(s); first: {problems[0]}")
     if not problems:
         log.info("validation passed — %d checks",
-                 len(RANGE_CHECKS) + len(COHERENCE_CHECKS) + 8)
+                 len(RANGE_CHECKS) + len(COHERENCE_CHECKS) + 9)
     return problems
 
 

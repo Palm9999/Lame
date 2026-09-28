@@ -21,10 +21,12 @@ public fun attributeFactors(
     factors: List<ProjectionFactor>,
     profile: ScoringProfile,
     position: Position?,
-): List<AttributedFactor> {
-    val fpBaseline = score(baselineComponents, profile, position)
-    val fpFinal = score(finalComponents, profile, position)
-    val delta = fpFinal - fpBaseline
+): List<AttributedFactor> =
+    attributeFactors(score(baselineComponents, profile, position), score(finalComponents, profile, position), factors)
+
+/** Apportions [finalPoints] − [baselinePoints], already scored by the caller, across [factors] (as above). */
+public fun attributeFactors(baselinePoints: Double, finalPoints: Double, factors: List<ProjectionFactor>): List<AttributedFactor> {
+    val delta = finalPoints - baselinePoints
 
     val totalLogMult = factors.sumOf { it.logMultiplier }
     if (factors.isEmpty() || kotlin.math.abs(totalLogMult) < 1e-9) {

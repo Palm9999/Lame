@@ -432,13 +432,20 @@ class GridViewModel(
                 r.copy(season = season, weeks = season.defaultWeeks)
             }
             is GridEvent.WeeksChanged -> r.copy(weeks = event.weeks)
-            // A new pack brings its own lead stat as the sort.
+            // A new pack brings its own lead stat as the sort, and a K or D/ST pack its chip.
             is GridEvent.PackSelected -> r.copy(
                 pack = event.pack,
+                positions = event.pack.unit ?: r.positions.takeIf { event.pack in it.packs } ?: PositionFilter.ALL,
                 sort = event.pack.defaultSort,
                 direction = GridRequest.defaultDirection(event.pack.defaultSort),
             )
-            is GridEvent.PositionsSelected -> r.copy(positions = event.positions)
+            // A chip keeps the pack when it offers it; otherwise it brings its first.
+            is GridEvent.PositionsSelected -> if (r.pack in event.positions.packs) {
+                r.copy(positions = event.positions)
+            } else {
+                val pack = event.positions.packs.first()
+                r.copy(positions = event.positions, pack = pack, sort = pack.defaultSort, direction = GridRequest.defaultDirection(pack.defaultSort))
+            }
             // Tapping the sorted column flips it; tapping another sorts it best-first.
             is GridEvent.SortBy -> if (event.column == r.sort) {
                 r.copy(direction = if (r.direction == Direction.DESCENDING) Direction.ASCENDING else Direction.DESCENDING)

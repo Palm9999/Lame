@@ -3,10 +3,21 @@ package dev.gridiron.core.projections
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.statquery.Component
+import dev.gridiron.core.statquery.Components
 import java.util.SplittableRandom
 import kotlin.math.ln
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
-public enum class DistributionFamily { NEGBINOM, BINOMIAL, GAMMA, POISSON }
+public enum class DistributionFamily {
+    NEGBINOM,
+    BINOMIAL,
+    GAMMA,
+    POISSON,
+
+    /** About normal, drawn on whole points and never below 0: a D/ST's points allowed in one game. */
+    NORMAL,
+}
 
 public data class DistributionSpec(
     val component: Component,
@@ -22,7 +33,8 @@ public data class SimulationResult(val p10: Double, val p25: Double, val p50: Do
  * Gaussian-copula machinery, out of scope until Phase 6's decision tools —
  * see design spec §3). Plain [DoubleArray] and [SplittableRandom], matching
  * the research doc's implementation notes; 10k draws is comfortably under a
- * millisecond even on a mid-range device.
+ * millisecond even on a mid-range device. A D/ST's points allowed are drawn
+ * per game (`g` of them) and scored through the profile's tiers.
  */
 public fun simulate(
     distributions: List<DistributionSpec>,
@@ -35,11 +47,21 @@ public fun simulate(
     val samples = DoubleArray(draws)
     val componentMap = HashMap<Component, Double>(distributions.size)
 
+    // A D/ST's points allowed score a tier per game, so each of its `g` games is drawn on its own
+    // and scored through the profile's tiers; everything else is drawn once and scored by score().
+    val allowed = distributions.firstOrNull { it.component == Components.POINTS_ALLOWED }
+    val independent = distributions.filter { it.component != Components.POINTS_ALLOWED }
+    val games = distributions.firstOrNull { it.component == Components.GAMES }?.mean?.roundToInt()?.coerceAtLeast(1) ?: 1
+    val perGameMean = (allowed?.mean ?: 0.0) / games
+    val perGameSd = sqrt((allowed?.variance ?: 0.0).coerceAtLeast(0.0) / games)
+
     for (i in 0 until draws) {
-        for (spec in distributions) {
+        for (spec in independent) {
             componentMap[spec.component] = drawOne(spec, rng)
         }
-        samples[i] = score(componentMap, profile, position)
+        var points = score(componentMap, profile, position)
+        if (allowed != null) repeat(games) { points += profile.pointsAllowedPoints(drawAllowed(perGameMean, perGameSd, rng)) }
+        samples[i] = points
     }
     samples.sort()
 
@@ -63,8 +85,13 @@ private fun drawOne(spec: DistributionSpec, rng: SplittableRandom): Double {
         // dedicated NegBinom sampler is a follow-up once real dist_family
         // data from the ETL side is available to validate against.
         DistributionFamily.BINOMIAL -> drawGamma(spec.mean, spec.variance, rng)
+        DistributionFamily.NORMAL -> drawAllowed(spec.mean, sqrt(spec.variance), rng)
     }
 }
+
+/** One game's points allowed: Normal([mean], [sd]) on whole points, never below 0. */
+private fun drawAllowed(mean: Double, sd: Double, rng: SplittableRandom): Double =
+    Math.round(mean + sd * gaussian(rng)).toDouble().coerceAtLeast(0.0)
 
 // internal (not private) so MonteCarloTest can call it directly to verify the
 // shape<1 boost trick's raw mean/variance, matching this module's existing

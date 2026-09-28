@@ -36,6 +36,7 @@ private val RUSHERS = listOf("QB", "RB", "WR")
 private val QB_RB = listOf("QB", "RB")
 private val QB = listOf("QB")
 private val RB = listOf("RB")
+private val KICKERS = listOf("K")
 
 private class Component(val id: String, val name: String, val definition: String, val decimals: Int)
 
@@ -89,6 +90,46 @@ private val RANGE_COMPONENTS = listOf(
     Component("pass_epa", "Pass EPA", "Summed EPA on dropbacks.", 3),
     Component("cpoe_sum", "CPOE Sum", "Summed per-attempt CPOE.", 3),
     Component("cpoe_n", "CPOE Attempts", "Attempts with a CPOE value.", 0),
+)
+
+/** Kicking metrics the Grid shows (its Kicking pack), with their column abbreviations; the rest are scoring and forecast inputs. */
+private val KICKING_GRID_ABBRS = mapOf("fg_made" to "FGM", "fg_att" to "FGA", "fg_made_50" to "FG50", "xp_made" to "XPM", "xp_att" to "XPA")
+
+/** Field goals, by distance and in total, extra points and misses: the kicker's scoring and forecast inputs. */
+private val KICKING: List<Metric> = listOf(
+    "fg_att" to ("FG Attempts" to "Field goal tries, any distance, blocked kicks included."),
+    "fg_made" to ("FGs Made" to "Field goals made, any distance."),
+    "fg_att_0_39" to ("FG Attempts 0-39" to "Field goal tries from 39 yards or closer, blocked kicks included."),
+    "fg_att_40_49" to ("FG Attempts 40-49" to "Field goal tries from 40 to 49 yards, blocked kicks included."),
+    "fg_att_50" to ("FG Attempts 50+" to "Field goal tries from 50 yards or farther, blocked kicks included."),
+    "fg_made_0_39" to ("FGs Made 0-39" to "Field goals made from 39 yards or closer."),
+    "fg_made_40_49" to ("FGs Made 40-49" to "Field goals made from 40 to 49 yards."),
+    "fg_made_50" to ("FGs Made 50+" to "Field goals made from 50 yards or farther."),
+    "fg_missed" to ("FGs Missed" to "Field goals missed or blocked, any distance."),
+    "xp_att" to ("XP Attempts" to "Extra point kicks tried."),
+    "xp_made" to ("XPs Made" to "Extra point kicks made."),
+    "xp_missed" to ("XPs Missed" to "Extra point kicks missed, blocked or aborted."),
+).map { (id, text) ->
+    Metric(
+        id, text.first, KICKING_GRID_ABBRS[id] ?: id.uppercase(), "kicking", text.second,
+        positions = KICKERS, decimals = 0, isInternal = id !in KICKING_GRID_ABBRS, sparse = true,
+    )
+}
+
+private val TEAM_DEFENSE = listOf("DST")
+
+/** The D/ST pseudo-players' facts: takeaways, scores, and points allowed, which the profile's tiers score. */
+private val DEFENSE: List<Metric> = listOf(
+    Triple("dst_sacks", "SACK", "D/ST Sacks" to "Sacks by the team's defense."),
+    Triple("dst_interceptions", "DINT", "D/ST Interceptions" to "Passes the team's defense intercepted."),
+    Triple("dst_fumble_recoveries", "FR", "D/ST Fumble Recoveries" to "Opponent fumbles the team recovered."),
+    Triple("dst_tds", "DTD", "D/ST TDs" to "Touchdowns by the defense or on a return: interceptions, fumbles, punts, kickoffs and blocked kicks."),
+    Triple("dst_safeties", "SAF", "D/ST Safeties" to "Safeties the team's defense scored."),
+).map { (id, abbr, text) ->
+    Metric(id, text.first, abbr, "defense", text.second, positions = TEAM_DEFENSE, decimals = 0, sparse = true)
+} + Metric(
+    "points_allowed", "Points Allowed", "PA", "defense", "Points the opponent scored, however it scored them.",
+    positions = TEAM_DEFENSE, higherIsBetter = false, decimals = 0,
 )
 
 private val REGISTRY: List<Metric> = listOf(
@@ -249,7 +290,7 @@ private val REGISTRY: List<Metric> = listOf(
 } + RANGE_COMPONENTS.map {
     Metric(it.id, it.name, it.id.uppercase(), "context", it.definition,
         positions = ALL_POSITIONS, decimals = it.decimals, isInternal = true)
-}
+} + KICKING + DEFENSE
 
 /**
  * The distribution the phone's floor/ceiling simulation draws each projected
@@ -266,6 +307,14 @@ internal val DIST_FAMILIES: Map<String, String> = buildMap {
         "rushing_tds", "rushing_tds_40", "rushing_tds_50", "rushing_first_downs", "rushing_2pt",
         "receiving_tds", "receiving_tds_40", "receiving_tds_50", "receiving_first_downs", "receiving_2pt", "fumbles_lost",
     ).forEach { put(it, "poisson") }
+    for (id in listOf(
+        "fg_att", "fg_made", "fg_att_0_39", "fg_att_40_49", "fg_att_50", "fg_made_0_39", "fg_made_40_49", "fg_made_50",
+        "fg_missed", "xp_att", "xp_made", "xp_missed",
+    )) put(id, "poisson")
+    put("dst_sacks", "negbinom")
+    for (id in listOf("dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties")) put(id, "poisson")
+    // One game's points allowed: the simulation draws it from a normal distribution and scores its tier.
+    put("points_allowed", "normal")
 }
 
 internal val METRICS: List<Metric> = REGISTRY.map { it.copy(distFamily = DIST_FAMILIES[it.id] ?: it.distFamily) }

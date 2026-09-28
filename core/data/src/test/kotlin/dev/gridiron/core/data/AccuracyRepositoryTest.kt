@@ -1,5 +1,6 @@
 package dev.gridiron.core.data
 
+import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import kotlinx.coroutines.test.runTest
@@ -86,10 +87,12 @@ class AccuracyRepositoryTest {
                 projected("w", 2025, 3, 6.0) + // didn't play
                 projected("w", 2025, 4, 4.0) + // 8 against 8
                 projected("w", 2025, 5, 7.0) +
-                // A kicker who played twice isn't measured.
+                // A kicker is measured too, on his own row.
                 played("k", 2025, 1, 9.0) + played("k", 2025, 2, 9.0) + projected("k", 2025, 2, 9.0),
         ).use { executor ->
-            val wr = AccuracyRepository(executor).backtest(2025, ScoringPresets.PPR).single()
+            val results = AccuracyRepository(executor).backtest(2025, ScoringPresets.PPR)
+            assertEquals(listOf("WR", "K"), results.map { it.position })
+            val wr = results.first()
 
             assertEquals("WR", wr.position)
             assertEquals(2, wr.playerWeeks)
@@ -107,6 +110,24 @@ class AccuracyRepositoryTest {
             assertEquals(null, repo.status().status)
             assertEquals(emptyList<Int>(), repo.seasons())
             assertEquals(emptyList<Any>(), repo.backtest(2025, ScoringPresets.PPR))
+        }
+    }
+
+    @Test
+    fun `the backtest widens ranges by the factors it's given`() = runTest {
+        fixture(
+            listOf(
+                meta("forecast_status", "ok"), meta("forecast_week:2025", "5"), player("w", "WR"),
+                // 12 points projected, with some spread: 22 scored lands outside the raw simulation's range.
+                "INSERT INTO player_week_projection VALUES ('w', 2025, 2, 'receptions', 'final', 6.0, 9.0)",
+                "INSERT INTO player_week_projection VALUES ('w', 2025, 2, 'receiving_yards', 'final', 60.0, 900.0)",
+            ) + played("w", 2025, 1, 5.0) + played("w", 2025, 2, 11.0),
+        ).use { executor ->
+            val repo = AccuracyRepository(executor)
+            suspend fun held(k: Double) = repo.backtest(2025, ScoringPresets.PPR, widening = mapOf(Position.WR to k)).single().calibration
+
+            assertEquals(0.0, held(0.0), 0.0)
+            assertEquals(1.0, held(5.0), 0.0)
         }
     }
 }

@@ -156,7 +156,7 @@ fun PlayerScreen(
                             style = MaterialTheme.typography.headlineSmall,
                             fontWeight = FontWeight.Bold,
                         )
-                        val detail = listOfNotNull(page.header?.position, page.header?.team)
+                        val detail = listOfNotNull(page.header?.position?.let(Position::label), page.header?.team)
                         if (detail.isNotEmpty()) {
                             Text(detail.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }

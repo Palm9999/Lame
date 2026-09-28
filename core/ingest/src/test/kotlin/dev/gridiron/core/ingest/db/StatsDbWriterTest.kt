@@ -30,7 +30,7 @@ class StatsDbWriterTest {
             w.writeMetrics(METRICS)
             for (s in seasons) {
                 w.writeFacts(listOf(fact("WR1", s, "targets", 5.0), fact("WR1", s, "target_share", 0.5)))
-                w.writeTeamDefense(listOf(TeamDefenseRow("AAA", s, 1, 10.0, 300.0, 2.0, 1.0, 0.0, 0.0)))
+                w.writeTeamDefense(listOf(TeamDefenseRow("AAA", s, 1, 10.0, 300.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.0)))
                 w.writeInjuries(listOf(InjuryRow("WR1", s, 1, "AAA", "Wide Receiver", "WR", "Questionable", "Knee", "Limited")))
             }
             w.writePlayers(listOf(wr1, old))
@@ -44,8 +44,8 @@ class StatsDbWriterTest {
         build(file, listOf(2025))
 
         val meta = readMeta(file)!!
-        assertEquals("7", meta["schema_version"])
-        assertEquals("2", meta["ingest_version"])
+        assertEquals("8", meta["schema_version"])
+        assertEquals("4", meta["ingest_version"])
         assertEquals("2025", meta["seasons"])
         assertEquals("3", meta["expected_through_week:2025"])
         assertEquals("2026-09-25T12:00:00Z", meta["built_at"])
@@ -54,7 +54,7 @@ class StatsDbWriterTest {
         assertEquals(listOf(listOf("WR1", "Wide Receiver", "wide receiver")), query(file, "SELECT player_id, full_name, search_name FROM player"))
         assertEquals(listOf(listOf("102", "WR1"), listOf("105", "OLD1")), query(file, "SELECT espn_id, player_id FROM player_xref ORDER BY espn_id"))
         assertEquals(listOf(listOf("2")), query(file, "SELECT COUNT(*) FROM player_week_stat"))
-        assertEquals(listOf(listOf("81")), query(file, "SELECT COUNT(*) FROM metric"))
+        assertEquals(listOf(listOf("99")), query(file, "SELECT COUNT(*) FROM metric"))
         assertEquals(1, query(file, "SELECT name FROM sqlite_master WHERE name = 'idx_pws_metric_season_week'").size)
         assertEquals(1, query(file, "SELECT name FROM sqlite_master WHERE name = 'sqlite_stat1'").size)
         assertEquals(listOf(listOf("Questionable")), query(file, "SELECT status FROM injury_report"))
@@ -137,5 +137,25 @@ class StatsDbWriterTest {
         assertTrue("game" in tables)
         assertFalse("projection_snapshot" in tables)
         assertFalse("accuracy_summary" in tables)
+    }
+
+    @Test
+    fun `each team's defense is a player, kept when it has stats`() {
+        val file = File(dir, "stats.db")
+        StatsDbWriter.create(file).use { w ->
+            w.writeMetrics(METRICS)
+            w.writeTeamDefense(
+                listOf(
+                    TeamDefenseRow("AAA", 2025, 1, 10.0, 300.0, 2.0, 1.0, 0.0, 0.0, 0.0, 0.0),
+                    TeamDefenseRow("BBB", 2025, 1, 20.0, 250.0, 1.0, 0.0, 1.0, 0.0, 0.0, 0.0),
+                ),
+            )
+            w.writeFacts(listOf(Fact("DST_AAA", 2025, 1, "AAA", "dst_sacks", 2.0)))
+            assertEquals(0, w.writePlayers(listOf(wr1)))
+        }
+        assertEquals(
+            listOf(listOf("DST_AAA", "AAA D/ST", "aaa dst", "DST", "AAA")),
+            query(file, "SELECT player_id, full_name, search_name, position, team FROM player ORDER BY 1"),
+        )
     }
 }

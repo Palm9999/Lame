@@ -3,7 +3,10 @@ package dev.gridiron.core.data
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
+import dev.gridiron.core.projections.ListedProjection
 import dev.gridiron.core.projections.projectPoints
+import dev.gridiron.core.projections.projectedScore
+import dev.gridiron.core.statquery.Bind
 import dev.gridiron.core.statquery.SqlQuery
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
@@ -71,6 +74,38 @@ class ProjectionsContractTest {
                 assertTrue(total("targets") <= 50.0, "$team: ${total("targets")} targets")
                 assertTrue(total("carries") <= 45.0, "$team: ${total("carries")} carries")
             }
+        }
+    }
+
+    @Test
+    fun `every team playing has one D-ST and at most one kicker, scoring sensibly`() = runTest {
+        JdbcQueryExecutor(StatsDb.path!!).use { executor ->
+            val repo = ProjectionsRepository(executor)
+            val (season, week) = projectedWeek(repo, executor)
+            val listed = repo.weekAll(season, week)
+            val playing = executor.query(
+                SqlQuery(
+                    "SELECT home_team, away_team FROM game WHERE season = ? AND week = ? AND game_type = 'REG'",
+                    listOf(Bind.Integer(season.toLong()), Bind.Integer(week.toLong())),
+                ),
+            ) { listOf(it.text(0), it.text(1)) }.flatten().toSet()
+            val defenses = listed.filter { it.position == "DST" }
+            val kickers = listed.filter { it.position == "K" }
+
+            assertEquals(playing, defenses.map { it.team }.toSet())
+            assertEquals(playing.size, defenses.size)
+            assertTrue(kickers.size in playing.size - 2..playing.size, "${kickers.size} kickers for ${playing.size} teams")
+            for (d in defenses) {
+                val allowed = d.components.single { it.metricId == "points_allowed" }
+                assertTrue(allowed.mean in 10.0..40.0 && allowed.variance in 25.0..400.0, "${d.name}: $allowed")
+                assertEquals(1.0, d.components.single { it.metricId == "g" }.mean, 0.0, d.name)
+            }
+            // Scored as the phone does: tiers in expectation, never the tier of the mean.
+            fun points(p: ListedProjection): Double = projectedScore(p.components, ScoringPresets.PPR, Position.fromCode(p.position!!))
+            fun top(position: String) = listed.filter { it.position == position }.map(::points).sortedDescending().take(12).average()
+            // Loose bands under the default kicking and D/ST scoring: a broken model lands far outside them.
+            assertTrue(top("K") in 6.0..12.0, "K1-12 average ${top("K")}")
+            assertTrue(top("DST") in 4.0..14.0, "DST1-12 average ${top("DST")}")
         }
     }
 }

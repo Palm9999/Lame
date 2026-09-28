@@ -4,11 +4,13 @@ import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.core.model.BonusStat
@@ -113,5 +115,19 @@ class ScoringScreenTest {
 
         compose.onNodeWithText("Presets can't be edited. Duplicate this one from the list to make your own.").assertIsDisplayed()
         compose.onNodeWithTag("field:PASS_TD").assertIsNotEnabled()
+    }
+
+    @Test
+    fun tiersLight() {
+        val state = custom.toEditing(readOnly = false)
+        val events = mutableListOf<EditEvent>()
+        compose.setContent { GridironTheme(darkTheme = false) { ScoringEditScreen(state, { events += it }, {}) } }
+
+        compose.onNodeWithTag("editorFields").performScrollToNode(hasTestTag("addTier"))
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/scoring_4_tiers.png")
+        compose.onNodeWithTag("tier:remove:8").performClick() // the 46+ tier
+        compose.onNodeWithTag("addTier").performClick()
+
+        assertEquals(listOf(EditEvent.TierRemoved(8), EditEvent.TierAdded), events)
     }
 }

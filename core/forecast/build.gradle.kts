@@ -6,6 +6,7 @@ plugins {
 // refresh, and CI runs it on the JVM when it builds the test database.
 dependencies {
     api(libs.androidx.sqlite)
+    implementation(projects.core.model)
 
     testImplementation(libs.androidx.sqlite.bundled)
 }

@@ -16,7 +16,7 @@ import java.util.Locale
 
 /**
  * CI's accuracy gate (spec §4): under PPR, the model's MAE must be below the
- * season-to-date average's at QB, RB, WR and TE. It runs only when
+ * season-to-date average's at QB, RB, WR, TE, K and D/ST (every one of [ACCURACY_POSITIONS]). It runs only when
  * GRIDIRON_ACCURACY_GATE names the season, on a GRIDIRON_STATS_DB built with
  * that season and the one before it. The parity job sets both. The table
  * goes to build/reports/accuracy-gate.txt for the job log.

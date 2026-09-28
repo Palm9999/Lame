@@ -2,6 +2,7 @@ package dev.gridiron.core.data
 
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.textOrNull
+import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.AccuracyQueries
 import dev.gridiron.core.projections.BACKTEST_DRAWS
@@ -10,6 +11,7 @@ import dev.gridiron.core.projections.PlayedWeek
 import dev.gridiron.core.projections.PositionAccuracy
 import dev.gridiron.core.projections.ProjectedWeek
 import dev.gridiron.core.projections.ProjectionComponent
+import dev.gridiron.core.projections.RANGE_WIDENING
 import dev.gridiron.core.projections.backtest
 import dev.gridiron.core.statquery.Component
 import dev.gridiron.core.statquery.Components
@@ -37,7 +39,12 @@ public class AccuracyRepository(private val executor: QueryExecutor) {
      * counted player-week, which is seconds of work on a phone, so call it
      * off the main thread.
      */
-    public suspend fun backtest(season: Int, profile: ScoringProfile, draws: Int = BACKTEST_DRAWS): List<PositionAccuracy> {
+    public suspend fun backtest(
+        season: Int,
+        profile: ScoringProfile,
+        draws: Int = BACKTEST_DRAWS,
+        widening: Map<Position, Double> = RANGE_WIDENING,
+    ): List<PositionAccuracy> {
         val beforeWeek = status().upcoming[season] ?: Int.MAX_VALUE
 
         data class Row(val playerId: String, val position: String, val week: Int, val component: ProjectionComponent)
@@ -60,6 +67,6 @@ public class AccuracyRepository(private val executor: QueryExecutor) {
             .map { (key, weekFacts) ->
                 PlayedWeek(key.first, key.second, key.third, weekFacts.associate { Component(it.metricId) to it.value })
             }
-        return backtest(season, projected, played, profile, draws)
+        return backtest(season, projected, played, profile, draws, widening)
     }
 }

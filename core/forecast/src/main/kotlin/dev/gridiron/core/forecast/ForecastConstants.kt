@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 3
+public const val FORECAST_VERSION: Int = 4
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -53,9 +53,9 @@ internal object K {
     const val PASS_RATE_MIN = 0.30
     const val PASS_RATE_MAX = 0.80
 
-    // Layer 7, spread: sigma = a * mu^0.75, CV at mu = 10 by position (projections.py EMPIRICAL_CV).
+    // Layer 7, spread: sigma = a * mu^0.75, CV at mu = 10 by position (projections.py EMPIRICAL_CV; K and DST from spec §6).
     const val VARIANCE_EXPONENT = 0.75
-    val EMPIRICAL_CV: Map<String, Double> = mapOf("QB" to 0.40, "RB" to 0.57, "WR" to 0.70, "TE" to 0.77)
+    val EMPIRICAL_CV: Map<String, Double> = mapOf("QB" to 0.40, "RB" to 0.57, "WR" to 0.70, "TE" to 0.77, "K" to 0.52, "DST" to 0.85)
 
     // Props (spec §5). Props can't be backtested (no historical props), so these are judgments, not fits.
     // The market's variance is this share of layer 7's for its mean: markets are sharper than the model, so
@@ -63,6 +63,33 @@ internal object K {
     const val MARKET_VARIANCE_RATIO = 0.5
     // A book that offers only Yes on an anytime TD can't be de-vigged; its implied chance is divided by this.
     const val ONE_SIDED_OVERROUND = 1.08
+
+    // K model (spec §6). Judgments, not fits: field goal accuracy is noisy, so a kicker's own mix and
+    // make rates need many kicks to move off the league's. The accuracy page measures the result.
+    // Fewer lined team-games than this and field goal and extra point tries are flat averages.
+    const val KICK_MIN_FIT_ROWS = 64
+    const val KICK_MIX_K = 20.0 // field goal tries
+    const val KICK_MAKE_K = 30.0 // tries in the bucket
+    const val XP_MAKE_K = 60.0 // extra point tries
+    // Without a line, a team's expected points: its recent scoring, shrunk this many games toward the league's.
+    const val TEAM_POINTS_K_GAMES = 4.0
+
+    // D/ST model (spec §6). Judgments, not fits, measured by the accuracy page. A unit's own per-game
+    // rates are recency-weighted and shrunk toward the league's by games: rarer, noisier events harder.
+    const val DST_HALF_LIFE = 6.0
+    val DST_K: Map<String, Double> = mapOf(
+        "dst_sacks" to 6.0, "dst_interceptions" to 12.0, "dst_fumble_recoveries" to 20.0,
+        "dst_tds" to 30.0, "dst_safeties" to 60.0,
+    )
+    const val DST_PA_K = 6.0
+    // What defenses got against an offense, shrunk this many games, and capped to 1 ± DST_CAP of the league's.
+    const val DST_OPP_K = 8.0
+    const val DST_CAP = 0.30
+    // Points allowed are about normal around their mean. Its spread, stored as the projection's variance,
+    // is real team scores' spread around their implied points, measured once this many lined team-games
+    // are in; about 10 points before that.
+    const val PA_SD_DEFAULT = 10.0
+    const val PA_SD_MIN_GAMES = 100
 
     // Storage: past weeks keep only players the model gave at least this many reference points.
     const val PAST_WEEK_MIN_POINTS = 1.0

@@ -54,6 +54,43 @@ class StatsRepositoryTest {
     }
 
     @Test
+    fun `the K and D-ST chips list kickers and team defenses with their own packs`() = runTest {
+        val season = catalog.season(2025)
+        val kickers = repo.grid(GridRequest(season, season.defaultWeeks, StatPack.KICKING, positions = PositionFilter.K), catalog)
+        val defenses = repo.grid(GridRequest(season, season.defaultWeeks, StatPack.DEFENSE, positions = PositionFilter.DST), catalog)
+
+        assertTrue(kickers.rows.size in 25..45, "${kickers.rows.size} kickers")
+        assertTrue(kickers.rows.all { it.position == "K" })
+        assertEquals(32, defenses.rows.size)
+        assertTrue(defenses.rows.all { it.position == "DST" && it.name.endsWith(" D/ST") && it.detail.startsWith("D/ST · ") })
+        val points = defenses.rows.map { it.cells.first().text }
+        assertTrue(points.isNotEmpty() && points.none { it.isBlank() }, "$points")
+    }
+
+    @Test
+    fun `every other chip, a search and a roster in the All view leave kickers and team defenses out`() = runTest {
+        val season = catalog.season(2025)
+        val special = executor.query(
+            SqlQuery("SELECT player_id FROM player WHERE position IN ('K', 'DST')", emptyList()),
+        ) { it.text(0) }.toSet()
+        assertTrue(special.any { it.startsWith("DST_") } && special.any { !it.startsWith("DST_") }, "no kickers or D/STs in the database")
+
+        for (positions in PositionFilter.entries - PositionFilter.K - PositionFilter.DST) {
+            val page = repo.grid(GridRequest(season, season.defaultWeeks, StatPack.FANTASY, positions = positions), catalog)
+            assertTrue(page.rows.none { it.playerId in special }, "$positions")
+        }
+        val roster = repo.grid(GridRequest(season, season.defaultWeeks, StatPack.FANTASY, onlyPlayers = special), catalog)
+        val search = repo.grid(GridRequest(season, season.defaultWeeks, StatPack.FANTASY, name = "dst"), catalog)
+        assertEquals(emptyList<String>(), roster.rows.map { it.playerId })
+        assertTrue(search.rows.none { it.playerId in special }, "${search.rows.map { it.playerId }}")
+        assertEquals(0, repo.count(GridRequest(season, season.defaultWeeks, StatPack.FANTASY, onlyPlayers = special)))
+
+        // The same roster under the K chip shows its kickers.
+        val rosterKickers = repo.grid(GridRequest(season, season.defaultWeeks, StatPack.KICKING, positions = PositionFilter.K, onlyPlayers = special), catalog)
+        assertTrue(rosterKickers.rows.isNotEmpty() && rosterKickers.rows.all { it.position == "K" })
+    }
+
+    @Test
     fun `every pack renders a complete, sorted page`() = runTest {
         for (pack in StatPack.entries) {
             for (perGame in listOf(false, true)) {

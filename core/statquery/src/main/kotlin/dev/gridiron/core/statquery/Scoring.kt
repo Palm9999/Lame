@@ -2,6 +2,7 @@ package dev.gridiron.core.statquery
 
 import dev.gridiron.core.model.BonusStat
 import dev.gridiron.core.model.Position
+import dev.gridiron.core.model.ScoringGroup
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.ScoringRule
 import dev.gridiron.core.statquery.Components as C
@@ -45,6 +46,17 @@ public val RULE_INPUTS: Map<ScoringRule, RuleInputs> = mapOf(
     ScoringRule.REC_TD_40 to on(C.RECEIVING_TDS_40),
     ScoringRule.REC_TD_50 to on(C.RECEIVING_TDS_50),
     ScoringRule.FUMBLE_LOST to on(C.FUMBLES_LOST),
+    ScoringRule.FG_MADE_0_39 to on(C.FG_MADE_0_39),
+    ScoringRule.FG_MADE_40_49 to on(C.FG_MADE_40_49),
+    ScoringRule.FG_MADE_50 to on(C.FG_MADE_50),
+    ScoringRule.FG_MISSED to on(C.FG_MISSED),
+    ScoringRule.XP_MADE to on(C.XP_MADE),
+    ScoringRule.XP_MISSED to on(C.XP_MISSED),
+    ScoringRule.DST_SACK to on(C.DST_SACKS),
+    ScoringRule.DST_INTERCEPTION to on(C.DST_INTERCEPTIONS),
+    ScoringRule.DST_FUMBLE_RECOVERY to on(C.DST_FUMBLE_RECOVERIES),
+    ScoringRule.DST_TD to on(C.DST_TDS),
+    ScoringRule.DST_SAFETY to on(C.DST_SAFETIES),
 )
 
 public val BONUS_INPUTS: Map<BonusStat, List<Component>> = mapOf(
@@ -54,8 +66,20 @@ public val BONUS_INPUTS: Map<BonusStat, List<Component>> = mapOf(
     BonusStat.RUSH_REC_YARDS to listOf(C.RUSHING_YARDS, C.RECEIVING_YARDS),
 )
 
+/**
+ * Kicking and team-defense rules. Their facts belong to kickers and D/STs, a
+ * few rows a week, so the scoring query pivots them on their own rather than
+ * widening the offense's pivot.
+ */
+internal val SPECIAL_RULES: Set<ScoringRule> =
+    ScoringRule.entries.filter { it.group == ScoringGroup.KICKING || it.group == ScoringGroup.DEFENSE }.toSet()
+
 /** Every component the scoring step reads, sorted so equal profiles give identical SQL. */
 internal val SCORING_COMPONENTS: List<Component> =
-    (RULE_INPUTS.values.flatMap { it.actual + it.expected }.map { it.component } + BONUS_INPUTS.values.flatten())
+    (
+        RULE_INPUTS.values.flatMap { it.actual + it.expected }.map { it.component } + BONUS_INPUTS.values.flatten() +
+            // Points allowed are read by the profile's tiers, not a rule.
+            C.POINTS_ALLOWED
+    )
         .distinct()
         .sortedBy { it.id }

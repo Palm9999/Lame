@@ -99,4 +99,57 @@ class BacktestTest {
         assertEquals(0.0, result.seasonAverage.mae, 1e-9)
         assertTrue(backtest(2025, listOf(projection("t", "TE", 2, 4.0, 0.0)), te, ScoringPresets.PPR).isEmpty())
     }
+
+    @Test
+    fun `kickers and team defenses are measured like everyone else`() {
+        fun kick(made: Double) = mapOf(Component("g") to 1.0, Component("fg_made_0_39") to made, Component("xp_made") to 3.0)
+        val played = listOf(
+            PlayedWeek("k", 2025, 1, kick(1.0)), // 3 + 3
+            PlayedWeek("k", 2025, 2, kick(2.0)), // 6 + 3
+            PlayedWeek("d", 2025, 1, mapOf(Component("g") to 1.0, Component("dst_sacks") to 3.0, Component("points_allowed") to 20.0)), // 3 + 0
+            PlayedWeek("d", 2025, 2, mapOf(Component("g") to 1.0, Component("dst_sacks") to 5.0, Component("points_allowed") to 10.0)), // 5 + 3
+        )
+        val projected = listOf(
+            ProjectedWeek("k", "K", 2, listOf(ProjectionComponent("fg_made_0_39", 1.0, 0.0), ProjectionComponent("xp_made", 3.0, 0.0))),
+            ProjectedWeek(
+                "d", "DST", 2,
+                listOf(
+                    ProjectionComponent("dst_sacks", 3.0, 0.0),
+                    // Exactly 10 allowed, so the projection is the 7-13 tier's 3.
+                    ProjectionComponent("points_allowed", 10.0, 0.0, "normal"),
+                    ProjectionComponent("g", 1.0, 0.0),
+                ),
+            ),
+        )
+
+        val results = backtest(2025, projected, played, ScoringPresets.PPR)
+
+        assertEquals(listOf("K", "DST"), results.map { it.position })
+        assertEquals(3.0, results[0].model.mae, 1e-9) // projected 6, scored 9
+        assertEquals(2.0, results[1].model.mae, 1e-9) // projected 6, scored 8
+    }
+
+    @Test
+    fun `every team starts a kicker and a D-ST, so their weeks count under the minimum too`() {
+        val played = listOf(
+            PlayedWeek("k", 2025, 1, mapOf(Component("g") to 1.0, Component("xp_made") to 2.0)),
+            PlayedWeek("k", 2025, 2, mapOf(Component("g") to 1.0, Component("xp_made") to 1.0)),
+            PlayedWeek("d", 2025, 1, mapOf(Component("g") to 1.0, Component("points_allowed") to 30.0)), // -1
+            PlayedWeek("d", 2025, 2, mapOf(Component("g") to 1.0, Component("points_allowed") to 40.0)), // -5
+        )
+        val projected = listOf(
+            ProjectedWeek("k", "K", 2, listOf(ProjectionComponent("xp_made", 2.0, 0.0))), // 2
+            ProjectedWeek(
+                "d", "DST", 2,
+                // 25 allowed: the 22-27 tier's -1.
+                listOf(ProjectionComponent("points_allowed", 25.0, 0.0, "normal"), ProjectionComponent("g", 1.0, 0.0)),
+            ),
+        )
+
+        val results = backtest(2025, projected, played, ScoringPresets.PPR)
+
+        assertEquals(listOf("K" to 1, "DST" to 1), results.map { it.position to it.playerWeeks })
+        assertEquals(1.0, results[0].model.mae, 1e-9) // projected 2, scored 1
+        assertEquals(4.0, results[1].model.mae, 1e-9) // projected -1, scored -5
+    }
 }

@@ -5,6 +5,7 @@ import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.ScoringRule
 import dev.gridiron.core.statquery.BONUS_INPUTS
 import dev.gridiron.core.statquery.Component
+import dev.gridiron.core.statquery.Components
 import dev.gridiron.core.statquery.RULE_INPUTS
 
 /**
@@ -19,6 +20,10 @@ import dev.gridiron.core.statquery.RULE_INPUTS
  * is called from single-player Monte Carlo tens of thousands of times per
  * second, and a metric the ETL hasn't populated for some player-week must
  * degrade quietly, not crash the caller.
+ *
+ * [components] is one game's stats: a D/ST's points allowed score the
+ * profile's tier for that game. Projections go through `projectedScore`,
+ * which scores the tiers in expectation.
  */
 public fun score(components: Map<Component, Double>, profile: ScoringProfile,
                   position: Position?): Double {
@@ -40,5 +45,8 @@ public fun score(components: Map<Component, Double>, profile: ScoringProfile,
         val yards = BONUS_INPUTS.getValue(bonus.stat).sumOf { value(it) }
         if (bonus.applies(yards)) total += bonus.points
     }
+    // One D/ST game's points allowed land in one of the profile's tiers. A map
+    // without them (anyone else's week) scores no tier.
+    components[Components.POINTS_ALLOWED]?.let { total += profile.pointsAllowedPoints(it) }
     return total
 }

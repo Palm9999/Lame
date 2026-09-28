@@ -23,12 +23,26 @@ private class CardRow(private val columns: List<Any?>) : ResultRow {
 }
 
 /** Answers the card's queries by what they read. KC is at BUF in week 4, three games left. */
-private class CardExecutor(private val status: String = "ok", private val bye: Boolean = false) : QueryExecutor {
+private class CardExecutor(
+    private val status: String = "ok",
+    private val bye: Boolean = false,
+    private val defense: Boolean = false,
+) : QueryExecutor {
     override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
         val sql = query.sql
         val rows: List<List<Any?>> = when {
             "schema_meta" in sql -> listOf(listOf("forecast_status", status), listOf("forecast_week:2026", "4"))
             "player_week_projection_factor" in sql -> emptyList()
+            "FROM player_week_projection" in sql && defense -> listOf(
+                listOf("DST_KC", "dst_sacks", "final", 3.0, 3.0, "negbinom"),
+                listOf("DST_KC", "points_allowed", "final", 10.0, 0.0, "normal"),
+                listOf("DST_KC", "g", "final", 1.0, 0.0, null),
+            )
+            "FROM player_ros_projection" in sql && defense -> listOf(
+                listOf("DST_KC", "dst_sacks", 9.0, 9.0, "negbinom"),
+                listOf("DST_KC", "points_allowed", 30.0, 0.0, "normal"),
+                listOf("DST_KC", "g", 3.0, 0.0, null),
+            )
             "FROM player_week_projection" in sql && bye -> emptyList()
             "FROM player_week_projection" in sql -> listOf(
                 listOf("W1", "receptions", "final", 5.0, 5.0, "binomial"),
@@ -104,5 +118,17 @@ class ProjectionCardTest {
         assertEquals("BUF −2.5 · O/U 47.5", lineText(GameLine("BUF", "KC", home = true, spread = 2.5, total = 47.5)))
         assertEquals("Pick'em · O/U 44", lineText(GameLine("BUF", "KC", home = true, spread = 0.0, total = 44.0)))
         assertEquals(null, lineText(GameLine("BUF", "KC", home = true, spread = null, total = null)))
+    }
+
+    @Test
+    fun `a team defense's card scores each game's points-allowed tier`() = runTest {
+        val card = loadProjectionCard(ProjectionsRepository(CardExecutor(defense = true)), "DST_KC", "KC", ScoringPresets.PPR, Position.DST, null)!!
+
+        // 3 sacks, and 10 allowed: the 7-13 tier's 3.
+        assertEquals(6.0, card.points, 1e-9)
+        assertTrue(card.floor < 6.0 && card.ceiling > 6.0)
+        // Three games of 3 sacks and 10 allowed. The tier of 30 allowed would be -4.
+        assertEquals(18.0, card.rosPoints!!, 1e-9)
+        assertEquals(6.0, card.rosPerGame!!, 1e-9)
     }
 }

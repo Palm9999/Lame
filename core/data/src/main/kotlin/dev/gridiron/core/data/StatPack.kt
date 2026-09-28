@@ -11,10 +11,18 @@ import dev.gridiron.core.statquery.StatColumn.CARRY_SHARE
 import dev.gridiron.core.statquery.StatColumn.CATCH_RATE
 import dev.gridiron.core.statquery.StatColumn.COMPLETIONS
 import dev.gridiron.core.statquery.StatColumn.CPOE
+import dev.gridiron.core.statquery.StatColumn.DST_FUMBLE_RECOVERIES
+import dev.gridiron.core.statquery.StatColumn.DST_INTERCEPTIONS
+import dev.gridiron.core.statquery.StatColumn.DST_SACKS
+import dev.gridiron.core.statquery.StatColumn.DST_SAFETIES
+import dev.gridiron.core.statquery.StatColumn.DST_TDS
 import dev.gridiron.core.statquery.StatColumn.EPA_PER_DROPBACK
 import dev.gridiron.core.statquery.StatColumn.EXPECTED_FANTASY_POINTS
 import dev.gridiron.core.statquery.StatColumn.EZ_TARGETS
 import dev.gridiron.core.statquery.StatColumn.FANTASY_POINTS
+import dev.gridiron.core.statquery.StatColumn.FG_ATT
+import dev.gridiron.core.statquery.StatColumn.FG_MADE
+import dev.gridiron.core.statquery.StatColumn.FG_MADE_50
 import dev.gridiron.core.statquery.StatColumn.FPOE
 import dev.gridiron.core.statquery.StatColumn.GL_CARRIES
 import dev.gridiron.core.statquery.StatColumn.GZ_CARRIES
@@ -22,6 +30,7 @@ import dev.gridiron.core.statquery.StatColumn.INTERCEPTIONS
 import dev.gridiron.core.statquery.StatColumn.OFFENSE_SNAPS
 import dev.gridiron.core.statquery.StatColumn.PASSING_TDS
 import dev.gridiron.core.statquery.StatColumn.PASSING_YARDS
+import dev.gridiron.core.statquery.StatColumn.POINTS_ALLOWED
 import dev.gridiron.core.statquery.StatColumn.QB_RUSH_INSIDE_5
 import dev.gridiron.core.statquery.StatColumn.RACR
 import dev.gridiron.core.statquery.StatColumn.RECEIVING_TDS
@@ -40,6 +49,8 @@ import dev.gridiron.core.statquery.StatColumn.TARGET_SHARE
 import dev.gridiron.core.statquery.StatColumn.TOTAL_EPA
 import dev.gridiron.core.statquery.StatColumn.WEIGHTED_OPPORTUNITIES
 import dev.gridiron.core.statquery.StatColumn.WOPR
+import dev.gridiron.core.statquery.StatColumn.XP_ATT
+import dev.gridiron.core.statquery.StatColumn.XP_MADE
 import dev.gridiron.core.statquery.StatColumn.YAC
 
 /**
@@ -104,8 +115,30 @@ public enum class StatPack(
         TOTAL_EPA,
         null,
     ),
+    KICKING(
+        "Kicking",
+        listOf(FANTASY_POINTS, FG_MADE, FG_ATT, FG_MADE_50, XP_MADE, XP_ATT),
+        FANTASY_POINTS,
+        FG_ATT,
+    ),
+    DEFENSE(
+        "Defense",
+        listOf(FANTASY_POINTS, POINTS_ALLOWED, DST_SACKS, DST_INTERCEPTIONS, DST_FUMBLE_RECOVERIES, DST_TDS, DST_SAFETIES),
+        FANTASY_POINTS,
+        null,
+    ),
+    ;
+
+    /** The chip a kicker or D/ST pack belongs to; null for the offense's packs. */
+    public val unit: PositionFilter?
+        get() = when (this) {
+            KICKING -> PositionFilter.K
+            DEFENSE -> PositionFilter.DST
+            else -> null
+        }
 }
 
+/** The Grid's position chips. All and the offense's chips never list kickers or D/STs; K and D/ST list only theirs. */
 public enum class PositionFilter(public val label: String, public val positions: Set<Position>) {
     ALL("All", emptySet()),
     QB("QB", setOf(Position.QB)),
@@ -113,4 +146,11 @@ public enum class PositionFilter(public val label: String, public val positions:
     WR("WR", setOf(Position.WR)),
     TE("TE", setOf(Position.TE)),
     FLEX("FLEX", Position.FLEX),
+    K("K", setOf(Position.K)),
+    DST("D/ST", setOf(Position.DST)),
+    ;
+
+    /** The packs this chip offers: kickers and D/STs have their own, and every other chip shares the offense's. */
+    public val packs: List<StatPack>
+        get() = StatPack.entries.filter { it.unit == this || (it.unit == null && this != K && this != DST) }
 }

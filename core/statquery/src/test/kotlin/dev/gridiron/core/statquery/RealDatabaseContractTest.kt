@@ -1,6 +1,7 @@
 package dev.gridiron.core.statquery
 
 import dev.gridiron.core.model.BonusStat
+import dev.gridiron.core.model.PointsAllowedTier
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.ScoringRule
@@ -219,6 +220,7 @@ class RealDatabaseContractTest {
             YardageBonus(BonusStat.PASSING_YARDS, 300, null, 3.0),
             YardageBonus(BonusStat.RECEIVING_YARDS, 100, 200, 1.5),
         ),
+        pointsAllowedTiers = listOf(PointsAllowedTier(0, 7.5), PointsAllowedTier(3, 4.25), PointsAllowedTier(10, 1.0), PointsAllowedTier(24, -2.5), PointsAllowedTier(31, -6.0)),
     )
 
     /** Written independently of `Scoring.kt`: metric ids by hand, per rule. */
@@ -242,6 +244,14 @@ class RealDatabaseContractTest {
             w(ScoringRule.REC_FIRST_DOWN) * v("receiving_first_downs") +
             w(ScoringRule.REC_TD_40) * v("receiving_tds_40") + w(ScoringRule.REC_TD_50) * v("receiving_tds_50") +
             w(ScoringRule.FUMBLE_LOST) * v("fumbles_lost")
+        fp += w(ScoringRule.FG_MADE_0_39) * v("fg_made_0_39") + w(ScoringRule.FG_MADE_40_49) * v("fg_made_40_49") +
+            w(ScoringRule.FG_MADE_50) * v("fg_made_50") + w(ScoringRule.FG_MISSED) * v("fg_missed") +
+            w(ScoringRule.XP_MADE) * v("xp_made") + w(ScoringRule.XP_MISSED) * v("xp_missed") +
+            w(ScoringRule.DST_SACK) * v("dst_sacks") + w(ScoringRule.DST_INTERCEPTION) * v("dst_interceptions") +
+            w(ScoringRule.DST_FUMBLE_RECOVERY) * v("dst_fumble_recoveries") + w(ScoringRule.DST_TD) * v("dst_tds") +
+            w(ScoringRule.DST_SAFETY) * v("dst_safeties")
+        // Written by hand, not with pointsAllowedPoints: the highest tier starting at or below the points allowed.
+        s["points_allowed"]?.let { allowed -> fp += profile.pointsAllowedTiers.last { allowed >= it.min }.points }
         for (b in profile.yardageBonuses) {
             val yards = when (b.stat) {
                 BonusStat.PASSING_YARDS -> v("passing_yards")

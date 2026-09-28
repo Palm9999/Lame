@@ -4,14 +4,18 @@ import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.statquery.BONUS_INPUTS
 import dev.gridiron.core.statquery.Component
+import dev.gridiron.core.statquery.Components
 import dev.gridiron.core.statquery.RULE_INPUTS
 import kotlin.math.abs
 
-/** The positions the backtest measures, in the page's order. */
-public val ACCURACY_POSITIONS: List<String> = listOf("QB", "RB", "WR", "TE")
+/** The positions the backtest measures, in the page's order. CI's gate holds every one to beating the season-to-date average. */
+public val ACCURACY_POSITIONS: List<String> = listOf("QB", "RB", "WR", "TE", "K", "DST")
 
-/** A player-week counts only when the model projected at least this many points (spec §4). */
+/** A player-week counts only when the model projected at least this many points (spec §4), except at [ACCURACY_EVERY_WEEK]. */
 public const val ACCURACY_MIN_POINTS: Double = 5.0
+
+/** Every team starts a kicker and a D/ST, so every projected week of theirs counts, whatever the projection. */
+public val ACCURACY_EVERY_WEEK: Set<String> = setOf("K", "DST")
 
 /**
  * Draws per player-week for the floor and ceiling. A season is about 3,000
@@ -23,9 +27,9 @@ public const val BACKTEST_DRAWS: Int = 250
 /** The short-memory baseline's window, in games played. */
 private const val LAST_GAMES = 4
 
-/** Every stat a real game's fantasy score reads. */
+/** Every stat a real game's fantasy score reads, points allowed (the tiers') included. */
 public val ACTUAL_SCORING_COMPONENTS: List<Component> =
-    (RULE_INPUTS.values.flatMap { inputs -> inputs.actual.map { it.component } } + BONUS_INPUTS.values.flatten())
+    (RULE_INPUTS.values.flatMap { inputs -> inputs.actual.map { it.component } } + BONUS_INPUTS.values.flatten() + Components.POINTS_ALLOWED)
         .distinct()
         .sortedBy { it.id }
 
@@ -81,13 +85,14 @@ private class Sample(
  * The walk-forward backtest of [season] under [profile] (spec §4).
  *
  * A player-week counts when the model projected at least
- * [ACCURACY_MIN_POINTS], the player played that week, and he had already
- * played earlier that season. The last rule keeps the season-to-date average
+ * [ACCURACY_MIN_POINTS] (any projection for a kicker or D/ST), the player
+ * played that week, and he had already played earlier that season. The last rule keeps the season-to-date average
  * defined, so all three predictors are measured on the same player-weeks.
  * [projected] holds [season]'s past weeks only. [played] holds the weeks
  * actually played, and must include the previous season, because the
  * last-four average reaches back into it. A position with nothing to count
- * is left out.
+ * is left out. [widening] is for fitting the range factors; everyone else
+ * uses [RANGE_WIDENING].
  */
 public fun backtest(
     season: Int,
@@ -95,6 +100,7 @@ public fun backtest(
     played: List<PlayedWeek>,
     profile: ScoringProfile,
     draws: Int = BACKTEST_DRAWS,
+    widening: Map<Position, Double> = RANGE_WIDENING,
 ): List<PositionAccuracy> {
     val positionOf = projected.associate { it.playerId to it.position }
     // Each projected player's games, oldest first, with the points he scored in each.
@@ -116,9 +122,8 @@ public fun backtest(
         val seasonToDate = earlier.filter { (game, _) -> game.season == season }.map { it.second }
         if (seasonToDate.isEmpty()) continue // his first game of the season
         val position = Position.fromCode(p.position)
-        val means = p.components.associate { Component(it.metricId) to it.mean }
-        if (score(means, profile, position) < ACCURACY_MIN_POINTS) continue
-        val model = projectPoints(p.components, profile, position, draws)
+        if (p.position !in ACCURACY_EVERY_WEEK && projectedScore(p.components, profile, position) < ACCURACY_MIN_POINTS) continue
+        val model = projectPoints(p.components, profile, position, draws, widening)
         samples.getOrPut(p.position) { mutableListOf() } += Sample(
             actual = mine[at].second,
             model = model.points,

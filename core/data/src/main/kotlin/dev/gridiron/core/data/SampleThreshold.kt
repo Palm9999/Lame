@@ -29,6 +29,7 @@ public data class SampleThreshold(
             StatColumn.DROPBACKS to 14,
             StatColumn.ATTEMPTS to 12,
             StatColumn.OFFENSE_SNAPS to 15,
+            StatColumn.FG_ATT to 1,
         )
 
         private val NOUN: Map<StatColumn, String> = mapOf(
@@ -37,6 +38,7 @@ public data class SampleThreshold(
             StatColumn.DROPBACKS to "dropbacks",
             StatColumn.ATTEMPTS to "attempts",
             StatColumn.OFFENSE_SNAPS to "snaps",
+            StatColumn.FG_ATT to "field goal tries",
         )
 
         public fun forRequest(sort: StatColumn, pack: StatPack, playedWeeks: Int, perGame: Boolean): SampleThreshold? =

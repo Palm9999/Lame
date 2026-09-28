@@ -55,4 +55,13 @@ class ProjectionListTest {
         assertEquals(11.0, scored.single().points, 1e-9)
         assertTrue(scored.single().floor < 11.0 && scored.single().ceiling > 11.0)
     }
+
+    @Test
+    fun `kickers and team defenses have their own tabs, outside FLEX`() {
+        val all = rows + row("k", "K", 8.0) + row("d", "DST", 7.0)
+        assertEquals(listOf("k"), visibleRows(all, PositionTab.K, emptyMap(), week = true).map { it.playerId })
+        assertEquals(listOf("d"), visibleRows(all, PositionTab.DST, emptyMap(), week = true).map { it.playerId })
+        assertEquals(listOf("w", "r", "t"), visibleRows(all, PositionTab.FLEX, emptyMap(), week = true).map { it.playerId })
+        assertEquals("D/ST", PositionTab.DST.label)
+    }
 }
