@@ -14,11 +14,11 @@ Roughly **85% of what those products sell is computable from [nflverse](https://
 
 ## Core features
 
-**The Grid** — a real mobile stat table. Frozen player column, 200+ sortable stats in packs, two-tier filtering, week-range recomputation with correct rate recalculation, saved presets, sparklines, CSV export. S Pen hover previews stat definitions.
+**The Grid** — a real mobile stat table. Frozen player column, 200+ sortable stats in packs, two-tier filtering, week-range recomputation with correct rate recalculation, sparklines, CSV export. Saved presets are planned, not built. S Pen hover previews stat definitions.
 
 **N-way comparison** — every commercial tool compares exactly two players. This compares up to four, across twenty columns, with percentile bars and an xFP-vs-actual scatter that identifies buy-low and sell-high candidates without words.
 
-**Transparent projections** — opportunity-first, market-anchored, regression-heavy. Every projection ships a factor waterfall: baseline → matchup → game script → weather → injury.
+**Transparent projections** — opportunity-first, market-anchored, regression-heavy. Every projection ships a factor waterfall: baseline → matchup → game script → market (betting props, when you enter an Odds API key). Weather and injury shifts aren't modeled.
 
 **Scoring as configuration** — the pipeline ships stat components, never fantasy points. Your exact league settings are applied on-device, so every format works offline and switching leagues is instant.
 
@@ -26,8 +26,8 @@ Roughly **85% of what those products sell is computable from [nflverse](https://
 
 ## Stack
 
-Kotlin · Jetpack Compose · Room 3 · Hilt · Navigation 3 · WorkManager · Vico
-Pipeline: GitHub Actions ETL → GitHub Releases as CDN → prebuilt SQLite shipped to the device. Cost: $0.
+Kotlin · Jetpack Compose · Navigation 3 · the bundled SQLite driver · Compose Canvas charts. No Hilt, Room or WorkManager.
+Pipeline: the phone downloads nflverse and ffopportunity data and builds its own SQLite database on Refresh (`core/ingest/`); CI's parity job holds it to the Python ETL. ESPN supplies live injuries and news. Cost: $0.
 
 ## Documentation
 
@@ -74,6 +74,9 @@ The third chip row filters by team, minimum snap share and any stat (**Filters**
 | **Compare** | **Done.** Hold up to four players in the Grid, then a tray, percentile bars, a head-to-head table, a two-player radar and an xFP-vs-actual scatter. |
 | **Custom scoring** | **Done.** PPR/Half/Standard presets plus your own profiles, edited on-device; FPTS, xFP and FPOE flow into the Grid and Compare under whichever profile is active. |
 | **Live data** | **Done.** Stats build on the phone; ESPN injuries and news on a News screen, Player pages and Grid badges; seasons chosen in Settings. |
+| **Projections** | **Done.** Weekly and rest-of-season projections for QB, RB, WR, TE, K and D/ST from `core/forecast/`, a factor waterfall, betting-props blend (with your Odds API key), and an accuracy page backed by a CI gate. Details in [`CLAUDE.md`](CLAUDE.md). |
+| **Kickers and D/ST** | **Done.** Own stat packs, editable points-allowed tiers, and K and D/ST chips on the Grid. Compare and the Player page's season stats don't cover them yet. |
+| Saved Grid presets | Not built. |
 
 ## Modules
 
@@ -88,10 +91,13 @@ The third chip row filters by team, minimum snap share and any stat (**Filters**
 | `:core:ui` | Android | Shared screen chrome (profile chip, metric/weeks sheets) so no feature module depends on another |
 | `:core:designsystem` | Android | Theme, dark mode, colorblind-safe heat scale |
 | `:core:data` | JVM | Stat packs, qualifying bars, formatting, the Grid/Compare/scoring/tray/settings repositories, and ESPN live data (`live.db`) |
-| `:core:datastore` | JVM | User preferences (scoring profiles, active profile, compare tray) as a small JSON file, read through a `PrefsSource` interface for virtual-time tests |
+| `:core:datastore` | JVM | User preferences (scoring profiles, rosters, settings, compare tray) as a small JSON file, read through a `PrefsSource` interface for virtual-time tests |
 | `:core:database` | JVM | Read-only SQLite access via the bundled driver, reopened after each refresh |
 | `:core:ingest` | JVM | Builds `stats.db` from nflverse and ffopportunity, on the phone and in CI |
 | `:core:statquery` | JVM | Query builder |
+| `:core:forecast` | JVM | The projection model: reads a freshly built `stats.db` and writes weekly, rest-of-season and factor projections |
+| `:core:projections` | JVM | Scoring and simulation of projections on the phone, and the backtest |
+| `:feature:projections` | Android | The Projections list, waterfall and accuracy page |
 | `:core:model` | JVM | Shared types |
 | `:core:testing` | JVM | Test fixtures: a JDBC executor over the real database, a fake `PrefsSource` |
 
@@ -99,8 +105,8 @@ The data modules are plain JVM, so the phone's own database code, including the 
 
 ### Where this departs from the spec
 
-- **`stats.db` is read with the SQLite driver, not Room.** Room checks a prebuilt database against its entity definitions and can't express this one's `WITHOUT ROWID` table or covering index. The database is read-only and queried only through generated SQL. Room remains the plan for `user.db` (presets, rosters).
-- **No Hilt.** Four screens and their repositories are still wired by hand in `GridironApplication` — one `Deps` holder built from one database connection and one preferences file.
+- **`stats.db` is read with the SQLite driver, not Room.** Room checks a prebuilt database against its entity definitions and can't express this one's `WITHOUT ROWID` table or covering index. The database is read-only and queried only through generated SQL. A `user.db` is planned for saved presets but not built; profiles and rosters live in the prefs JSON.
+- **No Hilt.** Repositories are wired by hand in `GridironApplication` — one `Deps` holder built from one database connection and one preferences file.
 - **`fpoe` stays in the ETL's metric registry, flagged `computed`**, alongside two new computed rows (`fantasy_points`/FPTS and `expected_fantasy_points`/xFP), because the Grid and Compare columns take their names and formatting from that registry rather than special-casing fantasy columns.
 - **Scoring inputs are stored sparse, and so are profile weights.** In `stats.db`, a scoring component that is zero for a player-week (a receiver's completions, most players' fumbles) isn't stored at all; the scoring query treats a missing component as zero. Separately, a custom profile's JSON records only the weights that differ from zero. A missing weight is zero: nothing fills it in from a preset.
 - **The compare tray bar lives in `:feature:players`**, and the sheets and profile chip it shares with Compare live in `:core:ui`, so neither feature module depends on the other.

@@ -1,5 +1,7 @@
 # Kotlin Ingest Engine Implementation Plan
 
+> **Executed, historical.** Shipped and merged; kept for lookup. It describes intent as written at the time, not current behavior. See `CLAUDE.md` for what exists.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A pure-JVM Kotlin module, `:core:ingest`, that builds `stats.db` from nflverse and ffopportunity. It produces the same numbers as the Python ETL, verified by a CI parity gate, so the phone can build its own database.

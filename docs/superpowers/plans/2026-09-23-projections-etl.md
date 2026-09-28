@@ -1,5 +1,7 @@
 # Projections ETL Implementation Plan
 
+> **Superseded.** The Python ETL stages this plan describes were replaced by the on-phone forecast; see [`../specs/2026-09-26-projection-model-design.md`](../specs/2026-09-26-projection-model-design.md). Kept for lookup only.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the server-side half of Phase 5 (Projections): a six-layer pipeline in

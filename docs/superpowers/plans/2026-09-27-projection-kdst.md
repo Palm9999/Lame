@@ -1,5 +1,7 @@
 # K and D/ST Projections Implementation Plan (sub-project 4 of 4)
 
+> **Executed, historical.** Shipped and merged; kept for lookup. It describes intent as written at the time, not current behavior. See `CLAUDE.md` for what exists.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Kickers and team defenses get stats, league scoring with editable points-allowed tiers, weekly and rest-of-season projections, K and D/ST tabs in ☰ → Projections, Player page cards, K and D/ST chips on the Grid, and accuracy rows. CI's gate holds K and D/ST to the same bar as the offense.

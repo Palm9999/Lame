@@ -1,6 +1,6 @@
 # Projection model: design
 
-**Status:** approved in conversation, section by section (2026-09-26).
+**Status:** implemented. Approved in conversation, section by section (2026-09-26).
 **Follows:** [live data refresh](2026-09-25-live-data-refresh-design.md), which deferred projections to this project.
 **Supersedes:** the pipeline half of [projections design](2026-09-23-projections-design.md) (Python ETL stages, `projection_snapshot`, `accuracy_summary`). Its on-device half (`:core:projections` scorer, Monte Carlo, factor attribution, waterfall) is kept and reused.
 

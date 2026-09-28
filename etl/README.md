@@ -2,7 +2,7 @@
 
 Turns [nflverse](https://github.com/nflverse/nflverse-data) releases into a compact, pre-indexed SQLite database for the Android app. Expected-points components come from [ffopportunity](https://github.com/ffverse/ffopportunity), an ffverse project.
 
-The app never touches upstream sources. A single season of play-by-play is ~98 MB of CSV; this pipeline reduces three full seasons (two complete, one in progress) to **8.0 MB gzipped**.
+This Python pipeline is now only CI's **parity reference**: the phone builds its own database with the Kotlin port in [`core/ingest/`](../core/ingest), and CI's parity job holds the two to the same values. Nothing built here reaches the app. A single season of play-by-play is ~98 MB of CSV; the pipeline reduces it to a compact database.
 
 ## Usage
 
@@ -26,22 +26,11 @@ python -m pytest tests/ -q
 
 ## Output
 
-Measured on 2024 + 2025 + 2026 (through week 2):
+Size and build time vary with the seasons built and the run; measure a build rather than trusting a figure here. The metric registry is [`gridiron_etl/metrics.py`](gridiron_etl/metrics.py) (visible and internal metrics, including the `x_*` expected components). Query performance is measured by the contract tests in [`:core:statquery`](../core/statquery/README.md), which run the app's actual generated SQL against a built database.
 
-| | |
-|---|---|
-| Facts | 577,407 |
-| Players | 832 |
-| Metrics | 81 (41 visible, 40 internal, including 15 `x_*` expected components) |
-| On disk | 44.1 MB |
-| Shipped (gzip -9) | 8.0 MB |
-| Build time (cached) | ~11 s |
+## Schema
 
-Query performance is measured by the contract tests in [`:core:statquery`](../core/statquery/README.md), which run the app's actual generated SQL against this database.
-
-## Schema (version 3)
-
-Long/narrow by design: **adding a metric is an `INSERT`, not a migration.**
+Long/narrow by design: **adding a metric is an `INSERT`, not a migration.** The tables and `SCHEMA_VERSION` are defined in [`gridiron_etl/schema.py`](gridiron_etl/schema.py); the version the phone builds is `core/ingest/.../db/Schema.kt`, and parity compares `schema_meta` between the two.
 
 | Table | Purpose |
 |---|---|
@@ -50,7 +39,9 @@ Long/narrow by design: **adding a metric is an `INSERT`, not a migration.**
 | `player` | Players with at least one stat in the built seasons. |
 | `schema_meta` | Schema version, seasons, source attribution (nflverse and ffopportunity), and `expected_through_week:<season>`: the last week through which ffopportunity's expected components cover the season's play-by-play. |
 
-Two rules are enforced structurally: **no table or column name contains a year**, so a new season is data rather than schema; and this builds only `stats.db`, the reconstructible database. User state lives in a separate `user.db` on the device.
+The schema also has the game, defense, injury and projection tables listed in [`CLAUDE.md`](../CLAUDE.md#database-schema-version-8), which `schema.py` also defines. The Kotlin build fills them; check `build.py` for which the Python build writes.
+
+Two rules are enforced structurally: **no table or column name contains a year**, so a new season is data rather than schema; and this builds only `stats.db`, the reconstructible database. User state is kept out of it: profiles and rosters live in the app's prefs JSON, and a `user.db` for saved presets is planned but not built.
 
 The database ships pre-indexed, `ANALYZE`d and `VACUUM`ed, so the query planner has statistics on first launch.
 
@@ -88,6 +79,6 @@ Every build runs [`validate.py`](gridiron_etl/validate.py). The database checks 
 
 ## Known gaps
 
-- **Only 39 of ~450 catalogued metrics** are implemented. These are the play-by-play and snap-count metrics; Next Gen Stats, FTN charting, injuries and schedules (Vegas lines, weather) are wired in `sources.py` but not yet transformed.
+- **Only part of the ~450 catalogued metrics** are implemented: the play-by-play, snap-count and ffopportunity metrics in `metrics.py`. Next Gen Stats and FTN charting are wired in `sources.py` but not yet transformed.
 - **`opportunity_share`** (RB backfield share) is registered but not computed. `fpoe` is now computable on-device, since the ETL loads ffopportunity's `x_*` expected components alongside the actuals.
 - **Pre-aggregated season rollups** (season totals, L3/L5/L8 splits) are specified but not built. They're the next performance step: a full-season Grid query is ~85 ms today, and a rollup would serve the most common view without aggregating weekly facts at all.

@@ -1,6 +1,6 @@
 # Live Data Refresh — Design
 
-**Status:** approved in conversation, section by section (2026-09-25).
+**Status:** implemented. Approved in conversation, section by section (2026-09-25).
 **Follow-up (separate project):** projections computed on-device.
 
 ## Goal

@@ -1,5 +1,7 @@
 # Live Refresh App Implementation Plan
 
+> **Executed, historical.** Shipped and merged; kept for lookup. It describes intent as written at the time, not current behavior. See `CLAUDE.md` for what exists.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The app builds its own `stats.db` on the phone with Plan 1's `IngestPipeline`, pulls ESPN injuries and news into a separate `live.db`, and shows them on new News, Player and Injury report screens, with no database shipped in the APK or published by the repo.

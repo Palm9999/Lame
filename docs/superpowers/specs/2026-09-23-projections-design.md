@@ -1,6 +1,6 @@
 # Projections: design
 
-Date: 2026-09-23 · Status: draft · Implements PRODUCT_SPEC §5 (Prediction engine), §9 Phase 5
+Date: 2026-09-23 · Status: partly superseded. The pipeline half (Python ETL stages, `projection_snapshot`, `accuracy_summary`) was replaced by [the 2026-09-26 projection model design](2026-09-26-projection-model-design.md); the on-device half (`:core:projections`) was built and is kept · Implements PRODUCT_SPEC §5 (Prediction engine), §9 Phase 5
 
 ## Intent
 
