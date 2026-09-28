@@ -432,7 +432,6 @@ class GridViewModel(
                 r.copy(season = season, weeks = season.defaultWeeks)
             }
             is GridEvent.WeeksChanged -> r.copy(weeks = event.weeks)
-            // A new pack brings its own lead stat as the sort.
             // A new pack brings its own lead stat as the sort, and a K or D/ST pack its chip.
             is GridEvent.PackSelected -> r.copy(
                 pack = event.pack,

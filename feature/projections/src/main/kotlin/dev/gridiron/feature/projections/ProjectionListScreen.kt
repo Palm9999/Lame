@@ -36,6 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -130,7 +131,7 @@ private fun ProjectionListRow(rank: Int, row: ProjectionRow, badge: String?, onP
                 }
             }
             Text(
-                listOfNotNull(row.position, row.team).joinToString(" · "),
+                listOfNotNull(Position.label(row.position), row.team).joinToString(" · "),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

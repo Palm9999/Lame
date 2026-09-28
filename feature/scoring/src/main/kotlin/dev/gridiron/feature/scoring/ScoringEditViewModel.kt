@@ -122,8 +122,11 @@ private fun EditState.Editing.validate(): Pair<Map<FieldKey, String>, ScoringPro
         if (points == null) errors[FieldKey.TierPoints(t.key)] = NUMBER
         if (min == null || points == null) null else PointsAllowedTier(min, points)
     }.sortedBy { it.min }
-    // Every game must land in a tier, so one has to start at 0. The first row carries the message.
-    if (tiers.isNotEmpty() && tiers.first().min != 0) errors[FieldKey.TierMin(this@validate.tiers.first().key)] = "One tier must start at 0"
+    // Every game must land in a tier, so one has to start at 0. The first row carries the message, unless it has its own.
+    if (tiers.isNotEmpty() && tiers.first().min != 0) {
+        val firstRow = FieldKey.TierMin(this@validate.tiers.first().key)
+        if (firstRow !in errors) errors[firstRow] = "One tier must start at 0"
+    }
     if (errors.isNotEmpty()) return errors to null
     return errors to original.copy(
         name = name.trim(),

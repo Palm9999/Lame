@@ -467,6 +467,9 @@ class ForecastEngineTest {
             // BBB-CCC has none: no game script, so the final projection is the matchup's.
             assertEquals(emptyList<String?>(), factors(db, "K_B"))
             assertEquals(listOf("matchup"), factors(db, "DST_BBB"))
+            // The matchup note names what the factor uses: the opponent's scoring as well as its sacks and turnovers.
+            val note = db.query("SELECT note FROM player_week_projection_factor WHERE player_id = 'DST_BBB' AND season = 2025 AND week = 3 AND factor = 'matchup'").single()[0]!!
+            assertTrue(Regex("""vs CCC: scores \d+\.\d pts, gives up \d+\.\d sacks, \d+\.\d turnovers a game""").matches(note), note)
             assertEquals(
                 db.query("SELECT metric_id, mean FROM player_week_projection WHERE player_id = 'K_B' AND season = 2025 AND week = 3 AND stage = 'baseline' ORDER BY 1"),
                 db.query("SELECT metric_id, mean FROM player_week_projection WHERE player_id = 'K_B' AND season = 2025 AND week = 3 AND stage = 'final' ORDER BY 1"),

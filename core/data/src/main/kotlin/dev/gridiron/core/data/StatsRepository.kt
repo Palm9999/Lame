@@ -64,7 +64,7 @@ public class StatsRepository(
             GridRowUi(
                 playerId = r.text(GridLayout.PLAYER_ID),
                 name = r.text(GridLayout.FULL_NAME),
-                detail = "${position ?: "–"} · ${team ?: "FA"} · $games g",
+                detail = "${position?.let(Position::label) ?: "–"} · ${team ?: "FA"} · $games g",
                 position = position,
                 team = team,
                 games = games,

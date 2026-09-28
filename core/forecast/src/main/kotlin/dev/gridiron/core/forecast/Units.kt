@@ -206,7 +206,7 @@ internal class UnitProjector(
             val s = defenseStages(u.own, u.ownAllowed, factors, opponentScores, league, implied)
             UnitStages(
                 s.baseline, s.afterMatchup, s.final,
-                matchupNote = defenseNote(opponent, against, league),
+                matchupNote = defenseNote(opponent, opponentScores, against, league),
                 scriptNote = implied?.let { impliedNote("$opponent implied", it, state.leagueImplied) },
                 sd = state.sd,
             )
@@ -270,11 +270,11 @@ internal class UnitProjector(
 private fun impliedNote(label: String, implied: Double, league: Double): String =
     String.format(Locale.US, "%s %.1f pts (%+.1f)", label, implied, implied - league)
 
-/** "vs KC: gives up 2.9 sacks, 1.6 turnovers a game", shrunk like the matchup's factors. */
-private fun defenseNote(opponent: String, against: Map<String, List<Double>>, league: DefenseLeague): String {
+/** "vs KC: scores 24.1 pts, gives up 2.9 sacks, 1.6 turnovers a game", shrunk like the matchup's factors. */
+private fun defenseNote(opponent: String, scores: Double, against: Map<String, List<Double>>, league: DefenseLeague): String {
     fun rate(stat: String) = unitRate(against[stat].orEmpty(), league.perGame.getValue(stat), K.DST_OPP_K)
     return String.format(
-        Locale.US, "vs %s: gives up %.1f sacks, %.1f turnovers a game",
-        opponent, rate("dst_sacks"), rate("dst_interceptions") + rate("dst_fumble_recoveries"),
+        Locale.US, "vs %s: scores %.1f pts, gives up %.1f sacks, %.1f turnovers a game",
+        opponent, scores, rate("dst_sacks"), rate("dst_interceptions") + rate("dst_fumble_recoveries"),
     )
 }

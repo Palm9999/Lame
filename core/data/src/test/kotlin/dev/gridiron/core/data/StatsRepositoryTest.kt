@@ -62,7 +62,7 @@ class StatsRepositoryTest {
         assertTrue(kickers.rows.size in 25..45, "${kickers.rows.size} kickers")
         assertTrue(kickers.rows.all { it.position == "K" })
         assertEquals(32, defenses.rows.size)
-        assertTrue(defenses.rows.all { it.position == "DST" && it.name.endsWith(" D/ST") })
+        assertTrue(defenses.rows.all { it.position == "DST" && it.name.endsWith(" D/ST") && it.detail.startsWith("D/ST · ") })
         val points = defenses.rows.map { it.cells.first().text }
         assertTrue(points.isNotEmpty() && points.none { it.isBlank() }, "$points")
     }

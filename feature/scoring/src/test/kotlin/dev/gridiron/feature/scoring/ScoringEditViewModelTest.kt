@@ -190,6 +190,11 @@ class ScoringEditViewModelTest {
 
         vm.onEvent(EditEvent.TierChanged(tiers[2].key, tiers[2].copy(min = "x")))
         assertEquals("Whole points, 0–99", (vm.state.value as EditState.Editing).errors[FieldKey.TierMin(tiers[2].key)])
+
+        // The first row's own mistake isn't hidden behind the missing 0.
+        vm.onEvent(EditEvent.TierChanged(tiers[2].key, tiers[2]))
+        vm.onEvent(EditEvent.TierChanged(zero.key, zero.copy(min = "x")))
+        assertEquals("Whole points, 0–99", (vm.state.value as EditState.Editing).errors[FieldKey.TierMin(zero.key)])
     }
 
     @Test

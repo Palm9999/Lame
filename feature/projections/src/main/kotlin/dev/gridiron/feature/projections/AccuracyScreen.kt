@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.gridiron.core.model.Position
 import dev.gridiron.core.projections.ACCURACY_MIN_POINTS
 import dev.gridiron.core.projections.ACCURACY_POSITIONS
 import dev.gridiron.core.projections.ErrorStats
@@ -103,7 +104,7 @@ private fun Measured(state: AccuracyState.Loaded, onSeason: (Int) -> Unit) {
         val missing = ACCURACY_POSITIONS - state.positions.map { it.position }.toSet()
         if (state.positions.isNotEmpty() && missing.isNotEmpty()) {
             item {
-                Text("Nothing to measure at ${missing.joinToString(transform = ::positionLabel)}.", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
+                Text("Nothing to measure at ${missing.joinToString(transform = Position::label)}.", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.bodySmall)
             }
         }
         item {
@@ -120,13 +121,12 @@ private fun Measured(state: AccuracyState.Loaded, onSeason: (Int) -> Unit) {
 }
 
 /** A position as the page names it: a team defense is "D/ST". */
-private fun positionLabel(code: String): String = if (code == "DST") "D/ST" else code
 
 @Composable
 private fun PositionTable(p: PositionAccuracy) {
     val best = minOf(p.model.mae, p.seasonAverage.mae, p.lastFour.mae)
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Text("${positionLabel(p.position)} · ${p.playerWeeks} player-weeks", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        Text("${Position.label(p.position)} · ${p.playerWeeks} player-weeks", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
         Text(
             "Floor to ceiling held ${percent(p.calibration)} of scores (target about 80%)",
             style = MaterialTheme.typography.labelSmall,

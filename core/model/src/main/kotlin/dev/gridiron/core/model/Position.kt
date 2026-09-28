@@ -16,5 +16,8 @@ public enum class Position(public val code: String) {
         public val SUPERFLEX: Set<Position> = setOf(QB, RB, WR, TE)
 
         public fun fromCode(code: String): Position? = entries.firstOrNull { it.code == code }
+
+        /** How a stored code reads on screen: "D/ST" for a team's defense, any other code as stored. */
+        public fun label(code: String): String = if (code == DST.code) "D/ST" else code
     }
 }

@@ -82,6 +82,14 @@ class LiveScreensTest {
     }
 
     @Test
+    fun aTeamDefensesPageReadsDst() {
+        val page = PlayerPage(PlayerHeader("DST_KC", "Kansas City D/ST", "DST", "KC"), null, emptyList(), emptyList(), null)
+        compose.setContent { GridironTheme { PlayerScreen("DST_KC", page, liveAvailable = true, onBack = {}, onOpen = {}) } }
+
+        compose.onNodeWithText("D/ST · KC").assertExists()
+    }
+
+    @Test
     fun aPlayerWithNothingLiveSaysSo() {
         compose.setContent {
             GridironTheme { PlayerScreen("P9", PlayerPage(null, null, emptyList(), emptyList(), null), liveAvailable = true, onBack = {}, onOpen = {}) }
