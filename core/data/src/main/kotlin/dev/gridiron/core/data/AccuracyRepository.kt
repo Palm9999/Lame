@@ -67,6 +67,6 @@ public class AccuracyRepository(private val executor: QueryExecutor) {
             .map { (key, weekFacts) ->
                 PlayedWeek(key.first, key.second, key.third, weekFacts.associate { Component(it.metricId) to it.value })
             }
-        return backtest(season, projected, played, profile, draws)
+        return backtest(season, projected, played, profile, draws, widening)
     }
 }

@@ -12,10 +12,14 @@ public data class ProjectedPoints(val points: Double, val floor: Double, val cei
  * every stat independently, and TD counts ignore the projected variance, so
  * its range alone held only 53-65% of real games. These factors were fitted
  * on the 2024 and 2025 backtests (pooled) so the range holds about 80% at
- * each position (spec section 4's calibration target).
+ * each position (spec section 4's calibration target). K and D/ST were
+ * fitted the same way when they arrived (sub-project 4): a kicker's
+ * simulation alone already holds 87%, so K has no factor.
  */
-public val RANGE_WIDENING: Map<Position, Double> =
-    mapOf(Position.QB to 1.40, Position.RB to 1.59, Position.WR to 1.52, Position.TE to 1.40)
+public val RANGE_WIDENING: Map<Position, Double> = mapOf(
+    Position.QB to 1.40, Position.RB to 1.59, Position.WR to 1.52, Position.TE to 1.40,
+    Position.DST to 1.09,
+)
 
 /**
  * The floor and ceiling shown for a projection of [points] whose simulation

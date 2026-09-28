@@ -47,12 +47,12 @@
 - [x] **Plan approved; execution method: native** (the user, 2026-09-27).
 - [x] **Session A built** (Tasks 1–4; see "K and D/ST: execution progress").
 - [x] **Session B built** (Tasks 5–8; see "K and D/ST: execution progress").
-- [ ] **Session C** (Tasks 9–11), then the final whole-branch review.
+- [x] **Session C built** (Tasks 9–11; see "K and D/ST: execution progress"). The gate passes at all six positions without tuning.
+- [ ] **Final whole-branch review** (Opus), then its fix pass.
 
-## Next step: sub-project 4 (K/DST) Session C, Tasks 9–11
+## Next step: sub-project 4 (K/DST) final whole-branch review
 
-**Start here.** Run Session C (Tasks 9–11) with the `executing-plans` skill: the walk-forward, the phone, then the gate at six positions and range widening, and docs. Then the final whole-branch review on the most capable model. Sessions A and B's results and rulings are under "K and D/ST: execution progress" below. The ledger (`.superpowers/sdd/2026-09-27-projection-kdst/progress.md`) survives only while this container does.
-
+**Start here.** All 11 tasks are built. Run the final whole-branch review on the most capable model (`executing-plans`' Final Review: the review package from b27f14d to HEAD, the plan's Review Focus, and the rulings under "K and D/ST: execution progress"). Fix its Critical and Important findings test-first in one pass, then open the PR for sub-project 4. The ledger (`.superpowers/sdd/2026-09-27-projection-kdst/progress.md`) survives only while this container does.
 
 1. **PR #7 (sub-project 3, props) is merged** (753e1f1). **PR #9 (deferred minors, plus rosters) is merged** (e188dc2).
 2. **Sub-project 4 plan, revised** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`, on draft PR #10. It has 11 tasks, with full code and tests written first.
@@ -95,6 +95,30 @@
   - Note: `stats.db` wasn't rebuilt in this task. No ingest code changed since Task 4's rebuild.
 - [x] **Task 7, kicker inputs and model** (711c4d9). `Kicker.kt`, `UNIT_POSITIONS`, `ForecastInputs.units`/`unitHistory`, K model constants. `KickerTest` 6/6, `InputsTest` 3/3.
 - [x] **Task 8, D/ST model** (1fcb6c0). `Defense.kt`, D/ST constants. `DefenseTest` 5/5.
+
+**Session C (2026-09-27/28), Tasks 9–11.** Base ac8c8a1. After Task 11: `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` fails only `:core:statquery`'s timing test (container speed, as in Task 6; passes with `CI=1`); `:app:assembleRelease lint` → BUILD SUCCESSFUL.
+
+- [x] **Task 9, the walk-forward** (c129bc1). `UnitProjector` (`Units.kt`), `averageImplied`, `WeekKind` internal, K/DST reference points, CV 0.52/0.85, `FORECAST_VERSION` 4. `:core:forecast:test` 93/93. On the rebuilt 2024–2026 database, 2025 has 543 kicker-weeks and 537 D/ST-weeks projected; `ProjectionsContractTest` 3/3 and `ForecastTimingTest` pass.
+- [x] **Task 10, the phone** (7ef1804). `projectedScore`, `DistributionFamily.NORMAL` (points allowed drawn per game), `attributeFactors(points…)`, `widening`, `ACCURACY_POSITIONS` with K and DST, the K and D/ST tabs.
+  - Ruling: `AccuracyRepositoryTest` asserted a kicker isn't measured; now it asserts rows WR and K. Cost if wrong: none, test-only.
+  - Ruling: the accuracy page printed "DST"; a `positionLabel` shows "D/ST" (copy rule). `AccuracyScreenTest` expects "Nothing to measure at QB, RB, TE, K, D/ST." Cost if wrong: one label.
+- [x] **Task 11, the gate, range widening and docs** (this commit).
+  - **Gate (2025, PPR), all six pass, no tuning:**
+    ```
+    pos       n           model      season avg          last 4   held
+    QB      498    6.42 (-0.19)    7.14 (-0.57)    7.07 (-0.56)    78%
+    RB      804    5.87 (-1.35)    6.01 (-0.31)    6.18 (+0.03)    78%
+    WR     1203    5.40 (-1.02)    5.79 (+0.28)    5.81 (+0.40)    81%
+    TE      455    4.87 (-1.62)    5.19 (-0.15)    5.42 (+0.30)    83%
+    K       493    3.83 (-0.02)    4.09 (+0.14)    4.18 (+0.05)    87%
+    DST     204    4.55 (-0.15)    4.97 (-1.21)    5.15 (-0.98)    79%
+    ```
+  - RB reads 5.87 where this file said 5.88. The base commit e188dc2, built fresh in a worktree, prints the identical table, so it's republished nflverse data, not a regression.
+  - **Range factors** (pooled 2024–2025): D/ST 1.09 (holds 80.0%, 76.5% alone). K gets none: its simulation alone holds 87.1%, and a factor can only widen.
+  - Ruling (a real bug, mine from Task 10): `AccuracyRepository.backtest` took `widening` but never passed it on, so the first fit read "widen 3.00" for D/ST. Fixed, with `the backtest widens ranges by the factors it's given` seen failing first. Cost if wrong: none.
+  - Note: a D/ST-only floor change (letting the widened floor go below zero) was tried first and reverted: it moved the fit from 1.09 to 1.08.
+  - Ruling: CLAUDE.md gains `:feature:scoring` and `:core:datastore` lines, which weren't listed. The metric count is now 51.
+  - Worth knowing: D/ST counts 204 of the 537 D/ST-weeks projected in 2025. The backtest's 5-point bar and its skip of each team's first game account for the rest. Not investigated further.
 
 ## Deferred minors fixed (2026-09-27)
 

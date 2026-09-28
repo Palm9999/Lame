@@ -63,18 +63,20 @@ GRIDIRON_STATS_DB=etl/build/accuracy.db GRIDIRON_ACCURACY_GATE=2025 ./gradlew :c
 - `:core:model` — Shared types used across the app
 - `:core:statquery` — Query builder that turns `StatQuerySpec` into SQL. Guarantees rate recomputation, SQL injection safety, determinism, and stable percentiles. Three test tiers: in-memory SQLite, safety/determinism checks, and contract tests against the real ETL database
 - `:core:database` — Read-only SQLite access via the bundled driver. `ReopenableQueryExecutor` closes and reopens the connection when a refresh swaps in a new `stats.db`, and bumps a version flow that every stats screen (Grid, Compare, Player page, Projections, waterfall, accuracy, Injury report, Team defense) reloads on
+- `:core:datastore` — User prefs (profiles, rosters, settings) as one JSON document. `formatVersion` 2 migrated older profiles once to the kicking and D/ST defaults and ESPN's points-allowed tiers
 - `:core:testing` — Test fixtures: JDBC executor over the real database. Proves results match what the phone's SQLite driver will return
-- `:core:projections` — Pure `score()` (the in-memory twin of `StatQueryBuilder`'s SQL scoring), factor attribution, and single-player Monte Carlo (floor/ceiling, widened per position by `RANGE_WIDENING` so the range holds about 80% of games) for the Projections feature; `backtest()`, which scores the stored past-week projections against real games beside the season-to-date and last-4 averages (MAE, bias, R², floor-to-ceiling calibration)
-- `:core:ingest` — Builds `stats.db` from nflverse and ffopportunity: a streaming CSV reader, Kotlin ports of the ETL's transforms and validation, and a pipeline that re-downloads only files whose ETag changed and copies unchanged seasons from the previous build. It also downloads nflverse's schedule (`games.csv`) into the `game` table and runs `:core:forecast` after validation; a forecast failure leaves the stats and records why. Runs on the phone and on the JVM (`./gradlew :core:ingest:buildStatsDb -Pseasons="2025" -Pout=etl/build/stats.db`); CI's parity job holds it to the Python ETL's values
-- `:core:forecast` — The projection model. Reads a freshly built stats.db and writes weekly, rest-of-season and waterfall-factor projections for QB/RB/WR/TE, walk-forward (each week only from the games before it). Seven layers: team volume, shrunk share (toward the player's last season; starting QB only; each team's shares sum to one), shrunk efficiency, expected TDs, opponent ratings (ridge), game script from nflverse's lines, distributions; then, for the upcoming week only, an inverse-variance blend with betting props when the user has an Odds API key (a `market` factor in the waterfall). Every constant is in `ForecastConstants.kt`; bump `FORECAST_VERSION` when one changes
+- `:core:projections` — Pure `score()` (the in-memory twin of `StatQueryBuilder`'s SQL scoring; a D/ST's points allowed score the profile's tier) and `projectedScore` (projections: tiers in expectation, per game), factor attribution, and single-player Monte Carlo (floor/ceiling, widened per position by `RANGE_WIDENING` so the range holds about 80% of games; a D/ST's points allowed are drawn per game and scored through the tiers) for the Projections feature; `backtest()`, which scores the stored past-week projections against real games beside the season-to-date and last-4 averages (MAE, bias, R², floor-to-ceiling calibration)
+- `:core:ingest` — Builds `stats.db` from nflverse and ffopportunity: a streaming CSV reader, Kotlin ports of the ETL's transforms and validation (kicking facts from play-by-play; each team's defense as a `DST_<TEAM>` pseudo-player from `team_week_defense`, with points allowed stored as a number for the profile's tiers), and a pipeline that re-downloads only files whose ETag changed and copies unchanged seasons from the previous build. It also downloads nflverse's schedule (`games.csv`) into the `game` table and runs `:core:forecast` after validation; a forecast failure leaves the stats and records why. Runs on the phone and on the JVM (`./gradlew :core:ingest:buildStatsDb -Pseasons="2025" -Pout=etl/build/stats.db`); CI's parity job holds it to the Python ETL's values
+- `:core:forecast` — The projection model. Reads a freshly built stats.db and writes weekly, rest-of-season and waterfall-factor projections for QB/RB/WR/TE, K and D/ST, walk-forward (each week only from the games before it). Seven layers: team volume, shrunk share (toward the player's last season; starting QB only; each team's shares sum to one), shrunk efficiency, expected TDs, opponent ratings (ridge), game script from nflverse's lines, distributions; then, for the upcoming week only, an inverse-variance blend with betting props when the user has an Odds API key (a `market` factor in the waterfall). K and D/ST have their own models (`Kicker.kt`, `Defense.kt`, run by `UnitProjector`). Kickers' field goal and extra point tries come from implied team points, with their distance mix and accuracy shrunk toward the league's. D/STs get their own sacks and takeaways times the opponent's, and points allowed from the opponent's implied points with a measured spread (stored as the variance, with `g` = 1 a game). Every constant is in `ForecastConstants.kt`; bump `FORECAST_VERSION` when one changes
 
 **Android Modules**:
 - `:app` — App entry point. `RefreshCoordinator` builds `stats.db` on the phone with `:core:ingest` and swaps it in without a restart; News, Player page, live Injury report, Settings (seasons, Odds API key) and Load stats screens
-- `:feature:players` — The Grid screen (main UI) and its ViewModel
+- `:feature:players` — The Grid screen (main UI) and its ViewModel. The K and D/ST chips bring their own packs (Kicking, Defense); All and the offense's chips leave kickers and D/STs out (`StatsRepository`)
+- `:feature:scoring` — Scoring profiles: the list and the editor (every rule, plus the points-allowed tier editor)
 - `:core:table` — Frozen-column stat table with shared horizontal scroll state
 - `:core:designsystem` — Theme, dark mode, colorblind-safe heat scale
 - `:core:data` — Stat packs, qualifying bars, formatting, repositories; `SettingsRepository` (which seasons to build); `PlayerDirectory` (ESPN id → player via `player_xref`); and the `live` package: the ESPN news/injuries parser and client, the writable `live.db` store, `LiveRepository`, and `PropsRepository` (The Odds API: the upcoming week's player props, fetched within the credit budget)
-- `:feature:projections` — The Projections list (☰ → Projections), the Player page's "This week" card, the waterfall screen (`ProjectionsKey`), and the accuracy page (☰ → Projection accuracy, `AccuracyKey`): each position's backtest for a season under the active profile, computed when the page opens
+- `:feature:projections` — The Projections list (☰ → Projections: the upcoming week or rest of season by position, K and D/ST included, scored with the active profile), the Player page's "This week" card, the waterfall screen (`ProjectionsKey`), and the accuracy page (☰ → Projection accuracy, `AccuracyKey`): each position's backtest for a season under the active profile, computed when the page opens
 
 ### Data Flow
 
@@ -97,7 +99,7 @@ GRIDIRON_STATS_DB=etl/build/accuracy.db GRIDIRON_ACCURACY_GATE=2025 ./gradlew :c
 
 **No Hilt or Navigation Yet** — Current single-screen setup. Hilt and Navigation 3 will arrive with the second feature.
 
-### Database Schema (Version 7)
+### Database Schema (Version 8)
 
 Long/narrow design: adding a metric is an `INSERT`, not a migration.
 
@@ -105,14 +107,14 @@ Long/narrow design: adding a metric is an `INSERT`, not a migration.
 |---|---|
 | `player_week_stat` | Facts: `(player_id, season, week, team, metric_id, value)`, indexed as covering index on `(metric_id, season, week, value)` |
 | `metric` | Metric registry: name, definition, formula, tier, predictive use, stability, internal flag, plus `dist_family` (distribution for on-device Monte Carlo/percentile reconstruction) and `zero_inflated` |
-| `player` | Players with at least one stat in the built seasons |
+| `player` | Players with at least one stat in the built seasons, plus a `DST_<TEAM>` pseudo-player per team |
 | `player_xref` | ESPN athlete id → `player_id` for every player nflverse lists, stats or not; links ESPN news and injuries |
 | `schema_meta` | Schema version, seasons, attribution |
 | `game` | nflverse schedule for the built seasons: opponents, results, spread and total, starting QBs, head coaches; the forecast's matchups and game script |
 | `player_week_projection` | Per (player, week, metric, stage) projected mean/variance, written by `:core:forecast` — `stage` is `baseline` (post volume-cascade) or `final` (fully adjusted) |
 | `player_week_projection_factor` | Per (player, week, factor) log-space attribution multiplier for one projection adjustment stage |
 | `player_ros_projection` | Rest-of-season aggregate: summed weekly mean/variance per (player, metric), no per-week detail |
-| `team_week_defense` | Per (team, season, week) points/yards allowed, sacks, INTs, fumbles recovered, defensive TDs |
+| `team_week_defense` | Per (team, season, week) points/yards allowed, sacks, INTs, fumbles recovered, defensive TDs, safeties, kickoff-return TDs |
 | `injury_report` | Per (player, season, week) nflverse injury report status/injury/practice |
 
 **`live.db`** (separate file, `PRAGMA user_version` 1): `news_item`, `news_player` (ESPN id, name, nullable `player_id`), `injury_status` (current snapshot), `injury_note` (appended when a comment changes), `prop_event` and `prop_line` (the upcoming week's player props by game, book, market, player and line; pruned 12 hours after kickoff), `live_meta` (fetch times, Odds API credits left, the last props error). Rows older than 30 days are pruned; an unreadable file is recreated.
@@ -129,7 +131,7 @@ Long/narrow design: adding a metric is an `INSERT`, not a migration.
 
 To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI builds a fresh database first).
 
-**Accuracy gate** — CI's parity job builds 2024–2025 and runs `AccuracyGateTest`. The gate fails if the model's 2025 MAE under PPR isn't below the season-to-date average's at QB, RB, WR and TE, and the job prints the table. It's never skipped: if it fails, tune the forecast's constants.
+**Accuracy gate** — CI's parity job builds 2024–2025 and runs `AccuracyGateTest`. The gate fails if the model's 2025 MAE under PPR isn't below the season-to-date average's at QB, RB, WR, TE, K and D/ST, and the job prints the table. It's never skipped: if it fails, tune the forecast's constants.
 
 ## Performance Notes
 
@@ -140,19 +142,20 @@ To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI 
 
 ## Known Gaps & Next Steps
 
-- Only 39 of ~450 catalogued metrics are implemented (play-by-play and snap count; Next Gen Stats, FTN charting, injuries/schedules are wired but not yet transformed)
+- Only 51 of ~450 catalogued metrics are implemented (play-by-play and snap count; Next Gen Stats, FTN charting, injuries/schedules are wired but not yet transformed)
 - Pre-aggregated season rollups are specified but not built (next performance target for the common full-season view)
 - Hilt dependency injection and Navigation 3 architecture arrive with the second feature
 - Saved Grid presets not yet implemented. Rosters are stored in the `:core:datastore` prefs JSON (`UserPrefs.rosters`), not a `user.db`: ☰ → Rosters manages them, the Player page toggles membership, and the Grid's roster chip narrows to one (`GridRequest.onlyPlayers`) and stars rostered players
 - APK signing uses a committed keystore (`app/gridiron.keystore`, intentional for a never-published personal app)
-- **Grid entry points**: tapping a Grid row opens the Player page (ESPN status, injury notes, tagged news, and a "This week" projection card that opens the waterfall); the ☰ menu opens Projections (the upcoming week or rest of season by position, scored with the active profile), Projection accuracy, News, Injury report (ESPN's live list with nflverse practice for the current season; the official list for past seasons), Team defense, Settings and Refresh stats.
+- **Grid entry points**: tapping a Grid row opens the Player page (ESPN status, injury notes, tagged news, and a "This week" projection card that opens the waterfall); the ☰ menu opens Projections (the upcoming week or rest of season by position, K and D/ST included, scored with the active profile), Projection accuracy, News, Injury report (ESPN's live list with nflverse practice for the current season; the official list for past seasons), Team defense, Settings and Refresh stats.
 - **ESPN's endpoints are unofficial and keyless**; a shape change shows as "Not updated: ESPN changed its … format" with the last data kept. Parsing lives in `core/data/.../live/Espn.kt`, tested against recorded responses in `core/data/src/test/resources/espn/`.
 - **Refresh runs in an application-scope coroutine, not WorkManager**: if Android kills the process mid-build, the old database stays and the next refresh starts over.
-- **Projection model sub-project 4 (K/DST) is not built yet.** See `docs/superpowers/specs/2026-09-26-projection-model-design.md`.
 - **Props can't be backtested**, because there are no historical props. The blend's weight (`MARKET_VARIANCE_RATIO`) and the one-sided anytime-TD margin (`ONE_SIDED_OVERROUND`) are judgments, not fits, and the accuracy page and CI gate measure the model alone.
 - **The accuracy page recomputes on every open** and after a refresh (off the main thread; its phone time isn't measured yet); nothing is cached between visits.
 - **Not modeled:** weather (wind is only known after kickoff) and shifting an injured player's share to teammates; an Out/IR player just shows Out, and a player returning from injury isn't projected until he plays again.
-- **K/DST fantasy scoring is out of scope** for `:core:projections`'s `score()` — `ScoringRule` structurally covers QB/RB/WR/TE only
+- **K and D/ST constants are judgments** (`ForecastConstants`), tuned only as far as the gate needs.
+- **ESPN's default D/ST also scores yards allowed and blocked kicks**, which aren't modeled: `team_week_defense` has yards allowed, so a yards-allowed tier editor would be the next step.
+- **Compare and the Player page's season stats show offense columns for a kicker or D/ST.**
 
 ## Codebase Notes
 
