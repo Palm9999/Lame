@@ -48,11 +48,12 @@
 - [x] **Session A built** (Tasks 1–4; see "K and D/ST: execution progress").
 - [x] **Session B built** (Tasks 5–8; see "K and D/ST: execution progress").
 - [x] **Session C built** (Tasks 9–11; see "K and D/ST: execution progress"). The gate passes at all six positions without tuning.
-- [ ] **Final whole-branch review** (Opus), then its fix pass.
+- [x] **Final whole-branch review** (Opus, 2026-09-28): "Ready to merge: Yes". 0 Critical, 0 Important, 8 Minor. One Minor was re-graded to Important and fixed (see below).
+- [ ] **PR #10 merged** (the user's call).
 
-## Next step: sub-project 4 (K/DST) final whole-branch review
+## Next step: merge PR #10, then decide on the deferred minors
 
-**Start here.** All 11 tasks are built. Run the final whole-branch review on the most capable model (`executing-plans`' Final Review: the review package from b27f14d to HEAD, the plan's Review Focus, and the rulings under "K and D/ST: execution progress"). Fix its Critical and Important findings test-first in one pass, then open the PR for sub-project 4. The ledger (`.superpowers/sdd/2026-09-27-projection-kdst/progress.md`) survives only while this container does.
+**Start here.** Sub-project 4 is built and reviewed, and CI is green on https://github.com/Palm9999/Lame/pull/10. The user merges it (or asks for changes). Then the user decides which of the review's deferred minors below to fix. There's no fifth sub-project in the design.
 
 1. **PR #7 (sub-project 3, props) is merged** (753e1f1). **PR #9 (deferred minors, plus rosters) is merged** (e188dc2).
 2. **Sub-project 4 plan, revised** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`, on draft PR #10. It has 11 tasks, with full code and tests written first.
@@ -119,6 +120,17 @@
   - Note: a D/ST-only floor change (letting the widened floor go below zero) was tried first and reverted: it moved the fit from 1.09 to 1.08.
   - Ruling: CLAUDE.md gains `:feature:scoring` and `:core:datastore` lines, which weren't listed. The metric count is now 51.
   - Worth knowing: D/ST counts 204 of the 537 D/ST-weeks projected in 2025. The backtest's 5-point bar and its skip of each team's first game account for the rest. Not investigated further.
+
+**Final review (Opus, 2026-09-28).** "Ready to merge: Yes". 0 Critical, 0 Important, 8 Minor.
+- Fixed: Minor 5, re-graded to Important. A D/ST's "TD dependence" on the waterfall could read over 100% or below zero, because its tiers can pull its total near or under zero. `tdDependence` is now a share from 0 to 1, and 0 when the total isn't positive. Test: `td dependence stays a share when a team defense's total is small or below zero`, seen failing first. The whole suite passed afterwards: 773 tests.
+- **Deferred minors** (the user decides):
+  - D/ST shows as "DST" on the Grid row detail, the Projections list row and the Player page header. The chip, the tab and the accuracy page say "D/ST".
+  - A kicker's game with no field goal or extra point try has no kicker week (5 team-games in 2024, 9 in 2025). His games count is one short, and the backtest skips those 0-point games. A fix needs the Python twin too.
+  - The D/ST accuracy row counts 204 of 537 projected weeks, because the offense's 5-point bar applies to it. Over every D/ST week the model still wins: 4.36 against the season average's 4.84.
+  - The waterfall's D/ST matchup note leaves out the opponent's scoring, which the matchup factor also uses.
+  - A safety is always credited to the defense on the play. That's wrong for a defense tackled in its own end zone on a return. This is rare, and Python has the same rule.
+  - `GridViewModel.kt:435` has a stale duplicated comment.
+  - In the tier editor, "One tier must start at 0" can overwrite a row's more specific "Whole points, 0–99" error.
 
 ## Deferred minors fixed (2026-09-27)
 

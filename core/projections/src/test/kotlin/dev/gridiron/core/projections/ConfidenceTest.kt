@@ -16,6 +16,14 @@ class ConfidenceTest {
     }
 
     @Test
+    fun `td dependence stays a share when a team defense's total is small or below zero`() {
+        // A D/ST's tiers can pull its total near or below zero: 1.2 TD points of 0.5, or of -2.
+        assertEquals(1.0, tdDependence(tdComponentPoints = 1.2, totalPoints = 0.5), 1e-9)
+        assertEquals(0.0, tdDependence(tdComponentPoints = 1.2, totalPoints = -2.0), 1e-9)
+        assertEquals(0.0, tdDependence(tdComponentPoints = -0.5, totalPoints = 4.0), 1e-9)
+    }
+
+    @Test
     fun `confidence is low for a small shrinkage weight`() {
         assertEquals(ConfidenceLevel.LOW, confidenceFrom(shrinkageWeight = 0.05))
     }
