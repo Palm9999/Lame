@@ -4,7 +4,8 @@ from gridiron_etl import transform
 
 
 def kick(**kw) -> dict:
-    base = dict(season=2025, week=1, season_type="REG", posteam="AAA", kicker_player_id="K1",
+    base = dict(season=2025, week=1, season_type="REG", play_type="field_goal", posteam="AAA", defteam="BBB",
+                kicker_player_id="K1",
                 field_goal_attempt=0, field_goal_result=None, kick_distance=None,
                 extra_point_attempt=0, extra_point_result=None)
     base.update(kw)
@@ -50,3 +51,24 @@ def test_preseason_and_kicks_without_a_kicker_do_not_count():
 def test_each_kickers_week_is_keyed_by_his_team():
     out = rows([fg(30, "made"), fg(30, "made", posteam="BBB", kicker_player_id="K2")])
     assert {k: r["team"] for k, r in out.items()} == {"K1": "AAA", "K2": "BBB"}
+
+
+def test_a_kicker_who_only_kicked_off_still_played_a_week_of_zeros_for_the_kicking_team():
+    # nflverse lists the receiving team as posteam on a kickoff; defteam kicks.
+    def kickoff(kicker, week, kicking, season_type="REG"):
+        return kick(play_type="kickoff", week=week, season_type=season_type,
+                    posteam="BBB" if kicking == "AAA" else "AAA", defteam=kicking, kicker_player_id=kicker)
+
+    out = transform.kicking_from(pl.LazyFrame([
+        fg(30, "made"), kickoff("K1", 1, "AAA"),
+        kickoff("K1", 2, "AAA"),
+        # A punter kicking off never tried a field goal or extra point: no week.
+        kickoff("P1", 2, "BBB"),
+        kickoff("K1", 3, "AAA", season_type="PRE"),
+    ])).sort("week").to_dicts()
+    assert [(r["week"], r["fg_att"]) for r in out] == [(1, 1), (2, 0)]
+    zero = out[1]
+    assert (zero["player_id"], zero["team"], zero["g"]) == ("K1", "AAA", 1)
+    assert all(zero[c] == 0 for c in ["fg_att", "fg_made", "fg_missed", "xp_att", "xp_made", "xp_missed",
+                                      "fg_att_0_39", "fg_att_40_49", "fg_att_50",
+                                      "fg_made_0_39", "fg_made_40_49", "fg_made_50"])

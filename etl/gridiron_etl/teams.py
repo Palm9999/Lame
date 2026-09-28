@@ -13,7 +13,8 @@ import polars as pl
 
 _DEF_COLUMNS = ["season", "week", "season_type", "game_id", "posteam", "defteam", "play_type", "safety",
                 "yards_gained", "sack", "interception", "fumble_lost", "touchdown",
-                "td_team", "home_team", "away_team", "total_home_score", "total_away_score"]
+                "td_team", "home_team", "away_team", "total_home_score", "total_away_score",
+                "posteam_score", "posteam_score_post"]
 
 
 def team_defense(pbp_path: Path) -> pl.DataFrame:
@@ -26,6 +27,8 @@ def team_defense(pbp_path: Path) -> pl.DataFrame:
 def team_defense_from(lf: pl.LazyFrame) -> pl.DataFrame:
     lf = lf.filter(pl.col("season_type").is_in(["REG", "POST"]))
     num = lambda c: pl.col(c).cast(pl.Float64, strict=False).fill_null(0)  # noqa: E731
+    names = lf.collect_schema().names()
+    lf = lf.with_columns(pl.lit(None, pl.Float64).alias(c) for c in ("posteam_score", "posteam_score_post") if c not in names)
 
     plays = (
         lf.filter(pl.col("defteam").is_not_null())
@@ -36,9 +39,20 @@ def team_defense_from(lf: pl.LazyFrame) -> pl.DataFrame:
             interceptions=num("interception").sum(),
             fumbles_recovered=num("fumble_lost").sum(),
             defensive_tds=(num("touchdown") * (pl.col("td_team") == pl.col("defteam")).fill_null(False)).sum(),
-            safeties=num("safety").sum(),
         )
         .rename({"defteam": "team"})
+    )
+
+    # A safety is the defense's on the play, unless posteam's score went up by 2
+    # (a punt returner tackled in his own end zone scores for the punting team).
+    posteam_scored = (pl.col("posteam_score_post").cast(pl.Float64, strict=False)
+                      - pl.col("posteam_score").cast(pl.Float64, strict=False)) == 2
+    safeties = (
+        lf.filter(num("safety") > 0)
+        .with_columns(team=pl.when(posteam_scored.fill_null(False)).then(pl.col("posteam")).otherwise(pl.col("defteam")))
+        .filter(pl.col("team").is_not_null())
+        .group_by(["team", "season", "week"])
+        .agg(safeties=num("safety").sum())
     )
 
     # nflverse lists the receiving team as posteam on a kickoff, so a return TD
@@ -62,6 +76,7 @@ def team_defense_from(lf: pl.LazyFrame) -> pl.DataFrame:
 
     return (
         points.join(plays, on=["team", "season", "week"], how="left")
+        .join(safeties, on=["team", "season", "week"], how="left")
         .join(returns, on=["team", "season", "week"], how="left")
         .with_columns(pl.col("season", "week").cast(pl.Int64))
         .fill_null(0)

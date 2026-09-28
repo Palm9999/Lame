@@ -238,7 +238,7 @@ The final whole-branch review found layer 2's first design wrong on real data. T
 - **Defaults and migration.** Presets score FG 3/4/5 by distance, FG missed −1, XP made 1, XP missed −1; sack 1, interception 2, fumble recovery 2, TD 6, safety 2; and ESPN's tiers. Profiles saved before this change were migrated once (prefs `formatVersion` 2) to those values. After that, a rule a profile doesn't list scores 0, as before.
 - **D/ST TDs** are the defense's (including punt and blocked-kick returns) plus kickoff returns; `team_week_defense` gains `safeties` and `kick_return_tds`.
 - **The Grid** has K and D/ST chips with their own packs (Kicking, Defense). All and the offense's chips leave kickers and D/STs out. This replaces §6's "The Grid is unchanged."
-- **Accuracy.** The accuracy page measures K and D/ST, and **CI's gate holds them to the same bar as QB–TE** (this replaces §4's QB–TE-only gate). `RANGE_WIDENING` gains DST 1.09, fitted like the others on pooled 2024–2025; K has no factor, because its simulation alone holds 87% of games. No constant needed tuning: in 2025 under PPR, K's MAE is 3.83 against the season-to-date average's 4.09, and D/ST's 4.55 against 4.97.
+- **Accuracy.** The accuracy page measures K and D/ST, and **CI's gate holds them to the same bar as QB–TE** (this replaces §4's QB–TE-only gate). `RANGE_WIDENING` gains DST 1.22, fitted like the others on pooled 2024–2025; K has no factor, because its simulation alone holds 87% of games. Every team starts a kicker and a D/ST, so the backtest counts every projected week of theirs, without the offense's 5-point bar. No constant needed tuning: in 2025 under PPR, K's MAE is 3.88 against the season-to-date average's 4.15, and D/ST's 4.36 against 4.84.
 
 ## Testing
 

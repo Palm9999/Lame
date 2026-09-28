@@ -67,4 +67,27 @@ class KickingTest {
         )
         assertEquals(mapOf("K1" to "AAA", "K2" to "BBB"), rows.associate { it.playerId to it.team })
     }
+
+    @Test
+    fun `a kicker who only kicked off still played, a week of zeros for the kicking team`() {
+        // nflverse lists the receiving team as posteam on a kickoff; defteam kicks.
+        fun kickoff(kicker: String, week: Int, kicking: String, seasonType: String = "REG") = play(
+            playType = "kickoff", week = week, seasonType = seasonType,
+            posteam = if (kicking == "AAA") "BBB" else "AAA", defteam = kicking, kicker = kicker,
+        )
+        val rows = kicks(
+            listOf(
+                fieldGoal("K1", 30.0, "made"), kickoff("K1", 1, "AAA"),
+                kickoff("K1", 2, "AAA"),
+                // A punter kicking off never tried a field goal or extra point: no week.
+                kickoff("P1", 2, "BBB"),
+                kickoff("K1", 3, "AAA", seasonType = "PRE"),
+            ),
+        )
+        assertEquals(listOf(1 to 1.0, 2 to 0.0), rows.map { it.week to it.values["fg_att"] })
+        val zero = rows.single { it.week == 2 }
+        assertEquals("K1" to "AAA", zero.playerId to zero.team)
+        assertEquals(1.0, zero.values["g"])
+        assertEquals(KICKING_METRICS.map { 0.0 }, KICKING_METRICS.map { zero.values[it] })
+    }
 }

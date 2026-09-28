@@ -128,4 +128,28 @@ class BacktestTest {
         assertEquals(3.0, results[0].model.mae, 1e-9) // projected 6, scored 9
         assertEquals(2.0, results[1].model.mae, 1e-9) // projected 6, scored 8
     }
+
+    @Test
+    fun `every team starts a kicker and a D-ST, so their weeks count under the minimum too`() {
+        val played = listOf(
+            PlayedWeek("k", 2025, 1, mapOf(Component("g") to 1.0, Component("xp_made") to 2.0)),
+            PlayedWeek("k", 2025, 2, mapOf(Component("g") to 1.0, Component("xp_made") to 1.0)),
+            PlayedWeek("d", 2025, 1, mapOf(Component("g") to 1.0, Component("points_allowed") to 30.0)), // -1
+            PlayedWeek("d", 2025, 2, mapOf(Component("g") to 1.0, Component("points_allowed") to 40.0)), // -5
+        )
+        val projected = listOf(
+            ProjectedWeek("k", "K", 2, listOf(ProjectionComponent("xp_made", 2.0, 0.0))), // 2
+            ProjectedWeek(
+                "d", "DST", 2,
+                // 25 allowed: the 22-27 tier's -1.
+                listOf(ProjectionComponent("points_allowed", 25.0, 0.0, "normal"), ProjectionComponent("g", 1.0, 0.0)),
+            ),
+        )
+
+        val results = backtest(2025, projected, played, ScoringPresets.PPR)
+
+        assertEquals(listOf("K" to 1, "DST" to 1), results.map { it.position to it.playerWeeks })
+        assertEquals(1.0, results[0].model.mae, 1e-9) // projected 2, scored 1
+        assertEquals(4.0, results[1].model.mae, 1e-9) // projected -1, scored -5
+    }
 }

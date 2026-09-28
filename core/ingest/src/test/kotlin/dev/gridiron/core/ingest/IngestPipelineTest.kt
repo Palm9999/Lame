@@ -134,7 +134,7 @@ class IngestPipelineTest {
         assertEquals(emptyList<Int>(), report.reused)
         val meta = readMeta(out)!!
         assertEquals("8", meta["schema_version"])
-        assertEquals("3", meta["ingest_version"])
+        assertEquals("4", meta["ingest_version"])
         assertEquals("2024,2025", meta["seasons"])
         assertEquals("1", meta["expected_through_week:2025"])
         assertNotNull(meta[Sources.metaKey(Input.PBP, 2025)])

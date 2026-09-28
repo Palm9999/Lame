@@ -51,13 +51,21 @@ internal class TeamDefenseAggregator {
         if (p.playType == "kickoff" && receiving != null && p.tdTeam == receiving) {
             allowed.getOrPut(Triple(receiving, p.season, p.week)) { Allowed() }.kickReturnTds += p.touchdown ?: 0.0
         }
+        // A safety is the defense's on the play, unless posteam's score went up by 2
+        // (a punt returner tackled in his own end zone scores for the punting team).
+        val safety = p.safety ?: 0.0
+        if (safety > 0.0) {
+            val posteamScored = p.posteamScore != null && p.posteamScorePost != null && p.posteamScorePost - p.posteamScore == 2.0
+            (if (posteamScored) p.posteam else p.defteam)?.let { scorer ->
+                allowed.getOrPut(Triple(scorer, p.season, p.week)) { Allowed() }.safeties += safety
+            }
+        }
         val defense = p.defteam ?: return
         val a = allowed.getOrPut(Triple(defense, p.season, p.week)) { Allowed() }
         if (p.playType == "pass" || p.playType == "run") a.yards += p.yardsGained ?: 0.0
         a.sacks += p.sack ?: 0.0
         a.interceptions += p.interception ?: 0.0
         a.fumbles += p.fumbleLost ?: 0.0
-        a.safeties += p.safety ?: 0.0
         if (p.tdTeam != null && p.tdTeam == defense) a.tds += p.touchdown ?: 0.0
     }
 

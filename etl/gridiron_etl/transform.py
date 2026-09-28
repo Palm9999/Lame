@@ -473,7 +473,7 @@ def expected_components(ep: pl.DataFrame) -> pl.DataFrame:
     )
 
 
-_KICK_COLUMNS = ["season", "week", "season_type", "posteam", "kicker_player_id",
+_KICK_COLUMNS = ["season", "week", "season_type", "play_type", "posteam", "defteam", "kicker_player_id",
                  "field_goal_attempt", "field_goal_result", "kick_distance",
                  "extra_point_attempt", "extra_point_result"]
 
@@ -492,7 +492,9 @@ def kicking_from(lf: pl.LazyFrame) -> pl.DataFrame:
 
     Blocked or missed field goals are misses; an extra point that isn't good
     (failed, blocked, aborted) is a miss. A field goal with no distance counts
-    as short. Every row has g = 1. Reproduced by core/ingest's KickingAggregator.
+    as short. Every row has g = 1. A kicker who only kicked off in a game (he
+    has a try in some other week of the season) gets a week of zeros for the
+    kicking team: he played. Reproduced by core/ingest's KickingAggregator.
     """
     num = lambda c: pl.col(c).cast(pl.Float64, strict=False).fill_null(0)  # noqa: E731
     fg = num("field_goal_attempt") == 1
@@ -502,13 +504,9 @@ def kicking_from(lf: pl.LazyFrame) -> pl.DataFrame:
     good = (pl.col("extra_point_result") == "good").fill_null(False)
     bucket = {"0_39": dist < 40, "40_49": (dist >= 40) & (dist < 50), "50": dist >= 50}
     count = lambda cond: cond.sum().cast(pl.Float64)  # noqa: E731
-    return (
-        lf.filter(
-            pl.col("season_type").is_in(["REG", "POST"])
-            & pl.col("posteam").is_not_null()
-            & pl.col("kicker_player_id").is_not_null()
-            & (fg | xp)
-        )
+    lf = lf.filter(pl.col("season_type").is_in(["REG", "POST"]) & pl.col("kicker_player_id").is_not_null())
+    kicks = (
+        lf.filter(pl.col("posteam").is_not_null() & (fg | xp))
         .group_by(["season", "week", "posteam", "kicker_player_id"])
         .agg(
             fg_att=count(fg),
@@ -527,3 +525,18 @@ def kicking_from(lf: pl.LazyFrame) -> pl.DataFrame:
         )
         .collect()
     )
+    # nflverse lists the receiving team as posteam on a kickoff; defteam kicks.
+    kickers = kicks.select("season", "player_id").unique()
+    kickoffs = (
+        lf.filter((pl.col("play_type") == "kickoff") & pl.col("defteam").is_not_null())
+        .select(pl.col("season", "week").cast(pl.Int64), team="defteam", player_id="kicker_player_id")
+        .unique()
+        .collect()
+        .join(kickers, on=["season", "player_id"], how="semi")
+        .join(kicks, on=["season", "week", "team", "player_id"], how="anti")
+    )
+    zeros = kickoffs.with_columns(
+        *[pl.lit(0.0).alias(c) for c in kicks.columns if c not in ("season", "week", "team", "player_id", "g")],
+        g=pl.lit(1.0),
+    )
+    return pl.concat([kicks, zeros.select(kicks.columns)])

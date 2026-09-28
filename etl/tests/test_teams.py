@@ -28,13 +28,23 @@ def test_team_defense_counts_what_each_defense_allowed_and_took_away():
     assert out["BUF"]["fumbles_recovered"] == 1
 
 
-def test_a_safety_goes_to_the_defense_and_a_kickoff_return_td_to_the_receiving_team():
+def test_a_safety_goes_to_the_team_that_scored_it_and_a_kickoff_return_td_to_the_receiving_team():
     base = {"season": 2025, "week": 1, "season_type": "REG", "game_id": "g1",
             "home_team": "KC", "away_team": "BUF", "yards_gained": 0, "sack": 0,
             "interception": 0, "fumble_lost": 0}
     plays = pl.LazyFrame([
+        # With no scores on the play, the defense on it scored the safety.
         {**base, "posteam": "BUF", "defteam": "KC", "play_type": "run", "safety": 1, "touchdown": 0,
-         "td_team": None, "total_home_score": 2, "total_away_score": 0},
+         "td_team": None, "total_home_score": 2, "total_away_score": 0,
+         "posteam_score": None, "posteam_score_post": None},
+        # A punt returner tackled in his own end zone: the punting team (posteam) scores it.
+        {**base, "posteam": "KC", "defteam": "BUF", "play_type": "punt", "safety": 1, "touchdown": 0,
+         "td_team": None, "total_home_score": 4, "total_away_score": 0,
+         "posteam_score": 2, "posteam_score_post": 4},
+        # An offense tackled in its own end zone, with scores: the defense scores it.
+        {**base, "posteam": "BUF", "defteam": "KC", "play_type": "pass", "safety": 1, "touchdown": 0,
+         "td_team": None, "total_home_score": 6, "total_away_score": 0,
+         "posteam_score": 0, "posteam_score_post": 0},
         {**base, "posteam": "BUF", "defteam": "KC", "play_type": "kickoff", "safety": 0, "touchdown": 1,
          "td_team": "BUF", "total_home_score": 2, "total_away_score": 6},
         {**base, "posteam": "KC", "defteam": "BUF", "play_type": "punt", "safety": 0, "touchdown": 1,
@@ -42,7 +52,8 @@ def test_a_safety_goes_to_the_defense_and_a_kickoff_return_td_to_the_receiving_t
     ])
     out = {r["team"]: r for r in teams.team_defense_from(plays).to_dicts()}
 
-    assert out["KC"]["safeties"] == 1
+    assert out["KC"]["safeties"] == 3
+    assert out["BUF"]["safeties"] == 0
     assert out["KC"]["kick_return_tds"] == 0
     assert out["BUF"]["kick_return_tds"] == 1
     assert out["BUF"]["defensive_tds"] == 1

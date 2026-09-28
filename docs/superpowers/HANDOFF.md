@@ -49,11 +49,12 @@
 - [x] **Session B built** (Tasks 5–8; see "K and D/ST: execution progress").
 - [x] **Session C built** (Tasks 9–11; see "K and D/ST: execution progress"). The gate passes at all six positions without tuning.
 - [x] **Final whole-branch review** (Opus, 2026-09-28): "Ready to merge: Yes". 0 Critical, 0 Important, 8 Minor. One Minor was re-graded to Important and fixed (see below).
-- [ ] **PR #10 merged** (the user's call).
+- [x] **The review's 7 deferred minors fixed** (2026-09-28, the user's call: "fix the minors then merge"). See "K and D/ST minors fixed" below.
+- [ ] **PR #10 merged** (the user asked for it once CI is green).
 
-## Next step: merge PR #10, then decide on the deferred minors
+## Next step: nothing planned
 
-**Start here.** Sub-project 4 is built and reviewed, and CI is green on https://github.com/Palm9999/Lame/pull/10. The user merges it (or asks for changes). Then the user decides which of the review's deferred minors below to fix. There's no fifth sub-project in the design.
+**Start here.** All four sub-projects are built, reviewed and (once PR #10 merges) merged. There's no fifth sub-project in the design. The user picks what's next. The non-blocking phone checks in items 5 and 6 below still stand.
 
 1. **PR #7 (sub-project 3, props) is merged** (753e1f1). **PR #9 (deferred minors, plus rosters) is merged** (e188dc2).
 2. **Sub-project 4 plan, revised** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`, on draft PR #10. It has 11 tasks, with full code and tests written first.
@@ -123,7 +124,7 @@
 
 **Final review (Opus, 2026-09-28).** "Ready to merge: Yes". 0 Critical, 0 Important, 8 Minor.
 - Fixed: Minor 5, re-graded to Important. A D/ST's "TD dependence" on the waterfall could read over 100% or below zero, because its tiers can pull its total near or under zero. `tdDependence` is now a share from 0 to 1, and 0 when the total isn't positive. Test: `td dependence stays a share when a team defense's total is small or below zero`, seen failing first. The whole suite passed afterwards: 773 tests.
-- **Deferred minors** (the user decides):
+- **Deferred minors** (all fixed 2026-09-28; see "K and D/ST minors fixed"):
   - D/ST shows as "DST" on the Grid row detail, the Projections list row and the Player page header. The chip, the tab and the accuracy page say "D/ST".
   - A kicker's game with no field goal or extra point try has no kicker week (5 team-games in 2024, 9 in 2025). His games count is one short, and the backtest skips those 0-point games. A fix needs the Python twin too.
   - The D/ST accuracy row counts 204 of 537 projected weeks, because the offense's 5-point bar applies to it. Over every D/ST week the model still wins: 4.36 against the season average's 4.84.
@@ -131,6 +132,36 @@
   - A safety is always credited to the defense on the play. That's wrong for a defense tackled in its own end zone on a return. This is rare, and Python has the same rule.
   - `GridViewModel.kt:435` has a stale duplicated comment.
   - In the tier editor, "One tier must start at 0" can overwrite a row's more specific "Whole points, 0–99" error.
+
+## K and D/ST minors fixed (2026-09-28)
+
+Each fix is test-first, and every new test was seen failing against the old code. Afterwards:
+- `GRIDIRON_STATS_DB=etl/build/stats.db ./gradlew test` fails only `:core:statquery`'s timing test (container speed, as before); it passes with `CI=1`.
+- `:app:assembleRelease lint` → BUILD SUCCESSFUL.
+- 2025 parity is OK on all 5 tables (`player_week_stat` 280,914 rows).
+- Both databases were rebuilt: `INGEST_VERSION` is 4.
+
+- [x] **D/ST label** (dd37065). `Position.label` shows "D/ST" on the Grid row, the Projections list row and the Player page header. The accuracy page now uses it too.
+- [x] **The D/ST matchup note** (dd37065) gives the opponent's shrunk scoring: "vs KC: scores 24.1 pts, gives up 2.9 sacks, 1.6 turnovers a game".
+  - Ruling: no `FORECAST_VERSION` bump. Factors are only stored for the upcoming week, whose season is always re-forecast. Cost if wrong: none.
+- [x] **Tier editor** (dd37065). The first row's own error ("Whole points, 0–99") is no longer replaced by "One tier must start at 0".
+- [x] **GridViewModel's duplicated comment** removed (dd37065).
+- [x] **Kicker weeks with no try** (this commit, Kotlin and Python). A kickoff by a player who has a field goal or extra point try that season gives him a zero week for the kicking team. That's 4 weeks in 2024 and 8 in 2025.
+  - The two Jets games where the punter kicked off get no kicker week (the punter has no try).
+- [x] **Safeties** (this commit, Kotlin and Python). A safety goes to posteam when posteam's score rose by 2 on the play (a punt returner tackled in his own end zone). Otherwise it goes to the defense.
+  - All 29 safeties in 2024–2025 went to the defense, so no current data changes. The reader now needs `posteam_score` and `posteam_score_post`.
+- [x] **The D/ST accuracy row** (this commit). Every team starts a kicker and a D/ST, so `ACCURACY_EVERY_WEEK` counts all their projected weeks, without the 5-point bar. The accuracy page's footnote says so.
+  - Refit `RANGE_WIDENING` for D/ST over those weeks: 1.09 → 1.22, which holds 80.0% pooled (81% in 2024, 79% in 2025). K still has no factor.
+  - **Gate (2025, PPR), all six pass:**
+    ```
+    pos       n           model      season avg          last 4   held
+    QB      498    6.42 (-0.19)    7.14 (-0.57)    7.07 (-0.56)    78%
+    RB      804    5.87 (-1.35)    6.01 (-0.31)    6.18 (+0.03)    78%
+    WR     1203    5.40 (-1.02)    5.79 (+0.28)    5.81 (+0.40)    81%
+    TE      455    4.87 (-1.62)    5.19 (-0.15)    5.42 (+0.30)    83%
+    K       501    3.88 (+0.02)    4.15 (+0.15)    4.23 (+0.04)    87%
+    DST     505    4.36 (-0.05)    4.84 (-0.12)    5.00 (-0.20)    79%
+    ```
 
 ## Deferred minors fixed (2026-09-27)
 

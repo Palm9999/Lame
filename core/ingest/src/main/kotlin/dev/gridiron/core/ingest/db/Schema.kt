@@ -11,7 +11,7 @@ public const val SCHEMA_VERSION: Int = 8
  * Bump whenever a transform, the schema or an input's meaning changes: a build
  * only copies a season out of a previous database built with the same version.
  */
-public const val INGEST_VERSION: Int = 3
+public const val INGEST_VERSION: Int = 4
 
 internal const val SOURCE_NOTE: String = "nflverse-data (CC BY 4.0); ffopportunity expected points (GPL >= 3)"
 

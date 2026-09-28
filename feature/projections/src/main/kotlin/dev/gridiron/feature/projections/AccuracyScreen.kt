@@ -109,7 +109,8 @@ private fun Measured(state: AccuracyState.Loaded, onSeason: (Int) -> Unit) {
         }
         item {
             Text(
-                "Counts weeks where the model projected at least ${ACCURACY_MIN_POINTS.toInt()} points and the player played, " +
+                "Counts weeks where the model projected at least ${ACCURACY_MIN_POINTS.toInt()} points (any projection for a kicker or D/ST) " +
+                    "and the player played, " +
                     "from the player's second game of the season. Bias is projected minus actual. " +
                     "Past weeks are projected without betting props.",
                 Modifier.padding(16.dp),
