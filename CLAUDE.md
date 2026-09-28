@@ -152,7 +152,7 @@ To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI 
 - **Refresh runs in an application-scope coroutine, not WorkManager**: if Android kills the process mid-build, the old database stays and the next refresh starts over.
 - **Props can't be backtested**, because there are no historical props. The blend's weight (`MARKET_VARIANCE_RATIO`) and the one-sided anytime-TD margin (`ONE_SIDED_OVERROUND`) are judgments, not fits, and the accuracy page and CI gate measure the model alone.
 - **The accuracy page recomputes on every open** and after a refresh (off the main thread; its phone time isn't measured yet); nothing is cached between visits.
-- **Not modeled:** weather (wind is only known after kickoff) and shifting an injured player's share to teammates; an Out/IR player just shows Out, and a player returning from injury isn't projected until he plays again.
+- **Not modeled:** weather (out of scope by the user's call) and shifting an injured player's share to teammates; an Out/IR player just shows Out, and a player returning from injury isn't projected until he plays again.
 - **K and D/ST constants are judgments** (`ForecastConstants`), tuned only as far as the gate needs.
 - **ESPN's default D/ST also scores yards allowed and blocked kicks**, which aren't modeled: `team_week_defense` has yards allowed, so a yards-allowed tier editor would be the next step.
 - **Compare and the Player page's season stats show offense columns for a kicker or D/ST.**

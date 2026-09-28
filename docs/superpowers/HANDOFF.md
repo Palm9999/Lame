@@ -50,11 +50,13 @@
 - [x] **Session C built** (Tasks 9–11; see "K and D/ST: execution progress"). The gate passes at all six positions without tuning.
 - [x] **Final whole-branch review** (Opus, 2026-09-28): "Ready to merge: Yes". 0 Critical, 0 Important, 8 Minor. One Minor was re-graded to Important and fixed (see below).
 - [x] **The review's 7 deferred minors fixed** (2026-09-28, the user's call: "fix the minors then merge"). See "K and D/ST minors fixed" below.
-- [ ] **PR #10 merged** (the user asked for it once CI is green).
+- [x] **PR #10 merged** (2026-09-28, merge eceb28d, CI green).
 
 ## Next step: nothing planned
 
-**Start here.** All four sub-projects are built, reviewed and (once PR #10 merges) merged. There's no fifth sub-project in the design. The user picks what's next. The non-blocking phone checks in items 5 and 6 below still stand.
+**Start here.** All four sub-projects are built, reviewed and merged. There's no fifth sub-project in the design. The user picks what's next. The non-blocking phone checks in items 5 and 6 below still stand.
+
+- **Weather is out of scope** (the user, 2026-09-28: "Don't worry about weather"). Don't propose modeling it.
 
 1. **PR #7 (sub-project 3, props) is merged** (753e1f1). **PR #9 (deferred minors, plus rosters) is merged** (e188dc2).
 2. **Sub-project 4 plan, revised** (2026-09-27): `docs/superpowers/plans/2026-09-27-projection-kdst.md`, on draft PR #10. It has 11 tasks, with full code and tests written first.
