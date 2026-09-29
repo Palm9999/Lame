@@ -58,8 +58,8 @@ internal class UnitProjector(
             val stages = stages(state, u, game)
             val id = u.player.playerId
             when (kind) {
-                WeekKind.PAST -> if (points(stages.final, stages.sd) >= K.PAST_WEEK_MIN_POINTS) emit(u, season, week, "final", stages.final, stages.sd)
-                WeekKind.UPCOMING -> if (points(stages.final, stages.sd) >= K.UPCOMING_MIN_POINTS) {
+                WeekKind.PAST -> if (worthKeeping(u, stages, K.PAST_WEEK_MIN_POINTS)) emit(u, season, week, "final", stages.final, stages.sd)
+                WeekKind.UPCOMING -> if (worthKeeping(u, stages, K.UPCOMING_MIN_POINTS)) {
                     emit(u, season, week, "baseline", stages.baseline, stages.sd)
                     emit(u, season, week, "final", stages.final, stages.sd)
                     stages.matchupNote?.let { sink.factor(id, season, week, "matchup", logRatio(stages.afterMatchup, stages.baseline, stages.sd), it) }
@@ -228,7 +228,7 @@ internal class UnitProjector(
     private fun addRest(state: UnitWeek, u: TeamUnit, season: Int, week: Int, ros: MutableMap<Pair<String, String>, DoubleArray>) {
         val game = gameOf[Triple(u.team, season, week)] ?: return // a bye
         val stages = stages(state, u, game)
-        if (points(stages.final, stages.sd) < K.UPCOMING_MIN_POINTS) return
+        if (!worthKeeping(u, stages, K.UPCOMING_MIN_POINTS)) return
         val cv = K.EMPIRICAL_CV.getValue(u.player.position)
         for ((metric, mean) in withGame(stages.final)) {
             if (mean <= 0.0) continue
@@ -264,6 +264,14 @@ internal class UnitProjector(
         referencePoints(components) +
             (components[POINTS_ALLOWED]?.let { ScoringPresets.PPR.expectedPointsAllowedPoints(it, sd) } ?: 0.0) +
             (components[YARDS_ALLOWED]?.let { ScoringPresets.PPR.expectedYardsAllowedPoints(it, K.DST_YA_CV * it) } ?: 0.0)
+
+    /**
+     * Whether a unit's game is stored. Every team starts a D/ST, and its reference points can be negative
+     * under the presets' tiers (a bad matchup's points and yards allowed), so a D/ST is always kept: dropping
+     * its worst weeks would bias the backtest and inflate rest of season. A kicker below [min] isn't worth storing.
+     */
+    private fun worthKeeping(u: TeamUnit, stages: UnitStages, min: Double): Boolean =
+        u is Defense || points(stages.final, stages.sd) >= min
 
     private fun logRatio(after: Map<String, Double>, before: Map<String, Double>, sd: Double): Double {
         val a = points(after, sd)

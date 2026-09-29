@@ -525,6 +525,30 @@ class ForecastEngineTest {
     }
 
     @Test
+    fun `every team's defense is projected however badly the matchup scores under the preset tiers`() {
+        league("bad-defense.db", units = true).use { db ->
+            // Every defense gives up 50 points and 750 yards: the tiers score -5 and -7, more than its takeaways earn.
+            db.exec("UPDATE player_week_stat SET value = 50 WHERE metric_id = 'points_allowed'")
+            db.exec("UPDATE player_week_stat SET value = 750 WHERE metric_id = 'yards_allowed'")
+            run(db)
+            for (team in listOf("AAA", "BBB", "CCC", "DDD")) {
+                assertEquals(
+                    listOf(listOf("baseline"), listOf("final")),
+                    db.query("SELECT DISTINCT stage FROM player_week_projection WHERE player_id = 'DST_$team' AND season = 2025 AND week = 3 AND metric_id = 'yards_allowed' ORDER BY 1"),
+                    team,
+                )
+                assertEquals(
+                    listOf(listOf("final")),
+                    db.query("SELECT DISTINCT stage FROM player_week_projection WHERE player_id = 'DST_$team' AND season = 2025 AND week = 2 AND metric_id = 'yards_allowed'"),
+                    team,
+                )
+            }
+            // Rest of season counts every remaining game: AAA plays weeks 3 and 4.
+            assertEquals(2.0, rosMean(db, "DST_AAA", "g"), 1e-9)
+        }
+    }
+
+    @Test
     fun `a defense with no yards history is projected without yards`() {
         league("no-yards.db", units = true).use { db ->
             db.exec("DELETE FROM player_week_stat WHERE metric_id = 'yards_allowed'")
