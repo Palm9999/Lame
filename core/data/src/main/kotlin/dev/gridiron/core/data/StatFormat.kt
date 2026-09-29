@@ -10,6 +10,14 @@ import dev.gridiron.core.statquery.StatColumn.EPA_PER_DROPBACK
 import dev.gridiron.core.statquery.StatColumn.EXPECTED_FANTASY_POINTS
 import dev.gridiron.core.statquery.StatColumn.FANTASY_POINTS
 import dev.gridiron.core.statquery.StatColumn.FPOE
+import dev.gridiron.core.statquery.StatColumn.FTN_BLITZ_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_CATCHABLE_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_CONTESTED_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_DROP_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_INT_WORTHY_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_OUT_OF_POCKET_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_PLAY_ACTION_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_THROWAWAY_RATE
 import dev.gridiron.core.statquery.StatColumn.NGS_AGGRESSIVENESS
 import dev.gridiron.core.statquery.StatColumn.NGS_CUSHION
 import dev.gridiron.core.statquery.StatColumn.NGS_INTENDED_AIR_YARDS
@@ -63,7 +71,11 @@ public class StatFormat(private val locale: Locale = Locale.getDefault()) {
         public fun isPercent(column: StatColumn): Boolean = column in PERCENT
 
         private val PERCENT: Set<StatColumn> =
-            setOf(TARGET_SHARE, AIR_YARDS_SHARE, CARRY_SHARE, SNAP_SHARE, CATCH_RATE, RUSH_SUCCESS_RATE)
+            setOf(
+                TARGET_SHARE, AIR_YARDS_SHARE, CARRY_SHARE, SNAP_SHARE, CATCH_RATE, RUSH_SUCCESS_RATE,
+                FTN_CATCHABLE_RATE, FTN_DROP_RATE, FTN_CONTESTED_RATE, FTN_PLAY_ACTION_RATE, FTN_BLITZ_RATE,
+                FTN_OUT_OF_POCKET_RATE, FTN_THROWAWAY_RATE, FTN_INT_WORTHY_RATE,
+            )
 
         private val DECIMALS: Map<StatColumn, Int> = mapOf(
             WOPR to 2,

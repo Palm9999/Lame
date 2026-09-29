@@ -27,6 +27,17 @@ import dev.gridiron.core.statquery.StatColumn.FPOE
 import dev.gridiron.core.statquery.StatColumn.GL_CARRIES
 import dev.gridiron.core.statquery.StatColumn.GZ_CARRIES
 import dev.gridiron.core.statquery.StatColumn.INTERCEPTIONS
+import dev.gridiron.core.statquery.StatColumn.DROPBACKS
+import dev.gridiron.core.statquery.StatColumn.FTN_BLITZ_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_CATCHABLE_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_CONTESTED_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_CREATED_REC
+import dev.gridiron.core.statquery.StatColumn.FTN_DROPS
+import dev.gridiron.core.statquery.StatColumn.FTN_DROP_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_INT_WORTHY_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_OUT_OF_POCKET_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_PLAY_ACTION_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_THROWAWAY_RATE
 import dev.gridiron.core.statquery.StatColumn.NGS_AGGRESSIVENESS
 import dev.gridiron.core.statquery.StatColumn.NGS_CUSHION
 import dev.gridiron.core.statquery.StatColumn.NGS_INTENDED_AIR_YARDS
@@ -142,6 +153,18 @@ public enum class StatPack(
         "NGS Receiving",
         listOf(NGS_SEPARATION, NGS_CUSHION, NGS_YAC_OVER_EXPECTED, TARGETS),
         NGS_SEPARATION,
+        TARGETS,
+    ),
+    FTN_PASSING(
+        "FTN Passing",
+        listOf(FTN_PLAY_ACTION_RATE, FTN_BLITZ_RATE, FTN_OUT_OF_POCKET_RATE, FTN_THROWAWAY_RATE, FTN_INT_WORTHY_RATE, DROPBACKS),
+        FTN_PLAY_ACTION_RATE,
+        DROPBACKS,
+    ),
+    FTN_RECEIVING(
+        "FTN Receiving",
+        listOf(FTN_CATCHABLE_RATE, FTN_DROP_RATE, FTN_CONTESTED_RATE, FTN_DROPS, FTN_CREATED_REC, TARGETS),
+        FTN_CATCHABLE_RATE,
         TARGETS,
     ),
     KICKING(

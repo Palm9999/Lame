@@ -21,7 +21,7 @@ python -m pytest tests/ -q
 
 | Source | Provides | License |
 |---|---|---|
-| [nflverse](https://github.com/nflverse/nflverse-data) | Play-by-play, snap counts, weekly rosters, schedules, players, Next Gen Stats — everything the `x_*` prefix isn't. | CC-BY 4.0, per the repository's [`LICENSE.md`](https://raw.githubusercontent.com/nflverse/nflverse-data/master/LICENSE.md) |
+| [nflverse](https://github.com/nflverse/nflverse-data) | Play-by-play, snap counts, weekly rosters, schedules, players, Next Gen Stats, FTN charting (CC BY-SA 4.0, credit "FTN Data via nflverse") — everything the `x_*` prefix isn't. | CC-BY 4.0, per the repository's [`LICENSE.md`](https://raw.githubusercontent.com/nflverse/nflverse-data/master/LICENSE.md) |
 | [ffopportunity](https://github.com/ffverse/ffopportunity) | Weekly expected-points components (`x_*` metrics): what an average player would have produced from the same plays. Fetched from `https://github.com/ffverse/ffopportunity/releases/download/latest-data/ep_weekly_{season}.parquet`, keyed on the same gsis player ids as nflverse. | GPL (>= 3), per the package's [`DESCRIPTION`](https://raw.githubusercontent.com/ffverse/ffopportunity/main/DESCRIPTION) and [`LICENSE.md`](https://raw.githubusercontent.com/ffverse/ffopportunity/main/LICENSE.md) |
 
 ## Output
@@ -79,6 +79,6 @@ Every build runs [`validate.py`](gridiron_etl/validate.py). The database checks 
 
 ## Known gaps
 
-- **Only part of the ~450 catalogued metrics** are implemented: the play-by-play, snap-count and ffopportunity metrics in `metrics.py`. Next Gen Stats and FTN charting are wired in `sources.py` but not yet transformed.
+- **Only part of the ~450 catalogued metrics** are implemented: the play-by-play, snap-count and ffopportunity metrics in `metrics.py`. Next Gen Stats (`ngs.py`) and FTN charting (`ftn.py`, ten headline metrics from 2022) are the only tracking and charting sources transformed.
 - **`opportunity_share`** (RB backfield share) is registered but not computed. `fpoe` is now computable on-device, since the ETL loads ffopportunity's `x_*` expected components alongside the actuals.
 - **Pre-aggregated season rollups** (season totals, L3/L5/L8 splits) are specified but not built. They're the next performance step: a full-season Grid query is ~85 ms today, and a rollup would serve the most common view without aggregating weekly facts at all.

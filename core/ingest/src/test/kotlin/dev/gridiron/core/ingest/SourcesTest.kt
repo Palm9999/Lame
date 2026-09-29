@@ -19,6 +19,13 @@ class SourcesTest {
     }
 
     @Test
+    fun `FTN charting is one uncompressed csv per season`() {
+        assertEquals("https://github.com/nflverse/nflverse-data/releases/download/ftn_charting/ftn_charting_2025.csv", Sources.url(Input.FTN, 2025))
+        assertEquals("ftn_charting_2022.csv", Sources.fileName(Input.FTN, 2022))
+        assertEquals("source:ftn_charting_2025.csv", Sources.metaKey(Input.FTN, 2025))
+    }
+
+    @Test
     fun `file names and meta keys`() {
         assertEquals("play_by_play_2024.csv.gz", Sources.fileName(Input.PBP, 2024))
         assertEquals("source:players.csv.gz", Sources.metaKey(Input.PLAYERS))

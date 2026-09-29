@@ -24,7 +24,7 @@ class MetricsTest {
     @Test
     fun `ids are unique and every Python metric is here`() {
         assertEquals(METRICS.size, byId.size)
-        assertEquals(123, METRICS.size)
+        assertEquals(143, METRICS.size)
     }
 
     @Test
@@ -44,6 +44,18 @@ class MetricsTest {
         "ngs_rush_efficiency" to listOf("RB"), "ngs_stacked_box_pct" to listOf("RB"),
         "ngs_separation" to listOf("RB", "WR", "TE"), "ngs_cushion" to listOf("RB", "WR", "TE"),
         "ngs_yac_over_expected" to listOf("RB", "WR", "TE"),
+    )
+    private val ftnVisible = mapOf(
+        "ftn_catchable_rate" to listOf("RB", "WR", "TE"), "ftn_drop_rate" to listOf("RB", "WR", "TE"),
+        "ftn_contested_rate" to listOf("RB", "WR", "TE"), "ftn_drops" to listOf("RB", "WR", "TE"),
+        "ftn_created_rec" to listOf("RB", "WR", "TE"),
+        "ftn_play_action_rate" to listOf("QB"), "ftn_blitz_rate" to listOf("QB"),
+        "ftn_out_of_pocket_rate" to listOf("QB"), "ftn_throwaway_rate" to listOf("QB"),
+        "ftn_int_worthy_rate" to listOf("QB"),
+    )
+    private val ftnInternal = listOf(
+        "ftn_targets", "ftn_catchable", "ftn_contested",
+        "ftn_dropbacks", "ftn_attempts", "ftn_pa_db", "ftn_blitz_db", "ftn_oop_db", "ftn_throwaway", "ftn_int_worthy",
     )
     private val ngsInternal = listOf(
         "ngs_attempts", "ngs_carries", "ngs_rush_yards", "ngs_targets", "ngs_receptions",
@@ -72,6 +84,40 @@ class MetricsTest {
             assertTrue(m.isInternal, id)
             assertFalse(id in SPARSE_METRIC_IDS, id)
         }
+    }
+
+    @Test
+    fun `the ten FTN metrics are visible tier B not sparse and position-scoped`() {
+        for ((id, positions) in ftnVisible) {
+            val m = byId.getValue(id)
+            assertFalse(m.isInternal, id)
+            assertFalse(m.computed, id)
+            assertEquals("B", m.tier, id)
+            assertEquals("ftn", m.group, id)
+            assertEquals(positions.sorted(), m.positions.sorted(), id)
+            // A week with no drops is a real 0, so none of these is sparse.
+            assertFalse(id in SPARSE_METRIC_IDS, id)
+        }
+        for (id in listOf("ftn_drop_rate", "ftn_drops", "ftn_throwaway_rate", "ftn_int_worthy_rate")) {
+            assertFalse(byId.getValue(id).higherIsBetter, id)
+        }
+        assertTrue(byId.getValue("ftn_catchable_rate").higherIsBetter)
+        assertTrue(byId.getValue("ftn_created_rec").higherIsBetter)
+    }
+
+    @Test
+    fun `the ten FTN components are internal and not sparse`() {
+        for (id in ftnInternal) {
+            val m = byId.getValue(id)
+            assertTrue(m.isInternal, id)
+            assertEquals("ftn", m.group, id)
+            assertFalse(id in SPARSE_METRIC_IDS, id)
+        }
+    }
+
+    @Test
+    fun `every FTN definition says FTN charting starts in 2022`() {
+        for (id in ftnVisible.keys) assertTrue("2022" in byId.getValue(id).definition, id)
     }
 
     @Test

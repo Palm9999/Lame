@@ -13,7 +13,7 @@ from pathlib import Path
 import polars as pl
 import requests
 
-from . import ngs, sources, schema, teams, transform, validate as validation
+from . import ftn, ngs, sources, schema, teams, transform, validate as validation
 from .metrics import METRICS, metric_rows, sparse_metric_ids
 
 log = logging.getLogger("gridiron.build")
@@ -81,6 +81,23 @@ def _expected(season: int, cache: Path | None, force: bool) -> pl.DataFrame | No
             return None
         raise
     return pl.read_parquet(path)
+
+
+def _ftn_flags(season: int, cache: Path | None, force: bool) -> pl.DataFrame | None:
+    """FTN's charted plays for a season, or None (with a warning) when there is no file or it can't be read.
+    FTN charts from 2022, so earlier seasons never ask; the build never fails on FTN."""
+    if season < ftn.FIRST_SEASON:
+        return None
+    try:
+        return ftn.load(sources.fetch("ftn", season, cache_dir=cache, force=force))
+    except requests.HTTPError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
+            log.warning("season %d: no FTN charting yet", season)
+        else:
+            log.warning("season %d: FTN charting unavailable (%s); left out", season, exc)
+    except Exception as exc:
+        log.warning("season %d: FTN charting unreadable (%s); left out", season, exc)
+    return None
 
 
 def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
@@ -153,6 +170,13 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
             frames.append(transform.to_long(expected, metric_ids, sparse_metric_ids()))
 
         frames.append(transform.to_long(weekly, metric_ids, sparse_metric_ids()))
+
+        charted = _ftn_flags(season, cache, force)
+        if charted is not None:
+            warning = ftn.coverage_warning(season, *ftn.coverage(lf, charted))
+            if warning:
+                log.warning(warning)
+            frames.append(transform.to_long(ftn.components(lf, charted), metric_ids, sparse_metric_ids()))
 
     if built:
         try:  # Next Gen Stats: all seasons in three files; a nice-to-have, not a blocker

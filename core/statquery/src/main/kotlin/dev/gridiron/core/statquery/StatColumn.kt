@@ -89,6 +89,18 @@ public enum class StatColumn(
     NGS_CUSHION("ngs_cushion", Ratio(C.NGS_CUSH_W, C.NGS_TARGETS)),
     NGS_YAC_OVER_EXPECTED("ngs_yac_over_expected", Ratio(C.NGS_YACOE_W, C.NGS_RECEPTIONS)),
 
+    // FTN charting (Grid only)
+    FTN_CATCHABLE_RATE("ftn_catchable_rate", Ratio(C.FTN_CATCHABLE, C.FTN_TARGETS)),
+    FTN_DROP_RATE("ftn_drop_rate", Ratio(C.FTN_DROPS, C.FTN_TARGETS), higherIsBetter = false),
+    FTN_CONTESTED_RATE("ftn_contested_rate", Ratio(C.FTN_CONTESTED, C.FTN_TARGETS)),
+    FTN_DROPS("ftn_drops", Total(C.FTN_DROPS), higherIsBetter = false),
+    FTN_CREATED_REC("ftn_created_rec", Total(C.FTN_CREATED_REC)),
+    FTN_PLAY_ACTION_RATE("ftn_play_action_rate", Ratio(C.FTN_PA_DB, C.FTN_DROPBACKS)),
+    FTN_BLITZ_RATE("ftn_blitz_rate", Ratio(C.FTN_BLITZ_DB, C.FTN_DROPBACKS)),
+    FTN_OUT_OF_POCKET_RATE("ftn_out_of_pocket_rate", Ratio(C.FTN_OOP_DB, C.FTN_DROPBACKS)),
+    FTN_THROWAWAY_RATE("ftn_throwaway_rate", Ratio(C.FTN_THROWAWAY, C.FTN_DROPBACKS), higherIsBetter = false),
+    FTN_INT_WORTHY_RATE("ftn_int_worthy_rate", Ratio(C.FTN_INT_WORTHY, C.FTN_ATTEMPTS), higherIsBetter = false),
+
     // Kicking (the Grid's K chip)
     FG_MADE("fg_made", Total(C.FG_MADE)),
     FG_ATT("fg_att", Total(C.FG_ATT)),
@@ -124,6 +136,9 @@ public enum class StatColumn(
             CPOE, NGS_TIME_TO_THROW, NGS_AGGRESSIVENESS, NGS_INTENDED_AIR_YARDS -> ATTEMPTS
             NGS_RYOE, NGS_RYOE_PER_ATT, NGS_RUSH_EFFICIENCY, NGS_STACKED_BOX_PCT -> CARRIES
             NGS_SEPARATION, NGS_CUSHION, NGS_YAC_OVER_EXPECTED -> TARGETS
+            FTN_CATCHABLE_RATE, FTN_DROP_RATE, FTN_CONTESTED_RATE -> TARGETS
+            FTN_PLAY_ACTION_RATE, FTN_BLITZ_RATE, FTN_OUT_OF_POCKET_RATE, FTN_THROWAWAY_RATE -> DROPBACKS
+            FTN_INT_WORTHY_RATE -> ATTEMPTS
             SNAP_SHARE -> OFFENSE_SNAPS
             else -> null
         }

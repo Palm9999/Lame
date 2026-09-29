@@ -202,6 +202,66 @@ private val NGS: List<Metric> = listOf(
     )
 }
 
+/**
+ * FTN charting, a twin of `metrics.py`'s FTN block. FTN charts every play from 2022; flags are
+ * attributed to the target receiver and the passer through play-by-play. Counts sit beside FTN's
+ * own denominators (plays FTN charted), so a range recomputes as sum(count) / sum(denominator),
+ * never a mean of weekly rates. None is sparse: a week with no drops is a real zero.
+ */
+private class FtnMetric(
+    val id: String,
+    val abbr: String,
+    val name: String,
+    val positions: List<String>,
+    val higherIsBetter: Boolean,
+    val decimals: Int,
+    val definition: String,
+)
+
+private val FTN: List<Metric> = listOf(
+    FtnMetric("ftn_catchable_rate", "CATCH%", "Catchable Target Rate", listOf("RB", "WR", "TE"), true, 1,
+        "Share of targets FTN's charters marked catchable: a target the receiver could have caught. Charted from 2022."),
+    FtnMetric("ftn_drop_rate", "DRP%", "Drop Rate", listOf("RB", "WR", "TE"), false, 1,
+        "Drops per target, as charted by FTN. Charted from 2022."),
+    FtnMetric("ftn_contested_rate", "CTD%", "Contested Target Rate", listOf("RB", "WR", "TE"), true, 1,
+        "Share of targets FTN charted as contested: a defender close enough to affect the catch. A role profile, not a quality measure. Charted from 2022."),
+    FtnMetric("ftn_drops", "DRP", "Drops", listOf("RB", "WR", "TE"), false, 0,
+        "Passes FTN charted as dropped. Charted from 2022."),
+    FtnMetric("ftn_created_rec", "CRT", "Created Receptions", listOf("RB", "WR", "TE"), true, 0,
+        "Receptions FTN charted as created by the receiver: a catch the throw did not make easy. Charted from 2022."),
+    FtnMetric("ftn_play_action_rate", "PA%", "Play-Action Rate", listOf("QB"), true, 1,
+        "Share of dropbacks that were play-action, as charted by FTN. A scheme profile. Charted from 2022."),
+    FtnMetric("ftn_blitz_rate", "BLZ%", "Blitz Rate Faced", listOf("QB"), true, 1,
+        "Share of dropbacks where FTN charted at least one blitzer. Charted from 2022."),
+    FtnMetric("ftn_out_of_pocket_rate", "OOP%", "Out-of-Pocket Rate", listOf("QB"), true, 1,
+        "Share of dropbacks where the quarterback left the pocket, as charted by FTN. Charted from 2022."),
+    FtnMetric("ftn_throwaway_rate", "TA%", "Throwaway Rate", listOf("QB"), false, 1,
+        "Share of dropbacks ended with an intentional throwaway, as charted by FTN. Charted from 2022."),
+    FtnMetric("ftn_int_worthy_rate", "IW%", "Interception-Worthy Rate", listOf("QB"), false, 1,
+        "Share of pass attempts FTN charted as interception-worthy, whether or not the defense caught them. Charted from 2022."),
+).map {
+    Metric(
+        it.id, it.name, it.abbr, "ftn", it.definition, positions = it.positions, tier = "B",
+        higherIsBetter = it.higherIsBetter, decimals = it.decimals,
+    )
+} + listOf(
+    Triple("ftn_targets", "FTN Targets", "Targets on plays FTN charted: the denominator of the receiver rates." to listOf("RB", "WR", "TE")),
+    Triple("ftn_catchable", "FTN Catchable Targets", "Targets FTN marked catchable." to listOf("RB", "WR", "TE")),
+    Triple("ftn_contested", "FTN Contested Targets", "Targets FTN marked contested." to listOf("RB", "WR", "TE")),
+    Triple("ftn_dropbacks", "FTN Dropbacks", "Dropbacks (attempts, sacks and scrambles) on plays FTN charted: the denominator of the QB rates." to listOf("QB")),
+    Triple("ftn_attempts", "FTN Attempts", "Pass attempts on plays FTN charted: the denominator of the interception-worthy rate." to listOf("QB")),
+    Triple("ftn_pa_db", "FTN Play-Action Dropbacks", "Charted dropbacks that were play-action." to listOf("QB")),
+    Triple("ftn_blitz_db", "FTN Blitzed Dropbacks", "Charted dropbacks against at least one blitzer." to listOf("QB")),
+    Triple("ftn_oop_db", "FTN Out-of-Pocket Dropbacks", "Charted dropbacks where the quarterback left the pocket." to listOf("QB")),
+    Triple("ftn_throwaway", "FTN Throwaways", "Charted dropbacks ended with a throwaway." to listOf("QB")),
+    Triple("ftn_int_worthy", "FTN Interception-Worthy Throws", "Charted pass attempts FTN marked interception-worthy." to listOf("QB")),
+).map { (id, name, text) ->
+    Metric(
+        id, name, id.uppercase(), "ftn", text.first, positions = text.second, tier = "B",
+        decimals = 0, isInternal = true,
+    )
+}
+
 private val REGISTRY: List<Metric> = listOf(
     // ---------------- Receiving volume ----------------
     Metric("targets", "Targets", "TGT", "volume",
@@ -360,7 +420,7 @@ private val REGISTRY: List<Metric> = listOf(
 } + RANGE_COMPONENTS.map {
     Metric(it.id, it.name, it.id.uppercase(), "context", it.definition,
         positions = ALL_POSITIONS, decimals = it.decimals, isInternal = true)
-} + KICKING + DEFENSE + NGS
+} + KICKING + DEFENSE + NGS + FTN
 
 /**
  * The distribution the phone's floor/ceiling simulation draws each projected

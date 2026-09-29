@@ -2,6 +2,7 @@ package dev.gridiron.core.data
 
 import dev.gridiron.core.statquery.StatColumn
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import java.util.Locale
 
@@ -51,6 +52,19 @@ class StatFormatTest {
         assertEquals("212.4", f.format(StatColumn.FANTASY_POINTS, 212.43, perGame = false))
         assertEquals("-3.0", f.format(StatColumn.FPOE, -3.0, perGame = false))
         assertEquals("14.2", f.format(StatColumn.EXPECTED_FANTASY_POINTS, 14.21, perGame = true))
+    }
+
+    @Test
+    fun `FTN rates are fractions and render as percentages`() {
+        for (c in listOf(
+            StatColumn.FTN_CATCHABLE_RATE, StatColumn.FTN_DROP_RATE, StatColumn.FTN_CONTESTED_RATE,
+            StatColumn.FTN_PLAY_ACTION_RATE, StatColumn.FTN_BLITZ_RATE, StatColumn.FTN_OUT_OF_POCKET_RATE,
+            StatColumn.FTN_THROWAWAY_RATE, StatColumn.FTN_INT_WORTHY_RATE,
+        )) {
+            assertEquals("4.3%", us.format(c, 0.0434, perGame = false), c.name)
+            assertTrue(StatFormat.isPercent(c), c.name)
+        }
+        assertEquals("3", us.format(StatColumn.FTN_DROPS, 3.0, perGame = false))
     }
 
     @Test

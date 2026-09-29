@@ -25,7 +25,7 @@ PBP_COLUMNS = [
     "receiver_player_id", "rusher_player_id", "passer_player_id",
     "yardline_100", "epa", "success", "cpoe", "two_point_attempt",
     "first_down_pass", "first_down_rush", "fumble_lost", "fumbled_1_player_id",
-    "two_point_conv_result",
+    "two_point_conv_result", "play_id",
 ]
 
 
