@@ -39,7 +39,7 @@ The report is published Wednesday to Friday, before the game, so reading it for 
 
 **Limit, unchanged:** a teammate who hasn't played for the team in its last `ACTIVE_WINDOW` (2) games has no share and still gets none. A newly promoted backup with no recent games won't absorb the freed volume; it lands on the other active players.
 
-**Rest of season** doesn't read `absent`: a current injury says nothing about future weeks, and the summed weeks are otherwise the same as today.
+**Rest of season.** An injury this week says nothing about later weeks, but rest of season is summed from the upcoming week's roster, so dropping an Out player there would erase all his later weeks and inflate his teammates'. `prepareWeek` therefore builds the upcoming week's team twice when anyone is absent: once with `absent` applied (this week's emitted rows, and this week's contribution to the sum) and once without (the baseline every later week starts from). A player who is Out this week has no row for it, adds nothing to the sum for it, and keeps his later weeks.
 
 **No new constants.** `FORECAST_VERSION` becomes 6 so the phone rebuilds projections on its next refresh.
 
@@ -47,12 +47,12 @@ The report is published Wednesday to Friday, before the game, so reading it for 
 
 - **Unit (`:core:forecast`):** an Out WR gets no row and his team's remaining target shares sum to one, each larger than before in the same ratio; the same for a Doubtful RB's carries; a Questionable player is unchanged; a QB listed Out hands the passing share to the next QB; every QB absent means no QB projection; an empty `absent` reproduces today's numbers exactly.
 - **Loader:** `loadInputs` on a small database reads Out and Doubtful rows and ignores Questionable, Note and null.
-- **Accuracy gate:** run before and after on 2024–2025 and report the 2025 MAE by position (QB, RB, WR, TE, K, D/ST) and the floor-to-ceiling "held" figures. A position that gets worse is fixed or excluded from the change before shipping; the gate is never skipped. Injured players' own weeks are absent from the backtest after the change, which alone can move a position's MAE, so the comparison is made on the players both runs project.
+- **Accuracy gate:** run before and after on 2024–2025 and report the 2025 MAE by position (QB, RB, WR, TE, K, D/ST) and the floor-to-ceiling "held" figures. A position that gets worse is fixed or excluded from the change before shipping; the gate is never skipped. Injured players' own weeks leave the backtest after the change, which alone can move a position's MAE; if a position worsens, diagnose on the player-weeks both builds project before deciding.
 - **Real database:** the existing contract tests still pass (the scoring speed test is known to fail in this container, see `HANDOFF.md`).
 
 ## Risks
 
-- **Fewer backtest rows.** Removing injured players' rows changes what the gate averages over. The before/after comparison on the shared set is the fair one, and the gate's own table stays the CI check.
+- **Fewer backtest rows.** Removing injured players' rows changes what the gate averages over. A position that worsens gets a comparison on the shared player-weeks; the gate's own table stays the CI check.
 - **Doubtful players who play.** None did in the sample, but nflverse can change its statuses; a wrong Out drops a real player. Accepted, since the report is the league's official designation.
 - **Proportional redistribution is crude.** A WR1 out lifts a TE and RBs' targets by the same factor as the other WRs'. Role-aware routing is the follow-up if the gate shows a gap.
 
