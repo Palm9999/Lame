@@ -13,7 +13,7 @@ from pathlib import Path
 import polars as pl
 import requests
 
-from . import sources, schema, teams, transform, validate as validation
+from . import ngs, sources, schema, teams, transform, validate as validation
 from .metrics import METRICS, metric_rows, sparse_metric_ids
 
 log = logging.getLogger("gridiron.build")
@@ -100,6 +100,7 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
     defense: list[pl.DataFrame] = []
     injury: list[pl.DataFrame] = []
     built: list[int] = []
+    played: list[pl.DataFrame] = []  # (season, week) pairs with play-by-play, for NGS
     meta: dict[str, str] = {}
 
     for season in seasons:
@@ -120,6 +121,7 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
         except Exception as exc:  # injury reports are a nice-to-have, not a blocker
             log.warning("season %d: injury report unavailable (%s)", season, exc)
         weekly = transform.weekly_player_stats(lf)
+        played.append(weekly.select(pl.col("season").cast(pl.Int64), pl.col("week").cast(pl.Int64)).unique())
         log.info("season %d: %d player-weeks from play-by-play", season, weekly.height)
 
         try:
@@ -151,6 +153,15 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
             frames.append(transform.to_long(expected, metric_ids, sparse_metric_ids()))
 
         frames.append(transform.to_long(weekly, metric_ids, sparse_metric_ids()))
+
+    if built:
+        try:  # Next Gen Stats: all seasons in three files; a nice-to-have, not a blocker
+            # Only weeks play-by-play has: a fact for a week with no games would fail the build's own checks.
+            ngs_frame = ngs.load(cache, force).join(pl.concat(played), on=["season", "week"], how="semi")
+            log.info("NGS: %d player-weeks in built seasons", ngs_frame.height)
+            frames.append(transform.to_long(ngs_frame, metric_ids, sparse_metric_ids()))
+        except Exception as exc:
+            log.warning("NGS unavailable (%s); its metrics are left out", exc)
 
     if not frames:
         raise RuntimeError(f"none of the seasons {seasons} has published play-by-play")

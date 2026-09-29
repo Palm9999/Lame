@@ -77,6 +77,18 @@ public enum class StatColumn(
     SNAP_SHARE("snap_share", Ratio(C.OFFENSE_SNAPS, C.TEAM_OFFENSE_SNAPS)),
     TOTAL_EPA("total_epa", Total(C.TOTAL_EPA)),
 
+    // Next Gen Stats (tier B): weighted averages recomputed over the range.
+    NGS_TIME_TO_THROW("ngs_time_to_throw", Ratio(C.NGS_TTT_W, C.NGS_ATTEMPTS)),
+    NGS_AGGRESSIVENESS("ngs_aggressiveness", Ratio(C.NGS_AGGR_W, C.NGS_ATTEMPTS)),
+    NGS_INTENDED_AIR_YARDS("ngs_intended_air_yards", Ratio(C.NGS_IAY_W, C.NGS_ATTEMPTS)),
+    NGS_RYOE("ngs_ryoe", Total(C.NGS_RYOE)),
+    NGS_RYOE_PER_ATT("ngs_ryoe_per_att", Ratio(C.NGS_RYOE, C.NGS_CARRIES)),
+    NGS_RUSH_EFFICIENCY("ngs_rush_efficiency", Ratio(C.NGS_EFF_W, C.NGS_RUSH_YARDS), higherIsBetter = false),
+    NGS_STACKED_BOX_PCT("ngs_stacked_box_pct", Ratio(C.NGS_BOX_W, C.NGS_CARRIES)),
+    NGS_SEPARATION("ngs_separation", Ratio(C.NGS_SEP_W, C.NGS_TARGETS)),
+    NGS_CUSHION("ngs_cushion", Ratio(C.NGS_CUSH_W, C.NGS_TARGETS)),
+    NGS_YAC_OVER_EXPECTED("ngs_yac_over_expected", Ratio(C.NGS_YACOE_W, C.NGS_RECEPTIONS)),
+
     // Kicking (the Grid's K chip)
     FG_MADE("fg_made", Total(C.FG_MADE)),
     FG_ATT("fg_att", Total(C.FG_ATT)),
@@ -109,7 +121,9 @@ public enum class StatColumn(
             TARGET_SHARE, AIR_YARDS_SHARE, WOPR, ADOT, RACR, CATCH_RATE -> TARGETS
             CARRY_SHARE, RUSH_SUCCESS_RATE, RUSH_EPA_PER_CARRY -> CARRIES
             EPA_PER_DROPBACK -> DROPBACKS
-            CPOE -> ATTEMPTS
+            CPOE, NGS_TIME_TO_THROW, NGS_AGGRESSIVENESS, NGS_INTENDED_AIR_YARDS -> ATTEMPTS
+            NGS_RYOE, NGS_RYOE_PER_ATT, NGS_RUSH_EFFICIENCY, NGS_STACKED_BOX_PCT -> CARRIES
+            NGS_SEPARATION, NGS_CUSHION, NGS_YAC_OVER_EXPECTED -> TARGETS
             SNAP_SHARE -> OFFENSE_SNAPS
             else -> null
         }

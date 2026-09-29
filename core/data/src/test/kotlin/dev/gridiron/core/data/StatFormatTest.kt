@@ -52,4 +52,11 @@ class StatFormatTest {
         assertEquals("-3.0", f.format(StatColumn.FPOE, -3.0, perGame = false))
         assertEquals("14.2", f.format(StatColumn.EXPECTED_FANTASY_POINTS, 14.21, perGame = true))
     }
+
+    @Test
+    fun `NGS percentages are already in points and are not multiplied again`() {
+        assertEquals("17.5", us.format(StatColumn.NGS_AGGRESSIVENESS, 17.53, perGame = false))
+        assertEquals("38.2", us.format(StatColumn.NGS_STACKED_BOX_PCT, 38.21, perGame = false))
+        assertEquals("2.85", us.format(StatColumn.NGS_SEPARATION, 2.851, perGame = false))
+    }
 }

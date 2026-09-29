@@ -11,11 +11,13 @@
 
 ## Where things stand
 
-Built and merged: the projection engine (K and D/ST included), accuracy page, props blend, live data refresh, Player page season stats, D/ST yards-allowed tiers (PR #14) and injured players' share to teammates (PR #17). Nothing is open. `INGEST_VERSION` 5, `FORECAST_VERSION` 6, prefs `formatVersion` 3.
+Built and merged: the projection engine (K and D/ST included), accuracy page, props blend, live data refresh, Player page season stats, D/ST yards-allowed tiers (PR #14) and injured players' share to teammates (PR #17). Nothing is open. `INGEST_VERSION` 6, `FORECAST_VERSION` 6, prefs `formatVersion` 3.
 
-**Next: more metrics (NGS/FTN).** The user picked it (2026-09-29). Start with brainstorming, and ask the scope question first: NGS only (recommended: three all-seasons weekly files, one row per player-week; passing, rushing, receiving), FTN only (play-level charting, 2022+, needs aggregation), or both. The Python ETL already downloads the NGS files (`sources.py`), but nothing transforms them and the Kotlin builder (`Sources.kt`) doesn't know them. FTN isn't wired anywhere. Touch points: `etl/gridiron_etl` (transform, `metrics.py`), `:core:ingest` (`Sources.kt`, `Metrics.kt`, the pipeline), the CI parity gate, and the metric counts asserted in `MetricsTest`, `StatsDbWriterTest` and `etl/tests/test_registry.py`. Bump `INGEST_VERSION` and rebuild `etl/build/stats.db` and `accuracy.db` with the Kotlin builder. FTN is CC BY-SA 4.0: credit "FTN Data via nflverse". Candidate metrics are listed in `docs/research/research-stats-catalog.md` (rows marked B/NGS/FTN).
+**Just built: Next Gen Stats** (PR for this branch; user chose NGS only, headline set of ten). Grid packs NGS Passing, Rushing and Receiving; ingest v6 stores each NGS average as average x weight beside its weight plus the weekly average under the metric's own id, none sparse. NGS is Grid-only: Compare and the Player page don't use it. Facts to keep: NGS numbers the Super Bowl one week after play-by-play (regular season + 5 vs + 4) and publishes only weeks with 15+ attempts, 10+ carries or 5+ targets; the rushing file has no QB rows and the receiving file is WR/TE only; efficiency is weighted by rush yards.
 
-**After it:** saved Grid presets (planned home: a `user.db`, not built) and season rollups (pre-aggregated totals for the full-season Grid view). Each gets its own brainstorm, spec, plan and PR.
+**Next: FTN charting** (play-level, 2022+, needs aggregation; FTN is CC BY-SA 4.0, credit "FTN Data via nflverse"), then saved Grid presets and season rollups. Start with brainstorming.
+
+**Deferred minors (NGS):** an average missing or dropped still leaves its weight in the denominator (2 rows in 2025); "no NGS rows published yet" also fires for 2012-2015; `loadNgs` drops a group silently on a 404; NGS facts carry NGS team codes ("LAR", not "LA"); all seasons' NGS rows stay in memory for a build and the three files are re-downloaded when any season is rebuilt and NGS is unchanged; the Python twin drops all NGS if one file fails; `NgsRealDatabaseTest` needs the Python download cache, so CI's Kotlin-only job skips it; no `predicts` text on the ten metrics.
 
 ## Rulings that still bind
 
@@ -29,6 +31,7 @@ Built and merged: the projection engine (K and D/ST included), accuracy page, pr
 
 ## Open checks on the phone (non-blocking)
 
+- **NGS:** after the first refresh (it rebuilds every season: ingest v6), open the Grid, pick the NGS Passing, NGS Rushing and NGS Receiving packs and confirm columns fill (QB chip for passing, RB for rushing, WR or TE for receiving). Report the refresh time.
 - **Odds API shape:** hand-built fixtures, no key in the container. On the first refresh with the user's key (☰ → Settings → Betting props, then Refresh stats), the toast should say "Props moved N projections".
 - **Season stats timing:** open a player with a full season; the section runs up to 20 small queries. Report how long it takes to appear.
 - **Yards allowed:** ☰ → Settings → a profile: the "Yards allowed" tier section edits and saves, and a D/ST's Grid points and Player page log include yards after a refresh (the first refresh rebuilds).

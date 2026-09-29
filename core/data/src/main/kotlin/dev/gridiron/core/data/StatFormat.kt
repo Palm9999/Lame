@@ -10,6 +10,16 @@ import dev.gridiron.core.statquery.StatColumn.EPA_PER_DROPBACK
 import dev.gridiron.core.statquery.StatColumn.EXPECTED_FANTASY_POINTS
 import dev.gridiron.core.statquery.StatColumn.FANTASY_POINTS
 import dev.gridiron.core.statquery.StatColumn.FPOE
+import dev.gridiron.core.statquery.StatColumn.NGS_AGGRESSIVENESS
+import dev.gridiron.core.statquery.StatColumn.NGS_CUSHION
+import dev.gridiron.core.statquery.StatColumn.NGS_INTENDED_AIR_YARDS
+import dev.gridiron.core.statquery.StatColumn.NGS_RUSH_EFFICIENCY
+import dev.gridiron.core.statquery.StatColumn.NGS_RYOE
+import dev.gridiron.core.statquery.StatColumn.NGS_RYOE_PER_ATT
+import dev.gridiron.core.statquery.StatColumn.NGS_SEPARATION
+import dev.gridiron.core.statquery.StatColumn.NGS_STACKED_BOX_PCT
+import dev.gridiron.core.statquery.StatColumn.NGS_TIME_TO_THROW
+import dev.gridiron.core.statquery.StatColumn.NGS_YAC_OVER_EXPECTED
 import dev.gridiron.core.statquery.StatColumn.RACR
 import dev.gridiron.core.statquery.StatColumn.RUSH_EPA_PER_CARRY
 import dev.gridiron.core.statquery.StatColumn.RUSH_SUCCESS_RATE
@@ -64,6 +74,17 @@ public class StatFormat(private val locale: Locale = Locale.getDefault()) {
             // Already in percentage points.
             CPOE to 1,
             TOTAL_EPA to 1,
+            // NGS percentages are already in points, so they stay out of PERCENT.
+            NGS_TIME_TO_THROW to 2,
+            NGS_AGGRESSIVENESS to 1,
+            NGS_INTENDED_AIR_YARDS to 1,
+            NGS_RYOE to 1,
+            NGS_RYOE_PER_ATT to 2,
+            NGS_RUSH_EFFICIENCY to 2,
+            NGS_STACKED_BOX_PCT to 1,
+            NGS_SEPARATION to 2,
+            NGS_CUSHION to 2,
+            NGS_YAC_OVER_EXPECTED to 2,
             FANTASY_POINTS to 1,
             EXPECTED_FANTASY_POINTS to 1,
             FPOE to 1,

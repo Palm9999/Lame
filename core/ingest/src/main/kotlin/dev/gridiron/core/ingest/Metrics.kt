@@ -138,6 +138,70 @@ private val DEFENSE: List<Metric> = listOf(
     ),
 )
 
+/**
+ * Next Gen Stats, a twin of `metrics.py`'s NGS block. NGS publishes per-week
+ * averages; each is stored as average x weight beside its weight, so a range
+ * recomputes as sum(avg x weight) / sum(weight), never a mean of means. The
+ * weekly average is stored too, under the metric's own id. None is sparse:
+ * a 0% stacked-box week is a real zero.
+ */
+private class NgsMetric(
+    val id: String,
+    val abbr: String,
+    val name: String,
+    val positions: List<String>,
+    val higherIsBetter: Boolean,
+    val decimals: Int,
+    val definition: String,
+)
+
+private val NGS: List<Metric> = listOf(
+    NgsMetric("ngs_time_to_throw", "TTT", "Time to Throw", listOf("QB",), true, 2,
+        "Average seconds from snap to release on attempts, sacks excluded. Under 2.5 is a quick game; over 3.0 holds the ball. Only weeks with 15 or more attempts are published."),
+    NgsMetric("ngs_aggressiveness", "AGG%", "Aggressiveness", listOf("QB",), true, 1,
+        "Share of attempts thrown into tight windows, with a defender within a yard of the receiver at the catch point. A risk profile, not a quality measure. Only weeks with 15 or more attempts are published."),
+    NgsMetric("ngs_intended_air_yards", "IAY", "Intended Air Yards", listOf("QB",), true, 1,
+        "Average air yards on attempts, measured by player tracking. Only weeks with 15 or more attempts are published."),
+    NgsMetric("ngs_ryoe", "RYOE", "Rush Yards Over Expected", listOf("RB"), true, 1,
+        "Actual rushing yards minus the tracking model's expectation from blocker and defender positions. Only weeks with 10 or more carries are published."),
+    NgsMetric("ngs_ryoe_per_att", "RYOE/A", "RYOE per Carry", listOf("RB"), true, 2,
+        "Rush yards over expected per carry. Only weeks with 10 or more carries are published."),
+    NgsMetric("ngs_rush_efficiency", "EFF", "Rushing Efficiency", listOf("RB"), false, 2,
+        "Yards a rusher travels per rushing yard gained. Lower is a more direct, north-south runner. Only weeks with 10 or more carries are published."),
+    NgsMetric("ngs_stacked_box_pct", "8+ BOX%", "Carries vs 8+ in the Box", listOf("RB"), true, 1,
+        "Share of carries with eight or more defenders in the box: the front the runner faced, not his skill. Only weeks with 10 or more carries are published."),
+    NgsMetric("ngs_separation", "SEP", "Average Separation", listOf("RB", "WR", "TE"), true, 2,
+        "Average yards between the receiver and the nearest defender when the pass arrives. Only weeks with 5 or more targets are published."),
+    NgsMetric("ngs_cushion", "CUSH", "Average Cushion", listOf("RB", "WR", "TE"), true, 2,
+        "Average yards between the receiver and the nearest defender at the snap. Only weeks with 5 or more targets are published."),
+    NgsMetric("ngs_yac_over_expected", "YACOE", "YAC Over Expected", listOf("RB", "WR", "TE"), true, 2,
+        "Average yards after catch above the tracking model's expectation, per reception. Only weeks with 5 or more targets are published."),
+).map {
+    Metric(
+        it.id, it.name, it.abbr, "ngs", it.definition, positions = it.positions, tier = "B",
+        higherIsBetter = it.higherIsBetter, decimals = it.decimals,
+    )
+} + listOf(
+    Triple("ngs_attempts", "NGS Attempts", "Attempts in NGS's passing file: the weight behind its passing averages." to 0),
+    Triple("ngs_carries", "NGS Carries", "Carries in NGS's rushing file: the weight behind its rushing averages." to 0),
+    Triple("ngs_rush_yards", "NGS Rush Yards", "Rushing yards in NGS's rushing file: the weight behind efficiency." to 0),
+    Triple("ngs_targets", "NGS Targets", "Targets in NGS's receiving file: the weight behind separation and cushion." to 0),
+    Triple("ngs_receptions", "NGS Receptions", "Receptions in NGS's receiving file: the weight behind YAC over expected." to 0),
+    Triple("ngs_ttt_w", "NGS Time to Throw x Attempts", "Weekly average time to throw times attempts." to 3),
+    Triple("ngs_aggr_w", "NGS Aggressiveness x Attempts", "Weekly aggressiveness times attempts." to 3),
+    Triple("ngs_iay_w", "NGS Intended Air Yards x Attempts", "Weekly average intended air yards times attempts." to 3),
+    Triple("ngs_eff_w", "NGS Efficiency x Carries", "Weekly rushing efficiency times carries." to 3),
+    Triple("ngs_box_w", "NGS 8+ Box x Carries", "Weekly share of carries against eight or more defenders, times carries." to 3),
+    Triple("ngs_sep_w", "NGS Separation x Targets", "Weekly average separation times targets." to 3),
+    Triple("ngs_cush_w", "NGS Cushion x Targets", "Weekly average cushion times targets." to 3),
+    Triple("ngs_yacoe_w", "NGS YAC Over Expected x Receptions", "Weekly average YAC over expected times receptions." to 3),
+).map { (id, name, text) ->
+    Metric(
+        id, name, id.uppercase(), "ngs", text.first, positions = ALL_POSITIONS, tier = "B",
+        decimals = text.second, isInternal = true,
+    )
+}
+
 private val REGISTRY: List<Metric> = listOf(
     // ---------------- Receiving volume ----------------
     Metric("targets", "Targets", "TGT", "volume",
@@ -296,7 +360,7 @@ private val REGISTRY: List<Metric> = listOf(
 } + RANGE_COMPONENTS.map {
     Metric(it.id, it.name, it.id.uppercase(), "context", it.definition,
         positions = ALL_POSITIONS, decimals = it.decimals, isInternal = true)
-} + KICKING + DEFENSE
+} + KICKING + DEFENSE + NGS
 
 /**
  * The distribution the phone's floor/ceiling simulation draws each projected

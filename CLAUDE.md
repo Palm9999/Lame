@@ -95,7 +95,7 @@ To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI 
 
 ## Known Gaps & Next Steps
 
-- Only the play-by-play, snap count and ffopportunity metrics of the ~450 catalogued are implemented (registry: `core/ingest/.../Metrics.kt`); Next Gen Stats and FTN charting are wired but not yet transformed
+- Only the play-by-play, snap count, ffopportunity and Next Gen Stats (ten headline metrics; Grid packs NGS Passing, Rushing and Receiving) metrics of the ~450 catalogued are implemented (registry: `core/ingest/.../Metrics.kt`); FTN charting is not wired. NGS shows in the Grid only: Compare and the Player page don't use it yet
 - Pre-aggregated season rollups are specified but not built (next performance target for the common full-season view)
 - Saved Grid presets not yet implemented (planned home: `user.db`). Rosters are stored in the `:core:datastore` prefs JSON (`UserPrefs.rosters`), not a `user.db`: ☰ → Rosters manages them, the Player page toggles membership, and the Grid's roster chip narrows to one (`GridRequest.onlyPlayers`) and stars rostered players
 - APK signing uses a committed keystore (`app/gridiron.keystore`, intentional for a never-published personal app)

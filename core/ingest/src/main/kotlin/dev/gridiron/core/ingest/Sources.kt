@@ -8,6 +8,9 @@ public enum class Input(public val perSeason: Boolean, public val label: String)
     EXPECTED(true, "expected points"),
     PLAYERS(false, "player list"),
     GAMES(false, "schedule"),
+    NGS_PASSING(false, "NGS passing"),
+    NGS_RUSHING(false, "NGS rushing"),
+    NGS_RECEIVING(false, "NGS receiving"),
 }
 
 /** Where each input lives: public nflverse and ffopportunity release assets, never this app's repository. */
@@ -26,6 +29,10 @@ public object Sources {
             Input.PLAYERS -> "$NFLVERSE/players/players.csv.gz"
             // Every season since 1999 in one file: opponents, results, lines, starting QBs, coaches.
             Input.GAMES -> "$NFLVERSE/schedules/games.csv"
+            // Next Gen Stats: every season in one file, so no season in the name.
+            Input.NGS_PASSING -> "$NFLVERSE/nextgen_stats/ngs_passing.csv.gz"
+            Input.NGS_RUSHING -> "$NFLVERSE/nextgen_stats/ngs_rushing.csv.gz"
+            Input.NGS_RECEIVING -> "$NFLVERSE/nextgen_stats/ngs_receiving.csv.gz"
         }
     }
 
