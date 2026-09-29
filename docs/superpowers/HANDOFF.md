@@ -1,53 +1,39 @@
 # Session Handoff
 
 **How the user wants to work:**
-- One fresh session per batch of **4 tasks**, with `/clear` after each.
-- Every session starts by reading this file, runs the next tasks, then updates this file, commits, pushes, and stops.
-- Keep replies short. Ask a question only when blocked, one line at a time.
+- One fresh session per gap, with `/clear` after each. Keep replies short; ask only when blocked, one line at a time.
+- Every session starts by reading this file, runs the next task, updates this file in the same PR, and stops.
+- Cost and context stay low: see "Working rules" in `CLAUDE.md` (short plans, no docs-only PRs, specs and plans deleted once executed).
 
-**Branch:** `claude/dreamy-euler-phbdq1`, based on `claude/relaxed-hypatia-73hhub` (the repo's main branch). Each new project goes in a new draft PR from this branch. After a PR merges, restart the branch first: `git fetch origin claude/relaxed-hypatia-73hhub && git checkout -B claude/dreamy-euler-phbdq1 origin/claude/relaxed-hypatia-73hhub`.
+**Branch:** `claude/dreamy-euler-phbdq1`, based on `claude/relaxed-hypatia-73hhub` (the repo's main branch). One session at a time on it. After a PR merges, reset it: `git fetch origin claude/relaxed-hypatia-73hhub && git checkout -B claude/dreamy-euler-phbdq1 origin/claude/relaxed-hypatia-73hhub`.
 
-**History:** the full session-by-session log (projection engine, accuracy, props, K/D/ST, live data refresh) was removed from this file on 2026-09-28. It stays in git: `git show b991467:docs/superpowers/HANDOFF.md` (blob `3251e5059b3956029d6284f97179a35050c1696e`). The specs and plans in `docs/superpowers/` are executed and historical.
+**History:** executed specs and plans, and older handoff logs, are in git: `git log --diff-filter=D -- docs/superpowers` finds them, `git show <sha>^:<path>` reads one. Shipped work is in the merged PRs (#4–#18).
 
 ## Where things stand
 
-The four projection sub-projects, the Player page season stats and D/ST yards-allowed scoring are built, reviewed and merged (PRs #4, #5, #6, #7, #9, #10, #11, #14, #17). Nothing is open. The projection design is `specs/2026-09-26-projection-model-design.md`, which supersedes the pipeline half of `specs/2026-09-23-projections-design.md`.
+Built and merged: the projection engine (K and D/ST included), accuracy page, props blend, live data refresh, Player page season stats, D/ST yards-allowed tiers (PR #14) and injured players' share to teammates (PR #17). Nothing is open. `INGEST_VERSION` 5, `FORECAST_VERSION` 6, prefs `formatVersion` 3.
 
-**Just shipped (2026-09-29, [PR #17](https://github.com/Palm9999/Lame/pull/17)): injured players' share to teammates** (spec `specs/2026-09-29-injury-share-redistribution-design.md`, plan `plans/2026-09-29-injury-share-redistribution.md`). A QB/RB/WR/TE that nflverse lists Out or Doubtful gets no projection that week and his team's target, carry and passing shares renormalize onto teammates (`ForecastInputs.absent`, `Projector.prepareWeek`); Questionable counts as playing; rest of season is built from the healthy roster. `FORECAST_VERSION` 6. 2025 PPR model MAE before → after: QB 6.42 → 6.41, RB 5.87 → 5.73, WR 5.40 → 5.38, TE 4.87 → 4.89 (the scored population grew, e.g. TE 455 → 485 player-weeks; the gap to the season average at TE narrowed 0.32 → 0.23). Gate passes at every position; "held" 79–87%.
+**Next: more metrics (NGS/FTN).** The user picked it (2026-09-29). Start with brainstorming, and ask the scope question first: NGS only (recommended: three all-seasons weekly files, one row per player-week; passing, rushing, receiving), FTN only (play-level charting, 2022+, needs aggregation), or both. The Python ETL already downloads the NGS files (`sources.py`), but nothing transforms them and the Kotlin builder (`Sources.kt`) doesn't know them. FTN isn't wired anywhere. Touch points: `etl/gridiron_etl` (transform, `metrics.py`), `:core:ingest` (`Sources.kt`, `Metrics.kt`, the pipeline), the CI parity gate, and the metric counts asserted in `MetricsTest`, `StatsDbWriterTest` and `etl/tests/test_registry.py`. Bump `INGEST_VERSION` and rebuild `etl/build/stats.db` and `accuracy.db` with the Kotlin builder. FTN is CC BY-SA 4.0: credit "FTN Data via nflverse". Candidate metrics are listed in `docs/research/research-stats-catalog.md` (rows marked B/NGS/FTN).
 
-**Shipped before it (2026-09-29, [PR #14](https://github.com/Palm9999/Lame/pull/14)): D/ST yards-allowed tiers** (spec `specs/2026-09-29-dst-yards-allowed-design.md`, plan `plans/2026-09-29-dst-yards-allowed.md`). Yards allowed (net) are a D/ST weekly stat scored through editable per-profile tiers (ESPN's on by default in every preset and, migrated once at prefs `formatVersion` 3, every saved profile; the table is from memory and unverified), projected as their own stat, drawn jointly with points allowed in the Monte Carlo, and shown in the Defense pack, Compare and the Player page's D/ST log. Measured on 2024–2025: points/yards correlation 0.666 (constant 0.67); yards spread 0.239 of the league mean (`DST_YA_CV` 0.25). `RANGE_WIDENING[DST]` stayed 1.22 (pooled held ≈ 80%). The 2025 gate has the model at 5.26 MAE against the season average's 6.00 at D/ST. Every team's D/ST is always projected (the min-points gates skip only kickers). `INGEST_VERSION` 5, `FORECAST_VERSION` 5.
-- **Deferred minors from its review:** the 0–800 `yards_allowed` range check hard-fails a build on one out-of-range game (observed 75–647); no dedicated `BacktestTest` case for yards; no refit note beside `RANGE_WIDENING`; the matchup note reads "scores 24.1 pts, 331 yards" ("gains 331 yards" would read better).
-
-**Next: more metrics (NGS/FTN)** — the user picked it (2026-09-29) to start in a fresh session after `/clear`. Brainstorm first (which Next Gen Stats and FTN charting metrics, for which positions, and whether any feed the forecast or only the Grid), then spec, plan and execute as one gap. It touches the Python ETL (`sources.py` already wires the downloads), the Kotlin port (`:core:ingest`, `Metrics.kt`) and the CI parity gate, and metric counts are asserted in tests (`MetricsTest`, `StatsDbWriterTest`, `etl/tests/test_registry.py`), so update them with the registry. Rebuild `etl/build/stats.db` and `accuracy.db` with the Kotlin builder after ingest changes (bump `INGEST_VERSION`).
-
-**Working rule:** one session at a time on `claude/dreamy-euler-phbdq1`. After each PR merges, reset it to main (see Branch above). Two sessions pushing to it caused a mix-up on 2026-09-29.
-
-**The other candidate gaps** (after metrics; each gets its own brainstorm, spec, plan and PR):
-- **Saved Grid presets:** planned home is a `user.db` (not built).
-- **Season rollups:** pre-aggregated season totals for the common full-season Grid view.
+**After it:** saved Grid presets (planned home: a `user.db`, not built) and season rollups (pre-aggregated totals for the full-season Grid view). Each gets its own brainstorm, spec, plan and PR.
 
 ## Rulings that still bind
 
-- **Weather is out of scope** (the user, 2026-09-28: "Don't worry about weather"). Don't propose modeling it.
-- **Points-allowed tiers** are each profile's own and editable, ESPN's by default (0, 1–6, 7–13, 14–17, 18–21, 22–27, 28–34, 35–45, 46+: 5, 4, 3, 1, 0, −1, −4, −5, −5). Points allowed are stored as a number; the phone scores the tiers in expectation (per game for rest of season). Saved profiles were migrated once (prefs `formatVersion` 2), with no fallback. **Yards-allowed tiers** follow the same rule (ESPN's yards table, editable; prefs `formatVersion` 3 migrated once; net yards stored as a number; scored in expectation per game).
-- **The accuracy gate covers K and D/ST** as well as QB, RB, WR and TE. If a position loses to the season-to-date average, tune its constants in `ForecastConstants.kt`.
+- **Weather is out of scope** (the user, 2026-09-28). Don't propose modeling it.
+- **Points-allowed and yards-allowed tiers** are each profile's own and editable, ESPN's by default; stored as numbers, scored in expectation per game on the phone. Saved profiles were migrated once (prefs `formatVersion` 2 and 3), with no fallback. ESPN's yards table is from memory, unverified.
+- **The accuracy gate covers QB, RB, WR, TE, K and D/ST.** If a position loses to the season-to-date average, tune its constants in `ForecastConstants.kt`.
 - **The Grid's K and D/ST chips** bring their own packs (Kicking, Defense); every other chip leaves them out.
-- **Judgments, not fits:** `MARKET_VARIANCE_RATIO` (0.5) and `ONE_SIDED_OVERROUND` (1.08). Props can't be backtested. The user kept both.
-- **Unverified defaults:** the kicking scoring defaults (3/4/5, −1, 1, −1) are common values, not checked against ESPN's. ESPN's yards-allowed tiers are from memory; blocked-kick D/ST scoring isn't modeled.
+- **Judgments, not fits:** `MARKET_VARIANCE_RATIO` (0.5), `ONE_SIDED_OVERROUND` (1.08), `DST_YA_K`, `DST_YA_SCRIPT_ELASTICITY`, `DST_YA_CV` (0.25), the kicking scoring defaults (3/4/5, −1, 1, −1). Props and yards can't be backtested.
+- **Every team's D/ST is always projected** (the min-points gates skip only kickers).
+- **Deferred minors (yards work):** the 0–800 `yards_allowed` range check hard-fails a build on one out-of-range game (observed 75–647); no dedicated `BacktestTest` case for yards; no refit note beside `RANGE_WIDENING`; the matchup note reads "scores 24.1 pts, 331 yards".
 
 ## Open checks on the phone (non-blocking)
 
-- **Odds API shape:** the fixtures are hand-built from the v4 docs, because there's no key in the container. On the first refresh with the user's key (☰ → Settings → Betting props, then Refresh stats), the toast should say "Props moved N projections", and Settings shows credits left.
-- **Season stats timing:** open a player with a full season (☰ → any Grid row). The section runs up to 20 small queries; report how long it takes to appear.
-- **Yards allowed:** ☰ → Settings → a profile: check the "Yards allowed" tier section edits and saves, and that a D/ST's Grid points and Player page log include yards after a refresh (the first refresh rebuilds, since `INGEST_VERSION` is 5).
-- **Accuracy page:** ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
+- **Odds API shape:** hand-built fixtures, no key in the container. On the first refresh with the user's key (☰ → Settings → Betting props, then Refresh stats), the toast should say "Props moved N projections".
+- **Season stats timing:** open a player with a full season; the section runs up to 20 small queries. Report how long it takes to appear.
+- **Yards allowed:** ☰ → Settings → a profile: the "Yards allowed" tier section edits and saves, and a D/ST's Grid points and Player page log include yards after a refresh (the first refresh rebuilds).
+- **Accuracy page:** ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows; the "held" figures should read about 78–83%.
 
 ## Container notes
 
-`etl/build/stats.db` (2024–2026) and `etl/build/accuracy.db` (2024–2025) exist in this container. Rebuild them if it is fresh; the commands are in `CLAUDE.md`.
-
-`RealDatabaseContractTest > scoring a full season for every player is fast` fails in this container (300–500 ms against a 250 ms budget) with or without any change; CI passes it. Don't chase it here.
-
-Bash tool calls sometimes fail with a transient "classifier gave no verdict" error; retry once, or use Read, Grep and Glob meanwhile.
-
-The `doc-cleanup` skill (`.claude/skills/doc-cleanup`) audits Markdown for stale claims; the 2026-09-28 pass fixed `CLAUDE.md`, `README.md`, `etl/README.md`, `PRODUCT_SPEC.md` and this file. `docs/research/*` and the plan bodies were not audited.
+`etl/build/stats.db` (2024–2026) and `etl/build/accuracy.db` (2024–2025) exist here; rebuild them if the container is fresh (commands in `CLAUDE.md`). `RealDatabaseContractTest > scoring a full season for every player is fast` fails here on timing with or without any change; CI passes it. Bash sometimes fails with a transient "classifier gave no verdict" error: retry once, or use Read, Grep and Glob meanwhile.
