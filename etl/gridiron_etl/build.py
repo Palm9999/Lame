@@ -13,7 +13,7 @@ from pathlib import Path
 import polars as pl
 import requests
 
-from . import sources, schema, teams, transform, validate as validation
+from . import ngs, sources, schema, teams, transform, validate as validation
 from .metrics import METRICS, metric_rows, sparse_metric_ids
 
 log = logging.getLogger("gridiron.build")
@@ -151,6 +151,14 @@ def build(seasons: list[int], out: Path, cache: Path | None, force: bool,
             frames.append(transform.to_long(expected, metric_ids, sparse_metric_ids()))
 
         frames.append(transform.to_long(weekly, metric_ids, sparse_metric_ids()))
+
+    if built:
+        try:  # Next Gen Stats: all seasons in three files; a nice-to-have, not a blocker
+            ngs_frame = ngs.load(cache, force).filter(pl.col("season").is_in(built))
+            log.info("NGS: %d player-weeks in built seasons", ngs_frame.height)
+            frames.append(transform.to_long(ngs_frame, metric_ids, sparse_metric_ids()))
+        except Exception as exc:
+            log.warning("NGS unavailable (%s); its metrics are left out", exc)
 
     if not frames:
         raise RuntimeError(f"none of the seasons {seasons} has published play-by-play")
