@@ -13,7 +13,16 @@
 
 Built and merged: the projection engine (K and D/ST included), accuracy page, props blend, live data refresh, Player page season stats, D/ST yards-allowed tiers (PR #14) and injured players' share to teammates (PR #17). Nothing is open. `INGEST_VERSION` 5, `FORECAST_VERSION` 6, prefs `formatVersion` 3.
 
-**Next: more metrics (NGS/FTN).** The user picked it (2026-09-29). Start with brainstorming, and ask the scope question first: NGS only (recommended: three all-seasons weekly files, one row per player-week; passing, rushing, receiving), FTN only (play-level charting, 2022+, needs aggregation), or both. The Python ETL already downloads the NGS files (`sources.py`), but nothing transforms them and the Kotlin builder (`Sources.kt`) doesn't know them. FTN isn't wired anywhere. Touch points: `etl/gridiron_etl` (transform, `metrics.py`), `:core:ingest` (`Sources.kt`, `Metrics.kt`, the pipeline), the CI parity gate, and the metric counts asserted in `MetricsTest`, `StatsDbWriterTest` and `etl/tests/test_registry.py`. Bump `INGEST_VERSION` and rebuild `etl/build/stats.db` and `accuracy.db` with the Kotlin builder. FTN is CC BY-SA 4.0: credit "FTN Data via nflverse". Candidate metrics are listed in `docs/research/research-stats-catalog.md` (rows marked B/NGS/FTN).
+**In progress: NGS metrics** (user chose NGS only, headline set of ten, 2026-09-29). Spec `docs/superpowers/specs/2026-09-29-ngs-metrics-design.md`, plan `docs/superpowers/plans/2026-09-29-ngs-metrics.md` (6 tasks, native execution on this branch). To resume after `/clear`: read the plan, then `.superpowers/sdd/2026-09-29-ngs-metrics/progress.md` (the ledger, git-ignored; if it is gone, trust the task list below and `git log`), and continue at the first task not marked done. Update this list in the same commit as each task.
+
+- [x] Task 1: registry (100 to 122 metrics), components, `StatColumn`s, `StatFormat`, three NGS packs (`NGS_PASSING`, `NGS_RUSHING`, `NGS_RECEIVING`; a ruling: three packs instead of the spec's one, so each chip's default sort has data).
+- [ ] Task 2: Kotlin `Ngs.kt` reader and transform
+- [ ] Task 3: pipeline integration (`INGEST_VERSION` 6, reuse rule, validation)
+- [ ] Task 4: Python `ngs.py`
+- [ ] Task 5: parity, real-database test, rebuild `etl/build/stats.db` and `accuracy.db`
+- [ ] Task 6: docs, delete spec and plan, open the PR
+
+Until Task 3 lands and the databases are rebuilt (Task 5), run Kotlin tests with `GRIDIRON_STATS_DB` unset: the old `stats.db` has no NGS metrics, so the database contract tests would fail for that reason alone.
 
 **After it:** saved Grid presets (planned home: a `user.db`, not built) and season rollups (pre-aggregated totals for the full-season Grid view). Each gets its own brainstorm, spec, plan and PR.
 

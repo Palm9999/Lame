@@ -59,6 +59,23 @@ public object Components {
     public val CPOE_SUM: Component = Component("cpoe_sum")
     public val CPOE_N: Component = Component("cpoe_n")
 
+    // Next Gen Stats. Each weekly average is stored as average x weight beside
+    // its weight (NGS's own attempts, carries, targets or receptions), so a
+    // range recomputes as a weighted average. All are sparse: absent means no NGS row.
+    public val NGS_ATTEMPTS: Component = Component("ngs_attempts")
+    public val NGS_CARRIES: Component = Component("ngs_carries")
+    public val NGS_TARGETS: Component = Component("ngs_targets")
+    public val NGS_RECEPTIONS: Component = Component("ngs_receptions")
+    public val NGS_TTT_W: Component = Component("ngs_ttt_w")
+    public val NGS_AGGR_W: Component = Component("ngs_aggr_w")
+    public val NGS_IAY_W: Component = Component("ngs_iay_w")
+    public val NGS_EFF_W: Component = Component("ngs_eff_w")
+    public val NGS_BOX_W: Component = Component("ngs_box_w")
+    public val NGS_SEP_W: Component = Component("ngs_sep_w")
+    public val NGS_CUSH_W: Component = Component("ngs_cush_w")
+    public val NGS_YACOE_W: Component = Component("ngs_yacoe_w")
+    public val NGS_RYOE: Component = Component("ngs_ryoe")
+
     // Scoring inputs. Internal and sparse (absent means zero); read only by
     // the scoring step, which applies the spec's profile per player-week.
     public val PASSING_FIRST_DOWNS: Component = Component("passing_first_downs")

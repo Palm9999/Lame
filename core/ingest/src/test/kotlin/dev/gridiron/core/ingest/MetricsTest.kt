@@ -24,7 +24,7 @@ class MetricsTest {
     @Test
     fun `ids are unique and every Python metric is here`() {
         assertEquals(METRICS.size, byId.size)
-        assertEquals(100, METRICS.size)
+        assertEquals(122, METRICS.size)
     }
 
     @Test
@@ -35,6 +35,41 @@ class MetricsTest {
             assertFalse(m.computed, id)
             assertTrue(id in SPARSE_METRIC_IDS, id)
             assertEquals(id.uppercase(), m.abbr)
+        }
+    }
+
+    private val ngsVisible = mapOf(
+        "ngs_time_to_throw" to listOf("QB"), "ngs_aggressiveness" to listOf("QB"), "ngs_intended_air_yards" to listOf("QB"),
+        "ngs_ryoe" to listOf("QB", "RB"), "ngs_ryoe_per_att" to listOf("QB", "RB"),
+        "ngs_rush_efficiency" to listOf("QB", "RB"), "ngs_stacked_box_pct" to listOf("QB", "RB"),
+        "ngs_separation" to listOf("RB", "WR", "TE"), "ngs_cushion" to listOf("RB", "WR", "TE"),
+        "ngs_yac_over_expected" to listOf("RB", "WR", "TE"),
+    )
+    private val ngsInternal = listOf(
+        "ngs_attempts", "ngs_carries", "ngs_targets", "ngs_receptions",
+        "ngs_ttt_w", "ngs_aggr_w", "ngs_iay_w", "ngs_eff_w", "ngs_box_w", "ngs_sep_w", "ngs_cush_w", "ngs_yacoe_w",
+    )
+
+    @Test
+    fun `the ten NGS metrics are visible tier B sparse and position-scoped`() {
+        for ((id, positions) in ngsVisible) {
+            val m = byId.getValue(id)
+            assertFalse(m.isInternal, id)
+            assertFalse(m.computed, id)
+            assertEquals("B", m.tier, id)
+            assertEquals("ngs", m.group, id)
+            assertEquals(positions.sorted(), m.positions.sorted(), id)
+            assertTrue(id in SPARSE_METRIC_IDS, id)
+        }
+        assertFalse(byId.getValue("ngs_rush_efficiency").higherIsBetter)
+    }
+
+    @Test
+    fun `the twelve NGS components are internal and sparse`() {
+        for (id in ngsInternal) {
+            val m = byId.getValue(id)
+            assertTrue(m.isInternal, id)
+            assertTrue(id in SPARSE_METRIC_IDS, id)
         }
     }
 

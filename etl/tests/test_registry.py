@@ -83,4 +83,29 @@ def test_kicking_and_defense_metrics_are_sparse_theirs_alone_and_visible_where_t
     assert METRICS["yards_allowed"].dist_family == "normal"
     assert not METRICS["yards_allowed"].higher_is_better
     assert not any(mid.startswith("pa_") for mid in METRICS)
-    assert len(METRICS) == 100
+    assert len(METRICS) == 122
+
+
+NGS_VISIBLE = {
+    "ngs_time_to_throw": ("QB",), "ngs_aggressiveness": ("QB",), "ngs_intended_air_yards": ("QB",),
+    "ngs_ryoe": ("QB", "RB"), "ngs_ryoe_per_att": ("QB", "RB"),
+    "ngs_rush_efficiency": ("QB", "RB"), "ngs_stacked_box_pct": ("QB", "RB"),
+    "ngs_separation": ("RB", "WR", "TE"), "ngs_cushion": ("RB", "WR", "TE"),
+    "ngs_yac_over_expected": ("RB", "WR", "TE"),
+}
+NGS_INTERNAL = [
+    "ngs_attempts", "ngs_carries", "ngs_targets", "ngs_receptions",
+    "ngs_ttt_w", "ngs_aggr_w", "ngs_iay_w", "ngs_eff_w", "ngs_box_w", "ngs_sep_w", "ngs_cush_w", "ngs_yacoe_w",
+]
+
+
+def test_ngs_metrics():
+    for mid, positions in NGS_VISIBLE.items():
+        m = METRICS[mid]
+        assert not m.internal and not m.computed and m.tier == "B" and m.group == "ngs", mid
+        assert sorted(m.positions) == sorted(positions), mid
+        assert mid in sparse_metric_ids(), mid
+    assert not METRICS["ngs_rush_efficiency"].higher_is_better
+    for mid in NGS_INTERNAL:
+        assert METRICS[mid].internal and mid in sparse_metric_ids(), mid
+

@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass, replace
 from typing import Literal
 
 Tier = Literal["A", "B", "C", "D"]
-Group = Literal["volume", "efficiency", "fantasy", "context", "passing", "usage", "kicking", "defense"]
+Group = Literal["volume", "efficiency", "fantasy", "context", "passing", "usage", "kicking", "defense", "ngs"]
 
 
 @dataclass(frozen=True)
@@ -318,6 +318,53 @@ _M: list[Metric] = [
             ("pass_epa", "Pass EPA", "Summed EPA on dropbacks.", 3),
             ("cpoe_sum", "CPOE Sum", "Summed per-attempt CPOE.", 3),
             ("cpoe_n", "CPOE Attempts", "Attempts with a CPOE value.", 0),
+        ]
+    ],
+    # ---------------- Next Gen Stats (tier B; core/ingest's Ngs.kt is the twin) ----------------
+    # NGS publishes per-week averages. Each is stored as average x weight beside its
+    # weight, so a range recomputes as sum(avg x weight) / sum(weight), never a mean of means.
+    *[
+        Metric(mid, name, abbr, "ngs", definition, positions=positions, tier="B",
+               higher_is_better=better, decimals=dec, sparse=True)
+        for mid, abbr, name, positions, better, dec, definition in [
+            ("ngs_time_to_throw", "TTT", "Time to Throw", ("QB",), True, 2,
+             "Average seconds from snap to release on attempts, sacks excluded. Under 2.5 is a quick game; over 3.0 holds the ball."),
+            ("ngs_aggressiveness", "AGG%", "Aggressiveness", ("QB",), True, 1,
+             "Share of attempts thrown into tight windows, with a defender within a yard of the receiver at the catch point. A risk profile, not a quality measure."),
+            ("ngs_intended_air_yards", "IAY", "Intended Air Yards", ("QB",), True, 1,
+             "Average air yards on attempts, measured by player tracking."),
+            ("ngs_ryoe", "RYOE", "Rush Yards Over Expected", ("QB", "RB"), True, 1,
+             "Actual rushing yards minus the tracking model's expectation from blocker and defender positions."),
+            ("ngs_ryoe_per_att", "RYOE/A", "RYOE per Carry", ("QB", "RB"), True, 2,
+             "Rush yards over expected per carry."),
+            ("ngs_rush_efficiency", "EFF", "Rushing Efficiency", ("QB", "RB"), False, 2,
+             "Yards a rusher travels per rushing yard gained. Lower is a more direct, north-south runner."),
+            ("ngs_stacked_box_pct", "8+ BOX%", "Carries vs 8+ in the Box", ("QB", "RB"), True, 1,
+             "Share of carries with eight or more defenders in the box: the front the runner faced, not his skill."),
+            ("ngs_separation", "SEP", "Average Separation", ("RB", "WR", "TE"), True, 2,
+             "Average yards between the receiver and the nearest defender when the pass arrives."),
+            ("ngs_cushion", "CUSH", "Average Cushion", ("RB", "WR", "TE"), True, 2,
+             "Average yards between the receiver and the nearest defender at the snap."),
+            ("ngs_yac_over_expected", "YACOE", "YAC Over Expected", ("RB", "WR", "TE"), True, 2,
+             "Average yards after catch above the tracking model's expectation, per reception."),
+        ]
+    ],
+    *[
+        Metric(mid, name, mid.upper(), "ngs", definition, positions=("QB", "RB", "WR", "TE"),
+               tier="B", decimals=dec, internal=True, sparse=True)
+        for mid, name, definition, dec in [
+            ("ngs_attempts", "NGS Attempts", "Attempts in NGS's passing file: the weight behind its passing averages.", 0),
+            ("ngs_carries", "NGS Carries", "Carries in NGS's rushing file: the weight behind its rushing averages.", 0),
+            ("ngs_targets", "NGS Targets", "Targets in NGS's receiving file: the weight behind separation and cushion.", 0),
+            ("ngs_receptions", "NGS Receptions", "Receptions in NGS's receiving file: the weight behind YAC over expected.", 0),
+            ("ngs_ttt_w", "NGS Time to Throw x Attempts", "Weekly average time to throw times attempts.", 3),
+            ("ngs_aggr_w", "NGS Aggressiveness x Attempts", "Weekly aggressiveness times attempts.", 3),
+            ("ngs_iay_w", "NGS Intended Air Yards x Attempts", "Weekly average intended air yards times attempts.", 3),
+            ("ngs_eff_w", "NGS Efficiency x Carries", "Weekly rushing efficiency times carries.", 3),
+            ("ngs_box_w", "NGS 8+ Box x Carries", "Weekly share of carries against eight or more defenders, times carries.", 3),
+            ("ngs_sep_w", "NGS Separation x Targets", "Weekly average separation times targets.", 3),
+            ("ngs_cush_w", "NGS Cushion x Targets", "Weekly average cushion times targets.", 3),
+            ("ngs_yacoe_w", "NGS YAC Over Expected x Receptions", "Weekly average YAC over expected times receptions.", 3),
         ]
     ],
 ]

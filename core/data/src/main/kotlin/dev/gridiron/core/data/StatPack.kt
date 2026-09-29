@@ -27,6 +27,16 @@ import dev.gridiron.core.statquery.StatColumn.FPOE
 import dev.gridiron.core.statquery.StatColumn.GL_CARRIES
 import dev.gridiron.core.statquery.StatColumn.GZ_CARRIES
 import dev.gridiron.core.statquery.StatColumn.INTERCEPTIONS
+import dev.gridiron.core.statquery.StatColumn.NGS_AGGRESSIVENESS
+import dev.gridiron.core.statquery.StatColumn.NGS_CUSHION
+import dev.gridiron.core.statquery.StatColumn.NGS_INTENDED_AIR_YARDS
+import dev.gridiron.core.statquery.StatColumn.NGS_RUSH_EFFICIENCY
+import dev.gridiron.core.statquery.StatColumn.NGS_RYOE
+import dev.gridiron.core.statquery.StatColumn.NGS_RYOE_PER_ATT
+import dev.gridiron.core.statquery.StatColumn.NGS_SEPARATION
+import dev.gridiron.core.statquery.StatColumn.NGS_STACKED_BOX_PCT
+import dev.gridiron.core.statquery.StatColumn.NGS_TIME_TO_THROW
+import dev.gridiron.core.statquery.StatColumn.NGS_YAC_OVER_EXPECTED
 import dev.gridiron.core.statquery.StatColumn.OFFENSE_SNAPS
 import dev.gridiron.core.statquery.StatColumn.PASSING_TDS
 import dev.gridiron.core.statquery.StatColumn.PASSING_YARDS
@@ -115,6 +125,24 @@ public enum class StatPack(
         listOf(TOTAL_EPA, EPA_PER_DROPBACK, CPOE, RUSH_EPA_PER_CARRY, RUSH_SUCCESS_RATE, ADOT, RACR, CATCH_RATE),
         TOTAL_EPA,
         null,
+    ),
+    NGS_PASSING(
+        "NGS Passing",
+        listOf(NGS_TIME_TO_THROW, NGS_AGGRESSIVENESS, NGS_INTENDED_AIR_YARDS, ATTEMPTS),
+        NGS_INTENDED_AIR_YARDS,
+        ATTEMPTS,
+    ),
+    NGS_RUSHING(
+        "NGS Rushing",
+        listOf(NGS_RYOE, NGS_RYOE_PER_ATT, NGS_RUSH_EFFICIENCY, NGS_STACKED_BOX_PCT, CARRIES),
+        NGS_RYOE_PER_ATT,
+        CARRIES,
+    ),
+    NGS_RECEIVING(
+        "NGS Receiving",
+        listOf(NGS_SEPARATION, NGS_CUSHION, NGS_YAC_OVER_EXPECTED, TARGETS),
+        NGS_SEPARATION,
+        TARGETS,
     ),
     KICKING(
         "Kicking",
