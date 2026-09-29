@@ -59,4 +59,36 @@ class DefenseTest {
         val noLine = defenseStages(own, 20.0, emptyMap(), 33.0, league, implied = null)
         assertEquals(noLine.afterMatchup, noLine.final)
     }
+
+    @Test
+    fun `yards allowed follow the same stages as points allowed, and are absent without a yards history`() {
+        val league = DefenseLeague(DST_STATS.associateWith { 1.0 }, 22.0, yardsAllowed = 330.0)
+        val own = DST_STATS.associateWith { 2.0 }
+        // Expected points after the matchup: 20 * 33 / 22 = 30; a line of 24 is 0.8 of that.
+        val stages = defenseStages(own, 20.0, emptyMap(), opponentScores = 33.0, league = league, implied = 24.0, ownYards = 300.0, yardsFactor = 1.1)
+        assertEquals(300.0, stages.baseline.getValue(YARDS_ALLOWED), 1e-12)
+        assertEquals(330.0, stages.afterMatchup.getValue(YARDS_ALLOWED), 1e-12)
+        assertEquals(330.0 * Math.pow(0.8, K.DST_YA_SCRIPT_ELASTICITY), stages.final.getValue(YARDS_ALLOWED), 1e-9)
+
+        // No line: the final stage is the matchup's. A wild line is capped like every game script.
+        val noLine = defenseStages(own, 20.0, emptyMap(), 33.0, league, implied = null, ownYards = 300.0, yardsFactor = 1.1)
+        assertEquals(330.0, noLine.final.getValue(YARDS_ALLOWED), 1e-12)
+        val wild = defenseStages(own, 20.0, emptyMap(), 33.0, league, implied = 100.0, ownYards = 300.0, yardsFactor = 1.0)
+        assertEquals(300.0 * Math.pow(K.IMPLIED_RATIO_MAX, K.DST_YA_SCRIPT_ELASTICITY), wild.final.getValue(YARDS_ALLOWED), 1e-9)
+
+        // Without yards (an old database, a fixture): nothing is emitted.
+        val none = defenseStages(own, 20.0, emptyMap(), 33.0, DefenseLeague(DST_STATS.associateWith { 1.0 }, 22.0), 17.0)
+        assertEquals(false, YARDS_ALLOWED in none.final.keys)
+    }
+
+    @Test
+    fun `the league's yards allowed are averaged from D-ST games, zero when there are none`() {
+        val games = listOf(
+            PlayerGame("DST_A", 2025, 1, "AAA", mapOf("g" to 1.0, "points_allowed" to 10.0, "yards_allowed" to 300.0)),
+            PlayerGame("DST_B", 2025, 1, "BBB", mapOf("g" to 1.0, "points_allowed" to 30.0, "yards_allowed" to 360.0)),
+        )
+        assertEquals(330.0, defenseLeague(games)!!.yardsAllowed, 1e-12)
+        val noYards = listOf(PlayerGame("DST_A", 2025, 1, "AAA", mapOf("g" to 1.0, "points_allowed" to 10.0)))
+        assertEquals(0.0, defenseLeague(noYards)!!.yardsAllowed, 0.0)
+    }
 }

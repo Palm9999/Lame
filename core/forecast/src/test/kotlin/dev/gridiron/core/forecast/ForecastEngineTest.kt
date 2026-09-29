@@ -112,7 +112,7 @@ class ForecastEngineTest {
         val sacks = if (team == "AAA" && season == 2025 && week == 2) dstA2025Week2Sacks else 2.0 * k
         db.week(
             "DST_$team", season, week, team,
-            "dst_sacks" to sacks, "dst_interceptions" to 1.0, "points_allowed" to allowed,
+            "dst_sacks" to sacks, "dst_interceptions" to 1.0, "points_allowed" to allowed, "yards_allowed" to allowed * 15.0,
         )
     }
 
@@ -469,7 +469,7 @@ class ForecastEngineTest {
             assertEquals(listOf("matchup"), factors(db, "DST_BBB"))
             // The matchup note names what the factor uses: the opponent's scoring as well as its sacks and turnovers.
             val note = db.query("SELECT note FROM player_week_projection_factor WHERE player_id = 'DST_BBB' AND season = 2025 AND week = 3 AND factor = 'matchup'").single()[0]!!
-            assertTrue(Regex("""vs CCC: scores \d+\.\d pts, gives up \d+\.\d sacks, \d+\.\d turnovers a game""").matches(note), note)
+            assertTrue(Regex("""vs CCC: scores \d+\.\d pts, \d+ yards, gives up \d+\.\d sacks, \d+\.\d turnovers a game""").matches(note), note)
             assertEquals(
                 db.query("SELECT metric_id, mean FROM player_week_projection WHERE player_id = 'K_B' AND season = 2025 AND week = 3 AND stage = 'baseline' ORDER BY 1"),
                 db.query("SELECT metric_id, mean FROM player_week_projection WHERE player_id = 'K_B' AND season = 2025 AND week = 3 AND stage = 'final' ORDER BY 1"),
@@ -500,6 +500,37 @@ class ForecastEngineTest {
             val games = db.query("SELECT DISTINCT mean, variance FROM player_week_projection WHERE player_id LIKE 'DST%' AND metric_id = 'g'")
             assertEquals(listOf(listOf("1.0", "0.0")), games)
             assertEquals(emptyList<List<String?>>(), db.query("SELECT metric_id FROM player_week_projection WHERE metric_id LIKE 'pa\\_%' ESCAPE '\\'"))
+        }
+    }
+
+    @Test
+    fun `a team defense's yards allowed are projected as their own stat with a spread that scales with the mean`() {
+        league("yards.db", units = true).use { db ->
+            run(db)
+            val rows = db.query(
+                "SELECT player_id, week, stage, mean, variance FROM player_week_projection " +
+                    "WHERE player_id LIKE 'DST%' AND metric_id = 'yards_allowed'",
+            )
+            assertTrue(rows.size >= 8, "$rows")
+            for (row in rows) {
+                val mean = row[3]!!.toDouble()
+                assertTrue(mean in 200.0..450.0, "$row")
+                assertEquals(K.DST_YA_CV * mean * (K.DST_YA_CV * mean), row[4]!!.toDouble(), 1e-6, "$row")
+            }
+            // Rest of season sums the remaining games, like points allowed.
+            assertTrue(rosMean(db, "DST_AAA", "yards_allowed") > 1.5 * finalMean(db, "DST_AAA", 3, "yards_allowed"))
+            // A kicker has none.
+            assertEquals(emptyList<List<String?>>(), db.query("SELECT 1 FROM player_week_projection WHERE player_id LIKE 'K%' AND metric_id = 'yards_allowed'"))
+        }
+    }
+
+    @Test
+    fun `a defense with no yards history is projected without yards`() {
+        league("no-yards.db", units = true).use { db ->
+            db.exec("DELETE FROM player_week_stat WHERE metric_id = 'yards_allowed'")
+            run(db)
+            assertEquals(emptyList<List<String?>>(), db.query("SELECT 1 FROM player_week_projection WHERE metric_id = 'yards_allowed'"))
+            assertTrue(finalMean(db, "DST_AAA", 3, "points_allowed") > 0.0)
         }
     }
 

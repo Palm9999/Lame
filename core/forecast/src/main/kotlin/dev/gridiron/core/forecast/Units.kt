@@ -17,6 +17,7 @@ private class Defense(
     override val team: String,
     val own: Map<String, Double>,
     val ownAllowed: Double,
+    val ownYards: Double,
 ) : TeamUnit
 
 /**
@@ -104,6 +105,7 @@ internal class UnitProjector(
                 scored.getOrPut(offense) { ArrayList() } += g["points_allowed"]
                 val byStat = allowed.getOrPut(offense) { HashMap() }
                 for (stat in DST_STATS) byStat.getOrPut(stat) { ArrayList() } += g[stat]
+                byStat.getOrPut(YARDS_ALLOWED) { ArrayList() } += g[YARDS_ALLOWED]
             }
         }
     }
@@ -185,6 +187,7 @@ internal class UnitProjector(
             player, team,
             DST_STATS.associateWith { stat -> unitRate(own.map { it[stat] }, league.perGame.getValue(stat), K.DST_K.getValue(stat)) },
             unitRate(own.map { it["points_allowed"] }, league.pointsAllowed, K.DST_PA_K),
+            unitRate(own.map { it[YARDS_ALLOWED] }, league.yardsAllowed, K.DST_YA_K),
         )
     }
 
@@ -203,7 +206,8 @@ internal class UnitProjector(
             val factors = DST_STATS.associateWith { stat -> opponentFactor(against[stat].orEmpty(), league.perGame.getValue(stat)) }
             val opponentScores = unitRate(state.scored[opponent].orEmpty(), league.pointsAllowed, K.DST_PA_K)
             val implied = game.impliedPoints(opponent)
-            val s = defenseStages(u.own, u.ownAllowed, factors, opponentScores, league, implied)
+            val yardsFactor = opponentFactor(against[YARDS_ALLOWED].orEmpty(), league.yardsAllowed)
+            val s = defenseStages(u.own, u.ownAllowed, factors, opponentScores, league, implied, u.ownYards, yardsFactor)
             UnitStages(
                 s.baseline, s.afterMatchup, s.final,
                 matchupNote = defenseNote(opponent, opponentScores, against, league),
@@ -247,17 +251,19 @@ internal class UnitProjector(
      */
     private fun variance(metric: String, mean: Double, cv: Double, sd: Double): Double = when (metric) {
         POINTS_ALLOWED -> sd * sd
+        YARDS_ALLOWED -> (K.DST_YA_CV * mean).let { it * it }
         "g" -> 0.0
         else -> varianceFor(mean, cv)
     }
 
     /**
      * A unit's reference points for one game: its stats at the presets' values
-     * and, for a D/ST, the preset tiers' expected points for its points allowed.
+     * and, for a D/ST, the preset tiers' expected points for its points and yards allowed.
      */
     private fun points(components: Map<String, Double>, sd: Double): Double =
         referencePoints(components) +
-            (components[POINTS_ALLOWED]?.let { ScoringPresets.PPR.expectedPointsAllowedPoints(it, sd) } ?: 0.0)
+            (components[POINTS_ALLOWED]?.let { ScoringPresets.PPR.expectedPointsAllowedPoints(it, sd) } ?: 0.0) +
+            (components[YARDS_ALLOWED]?.let { ScoringPresets.PPR.expectedYardsAllowedPoints(it, K.DST_YA_CV * it) } ?: 0.0)
 
     private fun logRatio(after: Map<String, Double>, before: Map<String, Double>, sd: Double): Double {
         val a = points(after, sd)
@@ -270,11 +276,16 @@ internal class UnitProjector(
 private fun impliedNote(label: String, implied: Double, league: Double): String =
     String.format(Locale.US, "%s %.1f pts (%+.1f)", label, implied, implied - league)
 
-/** "vs KC: scores 24.1 pts, gives up 2.9 sacks, 1.6 turnovers a game", shrunk like the matchup's factors. */
+/** "vs KC: scores 24.1 pts, 331 yards, gives up 2.9 sacks, 1.6 turnovers a game", shrunk like the matchup's factors. */
 private fun defenseNote(opponent: String, scores: Double, against: Map<String, List<Double>>, league: DefenseLeague): String {
     fun rate(stat: String) = unitRate(against[stat].orEmpty(), league.perGame.getValue(stat), K.DST_OPP_K)
+    val yards = if (league.yardsAllowed > 0.0) {
+        String.format(Locale.US, ", %.0f yards", unitRate(against[YARDS_ALLOWED].orEmpty(), league.yardsAllowed, K.DST_OPP_K))
+    } else {
+        ""
+    }
     return String.format(
-        Locale.US, "vs %s: scores %.1f pts, gives up %.1f sacks, %.1f turnovers a game",
-        opponent, scores, rate("dst_sacks"), rate("dst_interceptions") + rate("dst_fumble_recoveries"),
+        Locale.US, "vs %s: scores %.1f pts%s, gives up %.1f sacks, %.1f turnovers a game",
+        opponent, scores, yards, rate("dst_sacks"), rate("dst_interceptions") + rate("dst_fumble_recoveries"),
     )
 }

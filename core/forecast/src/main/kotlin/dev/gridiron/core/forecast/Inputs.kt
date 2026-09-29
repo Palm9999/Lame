@@ -101,7 +101,7 @@ private val READ_METRICS = listOf(
 private val UNIT_METRICS = listOf(
     "g", "fg_att_0_39", "fg_att_40_49", "fg_att_50", "fg_made_0_39", "fg_made_40_49", "fg_made_50",
     "fg_missed", "xp_att", "xp_made", "xp_missed",
-    "dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "points_allowed",
+    "dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "points_allowed", "yards_allowed",
 )
 
 internal fun loadInputs(conn: SQLiteConnection): ForecastInputs {

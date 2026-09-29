@@ -7,6 +7,13 @@ import dev.gridiron.core.statquery.Component
 public data class ProjectedPoints(val points: Double, val floor: Double, val ceiling: Double)
 
 /**
+ * Correlation between one game's points allowed and yards allowed, measured
+ * on every team-game of 2024-2025 (0.666, 1,140 games) and pinned by
+ * `DstCorrelationTest` within 0.05. The Monte Carlo draws the two jointly.
+ */
+public const val DST_POINTS_YARDS_CORRELATION: Double = 0.67
+
+/**
  * How much farther than the simulation's 10th and 90th percentiles each
  * position's floor and ceiling sit from the projection. The simulation draws
  * every stat independently, and TD counts ignore the projected variance, so
