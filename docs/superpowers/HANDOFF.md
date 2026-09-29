@@ -11,10 +11,14 @@
 
 ## Where things stand
 
-The four projection sub-projects and the Player page season stats are built, reviewed and merged (PRs #4, #5, #6, #7, #9, #10, #11). The projection design is `specs/2026-09-26-projection-model-design.md`, which supersedes the pipeline half of `specs/2026-09-23-projections-design.md`. Nothing is open.
+The four projection sub-projects and the Player page season stats are built, reviewed and merged (PRs #4, #5, #6, #7, #9, #10, #11). The projection design is `specs/2026-09-26-projection-model-design.md`, which supersedes the pipeline half of `specs/2026-09-23-projections-design.md`. Only the docs-only draft [PR #12](https://github.com/Palm9999/Lame/pull/12) is open (HANDOFF and the yards-allowed spec).
 
-**Next: the user picks the next Known Gap** (list in `CLAUDE.md`). Each one gets its own brainstorm, spec, plan and PR (the `brainstorming`, then `writing-plans` skills; the user has approved native execution before). The candidates, with what I found:
-- **Yards-allowed tiers for D/ST:** `team_week_defense` already stores yards allowed; needs a tier editor beside the points-allowed one, in scoring (SQL and `score()`), projections and the profile editor.
+**In flight (2026-09-29): D/ST yards-allowed tiers.** The design is approved and written up in `specs/2026-09-29-dst-yards-allowed-design.md` (committed on this branch, on the open draft docs PR #12). **Next:** the user reviews the spec; then write the plan with the `writing-plans` skill (expect about 4 tasks: model and SQL, data and Python parity, forecast and Monte Carlo, editor, migration and screens), get the user's plan review and execution choice (native was chosen last time), and execute. The user's rulings for it:
+- ESPN's yards tiers are **on by default in every preset and every saved profile** (migrated once, prefs `formatVersion` 3).
+- Yards allowed is **projected as its own stat**, like points allowed, and the Monte Carlo draws it jointly with points allowed.
+- The ESPN tier table in the spec is from memory and unverified; the user can edit it.
+
+**The other candidate gaps** (the user picks after this one; each gets its own brainstorm, spec, plan and PR):
 - **Injured player's share to teammates:** the forecast shows an Out/IR player as Out and doesn't move his share.
 - **More metrics (NGS/FTN):** wired in `sources.py` but not transformed; needs the Python ETL, the Kotlin port and the parity gate.
 - **Saved Grid presets:** planned home is a `user.db` (not built).
