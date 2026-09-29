@@ -8,14 +8,21 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.gridiron.core.data.Catalog
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.GridPage
+import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PositionFilter
+import dev.gridiron.core.data.PresetLimitReached
+import dev.gridiron.core.data.PresetNameTaken
+import dev.gridiron.core.data.Resolved
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.Sparkline
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TraySlotUi
 import dev.gridiron.core.data.describeSlot
+import dev.gridiron.core.datastore.GridPreset
+import dev.gridiron.core.datastore.MAX_PRESETS
+import dev.gridiron.core.datastore.PresetWeeks
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringPresets
@@ -81,7 +88,36 @@ sealed interface GridEvent {
     data object FilterSheetClosed : GridEvent
     /** Shows only roster [id]'s players; null shows everyone. */
     data class RosterSelected(val id: String?) : GridEvent
+
+    /** Opens the presets sheet. */
+    data object PresetsOpened : GridEvent
+    data object PresetsClosed : GridEvent
+    /** Opens the save dialog, its weeks rule defaulted from the view. */
+    data object PresetSaveRequested : GridEvent
+    data class PresetSaved(val name: String, val weeks: PresetWeeks) : GridEvent
+    /** Yes to "replace it?" after saving under a used name. */
+    data object PresetReplaceConfirmed : GridEvent
+    data class PresetRenameRequested(val id: String) : GridEvent
+    data class PresetRenamed(val id: String, val name: String) : GridEvent
+    /** Closes the save, rename or replace dialog and returns to the list. */
+    data object PresetDialogDismissed : GridEvent
+    data class PresetApplied(val id: String) : GridEvent
+    data class PresetDeleted(val id: String) : GridEvent
+    data object PresetDeleteUndone : GridEvent
+    /** The undo snackbar timed out. */
+    data object PresetDeleteDismissed : GridEvent
 }
+
+/** What the presets sheet shows: the list, or a dialog over it. */
+sealed interface PresetSheet {
+    data object Listing : PresetSheet
+    data class Saving(val weeks: PresetWeeks) : PresetSheet
+    data class Renaming(val id: String, val name: String) : PresetSheet
+    data class ConfirmReplace(val name: String, val id: String, val weeks: PresetWeeks) : PresetSheet
+}
+
+/** A saved preset as the sheet lists it; [unavailable] is why it can't be applied right now, or null. */
+data class PresetRow(val preset: GridPreset, val summary: String, val unavailable: String?)
 
 sealed interface GridUiState {
     data object Loading : GridUiState
@@ -115,7 +151,16 @@ sealed interface GridUiState {
         val rosterId: String? = null,
         /** Everyone on any roster, so the table can mark them. */
         val rostered: ImmutableSet<String> = persistentSetOf(),
+        /** False when no presets repository is wired, so the screen hides the chip. */
+        val presetsEnabled: Boolean = false,
+        val presets: ImmutableList<PresetRow> = persistentListOf(),
+        /** The open presets sheet, or null when closed. */
+        val presetSheet: PresetSheet? = null,
+        /** A preset just deleted, offered for undo until the snackbar goes. */
+        val deletedPreset: GridPreset? = null,
     ) : GridUiState {
+        val presetsFull: Boolean get() = presets.size >= MAX_PRESETS
+
         val refreshing: Boolean get() = page?.request != request && error == null
     }
 }
@@ -140,6 +185,8 @@ class GridViewModel(
     badges: Flow<Map<String, String>> = flowOf(emptyMap()),
     /** The user's fantasy teams, from [dev.gridiron.core.data.RosterRepository]. */
     rosters: Flow<List<Roster>> = flowOf(emptyList()),
+    /** Saved views; null turns the presets off. */
+    private val presets: GridPresetRepository? = null,
 ) : ViewModel() {
 
     private sealed interface CatalogLoad {
@@ -169,6 +216,10 @@ class GridViewModel(
     /** The chosen roster's players, kept so a request created later starts narrowed too. */
     private val onlyPlayers = MutableStateFlow<Set<String>?>(null)
     private val rosterList = rosters.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    private val presetList = (presets?.presets ?: flowOf(persistentListOf<GridPreset>()))
+        .stateIn(viewModelScope, SharingStarted.Eagerly, persistentListOf())
+    private val presetSheet = MutableStateFlow<PresetSheet?>(null)
+    private val deletedPreset = MutableStateFlow<GridPreset?>(null)
 
     private val trayUi: Flow<ImmutableList<TraySlotUi>> =
         combine(tray.slots, catalogLoad) { slots, load -> slots to (load as? CatalogLoad.Loaded)?.catalog }
@@ -224,6 +275,20 @@ class GridViewModel(
                     rosters = list.toImmutableList(),
                     rosterId = id,
                     rostered = list.flatMap { it.playerIds }.toImmutableSet(),
+                )
+            } else {
+                base
+            }
+        }.combine(combine(presetList, presetSheet, deletedPreset, ::Triple)) { base, (list, sheet, deleted) ->
+            if (base is GridUiState.Ready && presets != null) {
+                base.copy(
+                    presetsEnabled = true,
+                    presets = list.map { preset ->
+                        val reason = (presets.resolve(preset, base.request) as? Resolved.Unavailable)?.reason
+                        PresetRow(preset, presetSummary(preset), reason)
+                    }.toImmutableList(),
+                    presetSheet = sheet,
+                    deletedPreset = deleted,
                 )
             } else {
                 base
@@ -418,10 +483,97 @@ class GridViewModel(
                 rosterId.value = event.id
                 return
             }
+            GridEvent.PresetsOpened,
+            GridEvent.PresetsClosed,
+            GridEvent.PresetSaveRequested,
+            GridEvent.PresetReplaceConfirmed,
+            GridEvent.PresetDialogDismissed,
+            GridEvent.PresetDeleteUndone,
+            GridEvent.PresetDeleteDismissed,
+            is GridEvent.PresetSaved,
+            is GridEvent.PresetRenameRequested,
+            is GridEvent.PresetRenamed,
+            is GridEvent.PresetApplied,
+            is GridEvent.PresetDeleted -> {
+                onPresetEvent(event)
+                return
+            }
             else -> Unit
         }
         val c = catalog ?: return
         request.update { current -> current?.let { reduce(it, event, c) } }
+    }
+
+    private fun onPresetEvent(event: GridEvent) {
+        val repo = presets ?: return
+        val current = request.value
+        when (event) {
+            GridEvent.PresetsOpened -> presetSheet.value = PresetSheet.Listing
+            GridEvent.PresetsClosed -> presetSheet.value = null
+            GridEvent.PresetDialogDismissed -> presetSheet.value = PresetSheet.Listing
+            GridEvent.PresetSaveRequested -> if (current != null) presetSheet.value = PresetSheet.Saving(repo.weeksRule(current))
+            is GridEvent.PresetSaved -> if (current != null) {
+                viewModelScope.launch {
+                    try {
+                        repo.save(event.name, current, event.weeks)
+                        presetSheet.value = PresetSheet.Listing
+                    } catch (e: PresetNameTaken) {
+                        presetSheet.value = PresetSheet.ConfirmReplace(event.name.trim(), e.existingId, event.weeks)
+                    } catch (e: PresetLimitReached) {
+                        message.value = "You can keep $MAX_PRESETS presets. Delete one first."
+                    } catch (e: IllegalArgumentException) {
+                        message.value = e.message
+                    }
+                }
+            }
+            GridEvent.PresetReplaceConfirmed -> {
+                val ask = presetSheet.value as? PresetSheet.ConfirmReplace
+                if (ask != null && current != null) {
+                    viewModelScope.launch {
+                        repo.overwrite(ask.id, current, ask.weeks)
+                        presetSheet.value = PresetSheet.Listing
+                    }
+                }
+            }
+            is GridEvent.PresetRenameRequested -> presetList.value.firstOrNull { it.id == event.id }?.let {
+                presetSheet.value = PresetSheet.Renaming(it.id, it.name)
+            }
+            is GridEvent.PresetRenamed -> viewModelScope.launch {
+                try {
+                    repo.rename(event.id, event.name)
+                    presetSheet.value = PresetSheet.Listing
+                } catch (e: PresetNameTaken) {
+                    message.value = "Another preset is already called that."
+                } catch (e: IllegalArgumentException) {
+                    message.value = e.message
+                }
+            }
+            is GridEvent.PresetApplied -> {
+                val preset = presetList.value.firstOrNull { it.id == event.id }
+                if (preset != null && current != null) {
+                    when (val resolved = repo.resolve(preset, current)) {
+                        is Resolved.Ready -> {
+                            // A half-typed filter sheet would otherwise count against the old view.
+                            draft.value = null
+                            draftCount.value = null
+                            presetSheet.value = null
+                            request.value = resolved.request
+                        }
+                        is Resolved.Unavailable -> message.value = "${preset.name}: ${resolved.reason}"
+                    }
+                }
+            }
+            is GridEvent.PresetDeleted -> presetList.value.firstOrNull { it.id == event.id }?.let { preset ->
+                deletedPreset.value = preset
+                viewModelScope.launch { repo.delete(preset.id) }
+            }
+            GridEvent.PresetDeleteUndone -> deletedPreset.value?.let { preset ->
+                deletedPreset.value = null
+                viewModelScope.launch { repo.restore(preset) }
+            }
+            GridEvent.PresetDeleteDismissed -> deletedPreset.value = null
+            else -> Unit
+        }
     }
 
     companion object {
@@ -468,6 +620,18 @@ class GridViewModel(
             is GridEvent.FilterDraftChanged -> r
             GridEvent.FilterSheetClosed -> r
             is GridEvent.RosterSelected -> r
+            GridEvent.PresetsOpened,
+            GridEvent.PresetsClosed,
+            GridEvent.PresetSaveRequested,
+            GridEvent.PresetReplaceConfirmed,
+            GridEvent.PresetDialogDismissed,
+            GridEvent.PresetDeleteUndone,
+            GridEvent.PresetDeleteDismissed,
+            is GridEvent.PresetSaved,
+            is GridEvent.PresetRenameRequested,
+            is GridEvent.PresetRenamed,
+            is GridEvent.PresetApplied,
+            is GridEvent.PresetDeleted -> r
         }
 
         /**
@@ -488,9 +652,10 @@ class GridViewModel(
             tray: CompareTrayRepository,
             badges: Flow<Map<String, String>> = flowOf(emptyMap()),
             rosters: Flow<List<Roster>> = flowOf(emptyList()),
+            presets: GridPresetRepository? = null,
         ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { GridViewModel(repository, scoring, tray, badges = badges, rosters = rosters) }
+                initializer { GridViewModel(repository, scoring, tray, badges = badges, rosters = rosters, presets = presets) }
             }
     }
 }

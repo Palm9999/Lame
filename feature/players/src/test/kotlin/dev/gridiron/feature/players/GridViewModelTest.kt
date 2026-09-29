@@ -2,6 +2,7 @@ package dev.gridiron.feature.players
 
 import dev.gridiron.core.data.Catalog
 import dev.gridiron.core.data.CompareTrayRepository
+import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PositionFilter
 import dev.gridiron.core.data.ScoringRepository
@@ -12,6 +13,11 @@ import dev.gridiron.core.data.sparklineWeeks
 import dev.gridiron.core.data.weeksLabel
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.ResultRow
+import dev.gridiron.core.datastore.GridPreset
+import dev.gridiron.core.datastore.MAX_PRESETS
+import dev.gridiron.core.datastore.PresetFilter
+import dev.gridiron.core.datastore.PresetFilterKind
+import dev.gridiron.core.datastore.PresetWeeks
 import dev.gridiron.core.datastore.UserPrefs
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.WeekRange
@@ -430,6 +436,177 @@ class GridViewModelTest {
         advanceUntilIdle()
         assertEquals(null, ready(vm).rosterId)
         assertEquals(null, ready(vm).request.onlyPlayers)
+    }
+
+    // --- saved presets ---
+
+    private fun presetVm() = GridViewModel(
+        repo,
+        ScoringRepository(prefs),
+        CompareTrayRepository(prefs),
+        debounceMillis = 150,
+        presets = GridPresetRepository(prefs),
+    )
+
+    private fun stored(id: String, name: String, packId: String = "OPPORTUNITY") = GridPreset(
+        id, name, packId, "TARGETS", "DESCENDING", "WR", false, emptySet(), null,
+        listOf(PresetFilter("TARGETS", PresetFilterKind.AT_LEAST, 20.0), PresetFilter("SNAP_SHARE", PresetFilterKind.AT_LEAST, 0.5)),
+        PresetWeeks.LastN(4),
+    )
+
+    @Test
+    fun `save then apply restores the same view on another season`() = runTest(dispatcher) {
+        val vm = presetVm()
+        val first = ready(vm)
+        val other = first.catalog.seasons.first().season
+        val current = first.catalog.latest.season
+        assertTrue("needs two seasons", other != current)
+
+        vm.onEvent(GridEvent.PositionsSelected(PositionFilter.WR))
+        vm.onEvent(GridEvent.SortBy(StatColumn.SNAP_SHARE))
+        vm.onEvent(GridEvent.PerGameToggled)
+        vm.onEvent(GridEvent.MinSnapShareSelected(0.5))
+        vm.onEvent(GridEvent.TeamsSelected(setOf("KC")))
+        vm.onEvent(GridEvent.FiltersApplied(listOf(Filter(StatColumn.TARGETS, Condition.AtLeast(5.0)))))
+        val saved = ready(vm).request
+        vm.onEvent(GridEvent.PresetSaved("Mine", PresetWeeks.LastN(2)))
+        ready(vm)
+
+        vm.onEvent(GridEvent.SeasonSelected(other))
+        vm.onEvent(GridEvent.PositionsSelected(PositionFilter.ALL))
+        vm.onEvent(GridEvent.NameChanged("someone"))
+        val row = ready(vm).presets.single()
+        vm.onEvent(GridEvent.PresetApplied(row.preset.id))
+        val applied = ready(vm).request
+
+        assertEquals(other, applied.season.season)
+        assertEquals(saved.pack, applied.pack)
+        assertEquals(saved.positions, applied.positions)
+        assertEquals(saved.sort, applied.sort)
+        assertEquals(saved.direction, applied.direction)
+        assertEquals(true, applied.perGame)
+        assertEquals(setOf("KC"), applied.teams)
+        assertEquals(0.5, applied.minSnapShare)
+        assertEquals(saved.filters, applied.filters)
+        assertEquals("", applied.name)
+        val last = applied.season.defaultWeeks.last
+        assertEquals(WeekRange(maxOf(1, last - 1), last), applied.weeks)
+        assertNull(ready(vm).presetSheet)
+    }
+
+    @Test
+    fun `a used name asks to replace, and yes overwrites`() = runTest(dispatcher) {
+        val vm = presetVm()
+        ready(vm)
+        vm.onEvent(GridEvent.PresetSaved("Deep", PresetWeeks.WholeSeason))
+        ready(vm)
+        vm.onEvent(GridEvent.PositionsSelected(PositionFilter.TE))
+        vm.onEvent(GridEvent.PresetSaved("deep", PresetWeeks.LastN(3)))
+        val asked = ready(vm)
+        val confirm = asked.presetSheet as PresetSheet.ConfirmReplace
+        assertEquals(1, asked.presets.size)
+        assertEquals("ALL", asked.presets.single().preset.position) // nothing overwritten until confirmed
+
+        vm.onEvent(GridEvent.PresetReplaceConfirmed)
+        val done = ready(vm)
+        val p = done.presets.single().preset
+        assertEquals(confirm.id, p.id)
+        assertEquals("Deep", p.name)
+        assertEquals("TE", p.position)
+        assertEquals(PresetWeeks.LastN(3), p.weeks)
+        assertEquals(PresetSheet.Listing, done.presetSheet)
+    }
+
+    @Test
+    fun `an unavailable preset shows its reason and does not apply`() = runTest(dispatcher) {
+        prefs.update { it.copy(gridPresets = listOf(stored("x", "Old", packId = "GONE"))) }
+        val vm = presetVm()
+        val before = ready(vm).request
+        val row = ready(vm).presets.single()
+        assertTrue(row.unavailable != null)
+
+        vm.onEvent(GridEvent.PresetApplied("x"))
+        val after = ready(vm)
+        assertEquals(before, after.request)
+        assertTrue(after.message.orEmpty().contains(row.unavailable!!))
+    }
+
+    @Test
+    fun `applying a preset discards the open filter draft`() = runTest(dispatcher) {
+        prefs.update { it.copy(gridPresets = listOf(stored("g", "Fine"))) }
+        val vm = presetVm()
+        ready(vm)
+        vm.onEvent(GridEvent.FilterDraftChanged(listOf(Filter(StatColumn.TARGETS, Condition.AtLeast(10.0)))))
+        assertTrue(ready(vm).draftCount != null)
+        vm.onEvent(GridEvent.PresetApplied("g"))
+        assertNull(ready(vm).draftCount)
+    }
+
+    @Test
+    fun `delete then undo restores the preset`() = runTest(dispatcher) {
+        prefs.update { it.copy(gridPresets = listOf(stored("g", "Fine"))) }
+        val vm = presetVm()
+        ready(vm)
+        vm.onEvent(GridEvent.PresetDeleted("g"))
+        val deleted = ready(vm)
+        assertTrue(deleted.presets.isEmpty())
+        assertEquals("Fine", deleted.deletedPreset?.name)
+
+        vm.onEvent(GridEvent.PresetDeleteUndone)
+        val back = ready(vm)
+        assertEquals(listOf("Fine"), back.presets.map { it.preset.name })
+        assertNull(back.deletedPreset)
+    }
+
+    @Test
+    fun `deleting without undo clears the pending undo`() = runTest(dispatcher) {
+        prefs.update { it.copy(gridPresets = listOf(stored("g", "Fine"))) }
+        val vm = presetVm()
+        ready(vm)
+        vm.onEvent(GridEvent.PresetDeleted("g"))
+        ready(vm)
+        vm.onEvent(GridEvent.PresetDeleteDismissed)
+        assertNull(ready(vm).deletedPreset)
+    }
+
+    @Test
+    fun `saving is refused with a message at the limit`() = runTest(dispatcher) {
+        prefs.update { p -> p.copy(gridPresets = (1..MAX_PRESETS).map { stored("g$it", "View $it") }) }
+        val vm = presetVm()
+        ready(vm)
+        vm.onEvent(GridEvent.PresetSaved("One too many", PresetWeeks.WholeSeason))
+        val s = ready(vm)
+        assertEquals(MAX_PRESETS, s.presets.size)
+        assertTrue(s.message.orEmpty().contains("$MAX_PRESETS"))
+    }
+
+    @Test
+    fun `rename works, and a name used by another preset gets a message`() = runTest(dispatcher) {
+        prefs.update { it.copy(gridPresets = listOf(stored("a", "One"), stored("b", "Two"))) }
+        val vm = presetVm()
+        ready(vm)
+        vm.onEvent(GridEvent.PresetRenamed("a", "Uno"))
+        assertEquals(listOf("Uno", "Two"), ready(vm).presets.map { it.preset.name })
+        vm.onEvent(GridEvent.PresetRenamed("a", "two"))
+        val s = ready(vm)
+        assertEquals(listOf("Uno", "Two"), s.presets.map { it.preset.name })
+        assertTrue(s.message != null)
+    }
+
+    @Test
+    fun `a preset row summarizes the view`() = runTest(dispatcher) {
+        prefs.update { it.copy(gridPresets = listOf(stored("g", "Fine"), stored("h", "Whole").copy(position = "ALL", filters = emptyList(), weeks = PresetWeeks.WholeSeason))) }
+        val vm = presetVm()
+        val rows = ready(vm).presets
+        assertEquals("WR · Opportunity · last 4 wks · 2 filters", rows[0].summary)
+        assertEquals("Opportunity · whole season", rows[1].summary)
+    }
+
+    @Test
+    fun `without a repository the presets are off`() = runTest(dispatcher) {
+        val s = ready(viewModel())
+        assertFalse(s.presetsEnabled)
+        assertTrue(s.presets.isEmpty())
     }
 }
 
