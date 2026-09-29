@@ -45,7 +45,7 @@ class StatsDbWriterTest {
 
         val meta = readMeta(file)!!
         assertEquals("8", meta["schema_version"])
-        assertEquals("5", meta["ingest_version"])
+        assertEquals("6", meta["ingest_version"])
         assertEquals("2025", meta["seasons"])
         assertEquals("3", meta["expected_through_week:2025"])
         assertEquals("2026-09-25T12:00:00Z", meta["built_at"])

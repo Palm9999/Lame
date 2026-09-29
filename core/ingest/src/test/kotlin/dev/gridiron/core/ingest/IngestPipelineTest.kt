@@ -50,7 +50,59 @@ class IngestPipelineTest {
         )
         fetcher.serve(Sources.url(Input.PLAYERS), Fixtures.gzip(csv), version)
         serveGames()
+        serveNgs()
     }
+
+    private val ngsPassingHeader = listOf(
+        "season", "week", "team_abbr", "player_gsis_id", "attempts", "avg_time_to_throw", "aggressiveness", "avg_intended_air_yards",
+    )
+    private val ngsRushingHeader = listOf(
+        "season", "week", "team_abbr", "player_gsis_id", "rush_attempts", "efficiency",
+        "percent_attempts_gte_eight_defenders", "rush_yards_over_expected",
+    )
+    private val ngsReceivingHeader = listOf(
+        "season", "week", "team_abbr", "player_gsis_id", "targets", "receptions", "avg_cushion", "avg_separation",
+        "avg_yac_above_expectation",
+    )
+
+    /** The three NGS files for [seasons]: a week 0 aggregate row and a week 1 row each; WR1's separation is [separation]. */
+    private fun serveNgs(
+        version: String = "n1",
+        seasons: List<Int> = listOf(2024, 2025),
+        separation: Double = 3.0,
+        timeToThrow: Double = 2.5,
+        passingHeader: List<String> = ngsPassingHeader,
+    ) {
+        fun rows(build: (Int, Int) -> Map<String, Any?>) = seasons.flatMap { season -> listOf(0, 1).map { week -> build(season, week) } }
+        val passing = rows { season, week ->
+            mapOf(
+                "season" to season, "week" to week, "team_abbr" to "AAA", "player_gsis_id" to "QB1", "attempts" to 30,
+                "avg_time_to_throw" to timeToThrow, "aggressiveness" to 20.0, "avg_intended_air_yards" to 8.0,
+                "aggression" to 20.0,
+            )
+        }
+        val rushing = rows { season, week ->
+            mapOf(
+                "season" to season, "week" to week, "team_abbr" to "AAA", "player_gsis_id" to "RB1", "rush_attempts" to 20,
+                "efficiency" to 3.5, "percent_attempts_gte_eight_defenders" to 25.0, "rush_yards_over_expected" to 6.5,
+            )
+        }
+        val receiving = rows { season, week ->
+            mapOf(
+                "season" to season, "week" to week, "team_abbr" to "AAA", "player_gsis_id" to "WR1", "targets" to 10,
+                "receptions" to 6, "avg_cushion" to 6.0, "avg_separation" to separation, "avg_yac_above_expectation" to 1.5,
+            )
+        }
+        fetcher.serve(Sources.url(Input.NGS_PASSING), Fixtures.gzip(Fixtures.csv(passingHeader, passing)), version)
+        fetcher.serve(Sources.url(Input.NGS_RUSHING), Fixtures.gzip(Fixtures.csv(ngsRushingHeader, rushing)), version)
+        fetcher.serve(Sources.url(Input.NGS_RECEIVING), Fixtures.gzip(Fixtures.csv(ngsReceivingHeader, receiving)), version)
+    }
+
+    private fun removeNgs() = listOf(Input.NGS_PASSING, Input.NGS_RUSHING, Input.NGS_RECEIVING).forEach { fetcher.remove(Sources.url(it)) }
+
+    private fun ngsFact(file: File, player: String, season: Int, metric: String, week: Int = 1): Double? =
+        query(file, "SELECT value FROM player_week_stat WHERE player_id = '$player' AND season = $season AND week = $week AND metric_id = '$metric'")
+            .singleOrNull()?.single()?.toDouble()
 
     private val gamesHeader = listOf(
         "game_id", "season", "game_type", "week", "home_team", "away_team", "home_score", "away_score", "spread_line", "total_line",
@@ -134,7 +186,7 @@ class IngestPipelineTest {
         assertEquals(emptyList<Int>(), report.reused)
         val meta = readMeta(out)!!
         assertEquals("8", meta["schema_version"])
-        assertEquals("5", meta["ingest_version"])
+        assertEquals("6", meta["ingest_version"])
         assertEquals("2024,2025", meta["seasons"])
         assertEquals("1", meta["expected_through_week:2025"])
         assertNotNull(meta[Sources.metaKey(Input.PBP, 2025)])
@@ -525,5 +577,114 @@ class IngestPipelineTest {
             query(out, "SELECT metric_id, value FROM player_week_stat WHERE player_id = 'DST_BBB' ORDER BY 1"),
         )
         assertEquals(listOf(listOf("BBB D/ST", "DST", "BBB")), query(out, "SELECT full_name, position, team FROM player WHERE player_id = 'DST_BBB'"))
+    }
+
+    @Test
+    fun `a first build stores NGS components, skips week 0 and records the files' versions`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+        pipeline.build(listOf(2025), null, out)
+        assertEquals(30.0, ngsFact(out, "WR1", 2025, "ngs_sep_w"))
+        assertEquals(60.0, ngsFact(out, "WR1", 2025, "ngs_cush_w"))
+        assertEquals(75.0, ngsFact(out, "QB1", 2025, "ngs_ttt_w"))
+        assertEquals(6.5, ngsFact(out, "RB1", 2025, "ngs_ryoe"))
+        assertNull(ngsFact(out, "WR1", 2025, "ngs_sep_w", week = 0))
+        assertNotNull(readMeta(out)!![Sources.metaKey(Input.NGS_PASSING)])
+    }
+
+    @Test
+    fun `unchanged NGS and unchanged seasons are copied with their NGS facts`() = runTest {
+        servePlayers()
+        serveSeason(2024)
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2024, 2025), null, first)
+        val second = File(dir, "second.db")
+        val report = pipeline.build(listOf(2024, 2025), first, second)
+        assertEquals(listOf(2024, 2025), report.reused)
+        assertEquals(30.0, ngsFact(second, "WR1", 2024, "ngs_sep_w"))
+        assertEquals(30.0, ngsFact(second, "WR1", 2025, "ngs_sep_w"))
+    }
+
+    @Test
+    fun `changed NGS rebuilds the newest season only, and older seasons keep their NGS facts`() = runTest {
+        servePlayers()
+        serveSeason(2024)
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2024, 2025), null, first)
+        serveNgs(version = "n2", separation = 4.0)
+        val second = File(dir, "second.db")
+        val report = pipeline.build(listOf(2024, 2025), first, second)
+        assertEquals(listOf(2025), report.built)
+        assertEquals(listOf(2024), report.reused)
+        assertEquals(40.0, ngsFact(second, "WR1", 2025, "ngs_sep_w"))
+        assertEquals(30.0, ngsFact(second, "WR1", 2024, "ngs_sep_w"))
+    }
+
+    @Test
+    fun `NGS disappearing keeps a reused season's NGS facts and says so`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2025), null, first)
+        removeNgs()
+        val report = pipeline.build(listOf(2025), first, File(dir, "second.db"))
+        assertEquals(listOf(2025), report.reused)
+        assertTrue(report.warnings.any { "NGS" in it }, "${report.warnings}")
+        assertEquals(30.0, ngsFact(File(dir, "second.db"), "WR1", 2025, "ngs_sep_w"))
+    }
+
+    @Test
+    fun `a first build without NGS succeeds with a warning and no NGS facts`() = runTest {
+        servePlayers()
+        removeNgs()
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+        val report = pipeline.build(listOf(2025), null, out)
+        assertEquals(listOf(2025), report.built)
+        assertTrue(report.warnings.any { "NGS" in it }, "${report.warnings}")
+        assertNull(ngsFact(out, "WR1", 2025, "ngs_sep_w"))
+    }
+
+    @Test
+    fun `NGS arriving after a build without it rebuilds every season to add it`() = runTest {
+        servePlayers()
+        removeNgs()
+        serveSeason(2024)
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2024, 2025), null, first)
+        serveNgs()
+        val second = File(dir, "second.db")
+        val report = pipeline.build(listOf(2024, 2025), first, second)
+        assertEquals(listOf(2024, 2025), report.built)
+        assertEquals(30.0, ngsFact(second, "WR1", 2024, "ngs_sep_w"))
+    }
+
+    @Test
+    fun `a file with a renamed column is left out with a warning and the others still load`() = runTest {
+        servePlayers()
+        serveNgs(passingHeader = ngsPassingHeader.map { if (it == "aggressiveness") "aggression" else it })
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+        val report = pipeline.build(listOf(2025), null, out)
+        assertTrue(report.warnings.any { "NGS" in it && "aggressiveness" in it }, "${report.warnings}")
+        assertNull(ngsFact(out, "QB1", 2025, "ngs_ttt_w"))
+        assertEquals(30.0, ngsFact(out, "WR1", 2025, "ngs_sep_w"))
+    }
+
+    @Test
+    fun `an impossible NGS value drops its row with a warning, an odd one only warns`() = runTest {
+        servePlayers()
+        serveNgs(timeToThrow = -1.0, separation = 9.5)
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+        val report = pipeline.build(listOf(2025), null, out)
+        assertNull(ngsFact(out, "QB1", 2025, "ngs_ttt_w"))
+        assertEquals(95.0, ngsFact(out, "WR1", 2025, "ngs_sep_w"))
+        assertTrue(report.warnings.any { "NGS" in it && "dropped" in it }, "${report.warnings}")
+        assertTrue(report.warnings.any { "NGS" in it && "separation" in it }, "${report.warnings}")
     }
 }

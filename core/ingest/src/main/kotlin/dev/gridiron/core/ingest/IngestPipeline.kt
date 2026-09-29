@@ -12,10 +12,12 @@ import dev.gridiron.core.ingest.db.INGEST_VERSION
 import dev.gridiron.core.ingest.db.StatsDbWriter
 import dev.gridiron.core.ingest.db.readMeta
 import dev.gridiron.core.ingest.pbp.KickingAggregator
+import dev.gridiron.core.ingest.pbp.PlayerWeek
 import dev.gridiron.core.ingest.pbp.PlayerWeekAggregator
 import dev.gridiron.core.ingest.pbp.TeamDefenseAggregator
 import dev.gridiron.core.ingest.pbp.derive
 import dev.gridiron.core.ingest.pbp.readPlays
+import dev.gridiron.core.ingest.validate.checkNgs
 import dev.gridiron.core.ingest.validate.crossCheck
 import dev.gridiron.core.ingest.validate.expectedCoverage
 import dev.gridiron.core.ingest.validate.fantasyContract
@@ -55,6 +57,13 @@ public data class IngestReport(
 }
 
 private val SEASON_INPUTS = listOf(Input.PBP, Input.SNAP_COUNTS, Input.INJURIES, Input.EXPECTED)
+
+/** Next Gen Stats: three all-seasons files, each with its reader. */
+private val NGS_READERS: Map<Input, (java.io.InputStream, String) -> List<PlayerWeek>> = linkedMapOf(
+    Input.NGS_PASSING to ::readNgsPassing,
+    Input.NGS_RUSHING to ::readNgsRushing,
+    Input.NGS_RECEIVING to ::readNgsReceiving,
+)
 
 /**
  * Builds stats.db from nflverse and ffopportunity: the on-device replacement
@@ -112,9 +121,23 @@ public class IngestPipeline(
         private val reused = mutableListOf<Int>()
         private val skipped = LinkedHashMap<Int, String>()
 
+        /** One NGS file this build: what the download said, and the file itself when this build holds it. */
+        private inner class NgsSource {
+            var file: File? = null
+            var available = false
+            var changed = false
+        }
+
+        private val ngsSources = NGS_READERS.keys.associateWith { NgsSource() }
+        private var ngsBackfill = false
+        private var ngsRows: List<PlayerWeek>? = null
+        private var newest = 0
+
         suspend fun build(seasons: List<Int>, out: File): IngestReport {
             onProgress(IngestProgress.Checking(null))
+            newest = seasons.last()
             fetchPlayers()
+            fetchNgs()
             val players = openInput(playersFile).use { readPlayers(it, playersFile.name) }
             val crosswalk = players.filter { it.pfrPlayerId != null }.groupBy({ it.pfrPlayerId!! }, { it.playerId })
             return StatsDbWriter.create(out).use { writer ->
@@ -182,6 +205,64 @@ public class IngestPipeline(
         }
 
         /**
+         * NGS is shared by every season, so it is fetched once, with its saved
+         * validators. A file that can't be had is left out with a warning; the
+         * build never fails on NGS.
+         */
+        private suspend fun fetchNgs() {
+            for ((input, source) in ngsSources) {
+                val key = Sources.metaKey(input)
+                val saved = prior?.get(key)
+                val result = try {
+                    fetch(input, null, saved?.let(Validators::decode))
+                } catch (e: IOException) {
+                    warnings += "couldn't download ${input.label} (${e.message}); its metrics are left out"
+                    null
+                }
+                when (result) {
+                    is FetchResult.Downloaded -> {
+                        meta[key] = result.validators.encode()
+                        source.file = result.file
+                        source.available = true
+                        source.changed = true
+                        if (prior != null && saved == null) ngsBackfill = true
+                    }
+                    FetchResult.NotModified -> {
+                        meta[key] = checkNotNull(saved)
+                        source.available = true
+                    }
+                    FetchResult.NotPublished -> warnings += "nflverse's ${input.label} isn't available right now; its metrics are left out"
+                    null -> Unit
+                }
+                if (!source.available) saved?.let { meta[key] = it }
+            }
+        }
+
+        /** Every season's NGS rows, read once: a file that is unreadable or has lost a column is left out with a warning. */
+        private suspend fun ngs(): List<PlayerWeek> = ngsRows ?: loadNgs().also { ngsRows = it }
+
+        private suspend fun loadNgs(): List<PlayerWeek> {
+            val groups = mutableListOf<List<PlayerWeek>>()
+            for ((input, source) in ngsSources) {
+                if (!source.available) continue
+                val file = source.file ?: try {
+                    (fetch(input, null, known = null) as? FetchResult.Downloaded)?.file
+                } catch (e: IOException) {
+                    warnings += "couldn't download ${input.label} (${e.message}); its metrics are left out"
+                    null
+                } ?: continue
+                try {
+                    groups += openInput(file).use { NGS_READERS.getValue(input)(it, file.name) }
+                } catch (e: IOException) {
+                    warnings += "NGS: ${input.label} file is unreadable (${e.message}); left out"
+                } catch (e: MissingColumnsException) {
+                    warnings += "NGS: ${e.message}; ${input.label} left out"
+                }
+            }
+            return mergeNgs(*groups.toTypedArray())
+        }
+
+        /**
          * Null, with a warning, when there's no schedule: projections need it,
          * stats don't. A download that fails falls back to the kept copy.
          */
@@ -239,7 +320,10 @@ public class IngestPipeline(
                 }
                 return
             }
-            val unchanged = knownSeason && first.all { (input, r) ->
+            // NGS posts on its own schedule: the newest season follows it. Older seasons are final, unless a
+            // build without NGS is now getting it, when every season needs rebuilding to gain it.
+            val ngsStale = ngsBackfill || (season == newest && ngsSources.values.any { it.changed })
+            val unchanged = knownSeason && !ngsStale && first.all { (input, r) ->
                 r == FetchResult.NotModified ||
                     (r == FetchResult.NotPublished && prior?.containsKey(Sources.metaKey(input, season)) != true)
             }
@@ -319,6 +403,13 @@ public class IngestPipeline(
             }
 
             writer.writeFacts(toFacts(weekly))
+            if (ngsSources.values.any { it.available }) {
+                val all = ngs()
+                val rows = all.filter { it.season == season }
+                if (all.isNotEmpty() && rows.isEmpty()) warnings += "$season: no NGS rows published yet"
+                checkNgs(season, rows, weekly, warnings)
+                writer.writeFacts(toFacts(rows))
+            }
             // Kickers are keyed like players, so one who also ran a play keeps both sets of facts under one `g`.
             writer.writeFacts(toFacts(kicking.rows()))
             val defenseRows = defense.rows()

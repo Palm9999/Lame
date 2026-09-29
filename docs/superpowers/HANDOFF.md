@@ -17,7 +17,7 @@ Built and merged: the projection engine (K and D/ST included), accuracy page, pr
 
 - [x] Task 1: registry (100 to 122 metrics), components, `StatColumn`s, `StatFormat`, three NGS packs (`NGS_PASSING`, `NGS_RUSHING`, `NGS_RECEIVING`; a ruling: three packs instead of the spec's one, so each chip's default sort has data).
 - [x] Task 2: Kotlin `Ngs.kt` (`readNgsPassing/Rushing/Receiving`, `remapPostseasonWeeks`, `mergeNgs`) and `Input.NGS_*` in `Sources.kt`; not yet wired into `IngestPipeline` (Task 3)
-- [ ] Task 3: pipeline integration (`INGEST_VERSION` 6, reuse rule, validation)
+- [x] Task 3: pipeline integration in `IngestPipeline.kt` (`fetchNgs`, lazy `ngs()`, reuse rule), `validate/NgsChecks.kt`, `INGEST_VERSION` 6
 - [ ] Task 4: Python `ngs.py`
 - [ ] Task 5: parity, real-database test, rebuild `etl/build/stats.db` and `accuracy.db`
 - [ ] Task 6: docs, delete spec and plan, open the PR
