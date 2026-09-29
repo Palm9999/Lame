@@ -88,6 +88,7 @@ public data class YardageBonus(
  * @property basedOn The preset this profile was copied from, for "Reset to preset".
  * @property pointsAllowedTiers A D/ST's points-allowed tiers, lowest first. The
  *   first starts at 0, so every game lands in one; empty scores points allowed as nothing.
+ * @property yardsAllowedTiers A D/ST's yards-allowed tiers, lowest first, under the same rules.
  */
 public data class ScoringProfile(
     val id: String,
@@ -96,7 +97,8 @@ public data class ScoringProfile(
     val receptionByPosition: Map<Position, Double> = emptyMap(),
     val yardageBonuses: List<YardageBonus> = emptyList(),
     val basedOn: String? = null,
-    val pointsAllowedTiers: List<PointsAllowedTier> = emptyList(),
+    val pointsAllowedTiers: List<ScoringTier> = emptyList(),
+    val yardsAllowedTiers: List<ScoringTier> = emptyList(),
 ) {
     init {
         require(id.isNotBlank()) { "profile id must not be blank" }
@@ -106,12 +108,8 @@ public data class ScoringProfile(
             "reception overrides apply to RB, WR and TE only: ${receptionByPosition.keys}"
         }
         require(receptionByPosition.values.all { it.isFinite() }) { "reception weights must be finite" }
-        require(pointsAllowedTiers.isEmpty() || pointsAllowedTiers.first().min == 0) {
-            "the lowest points-allowed tier must start at 0: $pointsAllowedTiers"
-        }
-        require(pointsAllowedTiers.zipWithNext().all { (a, b) -> a.min < b.min }) {
-            "points-allowed tiers must start at rising points: $pointsAllowedTiers"
-        }
+        require(tiersAreValid(pointsAllowedTiers)) { "points-allowed tiers must start at 0 and rise: $pointsAllowedTiers" }
+        require(tiersAreValid(yardsAllowedTiers)) { "yards-allowed tiers must start at 0 and rise: $yardsAllowedTiers" }
     }
 
     public fun weight(rule: ScoringRule): Double = weights[rule] ?: 0.0
@@ -120,23 +118,19 @@ public data class ScoringProfile(
         receptionByPosition[position] ?: weight(ScoringRule.RECEPTION)
 
     /** A D/ST's points for one game in which the opponent scored [allowed]: the highest tier starting at or below it. */
-    public fun pointsAllowedPoints(allowed: Double): Double =
-        pointsAllowedTiers.lastOrNull { allowed >= it.min }?.points ?: 0.0
+    public fun pointsAllowedPoints(allowed: Double): Double = tierPoints(pointsAllowedTiers, allowed)
 
     /**
      * The expected [pointsAllowedPoints] for one game whose points allowed are
-     * about Normal([mean], [sd]) and land on whole points: a tier starting at 7
-     * takes everything from 6.5 up, and anything below the second tier's start
-     * is the first tier. A zero [sd] is the tier of [mean] rounded.
+     * about Normal([mean], [sd]) and land on whole points (see [expectedTierPoints]).
      */
-    public fun expectedPointsAllowedPoints(mean: Double, sd: Double): Double {
-        if (sd <= 0.0) return pointsAllowedPoints(Math.round(mean).toDouble())
-        return pointsAllowedTiers.indices.sumOf { i ->
-            val from = if (i == 0) 0.0 else normalCdf((pointsAllowedTiers[i].min - 0.5 - mean) / sd)
-            val to = pointsAllowedTiers.getOrNull(i + 1)?.let { normalCdf((it.min - 0.5 - mean) / sd) } ?: 1.0
-            pointsAllowedTiers[i].points * (to - from)
-        }
-    }
+    public fun expectedPointsAllowedPoints(mean: Double, sd: Double): Double = expectedTierPoints(pointsAllowedTiers, mean, sd)
+
+    /** A D/ST's points for one game in which the opponent gained [allowed] net yards. */
+    public fun yardsAllowedPoints(allowed: Double): Double = tierPoints(yardsAllowedTiers, allowed)
+
+    /** The expected [yardsAllowedPoints] for one game whose yards allowed are about Normal([mean], [sd]), on whole yards. */
+    public fun expectedYardsAllowedPoints(mean: Double, sd: Double): Double = expectedTierPoints(yardsAllowedTiers, mean, sd)
 
     public val isPreset: Boolean get() = ScoringPresets.byId(id) != null
 
@@ -180,6 +174,7 @@ public object ScoringPresets {
             ScoringRule.FUMBLE_LOST to -2.0,
         ) + KICKING_AND_DEFENSE,
         pointsAllowedTiers = ESPN_POINTS_ALLOWED,
+        yardsAllowedTiers = ESPN_YARDS_ALLOWED,
     )
 
     public val PPR: ScoringProfile = espn("preset:ppr", "PPR", 1.0)

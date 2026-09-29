@@ -106,11 +106,12 @@ public object Components {
     public val XP_ATT: Component = Component("xp_att")
 
     // Team defense and special teams (D/ST pseudo-players). Sparse, except
-    // points allowed, whose zero is a shutout; the profile's tiers score it.
+    // points and yards allowed, whose zero is a shutout; the profile's tiers score them.
     public val DST_SACKS: Component = Component("dst_sacks")
     public val DST_INTERCEPTIONS: Component = Component("dst_interceptions")
     public val DST_FUMBLE_RECOVERIES: Component = Component("dst_fumble_recoveries")
     public val DST_TDS: Component = Component("dst_tds")
     public val DST_SAFETIES: Component = Component("dst_safeties")
     public val POINTS_ALLOWED: Component = Component("points_allowed")
+    public val YARDS_ALLOWED: Component = Component("yards_allowed")
 }

@@ -78,8 +78,8 @@ internal val SPECIAL_RULES: Set<ScoringRule> =
 internal val SCORING_COMPONENTS: List<Component> =
     (
         RULE_INPUTS.values.flatMap { it.actual + it.expected }.map { it.component } + BONUS_INPUTS.values.flatten() +
-            // Points allowed are read by the profile's tiers, not a rule.
-            C.POINTS_ALLOWED
+            // Points and yards allowed are read by the profile's tiers, not a rule.
+            listOf(C.POINTS_ALLOWED, C.YARDS_ALLOWED)
     )
         .distinct()
         .sortedBy { it.id }

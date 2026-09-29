@@ -3,6 +3,7 @@ package dev.gridiron.core.statquery
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.ScoringRule
+import dev.gridiron.core.model.ScoringTier
 
 /**
  * [SCORING_COMPONENTS] split by whether a rule input is actual or expected
@@ -20,9 +21,9 @@ private val ACTUAL_COMPONENTS: List<Component> =
         .distinct()
         .sortedBy { it.id }
 
-/** Kicking and team-defense inputs, and points allowed for the tiers: pivoted apart (`ws`), so the offense's pivot stays as narrow as it was. */
+/** Kicking and team-defense inputs, and points and yards allowed for the tiers: pivoted apart (`ws`), so the offense's pivot stays as narrow as it was. */
 private val SPECIAL_COMPONENTS: List<Component> =
-    (SPECIAL_RULE_LIST.flatMap { RULE_INPUTS.getValue(it).actual }.map { it.component } + Components.POINTS_ALLOWED)
+    (SPECIAL_RULE_LIST.flatMap { RULE_INPUTS.getValue(it).actual }.map { it.component } + Components.POINTS_ALLOWED + Components.YARDS_ALLOWED)
         .distinct()
         .sortedBy { it.id }
 
@@ -38,7 +39,7 @@ private val EXPECTED_COMPONENTS: List<Component> =
  *     components to one row per player-week, `ws` does the same for kicking,
  *     team-defense and points-allowed components, `fw` and `fs` apply the
  *     spec's scoring profile to each week (so per-game bonuses and
- *     points-allowed tiers see single games), and `fsum` totals them per
+ *     points- and yards-allowed tiers see single games), and `fsum` totals them per
  *     player into fantasy points, expected fantasy points and FPOE.
  *  1. `agg` pivots `player_week_stat` to one row per player, summing only the
  *     components the requested columns need. Its predicate is
@@ -305,7 +306,7 @@ private class SqlWriter {
         line("  JOIN player p ON p.player_id = wk.player_id")
         line("), fs AS (")
         line("  SELECT ws.player_id")
-        line("       , ${points(profile, SPECIAL_RULE_LIST, expected = false, bonuses = false, wSpecial)} + ${tiers(profile)} AS fp")
+        line("       , ${points(profile, SPECIAL_RULE_LIST, expected = false, bonuses = false, wSpecial)} + ${tiers(profile.pointsAllowedTiers, Components.POINTS_ALLOWED)} + ${tiers(profile.yardsAllowedTiers, Components.YARDS_ALLOWED)} AS fp")
         line("  FROM ws")
         line("), xf AS (")
         line("  SELECT we.player_id")
@@ -363,16 +364,15 @@ private class SqlWriter {
     }
 
     /**
-     * One week's points-allowed tier from the profile's own tiers, checked
-     * highest first. A week with no points allowed (a kicker's) scores none:
-     * the pivot's column is NULL there, while a shutout stores 0.
+     * One week's tier from a profile's own [tiers] for [component], checked
+     * highest first. A week with none (a kicker's) scores none: the pivot's
+     * column is NULL there, while a shutout stores 0.
      */
-    private fun tiers(profile: ScoringProfile): String {
-        val tiers = profile.pointsAllowedTiers
+    private fun tiers(tiers: List<ScoringTier>, component: Component): String {
         if (tiers.isEmpty()) return "0"
-        val allowed = "ws.s${SPECIAL_COMPONENTS.indexOf(Components.POINTS_ALLOWED)}"
-        val cases = tiers.asReversed().joinToString(" ") { "WHEN $allowed >= ${int(it.min)} THEN ${real(it.points)}" }
-        return "(CASE WHEN $allowed IS NULL THEN 0 $cases ELSE 0 END)"
+        val value = "ws.s${SPECIAL_COMPONENTS.indexOf(component)}"
+        val cases = tiers.asReversed().joinToString(" ") { "WHEN $value >= ${int(it.min)} THEN ${real(it.points)}" }
+        return "(CASE WHEN $value IS NULL THEN 0 $cases ELSE 0 END)"
     }
 
     /** Reception points by position: the TE-premium case. */
