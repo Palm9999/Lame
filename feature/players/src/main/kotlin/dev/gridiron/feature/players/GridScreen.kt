@@ -57,6 +57,7 @@ import dev.gridiron.core.data.ColumnUi
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.CsvExport
 import dev.gridiron.core.data.GridPage
+import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.GridRowUi
 import dev.gridiron.core.data.MetricInfo
@@ -101,8 +102,9 @@ fun GridRoute(
     badges: Flow<Map<String, String>> = flowOf(emptyMap()),
     recovery: List<Pair<String, () -> Unit>> = emptyList(),
     rosters: Flow<List<Roster>> = flowOf(emptyList()),
+    presets: GridPresetRepository? = null,
 ) {
-    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges, rosters))
+    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges, rosters, presets))
     val state by vm.state.collectAsStateWithLifecycle()
     GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu, recovery)
 }
@@ -219,6 +221,13 @@ private fun GridContent(
                 if (r.positions != PositionFilter.K && r.positions != PositionFilter.DST) {
                     SnapChip(r.minSnapShare) { onEvent(GridEvent.MinSnapShareSelected(it)) }
                 }
+                if (state.presetsEnabled) {
+                    AssistChip(
+                        onClick = { onEvent(GridEvent.PresetsOpened) },
+                        label = { Text(if (state.presets.isEmpty()) "Presets" else "Presets (${state.presets.size})") },
+                        modifier = Modifier.testTag("chip:presets"),
+                    )
+                }
                 FilterChip(
                     selected = r.filters.isNotEmpty(),
                     onClick = { showFilters = true },
@@ -302,6 +311,7 @@ private fun GridContent(
             onChange = { updated -> onEvent(GridEvent.ReplaceTraySlot(original, updated)) },
         )
     }
+    state.presetSheet?.let { PresetsSheet(state, it, onEvent) }
     if (showTeams) {
         TeamSheet(state.catalog.teams, r.teams, onChange = { onEvent(GridEvent.TeamsSelected(it)) }, onDismiss = { showTeams = false })
     }

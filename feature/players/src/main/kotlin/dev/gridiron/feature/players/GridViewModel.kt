@@ -104,8 +104,6 @@ sealed interface GridEvent {
     data class PresetApplied(val id: String) : GridEvent
     data class PresetDeleted(val id: String) : GridEvent
     data object PresetDeleteUndone : GridEvent
-    /** The undo snackbar timed out. */
-    data object PresetDeleteDismissed : GridEvent
 }
 
 /** What the presets sheet shows: the list, or a dialog over it. */
@@ -156,7 +154,7 @@ sealed interface GridUiState {
         val presets: ImmutableList<PresetRow> = persistentListOf(),
         /** The open presets sheet, or null when closed. */
         val presetSheet: PresetSheet? = null,
-        /** A preset just deleted, offered for undo until the snackbar goes. */
+        /** A preset just deleted, offered for undo until the sheet closes. */
         val deletedPreset: GridPreset? = null,
     ) : GridUiState {
         val presetsFull: Boolean get() = presets.size >= MAX_PRESETS
@@ -489,7 +487,6 @@ class GridViewModel(
             GridEvent.PresetReplaceConfirmed,
             GridEvent.PresetDialogDismissed,
             GridEvent.PresetDeleteUndone,
-            GridEvent.PresetDeleteDismissed,
             is GridEvent.PresetSaved,
             is GridEvent.PresetRenameRequested,
             is GridEvent.PresetRenamed,
@@ -509,7 +506,10 @@ class GridViewModel(
         val current = request.value
         when (event) {
             GridEvent.PresetsOpened -> presetSheet.value = PresetSheet.Listing
-            GridEvent.PresetsClosed -> presetSheet.value = null
+            GridEvent.PresetsClosed -> {
+                presetSheet.value = null
+                deletedPreset.value = null
+            }
             GridEvent.PresetDialogDismissed -> presetSheet.value = PresetSheet.Listing
             GridEvent.PresetSaveRequested -> if (current != null) presetSheet.value = PresetSheet.Saving(repo.weeksRule(current))
             is GridEvent.PresetSaved -> if (current != null) {
@@ -557,6 +557,7 @@ class GridViewModel(
                             draft.value = null
                             draftCount.value = null
                             presetSheet.value = null
+                            deletedPreset.value = null
                             request.value = resolved.request
                         }
                         is Resolved.Unavailable -> message.value = "${preset.name}: ${resolved.reason}"
@@ -571,7 +572,6 @@ class GridViewModel(
                 deletedPreset.value = null
                 viewModelScope.launch { repo.restore(preset) }
             }
-            GridEvent.PresetDeleteDismissed -> deletedPreset.value = null
             else -> Unit
         }
     }
@@ -626,7 +626,6 @@ class GridViewModel(
             GridEvent.PresetReplaceConfirmed,
             GridEvent.PresetDialogDismissed,
             GridEvent.PresetDeleteUndone,
-            GridEvent.PresetDeleteDismissed,
             is GridEvent.PresetSaved,
             is GridEvent.PresetRenameRequested,
             is GridEvent.PresetRenamed,

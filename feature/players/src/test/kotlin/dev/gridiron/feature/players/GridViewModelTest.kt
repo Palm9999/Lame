@@ -559,13 +559,13 @@ class GridViewModelTest {
     }
 
     @Test
-    fun `deleting without undo clears the pending undo`() = runTest(dispatcher) {
+    fun `closing the sheet clears the pending undo`() = runTest(dispatcher) {
         prefs.update { it.copy(gridPresets = listOf(stored("g", "Fine"))) }
         val vm = presetVm()
         ready(vm)
         vm.onEvent(GridEvent.PresetDeleted("g"))
         ready(vm)
-        vm.onEvent(GridEvent.PresetDeleteDismissed)
+        vm.onEvent(GridEvent.PresetsClosed)
         assertNull(ready(vm).deletedPreset)
     }
 

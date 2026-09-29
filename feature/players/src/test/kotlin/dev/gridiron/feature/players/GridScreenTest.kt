@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
@@ -14,6 +15,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
@@ -25,6 +27,10 @@ import dev.gridiron.core.data.PositionFilter
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TraySlotUi
+import dev.gridiron.core.datastore.GridPreset
+import dev.gridiron.core.datastore.PresetFilter
+import dev.gridiron.core.datastore.PresetFilterKind
+import dev.gridiron.core.datastore.PresetWeeks
 import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.statquery.Condition
@@ -321,5 +327,154 @@ class GridScreenTest {
         // Rows expose one merged description; the badge is part of it.
         compose.onNodeWithContentDescription("${first.name} (injury status Q)", substring = true).assertExists()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/11_injury_badge.png")
+    }
+
+    // --- presets ---
+
+    private fun preset(id: String, name: String, packId: String = "RECEIVING") = GridPreset(
+        id, name, packId, "RECEIVING_YARDS", "DESCENDING", "WR", true, emptySet(), null,
+        listOf(PresetFilter("TARGETS", PresetFilterKind.AT_LEAST, 20.0)), PresetWeeks.LastN(4),
+    )
+
+    private fun presetState(sheet: PresetSheet? = PresetSheet.Listing, rows: List<PresetRow> = emptyList()): GridUiState.Ready {
+        val season = catalog.season(2025)
+        return ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING, positions = PositionFilter.WR))
+            .copy(presetsEnabled = true, presets = rows.toImmutableList(), presetSheet = sheet)
+    }
+
+    private fun row(id: String, name: String, unavailable: String? = null) =
+        PresetRow(preset(id, name), presetSummary(preset(id, name)), unavailable)
+
+    @Test
+    fun theChipIsOnlyThereWhenPresetsAreOn() {
+        val season = catalog.season(2025)
+        show(ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING)))
+        compose.onNodeWithTag("chip:presets").assertDoesNotExist()
+    }
+
+    @Test
+    fun theChipOpensTheSheet() {
+        val events = mutableListOf<GridEvent>()
+        show(presetState(sheet = null), onEvent = { events += it })
+        compose.onNodeWithTag("chip:presets").performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.PresetsOpened), events)
+    }
+
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test
+    fun anEmptySheetShowsTheHint() {
+        show(presetState())
+        compose.waitForIdle()
+        compose.onNodeWithText("Save the view you have open to come back to it.").assertIsDisplayed()
+        captureScreenRoboImage("build/outputs/roborazzi/12_presets_empty.png")
+    }
+
+    @OptIn(ExperimentalRoborazziApi::class)
+    @Test
+    fun tappingARowAppliesItAndAnUnavailableRowDoesNot() {
+        val events = mutableListOf<GridEvent>()
+        show(
+            presetState(rows = listOf(row("a", "Buy-low WRs"), row("b", "Deep threats"), row("c", "Old view", unavailable = "Its stat pack is gone."))),
+            onEvent = { events += it },
+        )
+        compose.waitForIdle()
+        compose.onAllNodesWithText("WR · Receiving · last 4 wks · 1 filter").onFirst().assertExists()
+        compose.onNodeWithText("Its stat pack is gone.").assertIsDisplayed()
+        captureScreenRoboImage("build/outputs/roborazzi/13_presets_sheet.png")
+
+        compose.onNodeWithTag("presets:row:a").performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.PresetApplied("a")), events)
+        compose.onNodeWithTag("presets:row:c").performClick()
+        assertEquals("an unavailable row must not apply", 1, events.size)
+    }
+
+    @Test
+    fun longPressOffersRenameAndDelete() {
+        val events = mutableListOf<GridEvent>()
+        show(presetState(rows = listOf(row("a", "Buy-low WRs"))), onEvent = { events += it })
+        compose.onNodeWithTag("presets:row:a").performTouchInput { longClick() }
+        compose.onNodeWithTag("presets:menu:delete").performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.PresetDeleted("a")), events)
+
+        compose.onNodeWithTag("presets:row:a").performTouchInput { longClick() }
+        compose.onNodeWithTag("presets:menu:rename").performClick()
+        assertEquals(GridEvent.PresetRenameRequested("a"), events.last())
+    }
+
+    @Test
+    fun saveAsksForTheDialog() {
+        val events = mutableListOf<GridEvent>()
+        show(presetState(), onEvent = { events += it })
+        compose.onNodeWithTag("presets:save").performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.PresetSaveRequested), events)
+    }
+
+    @Test
+    fun theSaveDialogSendsTheNameAndTheDefaultRule() {
+        val events = mutableListOf<GridEvent>()
+        show(presetState(sheet = PresetSheet.Saving(PresetWeeks.LastN(4))), onEvent = { events += it })
+        compose.onNodeWithTag("presets:name").performTextInput("  Mine ")
+        compose.onNodeWithTag("presets:confirm").performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.PresetSaved("  Mine ", PresetWeeks.LastN(4))), events)
+    }
+
+    @Test
+    fun theWeeksChoiceCanBeChanged() {
+        val events = mutableListOf<GridEvent>()
+        show(presetState(sheet = PresetSheet.Saving(PresetWeeks.LastN(4))), onEvent = { events += it })
+        compose.onNodeWithTag("presets:n:plus").performClick()
+        compose.onNodeWithTag("presets:name").performTextInput("A")
+        compose.onNodeWithTag("presets:confirm").performClick()
+        assertEquals(GridEvent.PresetSaved("A", PresetWeeks.LastN(5)), events.last())
+
+        events.clear()
+        compose.onNodeWithTag("presets:weeks:whole").performClick()
+        compose.onNodeWithTag("presets:confirm").performClick()
+        assertEquals(GridEvent.PresetSaved("A", PresetWeeks.WholeSeason), events.last())
+    }
+
+    @Test
+    fun aBlankNameCannotBeSaved() {
+        val events = mutableListOf<GridEvent>()
+        show(presetState(sheet = PresetSheet.Saving(PresetWeeks.WholeSeason)), onEvent = { events += it })
+        compose.onNodeWithTag("presets:confirm").performClick()
+        assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun replacingAUsedNameAsksFirst() {
+        val events = mutableListOf<GridEvent>()
+        show(presetState(sheet = PresetSheet.ConfirmReplace("Deep", "a", PresetWeeks.WholeSeason)), onEvent = { events += it })
+        compose.onNodeWithText("Replace \"Deep\"?").assertIsDisplayed()
+        compose.onNodeWithTag("presets:replace").performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.PresetReplaceConfirmed), events)
+    }
+
+    @Test
+    fun renameSendsTheNewName() {
+        val events = mutableListOf<GridEvent>()
+        show(presetState(sheet = PresetSheet.Renaming("a", "Old"), rows = listOf(row("a", "Old"))), onEvent = { events += it })
+        compose.onNodeWithTag("presets:name").performTextReplacement("Older")
+        compose.onNodeWithTag("presets:rename:confirm").performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.PresetRenamed("a", "Older")), events)
+    }
+
+    @Test
+    fun aDeletedPresetOffersUndo() {
+        val events = mutableListOf<GridEvent>()
+        show(presetState().copy(deletedPreset = preset("a", "Buy-low WRs")), onEvent = { events += it })
+        compose.onNodeWithText("Deleted \"Buy-low WRs\"").assertIsDisplayed()
+        compose.onNodeWithTag("presets:undo").performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.PresetDeleteUndone), events)
+    }
+
+    @Test
+    fun saveIsOffWithANoteAtTheLimit() {
+        val rows = (1..30).map { row("g$it", "View $it") }
+        val events = mutableListOf<GridEvent>()
+        show(presetState(rows = rows), onEvent = { events += it })
+        compose.onNodeWithText("You have 30 presets. Delete one to save another.").assertExists()
+        compose.onNodeWithTag("presets:save").performClick()
+        assertTrue(events.isEmpty())
     }
 }
