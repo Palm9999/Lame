@@ -64,6 +64,8 @@ SOURCES: dict[str, Source] = {
     "ngs_receiving": Source("ngs_receiving", "nextgen_stats", "ngs_receiving.csv.gz", partitioned=False),
     "ngs_rushing": Source("ngs_rushing", "nextgen_stats", "ngs_rushing.csv.gz", partitioned=False),
     "ngs_passing": Source("ngs_passing", "nextgen_stats", "ngs_passing.csv.gz", partitioned=False),
+    # FTN charting: one uncompressed csv per season, 2022 onward (earlier seasons 404).
+    "ftn": Source("ftn", "ftn_charting", "ftn_charting_{season}.csv"),
     "ep_weekly": Source("ep_weekly", "latest-data", "ep_weekly_{season}.parquet", base=FFOPPORTUNITY),
 }
 
