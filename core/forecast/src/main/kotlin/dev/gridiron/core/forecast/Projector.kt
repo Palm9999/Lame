@@ -149,11 +149,15 @@ internal class Projector(
     /** A player placed on a team for one week, before his team's shares are worked out. */
     private class Draft(val player: PlayerInfo, val team: String, val game: Game?, val ctx: PlayerContext, val rates: Rates)
 
+    /** One team's week: the QB who passes, who is projected, and their shares. */
+    private class Roster(val starter: String?, val kept: List<Draft>, val shares: Map<String, Shares>)
+
     /**
      * One week's projections, a team at a time: the expected starting QB and
      * the active players, with the team's target and carry shares scaled to
-     * sum to one (spec amendment to layer 2). The upcoming week's players are
-     * matched to [props] first.
+     * sum to one (spec amendment to layer 2). Players nflverse lists Out or
+     * Doubtful that week are left out first, so their volume goes to the rest.
+     * The upcoming week's players are matched to [props] first.
      */
     private fun prepareWeek(state: WeekState, kind: WeekKind): List<Prepared> {
         val drafts = candidates(state.order).mapNotNull { draft(state, it, kind) }
@@ -167,17 +171,39 @@ internal class Projector(
             null
         }
         return drafts.groupBy { it.team }.flatMap { (team, onTeam) ->
-            val starter = expectedStarter(team, onTeam, state, kind)
-            val kept = onTeam.filter { d ->
-                if (d.player.position == "QB") d.player.playerId == starter else isActive(d, team, state, kind)
-            }
-            val shares = normalizeShares(
-                kept.associate { d -> d.player.playerId to model.shares(d.ctx, d.rates, starter = d.player.playerId == starter) },
-            )
             val volume = teamVolume(teamHistory[team].orEmpty().takeWhile { it.order < state.order }, state.leagueTeam)
-            kept.map { d -> finish(state, d, shares.getValue(d.player.playerId), volume, kind, market) }
+            val roster = roster(team, onTeam, state, kind, respectAbsent = true)
+            val prepared = roster.kept.map { d -> finish(state, d, roster.shares.getValue(d.player.playerId), volume, kind, market) }
+            if (kind != WeekKind.UPCOMING) return@flatMap prepared
+            // Rest of season starts from this list. An injury this week says nothing about later weeks, so it
+            // gets the healthy roster's baseline; this week's own contribution is what was just projected.
+            val healthy = roster(team, onTeam, state, kind, respectAbsent = false)
+            if (healthy.starter == roster.starter && healthy.kept.size == roster.kept.size) return@flatMap prepared
+            val projected = prepared.associateBy { it.player.playerId }
+            healthy.kept.map { d ->
+                val id = d.player.playerId
+                Prepared(
+                    d.player, d.team, model.project(d.ctx, d.rates, volume, healthy.shares.getValue(id)), volume.passRate,
+                    upcoming = projected[id]?.upcoming ?: emptyMap(),
+                )
+            }
         }
     }
+
+    private fun roster(team: String, onTeam: List<Draft>, state: WeekState, kind: WeekKind, respectAbsent: Boolean): Roster {
+        val available = if (respectAbsent) onTeam.filterNot { isAbsent(it, state) } else onTeam
+        val starter = expectedStarter(team, available, state, kind)
+        val kept = available.filter { d ->
+            if (d.player.position == "QB") d.player.playerId == starter else isActive(d, team, state, kind)
+        }
+        val shares = normalizeShares(
+            kept.associate { d -> d.player.playerId to model.shares(d.ctx, d.rates, starter = d.player.playerId == starter) },
+        )
+        return Roster(starter, kept, shares)
+    }
+
+    /** Whether nflverse lists him Out or Doubtful this week. */
+    private fun isAbsent(d: Draft, state: WeekState): Boolean = Triple(d.player.playerId, state.season, state.week) in inputs.absent
 
     private fun draft(state: WeekState, player: PlayerInfo, kind: WeekKind): Draft? {
         val rates = state.rates[player.position] ?: return null

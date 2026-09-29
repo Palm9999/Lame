@@ -13,6 +13,24 @@ class InputsTest {
     lateinit var dir: File
 
     @Test
+    fun `only Out and Doubtful offensive players are absent`() {
+        TestDb(File(dir, "stats.db")).use { db ->
+            db.player("WR1", "WR", "AAA")
+            db.player("WR2", "WR", "AAA")
+            db.player("WR3", "WR", "AAA")
+            db.player("K1", "K", "AAA")
+            db.injury("WR1", 2025, 3, "Out")
+            db.injury("WR2", 2025, 3, "Doubtful")
+            db.injury("WR3", 2025, 3, "Questionable")
+            db.injury("WR3", 2025, 4, null)
+            db.injury("K1", 2025, 3, "Out")
+            db.injury("GHOST", 2025, 3, "Out") // not in `player`
+
+            assertEquals(setOf(Triple("WR1", 2025, 3), Triple("WR2", 2025, 3)), loadInputs(db.conn).absent)
+        }
+    }
+
+    @Test
     fun `players, their weeks, team totals, games and expected-points coverage load`() {
         TestDb(File(dir, "stats.db")).use { db ->
             db.player("QB1", "QB", "AAA")

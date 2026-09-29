@@ -134,6 +134,88 @@ class ForecastEngineTest {
         "SELECT mean FROM player_ros_projection WHERE player_id = '$player' AND season = 2025 AND as_of_week = 2 AND metric_id = 'targets'",
     ).single()[0]!!.toDouble()
 
+    private fun baselineTargets(db: TestDb, player: String): Double = db.query(
+        "SELECT mean FROM player_week_projection WHERE player_id = '$player' AND season = 2025 AND week = 3 AND stage = 'baseline' AND metric_id = 'targets'",
+    ).single()[0]!!.toDouble()
+
+    private fun weekRows(db: TestDb, player: String, season: Int, week: Int): Int = db.query(
+        "SELECT COUNT(*) FROM player_week_projection WHERE player_id = '$player' AND season = $season AND week = $week",
+    ).single()[0]!!.toInt()
+
+    @Test
+    fun `a player listed Out has no row that week and his team takes his targets, but keeps his later weeks`() {
+        var baseWr = 0.0
+        var baseRb = 0.0
+        var baseRbWeek3 = 0.0
+        var baseRbRos = 0.0
+        var baseWrRos = 0.0
+        league("base.db").use { db ->
+            run(db)
+            baseWr = baselineTargets(db, "WR_A")
+            baseRb = baselineTargets(db, "RB_A")
+            baseRbWeek3 = targets(db, "RB_A", 3)
+            baseRbRos = rosTargets(db, "RB_A")
+            baseWrRos = rosTargets(db, "WR_A")
+        }
+        league("hurt.db").use { db ->
+            db.injury("WR_A", 2025, 3, "Out")
+            run(db)
+
+            assertEquals(0, weekRows(db, "WR_A", 2025, 3))
+            // AAA's two target-getters split all its targets; with the WR out, the RB has them all.
+            assertEquals(baseWr + baseRb, baselineTargets(db, "RB_A"), 1e-9)
+            assertTrue(targets(db, "RB_A", 3) > baseRbWeek3)
+            // Week 4 doesn't know about the injury: the RB's rest of season past this week matches a healthy roster's.
+            assertEquals(baseRbRos - baseRbWeek3, rosTargets(db, "RB_A") - targets(db, "RB_A", 3), 1e-9)
+            // The WR keeps week 4 and loses only week 3.
+            val wrRos = rosTargets(db, "WR_A")
+            assertTrue(wrRos > 0.0 && wrRos < baseWrRos)
+        }
+    }
+
+    @Test
+    fun `a Questionable player is projected as usual`() {
+        var base = 0.0
+        league("base.db").use { db ->
+            run(db)
+            base = baselineTargets(db, "WR_A")
+        }
+        league("q.db").use { db ->
+            db.injury("WR_A", 2025, 3, "Questionable")
+            run(db)
+            assertEquals(base, baselineTargets(db, "WR_A"), 1e-12)
+        }
+    }
+
+    @Test
+    fun `a past week's Out player is missing from that week only`() {
+        league("past.db").use { db ->
+            db.injury("WR_A", 2025, 2, "Doubtful")
+            run(db)
+            assertEquals(0, weekRows(db, "WR_A", 2025, 2))
+            assertTrue(weekRows(db, "WR_A", 2025, 1) > 0)
+            assertTrue(weekRows(db, "WR_A", 2025, 3) > 0)
+        }
+    }
+
+    @Test
+    fun `an Out starting QB hands the passing to the next QB, and with no other QB nobody passes`() {
+        league("qb.db").use { db ->
+            db.player("QB2_A", "QB", "AAA")
+            db.week("QB2_A", 2025, 2, "AAA", "attempts" to 5.0, "completions" to 3.0, "passing_yards" to 30.0)
+            db.injury("QB_A", 2025, 3, "Out")
+            run(db)
+            assertEquals(0, weekRows(db, "QB_A", 2025, 3))
+            assertTrue(weekRows(db, "QB2_A", 2025, 3) > 0)
+        }
+        league("only.db").use { db ->
+            db.injury("QB_A", 2025, 3, "Out")
+            run(db)
+            assertEquals(0, weekRows(db, "QB_A", 2025, 3))
+            assertTrue(weekRows(db, "WR_A", 2025, 3) > 0)
+        }
+    }
+
     private fun factors(db: TestDb, player: String) = db.query(
         "SELECT factor FROM player_week_projection_factor WHERE player_id = '$player' AND season = 2025 AND week = 3 ORDER BY factor",
     ).map { it[0] }
