@@ -5,15 +5,22 @@
 - Every session starts by reading this file, runs the next tasks, then updates this file, commits, pushes, and stops.
 - Keep replies short. Ask a question only when blocked, one line at a time.
 
-**Branch:** `claude/dreamy-euler-phbdq1`, based on `claude/relaxed-hypatia-73hhub` (the repo's main branch). Each new project goes in a new PR from this branch.
+**Branch:** `claude/dreamy-euler-phbdq1`, based on `claude/relaxed-hypatia-73hhub` (the repo's main branch). Each new project goes in a new draft PR from this branch. After a PR merges, restart the branch first: `git fetch origin claude/relaxed-hypatia-73hhub && git checkout -B claude/dreamy-euler-phbdq1 origin/claude/relaxed-hypatia-73hhub`.
 
 **History:** the full session-by-session log (projection engine, accuracy, props, K/D/ST, live data refresh) was removed from this file on 2026-09-28. It stays in git: `git show b991467:docs/superpowers/HANDOFF.md` (blob `3251e5059b3956029d6284f97179a35050c1696e`). The specs and plans in `docs/superpowers/` are executed and historical.
 
 ## Where things stand
 
-The four projection sub-projects are built, reviewed and merged (PRs #4, #5, #6, #7, #9, #10): engine, accuracy page, Odds API props, and K/D/ST. The design is `specs/2026-09-26-projection-model-design.md`, which supersedes the pipeline half of `specs/2026-09-23-projections-design.md`. [PR #11](https://github.com/Palm9999/Lame/pull/11) (docs only) is open.
+The four projection sub-projects and the Player page season stats are built, reviewed and merged (PRs #4, #5, #6, #7, #9, #10, #11). The projection design is `specs/2026-09-26-projection-model-design.md`, which supersedes the pipeline half of `specs/2026-09-23-projections-design.md`. Nothing is open.
 
-**In flight (2026-09-29):** working through CLAUDE.md's Known Gaps, one at a time, each with its own design. The first is built on this branch (spec `specs/2026-09-29-player-season-stats-design.md`, plan `plans/2026-09-29-player-season-stats.md`): a Player page "Season stats" section (season chips, season line with percentiles, game log) and K and D/ST metric sets for Compare. Phone timing for the section (up to 20 queries) isn't measured yet. The other gaps: yards-allowed tiers for D/ST, shifting an injured player's share to teammates, more metrics (NGS/FTN), saved Grid presets, season rollups.
+**Next: the user picks the next Known Gap** (list in `CLAUDE.md`). Each one gets its own brainstorm, spec, plan and PR (the `brainstorming`, then `writing-plans` skills; the user has approved native execution before). The candidates, with what I found:
+- **Yards-allowed tiers for D/ST:** `team_week_defense` already stores yards allowed; needs a tier editor beside the points-allowed one, in scoring (SQL and `score()`), projections and the profile editor.
+- **Injured player's share to teammates:** the forecast shows an Out/IR player as Out and doesn't move his share.
+- **More metrics (NGS/FTN):** wired in `sources.py` but not transformed; needs the Python ETL, the Kotlin port and the parity gate.
+- **Saved Grid presets:** planned home is a `user.db` (not built).
+- **Season rollups:** pre-aggregated season totals for the common full-season Grid view.
+
+**Just shipped (PR #11):** Player page "Season stats" (chips, season line with position percentiles, game log), K and D/ST metric sets for Compare (no Scatter tab for them), and the docs cleanup. Spec `specs/2026-09-29-player-season-stats-design.md`, plan `plans/2026-09-29-player-season-stats.md`.
 
 ## Rulings that still bind
 
@@ -27,8 +34,15 @@ The four projection sub-projects are built, reviewed and merged (PRs #4, #5, #6,
 ## Open checks on the phone (non-blocking)
 
 - **Odds API shape:** the fixtures are hand-built from the v4 docs, because there's no key in the container. On the first refresh with the user's key (☰ → Settings → Betting props, then Refresh stats), the toast should say "Props moved N projections", and Settings shows credits left.
+- **Season stats timing:** open a player with a full season (☰ → any Grid row). The section runs up to 20 small queries; report how long it takes to appear.
 - **Accuracy page:** ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows. The floor-to-ceiling "held" figures should read about 78–83%.
 
 ## Container notes
 
 `etl/build/stats.db` (2024–2026) and `etl/build/accuracy.db` (2024–2025) exist in this container. Rebuild them if it is fresh; the commands are in `CLAUDE.md`.
+
+`RealDatabaseContractTest > scoring a full season for every player is fast` fails in this container (300–500 ms against a 250 ms budget) with or without any change; CI passes it. Don't chase it here.
+
+Bash tool calls sometimes fail with a transient "classifier gave no verdict" error; retry once, or use Read, Grep and Glob meanwhile.
+
+The `doc-cleanup` skill (`.claude/skills/doc-cleanup`) audits Markdown for stale claims; the 2026-09-28 pass fixed `CLAUDE.md`, `README.md`, `etl/README.md`, `PRODUCT_SPEC.md` and this file. `docs/research/*` and the plan bodies were not audited.
