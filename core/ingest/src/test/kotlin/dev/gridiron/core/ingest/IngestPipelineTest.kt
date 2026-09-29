@@ -865,4 +865,53 @@ class IngestPipelineTest {
         assertEquals(listOf(2025), report.built)
         assertEquals(emptyList<Int>(), report.reused)
     }
+
+    @Test
+    fun `a failed FTN download is left out with a warning and the build succeeds`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        fetcher.onFetch = { url -> if (url == Sources.url(Input.FTN, 2025)) throw IOException("HTTP 503") }
+        val out = File(dir, "stats.db")
+        val report = pipeline.build(listOf(2025), null, out)
+        assertEquals(listOf(2025), report.built)
+        assertEquals(1, report.warnings.count { "FTN" in it }, "${report.warnings}")
+        assertTrue(report.warnings.any { "couldn't download FTN charting" in it && "503" in it }, "${report.warnings}")
+        assertNull(ftnFact(out, "WR1", 2025, "ftn_targets"))
+        assertNull(readMeta(out)!![Sources.metaKey(Input.FTN, 2025)])
+    }
+
+    @Test
+    fun `a failed FTN download keeps an unchanged season's FTN facts`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2025), null, first)
+        fetcher.onFetch = { url -> if (url == Sources.url(Input.FTN, 2025)) throw IOException("HTTP 503") }
+        val second = File(dir, "second.db")
+        val report = pipeline.build(listOf(2025), first, second)
+        assertEquals(listOf(2025), report.reused)
+        assertEquals(1.0, ftnFact(second, "WR2", 2025, "ftn_drops"))
+        assertEquals(1, report.warnings.count { "FTN" in it }, "${report.warnings}")
+        assertNotNull(readMeta(second)!![Sources.metaKey(Input.FTN, 2025)])
+    }
+
+    @Test
+    fun `a failed FTN download during a rebuild leaves FTN out and the next build retries it`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2025), null, first)
+        serveSeason(2025, snapsVersion = "v2")
+        fetcher.onFetch = { url -> if (url == Sources.url(Input.FTN, 2025)) throw IOException("HTTP 503") }
+        val second = File(dir, "second.db")
+        val report = pipeline.build(listOf(2025), first, second)
+        assertEquals(listOf(2025), report.built)
+        assertEquals(1, report.warnings.count { "FTN" in it }, "${report.warnings}")
+        assertNull(ftnFact(second, "WR1", 2025, "ftn_targets"))
+        assertNull(readMeta(second)!![Sources.metaKey(Input.FTN, 2025)])
+        fetcher.onFetch = {}
+        val third = File(dir, "third.db")
+        assertEquals(listOf(2025), pipeline.build(listOf(2025), second, third).built)
+        assertEquals(1.0, ftnFact(third, "WR2", 2025, "ftn_drops"))
+    }
 }

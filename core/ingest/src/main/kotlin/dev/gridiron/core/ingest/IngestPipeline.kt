@@ -209,6 +209,21 @@ public class IngestPipeline(
                 onProgress(IngestProgress.Downloading(season, input.label, read, total))
             }
 
+        /** Seasons whose FTN download failed this build: they already carry a warning, so "not published yet" stays quiet. */
+        private val ftnDownloadFailed = mutableSetOf<Int>()
+
+        /**
+         * FTN's file for [season], never failing the build: a download that errors (a 5xx, a reset, a short read)
+         * leaves FTN out with one warning, and records no version, so the next build tries again. When the last
+         * build had FTN [known] the season counts as unchanged, so it keeps the FTN facts it already has.
+         */
+        private suspend fun fetchFtn(season: Int, known: Validators?): FetchResult = try {
+            fetch(Input.FTN, season, known)
+        } catch (e: IOException) {
+            if (ftnDownloadFailed.add(season)) warnings += "$season: couldn't download FTN charting (${e.message}); left out"
+            if (known != null) FetchResult.NotModified else FetchResult.NotPublished
+        }
+
         private suspend fun fetchPlayers() {
             val key = Sources.metaKey(Input.PLAYERS)
             val known = prior?.get(key)?.let(Validators::decode)?.takeIf { playersFile.isFile }
@@ -331,7 +346,7 @@ public class IngestPipeline(
             val knownSeason = season in priorSeasons
             val first = seasonInputs(season).associateWith { input ->
                 val known = if (knownSeason) prior?.get(Sources.metaKey(input, season))?.let(Validators::decode) else null
-                fetch(input, season, known)
+                if (input == Input.FTN) fetchFtn(season, known) else fetch(input, season, known)
             }
             if (first.getValue(Input.PBP) == FetchResult.NotPublished) {
                 if (knownSeason) {
@@ -383,7 +398,11 @@ public class IngestPipeline(
         ) {
             // A season is rebuilt from all of its files, so refetch any the first pass found unchanged.
             val files = first.mapValues { (input, r) ->
-                val result = if (r == FetchResult.NotModified) fetch(input, season, known = null) else r
+                val result = when {
+                    r != FetchResult.NotModified -> r
+                    input == Input.FTN -> fetchFtn(season, known = null)
+                    else -> fetch(input, season, known = null)
+                }
                 (result as? FetchResult.Downloaded)?.also { meta[Sources.metaKey(input, season)] = it.validators.encode() }?.file
             }
 
@@ -392,7 +411,7 @@ public class IngestPipeline(
             val defense = TeamDefenseAggregator()
             val kicking = KickingAggregator()
             val ftnFile = files[Input.FTN]
-            if (ftnFile == null && season >= FTN_FIRST_SEASON) warnings += "$season: no FTN charting yet"
+            if (ftnFile == null && season >= FTN_FIRST_SEASON && season !in ftnDownloadFailed) warnings += "$season: no FTN charting yet"
             val ftn = ftnFile?.let { loadFtn(season, it) }?.let(::FtnAggregator)
             val pbp = checkNotNull(files[Input.PBP])
             var n = 0
