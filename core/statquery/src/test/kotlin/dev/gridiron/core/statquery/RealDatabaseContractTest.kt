@@ -5,6 +5,7 @@ import dev.gridiron.core.model.PointsAllowedTier
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.ScoringRule
+import dev.gridiron.core.model.ScoringTier
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.model.YardageBonus
 import org.junit.jupiter.api.AfterAll
@@ -221,6 +222,7 @@ class RealDatabaseContractTest {
             YardageBonus(BonusStat.RECEIVING_YARDS, 100, 200, 1.5),
         ),
         pointsAllowedTiers = listOf(PointsAllowedTier(0, 7.5), PointsAllowedTier(3, 4.25), PointsAllowedTier(10, 1.0), PointsAllowedTier(24, -2.5), PointsAllowedTier(31, -6.0)),
+        yardsAllowedTiers = listOf(ScoringTier(0, 6.0), ScoringTier(250, 2.5), ScoringTier(400, -1.5), ScoringTier(520, -6.5)),
     )
 
     /** Written independently of `Scoring.kt`: metric ids by hand, per rule. */
@@ -252,6 +254,7 @@ class RealDatabaseContractTest {
             w(ScoringRule.DST_SAFETY) * v("dst_safeties")
         // Written by hand, not with pointsAllowedPoints: the highest tier starting at or below the points allowed.
         s["points_allowed"]?.let { allowed -> fp += profile.pointsAllowedTiers.last { allowed >= it.min }.points }
+        s["yards_allowed"]?.let { allowed -> fp += profile.yardsAllowedTiers.last { allowed >= it.min }.points }
         for (b in profile.yardageBonuses) {
             val yards = when (b.stat) {
                 BonusStat.PASSING_YARDS -> v("passing_yards")

@@ -17,7 +17,7 @@ class DstTest {
             mapOf(
                 "g" to 1.0, "dst_sacks" to 3.0, "dst_interceptions" to 1.0, "dst_fumble_recoveries" to 2.0,
                 // One defensive TD and one kickoff return TD.
-                "dst_tds" to 2.0, "dst_safeties" to 1.0, "points_allowed" to 17.0,
+                "dst_tds" to 2.0, "dst_safeties" to 1.0, "points_allowed" to 17.0, "yards_allowed" to 300.0,
             ),
             week.values,
         )
@@ -26,6 +26,12 @@ class DstTest {
     @Test
     fun `a shutout stores its zero points allowed`() {
         assertEquals(0.0, dstWeeks(listOf(row(0.0))).single().values["points_allowed"])
+    }
+
+    @Test
+    fun `a shutout of no yards is still stored`() {
+        val week = dstWeeks(listOf(row(0.0).copy(yardsAllowed = 0.0))).single()
+        assertEquals(0.0, week.values["yards_allowed"])
     }
 
     @Test

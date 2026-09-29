@@ -102,6 +102,7 @@ def dst_weekly(defense: pl.DataFrame) -> pl.DataFrame:
         dst_tds=(pl.col("defensive_tds") + pl.col("kick_return_tds")).cast(pl.Float64),
         dst_safeties=pl.col("safeties").cast(pl.Float64),
         points_allowed=pl.col("points_allowed").cast(pl.Float64),
+        yards_allowed=pl.col("yards_allowed").cast(pl.Float64),
     )
 
 

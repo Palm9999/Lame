@@ -74,9 +74,13 @@ def test_kicking_and_defense_metrics_are_sparse_theirs_alone_and_visible_where_t
         assert m.internal == (mid in KICKING and mid not in KICKING_VISIBLE), mid
         assert mid in sparse_metric_ids(), mid
     assert all(METRICS[m].positions == ("K",) for m in KICKING)
-    assert all(METRICS[m].positions == ("DST",) for m in DEFENSE + ["points_allowed"])
+    assert all(METRICS[m].positions == ("DST",) for m in DEFENSE + ["points_allowed", "yards_allowed"])
     assert not METRICS["points_allowed"].internal
     assert "points_allowed" not in sparse_metric_ids()
     assert METRICS["points_allowed"].dist_family == "normal"
+    assert not METRICS["yards_allowed"].internal
+    assert "yards_allowed" not in sparse_metric_ids()
+    assert METRICS["yards_allowed"].dist_family == "normal"
+    assert not METRICS["yards_allowed"].higher_is_better
     assert not any(mid.startswith("pa_") for mid in METRICS)
-    assert len(METRICS) == 99
+    assert len(METRICS) == 100

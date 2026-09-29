@@ -84,8 +84,10 @@ class DatabaseChecksTest {
         }
 
     @Test
-    fun `every team defense week has its points allowed`() {
-        assertEquals(emptyList<String>(), dstProblems("g" to 1.0, "points_allowed" to 0.0))
+    fun `every team defense week has its points and yards allowed`() {
+        assertEquals(emptyList<String>(), dstProblems("g" to 1.0, "points_allowed" to 0.0, "yards_allowed" to 0.0))
         assertTrue(dstProblems("g" to 1.0, "dst_sacks" to 2.0).any { "points allowed" in it })
+        assertTrue(dstProblems("g" to 1.0, "points_allowed" to 3.0).any { "yards allowed" in it })
+        assertTrue(dstProblems("g" to 1.0, "points_allowed" to 3.0, "yards_allowed" to 900.0).any { "yards_allowed" in it })
     }
 }

@@ -86,6 +86,7 @@ public enum class StatColumn(
 
     // Team defense (the Grid's D/ST chip)
     POINTS_ALLOWED("points_allowed", Total(C.POINTS_ALLOWED), higherIsBetter = false),
+    YARDS_ALLOWED("yards_allowed", Total(C.YARDS_ALLOWED), higherIsBetter = false),
     DST_SACKS("dst_sacks", Total(C.DST_SACKS)),
     DST_INTERCEPTIONS("dst_interceptions", Total(C.DST_INTERCEPTIONS)),
     DST_FUMBLE_RECOVERIES("dst_fumble_recoveries", Total(C.DST_FUMBLE_RECOVERIES)),

@@ -14,8 +14,8 @@ internal fun dstPlayer(team: String): PlayerInfo {
 
 /**
  * Each team-week as its D/ST's week, reproducing `teams.dst_weekly`. TDs are
- * the defense's plus kickoff returns. Points allowed are stored as a number:
- * the scoring profile's own tiers score them.
+ * the defense's plus kickoff returns. Points and yards allowed are stored as
+ * numbers: the scoring profile's own tiers score them.
  */
 internal fun dstWeeks(rows: List<TeamDefenseRow>): List<PlayerWeek> = rows.map { r ->
     val values = linkedMapOf<String, Double?>(
@@ -26,6 +26,7 @@ internal fun dstWeeks(rows: List<TeamDefenseRow>): List<PlayerWeek> = rows.map {
         "dst_tds" to r.defensiveTds + r.kickReturnTds,
         "dst_safeties" to r.safeties,
         "points_allowed" to r.pointsAllowed,
+        "yards_allowed" to r.yardsAllowed,
     )
     PlayerWeek(r.season, r.week, r.team, dstPlayerId(r.team), values)
 }
