@@ -11,7 +11,7 @@
 
 ## Where things stand
 
-Built and merged: the projection engine (K and D/ST included), accuracy page, props blend, live data refresh, Player page season stats, D/ST yards-allowed tiers (PR #14) and injured players' share to teammates (PR #17). Nothing is open. `INGEST_VERSION` 5, `FORECAST_VERSION` 6, prefs `formatVersion` 3.
+Built and merged: the projection engine (K and D/ST included), accuracy page, props blend, live data refresh, Player page season stats, D/ST yards-allowed tiers (PR #14) and injured players' share to teammates (PR #17). Nothing is open. `INGEST_VERSION` 6, `FORECAST_VERSION` 6, prefs `formatVersion` 3.
 
 **In progress: NGS metrics** (user chose NGS only, headline set of ten, 2026-09-29). Spec `docs/superpowers/specs/2026-09-29-ngs-metrics-design.md`, plan `docs/superpowers/plans/2026-09-29-ngs-metrics.md` (6 tasks, native execution on this branch). To resume after `/clear`: read the plan, then `.superpowers/sdd/2026-09-29-ngs-metrics/progress.md` (the ledger, git-ignored; if it is gone, trust the task list below and `git log`), and continue at the first task not marked done. Update this list in the same commit as each task.
 
@@ -20,7 +20,8 @@ Built and merged: the projection engine (K and D/ST included), accuracy page, pr
 - [x] Task 3: pipeline integration in `IngestPipeline.kt` (`fetchNgs`, lazy `ngs()`, reuse rule), `validate/NgsChecks.kt`, `INGEST_VERSION` 6
 - [x] Task 4: Python `etl/gridiron_etl/ngs.py` (`components`, `remap_postseason_weeks`, `drop_impossible`, `load`), hooked into `build.py`; a 2025 Python build stores 13 NGS metrics (1,282 receiving rows)
 - [x] Task 5: parity OK for 2025 (299,853 facts, 122 metrics), `etl/build/stats.db` and `accuracy.db` rebuilt with the Kotlin builder (ingest v6), `NgsRealDatabaseTest` (Grid column over weeks 1-8 equals the CSV's weighted average), accuracy gate passes. Ruling: visible NGS ratios also store their weekly average and no NGS metric is sparse (the single-week contract test needs both)
-- [x] Task 6 (docs): CLAUDE.md and ARCHITECTURE.md updated. Remaining: final whole-branch review, fix pass, then delete the spec and plan and open the PR
+- [x] Task 6 (docs): CLAUDE.md and ARCHITECTURE.md updated.
+- [x] Final review (Opus) and one fix pass: Super Bowl week alignment (NGS is regular season + 5, play-by-play + 4; NGS weeks without play-by-play are dropped), efficiency weighted by rush yards (`ngs_rush_yards`, 123 metrics), rushing metrics RB-only, a season rebuilt while an NGS file was unavailable is rebuilt again once it returns, weekly minimums in the definitions. Remaining: delete the spec and plan, open the PR
 
 The databases in `etl/build` are already rebuilt with NGS; the full suite runs with `GRIDIRON_STATS_DB=etl/build/stats.db` (only the known timing test fails).
 

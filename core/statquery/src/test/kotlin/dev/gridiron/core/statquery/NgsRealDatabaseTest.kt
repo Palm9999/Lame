@@ -2,6 +2,7 @@ package dev.gridiron.core.statquery
 
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.statquery.StatColumn.NGS_CUSHION
+import dev.gridiron.core.statquery.StatColumn.NGS_RUSH_EFFICIENCY
 import dev.gridiron.core.statquery.StatColumn.NGS_RYOE_PER_ATT
 import dev.gridiron.core.statquery.StatColumn.NGS_SEPARATION
 import dev.gridiron.core.statquery.StatColumn.NGS_TIME_TO_THROW
@@ -96,5 +97,12 @@ class NgsRealDatabaseTest {
         val expected = player.sumOf { it.getValue("rush_yards_over_expected").toDouble() } /
             player.sumOf { it.getValue("rush_attempts").toDouble() }
         assertEquals(expected, gridValue(id, NGS_RYOE_PER_ATT)!!, 1e-6)
+    }
+
+    @Test
+    fun `a rusher's efficiency over weeks 1-8 is weighted by his rushing yards`() {
+        val player = busiest(csvRows("ngs_rushing.csv.gz"))
+        val id = player.first().getValue("player_gsis_id")
+        assertEquals(weighted(player, "efficiency", "rush_yards"), gridValue(id, NGS_RUSH_EFFICIENCY)!!, 1e-6)
     }
 }

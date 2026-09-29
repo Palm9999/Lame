@@ -20,7 +20,7 @@ class NgsTest {
         "avg_time_to_throw", "aggressiveness", "avg_intended_air_yards",
     )
     private val rushingHeader = listOf(
-        "season", "week", "team_abbr", "player_gsis_id", "rush_attempts",
+        "season", "week", "team_abbr", "player_gsis_id", "rush_attempts", "rush_yards",
         "efficiency", "percent_attempts_gte_eight_defenders", "rush_yards_over_expected",
     )
     private val receivingHeader = listOf(
@@ -40,7 +40,7 @@ class NgsTest {
     private fun rushing(vararg overrides: Pair<String, Any?>): Map<String, Any?> =
         mapOf(
             "season" to 2025, "week" to 3, "team_abbr" to "AAA", "player_gsis_id" to "RB1", "rush_attempts" to 20,
-            "efficiency" to 3.5, "percent_attempts_gte_eight_defenders" to 25.0, "rush_yards_over_expected" to 6.5,
+            "rush_yards" to 80, "efficiency" to 3.5, "percent_attempts_gte_eight_defenders" to 25.0, "rush_yards_over_expected" to 6.5,
         ) + overrides
 
     private fun receiving(vararg overrides: Pair<String, Any?>): Map<String, Any?> =
@@ -83,7 +83,9 @@ class NgsTest {
     fun `rushing stores RYOE directly and the other averages times carries`() {
         val row = readNgsRushing(stream(rushingHeader, rushing()), "ngs_rushing.csv.gz").single()
         assertEquals(20.0, row.values["ngs_carries"])
-        assertEquals(70.0, row.values["ngs_eff_w"])
+        // Efficiency is distance per rushing yard, so it is weighted by yards, not carries.
+        assertEquals(80.0, row.values["ngs_rush_yards"])
+        assertEquals(280.0, row.values["ngs_eff_w"])
         assertEquals(500.0, row.values["ngs_box_w"])
         assertEquals(6.5, row.values["ngs_ryoe"])
         assertEquals(3.5, row.values["ngs_rush_efficiency"])
@@ -105,7 +107,7 @@ class NgsTest {
         val row = readNgsRushing(stream(rushingHeader, rushing("rush_yards_over_expected" to null)), "ngs_rushing.csv.gz").single()
         assertNull(row.values["ngs_ryoe"])
         assertNull(row.values["ngs_ryoe_per_att"])
-        assertEquals(70.0, row.values["ngs_eff_w"])
+        assertEquals(280.0, row.values["ngs_eff_w"])
     }
 
     @Test
@@ -133,15 +135,15 @@ class NgsTest {
     private fun week(season: Int, week: Int) = PlayerWeek(season, week, "AAA", "P$week", mutableMapOf("ngs_targets" to 1.0))
 
     @Test
-    fun `NGS week 23 becomes 22 when the season has no week 22`() {
-        val out = remapPostseasonWeeks(listOf(week(2025, 21), week(2025, 23), week(2024, 23)))
-        assertEquals(listOf(21, 22, 22), out.map { it.week })
+    fun `NGS numbers the Super Bowl a week after play-by-play, in 18-week and 17-week seasons alike`() {
+        val out = remapPostseasonWeeks(listOf(week(2025, 21), week(2025, 23), week(2019, 20), week(2019, 22)))
+        assertEquals(listOf(21, 22, 20, 21), out.map { it.week })
     }
 
     @Test
-    fun `a season with both week 22 and week 23 is left alone`() {
-        val out = remapPostseasonWeeks(listOf(week(2025, 22), week(2025, 23)))
-        assertEquals(listOf(22, 23), out.map { it.week })
+    fun `weeks before the Super Bowl are left alone`() {
+        val out = remapPostseasonWeeks(listOf(week(2025, 1), week(2025, 19), week(2025, 22), week(2019, 18)))
+        assertEquals(listOf(1, 19, 22, 18), out.map { it.week })
     }
 
     @Test

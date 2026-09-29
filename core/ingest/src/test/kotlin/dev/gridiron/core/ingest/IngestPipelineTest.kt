@@ -57,7 +57,7 @@ class IngestPipelineTest {
         "season", "week", "team_abbr", "player_gsis_id", "attempts", "avg_time_to_throw", "aggressiveness", "avg_intended_air_yards",
     )
     private val ngsRushingHeader = listOf(
-        "season", "week", "team_abbr", "player_gsis_id", "rush_attempts", "efficiency",
+        "season", "week", "team_abbr", "player_gsis_id", "rush_attempts", "rush_yards", "efficiency",
         "percent_attempts_gte_eight_defenders", "rush_yards_over_expected",
     )
     private val ngsReceivingHeader = listOf(
@@ -72,8 +72,9 @@ class IngestPipelineTest {
         separation: Double = 3.0,
         timeToThrow: Double = 2.5,
         passingHeader: List<String> = ngsPassingHeader,
+        weeks: List<Int> = listOf(0, 1),
     ) {
-        fun rows(build: (Int, Int) -> Map<String, Any?>) = seasons.flatMap { season -> listOf(0, 1).map { week -> build(season, week) } }
+        fun rows(build: (Int, Int) -> Map<String, Any?>) = seasons.flatMap { season -> weeks.map { week -> build(season, week) } }
         val passing = rows { season, week ->
             mapOf(
                 "season" to season, "week" to week, "team_abbr" to "AAA", "player_gsis_id" to "QB1", "attempts" to 30,
@@ -84,7 +85,7 @@ class IngestPipelineTest {
         val rushing = rows { season, week ->
             mapOf(
                 "season" to season, "week" to week, "team_abbr" to "AAA", "player_gsis_id" to "RB1", "rush_attempts" to 20,
-                "efficiency" to 3.5, "percent_attempts_gte_eight_defenders" to 25.0, "rush_yards_over_expected" to 6.5,
+                "rush_yards" to 80, "efficiency" to 3.5, "percent_attempts_gte_eight_defenders" to 25.0, "rush_yards_over_expected" to 6.5,
             )
         }
         val receiving = rows { season, week ->
@@ -687,5 +688,38 @@ class IngestPipelineTest {
         assertEquals(95.0, ngsFact(out, "WR1", 2025, "ngs_sep_w"))
         assertTrue(report.warnings.any { "NGS" in it && "dropped" in it }, "${report.warnings}")
         assertTrue(report.warnings.any { "NGS" in it && "separation" in it }, "${report.warnings}")
+    }
+
+    @Test
+    fun `NGS weeks without play-by-play are dropped with a warning, not a failed build`() = runTest {
+        servePlayers()
+        serveNgs(weeks = listOf(0, 1, 5))
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+        val report = pipeline.build(listOf(2025), null, out)
+        assertEquals(30.0, ngsFact(out, "WR1", 2025, "ngs_sep_w"))
+        assertNull(ngsFact(out, "WR1", 2025, "ngs_sep_w", week = 5))
+        assertTrue(report.warnings.any { "NGS" in it && "no play-by-play" in it }, "${report.warnings}")
+    }
+
+    @Test
+    fun `a season rebuilt while an NGS file was unavailable gets it on the next build`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2025), null, first)
+        // 2025's play-by-play changes, so it is rebuilt, but the receiving file can't be downloaded right now.
+        serveSeason(2025, version = "v2")
+        fetcher.onFetch = { url -> if (url == Sources.url(Input.NGS_RECEIVING)) throw IOException("boom") }
+        val second = File(dir, "second.db")
+        val secondReport = pipeline.build(listOf(2025), first, second)
+        assertEquals(listOf(2025), secondReport.built)
+        assertNull(ngsFact(second, "WR1", 2025, "ngs_sep_w"))
+        // The file is back, unchanged upstream: the season must still be rebuilt to gain it.
+        fetcher.onFetch = {}
+        val third = File(dir, "third.db")
+        val report = pipeline.build(listOf(2025), second, third)
+        assertEquals(listOf(2025), report.built)
+        assertEquals(30.0, ngsFact(third, "WR1", 2025, "ngs_sep_w"))
     }
 }

@@ -23,7 +23,7 @@ private val NGS_CHECKS = listOf(
     NgsCheck("time to throw", "ngs_ttt_w", "ngs_time_to_throw", "ngs_attempts", { it <= 0.0 || it > 10.0 }, 1.5..4.5),
     NgsCheck("aggressiveness", "ngs_aggr_w", "ngs_aggressiveness", "ngs_attempts", { it < 0.0 || it > 100.0 }, 0.0..60.0),
     NgsCheck("intended air yards", "ngs_iay_w", "ngs_intended_air_yards", "ngs_attempts", { it < -30.0 || it > 60.0 }, -5.0..25.0),
-    NgsCheck("rushing efficiency", "ngs_eff_w", "ngs_rush_efficiency", "ngs_carries", { it <= 0.0 }, null),
+    NgsCheck("rushing efficiency", "ngs_eff_w", "ngs_rush_efficiency", "ngs_rush_yards", { it <= 0.0 }, null),
     NgsCheck("stacked box", "ngs_box_w", "ngs_stacked_box_pct", "ngs_carries", { it < 0.0 || it > 100.0 }, 0.0..100.0),
     NgsCheck("separation", "ngs_sep_w", "ngs_separation", "ngs_targets", { it < 0.0 || it > 20.0 }, 0.0..8.0),
     NgsCheck("cushion", "ngs_cush_w", "ngs_cushion", "ngs_targets", { it < 0.0 || it > 40.0 }, 0.0..15.0),
@@ -69,6 +69,20 @@ internal fun checkNgs(season: Int, rows: List<PlayerWeek>, weekly: List<PlayerWe
     if (dropped.isNotEmpty()) warnings += "$season: NGS dropped impossible values: ${dropped.entries.joinToString { "${it.key} ${it.value}" }}"
     if (unusual.isNotEmpty()) warnings += "$season: NGS values outside the usual range: ${unusual.entries.joinToString { "${it.key} ${it.value}" }}"
     crossCheckCounts(season, rows, weekly, warnings)
+}
+
+/**
+ * NGS rows for weeks the season's play-by-play doesn't have (NGS posts a week
+ * before play-by-play does) are dropped with a warning: a fact for a week with
+ * no games would fail the build's own checks.
+ */
+internal fun dropUnplayedWeeks(season: Int, rows: List<PlayerWeek>, weekly: List<PlayerWeek>, warnings: MutableList<String>): List<PlayerWeek> {
+    val played = weekly.mapTo(HashSet()) { it.week }
+    val (kept, dropped) = rows.partition { it.week in played }
+    if (dropped.isNotEmpty()) {
+        warnings += "$season: NGS week(s) ${dropped.map { it.week }.toSortedSet().joinToString()} have no play-by-play; left out"
+    }
+    return kept
 }
 
 private fun crossCheckCounts(season: Int, rows: List<PlayerWeek>, weekly: List<PlayerWeek>, warnings: MutableList<String>) {

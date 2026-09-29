@@ -1,6 +1,7 @@
 package dev.gridiron.core.statquery
 
 import dev.gridiron.core.model.WeekRange
+import dev.gridiron.core.statquery.StatColumn.NGS_RUSH_EFFICIENCY
 import dev.gridiron.core.statquery.StatColumn.NGS_RYOE_PER_ATT
 import dev.gridiron.core.statquery.StatColumn.NGS_SEPARATION
 import dev.gridiron.core.statquery.StatColumn.NGS_TIME_TO_THROW
@@ -47,6 +48,15 @@ class NgsColumnsTest {
         db.week("rb1", 1, ngsRyoe to 10.0, ngsCarries to 20)
         db.week("rb1", 2, ngsRyoe to -4.0, ngsCarries to 10)
         assertEquals(0.2, db.grid(spec(NGS_RYOE_PER_ATT)).single().value(NGS_RYOE_PER_ATT)!!, 1e-9)
+    }
+
+    @Test
+    fun `rushing efficiency is weighted by rushing yards, not carries`() {
+        db.player("rb1", "Running Back", position = "RB")
+        // Week 1: 2.0 on 10 yards. Week 2: 4.0 on 40 yards. (20 + 160) / 50 = 3.6; the mean is 3.0.
+        db.week("rb1", 1, Component("ngs_eff_w") to 2.0 * 10, Component("ngs_rush_yards") to 10)
+        db.week("rb1", 2, Component("ngs_eff_w") to 4.0 * 40, Component("ngs_rush_yards") to 40)
+        assertEquals(3.6, db.grid(spec(NGS_RUSH_EFFICIENCY)).single().value(NGS_RUSH_EFFICIENCY)!!, 1e-9)
     }
 
     @Test

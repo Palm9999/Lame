@@ -12,7 +12,7 @@ def passing(**kw) -> dict:
 
 def rushing(**kw) -> dict:
     return {"season": 2025, "week": 3, "team_abbr": "AAA", "player_gsis_id": "RB1", "rush_attempts": 20,
-            "efficiency": 3.5, "percent_attempts_gte_eight_defenders": 25.0,
+            "rush_yards": 80, "efficiency": 3.5, "percent_attempts_gte_eight_defenders": 25.0,
             "rush_yards_over_expected": 6.5, **kw}
 
 
@@ -61,7 +61,9 @@ def test_a_missing_average_stores_nothing_for_it_and_a_zero_weight_nothing_at_al
 def test_rushing_stores_ryoe_directly_and_the_other_averages_times_carries():
     r = row(build(r=[rushing()]), "RB1")
     assert r["ngs_carries"] == 20.0
-    assert r["ngs_eff_w"] == 70.0
+    # Efficiency is distance per rushing yard, so it is weighted by yards, not carries.
+    assert r["ngs_rush_yards"] == 80.0
+    assert r["ngs_eff_w"] == 280.0
     assert r["ngs_box_w"] == 500.0
     assert r["ngs_ryoe"] == 6.5
     assert (r["ngs_rush_efficiency"], r["ngs_stacked_box_pct"], r["ngs_ryoe_per_att"]) == (3.5, 25.0, 0.325)
@@ -75,7 +77,7 @@ def test_a_zero_average_is_kept_as_a_zero_not_dropped():
 def test_a_season_without_a_ryoe_model_keeps_its_other_components():
     r = row(build(r=[rushing(rush_yards_over_expected=None)]), "RB1")
     assert r["ngs_ryoe"] is None
-    assert r["ngs_eff_w"] == 70.0
+    assert r["ngs_eff_w"] == 280.0
 
 
 def test_receiving_weights_separation_and_cushion_by_targets_and_yac_by_receptions():
@@ -85,9 +87,14 @@ def test_receiving_weights_separation_and_cushion_by_targets_and_yac_by_receptio
     assert (r["ngs_cushion"], r["ngs_separation"], r["ngs_yac_over_expected"]) == (6.0, 3.0, 1.5)
 
 
-def test_week_23_becomes_22_only_when_the_season_has_no_week_22():
-    df = pl.DataFrame({"season": [2025, 2025, 2024, 2023, 2023], "week": [21, 23, 23, 22, 23]})
-    assert ngs.remap_postseason_weeks(df)["week"].to_list() == [21, 22, 22, 22, 23]
+def test_the_super_bowl_week_matches_play_by_play_in_18_and_17_week_seasons():
+    df = pl.DataFrame({"season": [2025, 2025, 2019, 2019], "week": [21, 23, 20, 22]})
+    assert ngs.remap_postseason_weeks(df)["week"].to_list() == [21, 22, 20, 21]
+
+
+def test_weeks_before_the_super_bowl_are_left_alone():
+    df = pl.DataFrame({"season": [2025, 2025, 2025, 2019], "week": [1, 19, 22, 18]})
+    assert ngs.remap_postseason_weeks(df)["week"].to_list() == [1, 19, 22, 18]
 
 
 def test_a_player_in_two_files_becomes_one_row_with_both_sets_of_components():

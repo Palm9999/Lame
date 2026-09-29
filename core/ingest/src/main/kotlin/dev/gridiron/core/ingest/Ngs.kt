@@ -43,13 +43,16 @@ private val PASSING = NgsFile(
         NgsAverage("avg_intended_air_yards", "ngs_iay_w", "ngs_intended_air_yards"),
     ),
 )
-private val RUSHING = NgsFile(
+private val RUSHING_CARRIES = NgsFile(
     "rush_attempts", "ngs_carries",
-    listOf(
-        NgsAverage("efficiency", "ngs_eff_w", "ngs_rush_efficiency"),
-        NgsAverage("percent_attempts_gte_eight_defenders", "ngs_box_w", "ngs_stacked_box_pct"),
-    ),
+    listOf(NgsAverage("percent_attempts_gte_eight_defenders", "ngs_box_w", "ngs_stacked_box_pct")),
     totals = listOf(NgsTotal("rush_yards_over_expected", "ngs_ryoe", "ngs_ryoe_per_att")),
+)
+
+/** Efficiency is distance travelled per rushing yard, so a range weights it by yards, not carries. */
+private val RUSHING_YARDS = NgsFile(
+    "rush_yards", "ngs_rush_yards",
+    listOf(NgsAverage("efficiency", "ngs_eff_w", "ngs_rush_efficiency")),
 )
 
 /** Receiving has two weights: separation and cushion are per target, YAC over expected per reception. */
@@ -67,7 +70,7 @@ private val RECEIVING_RECEPTIONS = NgsFile(
 
 internal fun readNgsPassing(input: InputStream, source: String): List<PlayerWeek> = readNgs(input, source, listOf(PASSING))
 
-internal fun readNgsRushing(input: InputStream, source: String): List<PlayerWeek> = readNgs(input, source, listOf(RUSHING))
+internal fun readNgsRushing(input: InputStream, source: String): List<PlayerWeek> = readNgs(input, source, listOf(RUSHING_CARRIES, RUSHING_YARDS))
 
 internal fun readNgsReceiving(input: InputStream, source: String): List<PlayerWeek> =
     readNgs(input, source, listOf(RECEIVING_TARGETS, RECEIVING_RECEPTIONS))
@@ -98,15 +101,16 @@ private fun CsvRow.addComponents(file: NgsFile, into: MutableMap<String, Double?
     }
 }
 
+/** The last regular-season week: 18 from 2021, 17 before. */
+private fun lastRegularWeek(season: Int): Int = if (season >= 2021) 18 else 17
+
 /**
- * NGS numbers the Super Bowl week 23, play-by-play 22. When a season's NGS has
- * no week 22 its week 23 becomes 22; a season with both keeps them as they are.
+ * NGS numbers the Super Bowl one week after play-by-play does, skipping the
+ * Pro Bowl week: regular season + 5 where play-by-play has regular season + 4
+ * (23 vs 22 in 2025, 22 vs 21 in 2019). Every other week agrees.
  */
-internal fun remapPostseasonWeeks(rows: List<PlayerWeek>): List<PlayerWeek> {
-    val hasWeek22 = rows.filter { it.week == 22 }.mapTo(HashSet()) { it.season }
-    return rows.map {
-        if (it.week == 23 && it.season !in hasWeek22) PlayerWeek(it.season, 22, it.team, it.playerId, it.values) else it
-    }
+internal fun remapPostseasonWeeks(rows: List<PlayerWeek>): List<PlayerWeek> = rows.map {
+    if (it.week == lastRegularWeek(it.season) + 5) PlayerWeek(it.season, it.week - 1, it.team, it.playerId, it.values) else it
 }
 
 /** One row per (season, week, player) from the three files, with week numbers matching play-by-play. */

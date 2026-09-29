@@ -83,7 +83,7 @@ public enum class StatColumn(
     NGS_INTENDED_AIR_YARDS("ngs_intended_air_yards", Ratio(C.NGS_IAY_W, C.NGS_ATTEMPTS)),
     NGS_RYOE("ngs_ryoe", Total(C.NGS_RYOE)),
     NGS_RYOE_PER_ATT("ngs_ryoe_per_att", Ratio(C.NGS_RYOE, C.NGS_CARRIES)),
-    NGS_RUSH_EFFICIENCY("ngs_rush_efficiency", Ratio(C.NGS_EFF_W, C.NGS_CARRIES), higherIsBetter = false),
+    NGS_RUSH_EFFICIENCY("ngs_rush_efficiency", Ratio(C.NGS_EFF_W, C.NGS_RUSH_YARDS), higherIsBetter = false),
     NGS_STACKED_BOX_PCT("ngs_stacked_box_pct", Ratio(C.NGS_BOX_W, C.NGS_CARRIES)),
     NGS_SEPARATION("ngs_separation", Ratio(C.NGS_SEP_W, C.NGS_TARGETS)),
     NGS_CUSHION("ngs_cushion", Ratio(C.NGS_CUSH_W, C.NGS_TARGETS)),

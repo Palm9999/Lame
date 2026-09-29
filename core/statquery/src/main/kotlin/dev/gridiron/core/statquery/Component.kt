@@ -64,6 +64,7 @@ public object Components {
     // range recomputes as a weighted average. All are sparse: absent means no NGS row.
     public val NGS_ATTEMPTS: Component = Component("ngs_attempts")
     public val NGS_CARRIES: Component = Component("ngs_carries")
+    public val NGS_RUSH_YARDS: Component = Component("ngs_rush_yards")
     public val NGS_TARGETS: Component = Component("ngs_targets")
     public val NGS_RECEPTIONS: Component = Component("ngs_receptions")
     public val NGS_TTT_W: Component = Component("ngs_ttt_w")

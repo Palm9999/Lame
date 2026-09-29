@@ -19,6 +19,7 @@ import dev.gridiron.core.ingest.pbp.derive
 import dev.gridiron.core.ingest.pbp.readPlays
 import dev.gridiron.core.ingest.validate.checkNgs
 import dev.gridiron.core.ingest.validate.crossCheck
+import dev.gridiron.core.ingest.validate.dropUnplayedWeeks
 import dev.gridiron.core.ingest.validate.expectedCoverage
 import dev.gridiron.core.ingest.validate.fantasyContract
 import dev.gridiron.core.ingest.validate.validateDatabase
@@ -130,6 +131,13 @@ public class IngestPipeline(
 
         private val ngsSources = NGS_READERS.keys.associateWith { NgsSource() }
         private var ngsBackfill = false
+
+        /**
+         * NGS files a rebuilt season couldn't get (a 404 or a failed download, not a bad file): their saved
+         * validators are left out of the new database, so the next build sees them as new and rebuilds
+         * every season to add the data.
+         */
+        private val ngsLost = mutableSetOf<Input>()
         private var ngsRows: List<PlayerWeek>? = null
         private var newest = 0
 
@@ -149,6 +157,7 @@ public class IngestPipeline(
                 check(built.isNotEmpty() || reused.isNotEmpty()) { "none of the seasons $seasons has published play-by-play" }
                 writer.writePlayers(players)
                 writer.writeGames(readSchedule((built + reused).toSet()))
+                ngsLost.forEach { meta.remove(Sources.metaKey(it)) }
                 writer.finish(built + reused, meta, now())
                 onProgress(IngestProgress.Validating)
                 val problems = validateDatabase(writer.connection)
@@ -241,16 +250,24 @@ public class IngestPipeline(
         /** Every season's NGS rows, read once: a file that is unreadable or has lost a column is left out with a warning. */
         private suspend fun ngs(): List<PlayerWeek> = ngsRows ?: loadNgs().also { ngsRows = it }
 
+        /** An unchanged NGS file a rebuilt season needs is downloaded again in full; null, with a warning, when it can't be. */
+        private suspend fun refetchNgs(input: Input): File? = try {
+            (fetch(input, null, known = null) as? FetchResult.Downloaded)?.file
+                ?: null.also { warnings += "nflverse's ${input.label} isn't available right now; its metrics are left out" }
+        } catch (e: IOException) {
+            warnings += "couldn't download ${input.label} (${e.message}); its metrics are left out"
+            null
+        }
+
         private suspend fun loadNgs(): List<PlayerWeek> {
             val groups = mutableListOf<List<PlayerWeek>>()
             for ((input, source) in ngsSources) {
                 if (!source.available) continue
-                val file = source.file ?: try {
-                    (fetch(input, null, known = null) as? FetchResult.Downloaded)?.file
-                } catch (e: IOException) {
-                    warnings += "couldn't download ${input.label} (${e.message}); its metrics are left out"
-                    null
-                } ?: continue
+                val file = source.file ?: refetchNgs(input)
+                if (file == null) {
+                    ngsLost += input
+                    continue
+                }
                 try {
                     groups += openInput(file).use { NGS_READERS.getValue(input)(it, file.name) }
                 } catch (e: IOException) {
@@ -403,9 +420,10 @@ public class IngestPipeline(
             }
 
             writer.writeFacts(toFacts(weekly))
+            ngsSources.filterValues { !it.available }.keys.forEach { ngsLost += it }
             if (ngsSources.values.any { it.available }) {
                 val all = ngs()
-                val rows = all.filter { it.season == season }
+                val rows = dropUnplayedWeeks(season, all.filter { it.season == season }, weekly, warnings)
                 if (all.isNotEmpty() && rows.isEmpty()) warnings += "$season: no NGS rows published yet"
                 checkNgs(season, rows, weekly, warnings)
                 writer.writeFacts(toFacts(rows))
