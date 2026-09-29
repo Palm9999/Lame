@@ -39,4 +39,12 @@ class PlayerStatSetsTest {
         assertTrue(StatColumn.FG_ATT in PlayerStatSets.logColumns(Position.K))
         assertTrue(StatColumn.POINTS_ALLOWED in PlayerStatSets.logColumns(Position.DST))
     }
+
+    @Test
+    fun `a defense's game log reads fantasy points, points allowed, yards allowed, sacks and interceptions`() {
+        assertEquals(
+            listOf(StatColumn.FANTASY_POINTS, StatColumn.POINTS_ALLOWED, StatColumn.YARDS_ALLOWED, StatColumn.DST_SACKS, StatColumn.DST_INTERCEPTIONS),
+            PlayerStatSets.logColumns(Position.DST),
+        )
+    }
 }

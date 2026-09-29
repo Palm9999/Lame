@@ -52,6 +52,7 @@ import dev.gridiron.core.statquery.StatColumn.WOPR
 import dev.gridiron.core.statquery.StatColumn.XP_ATT
 import dev.gridiron.core.statquery.StatColumn.XP_MADE
 import dev.gridiron.core.statquery.StatColumn.YAC
+import dev.gridiron.core.statquery.StatColumn.YARDS_ALLOWED
 
 /**
  * The Grid's primary navigation: a curated column set, never all 39 at once.
@@ -123,7 +124,7 @@ public enum class StatPack(
     ),
     DEFENSE(
         "Defense",
-        listOf(FANTASY_POINTS, POINTS_ALLOWED, DST_SACKS, DST_INTERCEPTIONS, DST_FUMBLE_RECOVERIES, DST_TDS, DST_SAFETIES),
+        listOf(FANTASY_POINTS, POINTS_ALLOWED, YARDS_ALLOWED, DST_SACKS, DST_INTERCEPTIONS, DST_FUMBLE_RECOVERIES, DST_TDS, DST_SAFETIES),
         FANTASY_POINTS,
         null,
     ),

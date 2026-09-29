@@ -105,6 +105,7 @@ class PlayerStatsRepositoryTest {
     fun `a defenses log has an opponent and a result every week, and adds up`() = runTest {
         val id = topId(StatPack.DEFENSE, PositionFilter.DST)
         assertLogAddsUp(id, Position.DST, StatColumn.POINTS_ALLOWED)
+        assertLogAddsUp(id, Position.DST, StatColumn.YARDS_ALLOWED)
         val s = repo.stats(id, Position.DST, ppr, season = 2025)
         assertNull(s.bar)
         assertTrue(s.ranked)

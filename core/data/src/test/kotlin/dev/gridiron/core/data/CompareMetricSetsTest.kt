@@ -45,6 +45,8 @@ class CompareMetricSetsTest {
             assertTrue(StatColumn.EXPECTED_FANTASY_POINTS !in columns && StatColumn.FPOE !in columns, "$p")
             assertTrue(CompareMetricSets.radarAxes(p).size >= 3, "$p")
         }
+        assertTrue(StatColumn.YARDS_ALLOWED in CompareMetricSets.groupsFor(Position.DST).getValue(CompareGroup.EFFICIENCY))
+        assertEquals(7, CompareMetricSets.radarAxes(Position.DST).size)
         assertEquals(StatColumn.FG_ATT, CompareMetricSets.qualifier(Position.K))
         assertEquals(StatColumn.POINTS_ALLOWED, CompareMetricSets.qualifier(Position.DST))
     }

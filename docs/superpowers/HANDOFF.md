@@ -13,11 +13,7 @@
 
 The four projection sub-projects and the Player page season stats are built, reviewed and merged (PRs #4, #5, #6, #7, #9, #10, #11). The projection design is `specs/2026-09-26-projection-model-design.md`, which supersedes the pipeline half of `specs/2026-09-23-projections-design.md`. Only the docs-only draft [PR #12](https://github.com/Palm9999/Lame/pull/12) is open (HANDOFF and the yards-allowed spec).
 
-**In flight (2026-09-29): D/ST yards-allowed tiers.** The spec (`specs/2026-09-29-dst-yards-allowed-design.md`) is approved and the plan is written: `plans/2026-09-29-dst-yards-allowed.md` (4 tasks: model, SQL and `score()`; data, Python parity and the Grid column; forecast, expectation and the joint Monte Carlo with the range refit and the gate; editor, prefs v3, screens and docs). Both are on the open draft docs PR #12. **Next:** the user reviews the plan and picks an execution method (subagent-driven or native; recommended: native, since the four tasks share interfaces), then execute. The user's rulings for it:
-- ESPN's yards tiers are **on by default in every preset and every saved profile** (migrated once, prefs `formatVersion` 3).
-- Yards allowed is **projected as its own stat**, like points allowed, and the Monte Carlo draws it jointly with points allowed.
-- The ESPN tier table in the spec is from memory and unverified; the user can edit it.
-- Measured on 2024–2025 (1,140 team-games): points/yards allowed correlation 0.666 (constant 0.67), yards spread 0.239 of the league mean around each team-season's average (`DST_YA_CV` 0.25).
+**Just shipped (2026-09-29): D/ST yards-allowed tiers** (spec `specs/2026-09-29-dst-yards-allowed-design.md`, plan `plans/2026-09-29-dst-yards-allowed.md`, on draft PR #12). Yards allowed (net) are a D/ST weekly stat scored through editable per-profile tiers (ESPN's on by default in every preset and, migrated once at prefs `formatVersion` 3, every saved profile; the table is from memory and unverified), projected as their own stat, drawn jointly with points allowed in the Monte Carlo, and shown in the Defense pack, Compare and the Player page's D/ST log. Measured on 2024–2025: points/yards correlation 0.666 (constant 0.67); yards spread 0.239 of the league mean (`DST_YA_CV` 0.25). `RANGE_WIDENING[DST]` stayed 1.22 (pooled held ≈ 80%). The 2025 gate has the model at 5.24 MAE against the season average's 6.05 at D/ST. `INGEST_VERSION` 5, `FORECAST_VERSION` 5. **Next:** the user reviews PR #12 and merges it; then the next gap.
 
 **The other candidate gaps** (the user picks after this one; each gets its own brainstorm, spec, plan and PR):
 - **Injured player's share to teammates:** the forecast shows an Out/IR player as Out and doesn't move his share.
@@ -34,7 +30,7 @@ The four projection sub-projects and the Player page season stats are built, rev
 - **The accuracy gate covers K and D/ST** as well as QB, RB, WR and TE. If a position loses to the season-to-date average, tune its constants in `ForecastConstants.kt`.
 - **The Grid's K and D/ST chips** bring their own packs (Kicking, Defense); every other chip leaves them out.
 - **Judgments, not fits:** `MARKET_VARIANCE_RATIO` (0.5) and `ONE_SIDED_OVERROUND` (1.08). Props can't be backtested. The user kept both.
-- **Unverified defaults:** the kicking scoring defaults (3/4/5, −1, 1, −1) are common values, not checked against ESPN's. ESPN's yards-allowed and blocked-kick D/ST scoring isn't modeled.
+- **Unverified defaults:** the kicking scoring defaults (3/4/5, −1, 1, −1) are common values, not checked against ESPN's. ESPN's yards-allowed tiers are from memory; blocked-kick D/ST scoring isn't modeled.
 
 ## Open checks on the phone (non-blocking)
 
