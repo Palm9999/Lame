@@ -6,6 +6,7 @@ public enum class Input(public val perSeason: Boolean, public val label: String)
     SNAP_COUNTS(true, "snap counts"),
     INJURIES(true, "injury reports"),
     EXPECTED(true, "expected points"),
+    FTN(true, "FTN charting"),
     PLAYERS(false, "player list"),
     GAMES(false, "schedule"),
     NGS_PASSING(false, "NGS passing"),
@@ -26,6 +27,8 @@ public object Sources {
             Input.INJURIES -> "$NFLVERSE/injuries/injuries_$season.csv.gz"
             // ffopportunity publishes no gzip variant of this file.
             Input.EXPECTED -> "$FFOPPORTUNITY/ep_weekly_$season.csv"
+            // FTN publishes 2022 onward, one uncompressed csv per season.
+            Input.FTN -> "$NFLVERSE/ftn_charting/ftn_charting_$season.csv"
             Input.PLAYERS -> "$NFLVERSE/players/players.csv.gz"
             // Every season since 1999 in one file: opponents, results, lines, starting QBs, coaches.
             Input.GAMES -> "$NFLVERSE/schedules/games.csv"
