@@ -13,7 +13,7 @@
 
 The four projection sub-projects are built, reviewed and merged (PRs #4, #5, #6, #7, #9, #10): engine, accuracy page, Odds API props, and K/D/ST. The design is `specs/2026-09-26-projection-model-design.md`, which supersedes the pipeline half of `specs/2026-09-23-projections-design.md`. [PR #11](https://github.com/Palm9999/Lame/pull/11) (docs only) is open.
 
-**In flight (2026-09-28):** working through CLAUDE.md's Known Gaps, one at a time, each with its own design. The first is a Player page "Season stats" section (season chips, season line with percentiles, week-by-week game log) plus K and D/ST metric sets for Compare. The design is proposed and awaits the user's approval; no spec is written yet. The other gaps: yards-allowed tiers for D/ST, shifting an injured player's share to teammates, more metrics (NGS/FTN), saved Grid presets, season rollups.
+**In flight (2026-09-28):** working through CLAUDE.md's Known Gaps, one at a time, each with its own design. The first is a Player page "Season stats" section (season chips, season line with percentiles, week-by-week game log) plus K and D/ST metric sets for Compare. The design is approved and written up in `specs/2026-09-29-player-season-stats-design.md`; the user reviews the spec next, then the plan is written. The other gaps: yards-allowed tiers for D/ST, shifting an injured player's share to teammates, more metrics (NGS/FTN), saved Grid presets, season rollups.
 
 ## Rulings that still bind
 
