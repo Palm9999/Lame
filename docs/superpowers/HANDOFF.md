@@ -20,7 +20,7 @@ Built and merged: the projection engine (K and D/ST included), accuracy page, pr
 - [x] Task 3: pipeline integration in `IngestPipeline.kt` (`fetchNgs`, lazy `ngs()`, reuse rule), `validate/NgsChecks.kt`, `INGEST_VERSION` 6
 - [x] Task 4: Python `etl/gridiron_etl/ngs.py` (`components`, `remap_postseason_weeks`, `drop_impossible`, `load`), hooked into `build.py`; a 2025 Python build stores 13 NGS metrics (1,282 receiving rows)
 - [x] Task 5: parity OK for 2025 (299,853 facts, 122 metrics), `etl/build/stats.db` and `accuracy.db` rebuilt with the Kotlin builder (ingest v6), `NgsRealDatabaseTest` (Grid column over weeks 1-8 equals the CSV's weighted average), accuracy gate passes. Ruling: visible NGS ratios also store their weekly average and no NGS metric is sparse (the single-week contract test needs both)
-- [ ] Task 6: docs, delete spec and plan, open the PR
+- [x] Task 6 (docs): CLAUDE.md and ARCHITECTURE.md updated. Remaining: final whole-branch review, fix pass, then delete the spec and plan and open the PR
 
 The databases in `etl/build` are already rebuilt with NGS; the full suite runs with `GRIDIRON_STATS_DB=etl/build/stats.db` (only the known timing test fails).
 
