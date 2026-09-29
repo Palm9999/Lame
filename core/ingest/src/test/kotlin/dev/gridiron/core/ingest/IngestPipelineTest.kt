@@ -105,6 +105,29 @@ class IngestPipelineTest {
         query(file, "SELECT value FROM player_week_stat WHERE player_id = '$player' AND season = $season AND week = $week AND metric_id = '$metric'")
             .singleOrNull()?.single()?.toDouble()
 
+    private val ftnHeader = listOf(
+        "nflverse_game_id", "nflverse_play_id", "is_play_action", "is_qb_out_of_pocket", "is_interception_worthy",
+        "is_throw_away", "is_catchable_ball", "is_contested_ball", "is_created_reception", "is_drop", "n_blitzers",
+    )
+
+    private fun ftnRow(playId: Int, vararg overrides: Pair<String, Any?>): Map<String, Any?> = mapOf(
+        "nflverse_game_id" to "g1", "nflverse_play_id" to playId, "is_play_action" to "FALSE", "is_qb_out_of_pocket" to "FALSE",
+        "is_interception_worthy" to "FALSE", "is_throw_away" to "FALSE", "is_catchable_ball" to "FALSE",
+        "is_contested_ball" to "FALSE", "is_created_reception" to "FALSE", "is_drop" to "FALSE", "n_blitzers" to 0,
+    ) + overrides
+
+    /** FTN's file for [season]: WR1's catch was play-action and catchable; WR2's target was a catchable drop against a blitz. */
+    private fun serveFtn(season: Int, version: String = "f1", header: List<String> = ftnHeader, rows: List<Map<String, Any?>>? = null) {
+        val all = rows ?: listOf(
+            ftnRow(1, "is_play_action" to "TRUE", "is_catchable_ball" to "TRUE"),
+            ftnRow(2, "is_catchable_ball" to "TRUE", "is_drop" to "TRUE", "n_blitzers" to 2),
+            ftnRow(3),
+        )
+        fetcher.serve(Sources.url(Input.FTN, season), Fixtures.csv(header, all).toByteArray(), version)
+    }
+
+    private fun ftnFact(file: File, player: String, season: Int, metric: String, week: Int = 1): Double? = ngsFact(file, player, season, metric, week)
+
     private val gamesHeader = listOf(
         "game_id", "season", "game_type", "week", "home_team", "away_team", "home_score", "away_score", "spread_line", "total_line",
     )
@@ -131,13 +154,15 @@ class IngestPipelineTest {
         expected: Boolean = true,
         wr1Receptions: Int = 1,
         extraPlays: List<Map<String, Any?>> = emptyList(),
+        ftn: Boolean = true,
     ) {
         val plays = listOf(
-            Fixtures.pbp("season" to season, "receiver_player_id" to "WR1", "passer_player_id" to "QB1", "pass_attempt" to 1,
+            Fixtures.pbp("season" to season, "play_id" to 1, "receiver_player_id" to "WR1", "passer_player_id" to "QB1", "pass_attempt" to 1,
                 "complete_pass" to 1, "air_yards" to 10, "receiving_yards" to 15, "passing_yards" to 15, "yards_gained" to 15),
-            Fixtures.pbp("season" to season, "receiver_player_id" to "WR2", "passer_player_id" to "QB1", "pass_attempt" to 1, "air_yards" to 5),
-            Fixtures.pbp("season" to season, "play_type" to "run", "rusher_player_id" to "RB1", "rushing_yards" to 4, "yards_gained" to 4),
+            Fixtures.pbp("season" to season, "play_id" to 2, "receiver_player_id" to "WR2", "passer_player_id" to "QB1", "pass_attempt" to 1, "air_yards" to 5),
+            Fixtures.pbp("season" to season, "play_id" to 3, "play_type" to "run", "rusher_player_id" to "RB1", "rushing_yards" to 4, "yards_gained" to 4),
         ) + extraPlays
+        if (ftn) serveFtn(season, version)
         fetcher.serve(Sources.url(Input.PBP, season), Fixtures.gzip(Fixtures.pbpCsv(plays)), version)
         fetcher.serve(
             Sources.url(Input.SNAP_COUNTS, season),
@@ -187,7 +212,7 @@ class IngestPipelineTest {
         assertEquals(emptyList<Int>(), report.reused)
         val meta = readMeta(out)!!
         assertEquals("8", meta["schema_version"])
-        assertEquals("6", meta["ingest_version"])
+        assertEquals("7", meta["ingest_version"])
         assertEquals("2024,2025", meta["seasons"])
         assertEquals("1", meta["expected_through_week:2025"])
         assertNotNull(meta[Sources.metaKey(Input.PBP, 2025)])
@@ -721,5 +746,123 @@ class IngestPipelineTest {
         val report = pipeline.build(listOf(2025), second, third)
         assertEquals(listOf(2025), report.built)
         assertEquals(30.0, ngsFact(third, "WR1", 2025, "ngs_sep_w"))
+    }
+
+    @Test
+    fun `a first build stores FTN components and weekly rates and records the file's version`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+        pipeline.build(listOf(2025), null, out)
+        assertEquals(1.0, ftnFact(out, "WR1", 2025, "ftn_targets"))
+        assertEquals(1.0, ftnFact(out, "WR1", 2025, "ftn_catchable"))
+        assertEquals(0.0, ftnFact(out, "WR1", 2025, "ftn_drops"))
+        assertEquals(0.0, ftnFact(out, "WR1", 2025, "ftn_drop_rate"))
+        assertEquals(1.0, ftnFact(out, "WR2", 2025, "ftn_drops"))
+        assertEquals(1.0, ftnFact(out, "WR2", 2025, "ftn_drop_rate"))
+        assertEquals(2.0, ftnFact(out, "QB1", 2025, "ftn_dropbacks"))
+        assertEquals(0.5, ftnFact(out, "QB1", 2025, "ftn_play_action_rate"))
+        assertEquals(0.5, ftnFact(out, "QB1", 2025, "ftn_blitz_rate"))
+        // The run play has an FTN row, but a rusher is credited nothing.
+        assertNull(ftnFact(out, "RB1", 2025, "ftn_targets"))
+        assertNotNull(readMeta(out)!![Sources.metaKey(Input.FTN, 2025)])
+    }
+
+    @Test
+    fun `unchanged FTN and unchanged seasons are copied with their FTN facts`() = runTest {
+        servePlayers()
+        serveSeason(2024)
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2024, 2025), null, first)
+        val second = File(dir, "second.db")
+        val report = pipeline.build(listOf(2024, 2025), first, second)
+        assertEquals(listOf(2024, 2025), report.reused)
+        assertEquals(1.0, ftnFact(second, "WR2", 2024, "ftn_drops"))
+        assertEquals(1.0, ftnFact(second, "WR2", 2025, "ftn_drops"))
+        assertNotNull(readMeta(second)!![Sources.metaKey(Input.FTN, 2024)])
+    }
+
+    @Test
+    fun `changed FTN rebuilds only that season and the other keeps its FTN facts`() = runTest {
+        servePlayers()
+        serveSeason(2024)
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2024, 2025), null, first)
+        serveFtn(2025, version = "f2", rows = listOf(ftnRow(1, "is_drop" to "TRUE", "is_catchable_ball" to "TRUE"), ftnRow(2)))
+        val second = File(dir, "second.db")
+        val report = pipeline.build(listOf(2024, 2025), first, second)
+        assertEquals(listOf(2025), report.built)
+        assertEquals(listOf(2024), report.reused)
+        assertEquals(1.0, ftnFact(second, "WR1", 2025, "ftn_drops"))
+        assertEquals(0.0, ftnFact(second, "WR1", 2024, "ftn_drops"))
+    }
+
+    @Test
+    fun `a 2022 or later season without an FTN file builds with one warning`() = runTest {
+        servePlayers()
+        serveSeason(2025, ftn = false)
+        val out = File(dir, "stats.db")
+        val report = pipeline.build(listOf(2025), null, out)
+        assertEquals(listOf(2025), report.built)
+        assertEquals(listOf("2025: no FTN charting yet"), report.warnings.filter { "FTN" in it })
+        assertNull(ftnFact(out, "WR1", 2025, "ftn_targets"))
+        assertNull(readMeta(out)!![Sources.metaKey(Input.FTN, 2025)])
+    }
+
+    @Test
+    fun `a 2019 season without FTN builds silently, never asks for it, and is reused next time`() = runTest {
+        servePlayers()
+        serveSeason(2019, ftn = false)
+        serveSeason(2025, ftn = false)
+        val first = File(dir, "first.db")
+        val report = pipeline.build(listOf(2019, 2025), null, first)
+        assertEquals(listOf("2025: no FTN charting yet"), report.warnings.filter { "FTN" in it })
+        assertTrue(fetcher.calls.none { Sources.fileName(Input.FTN, 2019) in it.first }, "${fetcher.calls}")
+        val second = pipeline.build(listOf(2019, 2025), first, File(dir, "second.db"))
+        assertEquals(listOf(2019, 2025), second.reused)
+        assertEquals(emptyList<Int>(), second.built)
+    }
+
+    @Test
+    fun `a file with a renamed column is left out of that season with a warning and the build succeeds`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        serveFtn(2025, header = ftnHeader.map { if (it == "is_drop") "is_dropped" else it }, rows = listOf(ftnRow(1).let { it - "is_drop" + ("is_dropped" to "FALSE") }))
+        val out = File(dir, "stats.db")
+        val report = pipeline.build(listOf(2025), null, out)
+        assertEquals(listOf(2025), report.built)
+        assertTrue(report.warnings.any { "FTN" in it && "is_drop" in it }, "${report.warnings}")
+        assertNull(ftnFact(out, "WR1", 2025, "ftn_targets"))
+        assertEquals(1.0, ngsFact(out, "WR1", 2025, "targets"))
+    }
+
+    @Test
+    fun `a season whose FTN file covers part of its attempts keeps the rates of the covered weeks and warns`() = runTest {
+        servePlayers()
+        // Week 2's two attempts are not in FTN's file (it lags play-by-play): 2 of 4 attempts are charted.
+        val week2 = listOf(10, 11).map {
+            Fixtures.pbp("season" to 2025, "week" to 2, "play_id" to it, "receiver_player_id" to "WR1", "passer_player_id" to "QB1", "pass_attempt" to 1, "air_yards" to 5)
+        }
+        serveSeason(2025, extraPlays = week2)
+        val out = File(dir, "stats.db")
+        val report = pipeline.build(listOf(2025), null, out)
+        assertEquals(1.0, ftnFact(out, "WR1", 2025, "ftn_catchable_rate", week = 1))
+        assertNull(ftnFact(out, "WR1", 2025, "ftn_targets", week = 2))
+        assertNull(ftnFact(out, "WR1", 2025, "ftn_drop_rate", week = 2))
+        assertEquals(1, report.warnings.count { "FTN charting covers" in it }, "${report.warnings}")
+    }
+
+    @Test
+    fun `the previous database's ingest version 6 is ignored and every season is rebuilt`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2025), null, first)
+        BundledSQLiteDriver().open(first.path).use { it.execSQL("UPDATE schema_meta SET value = '6' WHERE key = 'ingest_version'") }
+        val report = pipeline.build(listOf(2025), first, File(dir, "second.db"))
+        assertEquals(listOf(2025), report.built)
+        assertEquals(emptyList<Int>(), report.reused)
     }
 }

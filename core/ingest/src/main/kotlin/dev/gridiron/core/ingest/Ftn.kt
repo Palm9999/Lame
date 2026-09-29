@@ -112,13 +112,22 @@ internal class FtnAggregator(private val index: Map<FtnKey, FtnFlags>) {
 
     private val players = LinkedHashMap<Key, Acc>()
 
+    /** Pass attempts that were eligible, and how many of them FTN charted: the coverage check's inputs. */
+    var passAttempts = 0
+        private set
+    var chartedAttempts = 0
+        private set
+
     fun add(p: Play) {
         val team = p.posteam ?: return
         if (p.seasonType !in SEASON_TYPES || p.playType !in SCRIMMAGE_PLAY_TYPES || p.playType in RATE_EXCLUDED_PLAY_TYPES) return
         if ((p.twoPointAttempt ?: 0.0) != 0.0) return
+        val attempt = p.passAttempt ?: 0.0
+        if (attempt > 0.0) passAttempts++
         val gameId = p.gameId ?: return
         val playId = p.playId ?: return
         val flags = index[FtnKey(gameId, playId)] ?: return
+        if (attempt > 0.0) chartedAttempts++
 
         p.receiver?.let { receiver ->
             val a = acc(p, team, receiver)
@@ -130,7 +139,6 @@ internal class FtnAggregator(private val index: Map<FtnKey, FtnFlags>) {
         }
         p.passer?.let { passer ->
             val scramble = if ((p.qbScramble ?: 0.0) == 1.0) 1.0 else 0.0
-            val attempt = p.passAttempt ?: 0.0
             val weight = attempt + (p.sack ?: 0.0) + scramble
             if (weight <= 0.0) return@let
             val a = acc(p, team, passer)

@@ -21,6 +21,7 @@ import dev.gridiron.core.ingest.validate.checkNgs
 import dev.gridiron.core.ingest.validate.crossCheck
 import dev.gridiron.core.ingest.validate.dropUnplayedWeeks
 import dev.gridiron.core.ingest.validate.expectedCoverage
+import dev.gridiron.core.ingest.validate.ftnCoverageWarning
 import dev.gridiron.core.ingest.validate.fantasyContract
 import dev.gridiron.core.ingest.validate.validateDatabase
 import kotlinx.coroutines.CancellationException
@@ -58,6 +59,11 @@ public data class IngestReport(
 }
 
 private val SEASON_INPUTS = listOf(Input.PBP, Input.SNAP_COUNTS, Input.INJURIES, Input.EXPECTED)
+
+/** FTN charts plays from 2022; earlier seasons have no file, so the build never asks for one. */
+private const val FTN_FIRST_SEASON = 2022
+
+private fun seasonInputs(season: Int): List<Input> = if (season >= FTN_FIRST_SEASON) SEASON_INPUTS + Input.FTN else SEASON_INPUTS
 
 /** Next Gen Stats: three all-seasons files, each with its reader. */
 private val NGS_READERS: Map<Input, (java.io.InputStream, String) -> List<PlayerWeek>> = linkedMapOf(
@@ -323,7 +329,7 @@ public class IngestPipeline(
         private suspend fun season(season: Int, writer: StatsDbWriter, crosswalk: Map<String, List<String>>) {
             onProgress(IngestProgress.Checking(season))
             val knownSeason = season in priorSeasons
-            val first = SEASON_INPUTS.associateWith { input ->
+            val first = seasonInputs(season).associateWith { input ->
                 val known = if (knownSeason) prior?.get(Sources.metaKey(input, season))?.let(Validators::decode) else null
                 fetch(input, season, known)
             }
@@ -361,7 +367,7 @@ public class IngestPipeline(
         private fun reuse(season: Int, writer: StatsDbWriter) {
             val p = checkNotNull(prior)
             writer.copySeasonFrom(checkNotNull(previous), season)
-            for (input in SEASON_INPUTS) {
+            for (input in seasonInputs(season)) {
                 val key = Sources.metaKey(input, season)
                 p[key]?.let { meta[key] = it }
             }
@@ -385,6 +391,9 @@ public class IngestPipeline(
             val players = PlayerWeekAggregator()
             val defense = TeamDefenseAggregator()
             val kicking = KickingAggregator()
+            val ftnFile = files[Input.FTN]
+            if (ftnFile == null && season >= FTN_FIRST_SEASON) warnings += "$season: no FTN charting yet"
+            val ftn = ftnFile?.let { loadFtn(season, it) }?.let(::FtnAggregator)
             val pbp = checkNotNull(files[Input.PBP])
             var n = 0
             try {
@@ -394,6 +403,7 @@ public class IngestPipeline(
                         players.add(play)
                         defense.add(play)
                         kicking.add(play)
+                        ftn?.add(play)
                     }
                 }
             } catch (e: IOException) {
@@ -420,6 +430,10 @@ public class IngestPipeline(
             }
 
             writer.writeFacts(toFacts(weekly))
+            ftn?.let {
+                ftnCoverageWarning(season, it.passAttempts, it.chartedAttempts)?.let { w -> warnings += w }
+                writer.writeFacts(toFacts(it.rows()))
+            }
             ngsSources.filterValues { !it.available }.keys.forEach { ngsLost += it }
             if (ngsSources.values.any { it.available }) {
                 val all = ngs()
@@ -445,6 +459,14 @@ public class IngestPipeline(
                 ?.let(writer::writeInjuries)
             files.values.forEach { it?.delete() }
             built += season
+        }
+
+        /** FTN's plays, or null, with a warning, when the file is unreadable or has lost a column: the build never fails on FTN. */
+        private fun loadFtn(season: Int, file: File): Map<FtnKey, FtnFlags>? = try {
+            readOptional(season, "FTN charting", file) { f -> openInput(f).use { readFtn(it, f.name) } }
+        } catch (e: MissingColumnsException) {
+            warnings += "$season: ${e.message}; FTN charting left out"
+            null
         }
 
         /**

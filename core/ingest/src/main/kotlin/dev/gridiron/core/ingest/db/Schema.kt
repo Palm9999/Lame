@@ -11,9 +11,9 @@ public const val SCHEMA_VERSION: Int = 8
  * Bump whenever a transform, the schema or an input's meaning changes: a build
  * only copies a season out of a previous database built with the same version.
  */
-public const val INGEST_VERSION: Int = 6
+public const val INGEST_VERSION: Int = 7
 
-internal const val SOURCE_NOTE: String = "nflverse-data (CC BY 4.0); ffopportunity expected points (GPL >= 3)"
+internal const val SOURCE_NOTE: String = "nflverse-data (CC BY 4.0); FTN Data via nflverse (CC BY-SA 4.0); ffopportunity expected points (GPL >= 3)"
 
 /** `etl/gridiron_etl/schema.py`'s DDL, one statement per entry, plus `player_xref` and `game`, minus `projection_snapshot` and `accuracy_summary`. */
 internal val SCHEMA: List<String> = listOf(
