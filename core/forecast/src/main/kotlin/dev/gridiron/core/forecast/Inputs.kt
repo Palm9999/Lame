@@ -87,6 +87,8 @@ internal class ForecastInputs(
     val units: Map<String, PlayerInfo> = emptyMap(),
     /** Their weeks, per player id, oldest first. */
     val unitHistory: Map<String, List<PlayerGame>> = emptyMap(),
+    /** (player id, season, week) for every QB, RB, WR or TE nflverse listed Out or Doubtful: none of them has ever played that week. */
+    val absent: Set<Triple<String, Int, Int>> = emptySet(),
 )
 
 private val READ_METRICS = listOf(
@@ -121,7 +123,19 @@ internal fun loadInputs(conn: SQLiteConnection): ForecastInputs {
         readPlayers(conn, POSITIONS), history, readGames(conn), teamGames, readExpectedThrough(conn),
         units = readPlayers(conn, UNIT_POSITIONS),
         unitHistory = readHistory(conn, UNIT_POSITIONS, UNIT_METRICS),
+        absent = readAbsent(conn),
     )
+}
+
+private fun readAbsent(conn: SQLiteConnection): Set<Triple<String, Int, Int>> = conn.prepare(
+    """SELECT i.player_id, i.season, i.week FROM injury_report i
+       JOIN player p ON p.player_id = i.player_id
+       WHERE i.status IN ('Out', 'Doubtful') AND p.position IN (${POSITIONS.joinToString(",") { "?" }})""",
+).use { st ->
+    POSITIONS.forEachIndexed { i, p -> st.bindText(i + 1, p) }
+    buildSet {
+        while (st.step()) add(Triple(st.getText(0), st.getLong(1).toInt(), st.getLong(2).toInt()))
+    }
 }
 
 private fun readPlayers(conn: SQLiteConnection, positions: List<String>): Map<String, PlayerInfo> =

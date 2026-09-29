@@ -54,6 +54,11 @@ internal class TestDb(val file: File) : AutoCloseable {
         if (played) 21 else null, if (played) 17 else null, spread, total, homeQb, awayQb, homeCoach, awayCoach,
     )
 
+    fun injury(id: String, season: Int, week: Int, status: String?) = exec(
+        "INSERT OR REPLACE INTO injury_report (player_id, season, week, status) VALUES (?, ?, ?, ?)",
+        id, season, week, status,
+    )
+
     fun query(sql: String): List<List<String?>> = conn.prepare(sql).use { st ->
         buildList {
             while (st.step()) add((0 until st.getColumnCount()).map { if (st.isNull(it)) null else st.getText(it) })
@@ -105,6 +110,10 @@ internal class TestDb(val file: File) : AutoCloseable {
                 home_team TEXT NOT NULL, away_team TEXT NOT NULL, home_score INTEGER, away_score INTEGER,
                 spread_line REAL, total_line REAL, roof TEXT, home_qb_id TEXT, away_qb_id TEXT,
                 home_coach TEXT, away_coach TEXT) WITHOUT ROWID""",
+            """CREATE TABLE injury_report (
+                player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
+                team TEXT, name TEXT, position TEXT, status TEXT, injury TEXT, practice TEXT,
+                PRIMARY KEY (player_id, season, week)) WITHOUT ROWID""",
         )
     }
 }
