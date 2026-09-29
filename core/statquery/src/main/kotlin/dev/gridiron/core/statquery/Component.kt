@@ -77,6 +77,21 @@ public object Components {
     public val NGS_YACOE_W: Component = Component("ngs_yacoe_w")
     public val NGS_RYOE: Component = Component("ngs_ryoe")
 
+    // FTN charting. Counts beside FTN's own denominators (plays FTN charted), so a range
+    // recomputes as a ratio of sums. None is sparse: a week with no drops is a real zero.
+    public val FTN_TARGETS: Component = Component("ftn_targets")
+    public val FTN_CATCHABLE: Component = Component("ftn_catchable")
+    public val FTN_CONTESTED: Component = Component("ftn_contested")
+    public val FTN_DROPS: Component = Component("ftn_drops")
+    public val FTN_CREATED_REC: Component = Component("ftn_created_rec")
+    public val FTN_DROPBACKS: Component = Component("ftn_dropbacks")
+    public val FTN_ATTEMPTS: Component = Component("ftn_attempts")
+    public val FTN_PA_DB: Component = Component("ftn_pa_db")
+    public val FTN_BLITZ_DB: Component = Component("ftn_blitz_db")
+    public val FTN_OOP_DB: Component = Component("ftn_oop_db")
+    public val FTN_THROWAWAY: Component = Component("ftn_throwaway")
+    public val FTN_INT_WORTHY: Component = Component("ftn_int_worthy")
+
     // Scoring inputs. Internal and sparse (absent means zero); read only by
     // the scoring step, which applies the spec's profile per player-week.
     public val PASSING_FIRST_DOWNS: Component = Component("passing_first_downs")

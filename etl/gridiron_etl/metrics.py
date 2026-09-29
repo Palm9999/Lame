@@ -15,7 +15,7 @@ from dataclasses import asdict, dataclass, replace
 from typing import Literal
 
 Tier = Literal["A", "B", "C", "D"]
-Group = Literal["volume", "efficiency", "fantasy", "context", "passing", "usage", "kicking", "defense", "ngs"]
+Group = Literal["volume", "efficiency", "fantasy", "context", "passing", "usage", "kicking", "defense", "ngs", "ftn"]
 
 
 @dataclass(frozen=True)
@@ -367,6 +367,53 @@ _M: list[Metric] = [
             ("ngs_sep_w", "NGS Separation x Targets", "Weekly average separation times targets.", 3),
             ("ngs_cush_w", "NGS Cushion x Targets", "Weekly average cushion times targets.", 3),
             ("ngs_yacoe_w", "NGS YAC Over Expected x Receptions", "Weekly average YAC over expected times receptions.", 3),
+        ]
+    ],
+    # ---------------- FTN charting (tier B; core/ingest's Ftn.kt is the twin) ----------------
+    # FTN charts every play from 2022; flags are attributed to the target receiver and the
+    # passer through play-by-play. Counts sit beside FTN's own denominators (plays FTN charted),
+    # so a range recomputes as sum(count) / sum(denominator), never a mean of weekly rates.
+    # None is sparse: a week with no drops is a real zero.
+    *[
+        Metric(mid, name, abbr, "ftn", definition, positions=positions, tier="B",
+               higher_is_better=better, decimals=dec)
+        for mid, abbr, name, positions, better, dec, definition in [
+            ("ftn_catchable_rate", "CATCH%", "Catchable Target Rate", ("RB", "WR", "TE"), True, 1,
+             "Share of targets FTN's charters marked catchable: a target the receiver could have caught. Charted from 2022."),
+            ("ftn_drop_rate", "DRP%", "Drop Rate", ("RB", "WR", "TE"), False, 1,
+             "Drops per target, as charted by FTN. Charted from 2022."),
+            ("ftn_contested_rate", "CTD%", "Contested Target Rate", ("RB", "WR", "TE"), True, 1,
+             "Share of targets FTN charted as contested: a defender close enough to affect the catch. A role profile, not a quality measure. Charted from 2022."),
+            ("ftn_drops", "DRP", "Drops", ("RB", "WR", "TE"), False, 0,
+             "Passes FTN charted as dropped. Charted from 2022."),
+            ("ftn_created_rec", "CRT", "Created Receptions", ("RB", "WR", "TE"), True, 0,
+             "Receptions FTN charted as created by the receiver: a catch the throw did not make easy. Charted from 2022."),
+            ("ftn_play_action_rate", "PA%", "Play-Action Rate", ("QB",), True, 1,
+             "Share of dropbacks that were play-action, as charted by FTN. A scheme profile. Charted from 2022."),
+            ("ftn_blitz_rate", "BLZ%", "Blitz Rate Faced", ("QB",), True, 1,
+             "Share of dropbacks where FTN charted at least one blitzer. Charted from 2022."),
+            ("ftn_out_of_pocket_rate", "OOP%", "Out-of-Pocket Rate", ("QB",), True, 1,
+             "Share of dropbacks where the quarterback left the pocket, as charted by FTN. Charted from 2022."),
+            ("ftn_throwaway_rate", "TA%", "Throwaway Rate", ("QB",), False, 1,
+             "Share of dropbacks ended with an intentional throwaway, as charted by FTN. Charted from 2022."),
+            ("ftn_int_worthy_rate", "IW%", "Interception-Worthy Rate", ("QB",), False, 1,
+             "Share of pass attempts FTN charted as interception-worthy, whether or not the defense caught them. Charted from 2022."),
+        ]
+    ],
+    *[
+        Metric(mid, name, mid.upper(), "ftn", definition, positions=positions,
+               tier="B", decimals=0, internal=True)
+        for mid, name, definition, positions in [
+            ("ftn_targets", "FTN Targets", "Targets on plays FTN charted: the denominator of the receiver rates.", ("RB", "WR", "TE")),
+            ("ftn_catchable", "FTN Catchable Targets", "Targets FTN marked catchable.", ("RB", "WR", "TE")),
+            ("ftn_contested", "FTN Contested Targets", "Targets FTN marked contested.", ("RB", "WR", "TE")),
+            ("ftn_dropbacks", "FTN Dropbacks", "Dropbacks (attempts, sacks and scrambles) on plays FTN charted: the denominator of the QB rates.", ("QB",)),
+            ("ftn_attempts", "FTN Attempts", "Pass attempts on plays FTN charted: the denominator of the interception-worthy rate.", ("QB",)),
+            ("ftn_pa_db", "FTN Play-Action Dropbacks", "Charted dropbacks that were play-action.", ("QB",)),
+            ("ftn_blitz_db", "FTN Blitzed Dropbacks", "Charted dropbacks against at least one blitzer.", ("QB",)),
+            ("ftn_oop_db", "FTN Out-of-Pocket Dropbacks", "Charted dropbacks where the quarterback left the pocket.", ("QB",)),
+            ("ftn_throwaway", "FTN Throwaways", "Charted dropbacks ended with a throwaway.", ("QB",)),
+            ("ftn_int_worthy", "FTN Interception-Worthy Throws", "Charted pass attempts FTN marked interception-worthy.", ("QB",)),
         ]
     ],
 ]

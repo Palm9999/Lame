@@ -83,7 +83,7 @@ def test_kicking_and_defense_metrics_are_sparse_theirs_alone_and_visible_where_t
     assert METRICS["yards_allowed"].dist_family == "normal"
     assert not METRICS["yards_allowed"].higher_is_better
     assert not any(mid.startswith("pa_") for mid in METRICS)
-    assert len(METRICS) == 123
+    assert len(METRICS) == 143
 
 
 NGS_VISIBLE = {
@@ -110,3 +110,30 @@ def test_ngs_metrics():
     for mid in NGS_INTERNAL:
         assert METRICS[mid].internal and mid not in sparse_metric_ids(), mid
 
+
+
+FTN_VISIBLE = {
+    "ftn_catchable_rate": ("RB", "WR", "TE"), "ftn_drop_rate": ("RB", "WR", "TE"),
+    "ftn_contested_rate": ("RB", "WR", "TE"), "ftn_drops": ("RB", "WR", "TE"),
+    "ftn_created_rec": ("RB", "WR", "TE"),
+    "ftn_play_action_rate": ("QB",), "ftn_blitz_rate": ("QB",), "ftn_out_of_pocket_rate": ("QB",),
+    "ftn_throwaway_rate": ("QB",), "ftn_int_worthy_rate": ("QB",),
+}
+FTN_INTERNAL = [
+    "ftn_targets", "ftn_catchable", "ftn_contested",
+    "ftn_dropbacks", "ftn_attempts", "ftn_pa_db", "ftn_blitz_db", "ftn_oop_db", "ftn_throwaway", "ftn_int_worthy",
+]
+
+
+def test_ftn_metrics():
+    for mid, positions in FTN_VISIBLE.items():
+        m = METRICS[mid]
+        assert not m.internal and not m.computed and m.tier == "B" and m.group == "ftn", mid
+        assert sorted(m.positions) == sorted(positions), mid
+        assert mid not in sparse_metric_ids(), mid  # zeros are real: a week with no drops
+        assert "2022" in m.definition, mid
+    for mid in ("ftn_drop_rate", "ftn_drops", "ftn_throwaway_rate", "ftn_int_worthy_rate"):
+        assert not METRICS[mid].higher_is_better, mid
+    assert METRICS["ftn_catchable_rate"].higher_is_better and METRICS["ftn_created_rec"].higher_is_better
+    for mid in FTN_INTERNAL:
+        assert METRICS[mid].internal and METRICS[mid].group == "ftn" and mid not in sparse_metric_ids(), mid
