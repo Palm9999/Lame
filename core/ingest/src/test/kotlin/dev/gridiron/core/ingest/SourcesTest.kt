@@ -11,6 +11,10 @@ class SourcesTest {
         assertEquals("https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_2025.csv.gz", Sources.url(Input.SNAP_COUNTS, 2025))
         assertEquals("https://github.com/nflverse/nflverse-data/releases/download/injuries/injuries_2025.csv.gz", Sources.url(Input.INJURIES, 2025))
         assertEquals("https://github.com/ffverse/ffopportunity/releases/download/latest-data/ep_weekly_2025.csv", Sources.url(Input.EXPECTED, 2025))
+        assertEquals("https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_passing.csv.gz", Sources.url(Input.NGS_PASSING))
+        assertEquals("https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_rushing.csv.gz", Sources.url(Input.NGS_RUSHING))
+        assertEquals("https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_receiving.csv.gz", Sources.url(Input.NGS_RECEIVING))
+        assertEquals("source:ngs_passing.csv.gz", Sources.metaKey(Input.NGS_PASSING))
         assertEquals("https://github.com/nflverse/nflverse-data/releases/download/players/players.csv.gz", Sources.url(Input.PLAYERS))
     }
 

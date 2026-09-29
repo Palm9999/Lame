@@ -16,7 +16,7 @@ Built and merged: the projection engine (K and D/ST included), accuracy page, pr
 **In progress: NGS metrics** (user chose NGS only, headline set of ten, 2026-09-29). Spec `docs/superpowers/specs/2026-09-29-ngs-metrics-design.md`, plan `docs/superpowers/plans/2026-09-29-ngs-metrics.md` (6 tasks, native execution on this branch). To resume after `/clear`: read the plan, then `.superpowers/sdd/2026-09-29-ngs-metrics/progress.md` (the ledger, git-ignored; if it is gone, trust the task list below and `git log`), and continue at the first task not marked done. Update this list in the same commit as each task.
 
 - [x] Task 1: registry (100 to 122 metrics), components, `StatColumn`s, `StatFormat`, three NGS packs (`NGS_PASSING`, `NGS_RUSHING`, `NGS_RECEIVING`; a ruling: three packs instead of the spec's one, so each chip's default sort has data).
-- [ ] Task 2: Kotlin `Ngs.kt` reader and transform
+- [x] Task 2: Kotlin `Ngs.kt` (`readNgsPassing/Rushing/Receiving`, `remapPostseasonWeeks`, `mergeNgs`) and `Input.NGS_*` in `Sources.kt`; not yet wired into `IngestPipeline` (Task 3)
 - [ ] Task 3: pipeline integration (`INGEST_VERSION` 6, reuse rule, validation)
 - [ ] Task 4: Python `ngs.py`
 - [ ] Task 5: parity, real-database test, rebuild `etl/build/stats.db` and `accuracy.db`
