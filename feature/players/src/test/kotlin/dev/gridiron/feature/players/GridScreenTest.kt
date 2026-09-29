@@ -24,6 +24,7 @@ import com.github.takahirom.roborazzi.captureScreenRoboImage
 import dev.gridiron.core.data.Catalog
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PositionFilter
+import dev.gridiron.core.data.SeasonInfo
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TraySlotUi
@@ -33,6 +34,7 @@ import dev.gridiron.core.datastore.PresetFilterKind
 import dev.gridiron.core.datastore.PresetWeeks
 import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.core.model.CompareSlot
+import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.statquery.Condition
 import dev.gridiron.core.statquery.Filter
 import dev.gridiron.core.statquery.StatColumn
@@ -476,5 +478,29 @@ class GridScreenTest {
         compose.onNodeWithText("You have 30 presets. Delete one to save another.").assertExists()
         compose.onNodeWithTag("presets:save").performClick()
         assertTrue(events.isEmpty())
+    }
+
+    @Test
+    fun theFormShowsTheSheetsError() {
+        show(presetState(sheet = PresetSheet.Renaming("a", "Old"), rows = listOf(row("a", "Old"))).copy(presetError = "Another preset is already called that."))
+        compose.onNodeWithText("Another preset is already called that.").assertIsDisplayed()
+    }
+
+    @Test
+    fun theStepperReachesPastTheWeeksPlayedSoFar() {
+        val events = mutableListOf<GridEvent>()
+        val early = ready(GridRequest(SeasonInfo(2025, 2), WeekRange(1, 2), StatPack.RECEIVING, positions = PositionFilter.WR))
+            .copy(presetsEnabled = true, presetSheet = PresetSheet.Saving(PresetWeeks.LastN(4)))
+        show(early, onEvent = { events += it })
+        compose.onNodeWithText("Last 4 weeks").assertExists()
+        compose.onNodeWithTag("presets:name").performTextInput("A")
+        compose.onNodeWithTag("presets:confirm").performClick()
+        assertEquals(GridEvent.PresetSaved("A", PresetWeeks.LastN(4)), events.last())
+    }
+
+    @Test
+    fun oneWeekReadsInTheSingular() {
+        show(presetState(sheet = PresetSheet.Saving(PresetWeeks.LastN(1))))
+        compose.onNodeWithText("Last 1 week").assertExists()
     }
 }

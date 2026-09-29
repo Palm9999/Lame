@@ -528,7 +528,7 @@ class GridViewModelTest {
         vm.onEvent(GridEvent.PresetApplied("x"))
         val after = ready(vm)
         assertEquals(before, after.request)
-        assertTrue(after.message.orEmpty().contains(row.unavailable!!))
+        assertTrue(after.presetError.orEmpty().contains(row.unavailable!!))
     }
 
     @Test
@@ -577,7 +577,8 @@ class GridViewModelTest {
         vm.onEvent(GridEvent.PresetSaved("One too many", PresetWeeks.WholeSeason))
         val s = ready(vm)
         assertEquals(MAX_PRESETS, s.presets.size)
-        assertTrue(s.message.orEmpty().contains("$MAX_PRESETS"))
+        assertTrue(s.presetError.orEmpty().contains("$MAX_PRESETS"))
+        assertNull(s.message)
     }
 
     @Test
@@ -590,7 +591,8 @@ class GridViewModelTest {
         vm.onEvent(GridEvent.PresetRenamed("a", "two"))
         val s = ready(vm)
         assertEquals(listOf("Uno", "Two"), s.presets.map { it.preset.name })
-        assertTrue(s.message != null)
+        assertEquals("Another preset is already called that.", s.presetError)
+        assertNull("the snackbar sits under the sheet, so the error must not go there", s.message)
     }
 
     @Test
@@ -600,6 +602,32 @@ class GridViewModelTest {
         val rows = ready(vm).presets
         assertEquals("WR · Opportunity · last 4 wks · 2 filters", rows[0].summary)
         assertEquals("Opportunity · whole season", rows[1].summary)
+    }
+
+    @Test
+    fun `a failed write shows an error in the sheet instead of crashing`() = runTest(dispatcher) {
+        val inner = prefs
+        val failing = object : dev.gridiron.core.datastore.PrefsSource {
+            override val prefs: kotlinx.coroutines.flow.Flow<UserPrefs> = inner.prefs
+            override suspend fun update(transform: (UserPrefs) -> UserPrefs): UserPrefs = throw java.io.IOException("disk full")
+        }
+        val vm = GridViewModel(repo, ScoringRepository(prefs), CompareTrayRepository(prefs), debounceMillis = 150, presets = GridPresetRepository(failing))
+        ready(vm)
+        vm.onEvent(GridEvent.PresetSaved("Mine", PresetWeeks.WholeSeason))
+        val s = ready(vm)
+        assertTrue(s.presetError.orEmpty().contains("disk full"))
+        assertTrue(s.presets.isEmpty())
+    }
+
+    @Test
+    fun `the sheet's error clears when a form is dismissed`() = runTest(dispatcher) {
+        prefs.update { it.copy(gridPresets = listOf(stored("a", "One"), stored("b", "Two"))) }
+        val vm = presetVm()
+        ready(vm)
+        vm.onEvent(GridEvent.PresetRenamed("a", "two"))
+        assertTrue(ready(vm).presetError != null)
+        vm.onEvent(GridEvent.PresetDialogDismissed)
+        assertNull(ready(vm).presetError)
     }
 
     @Test

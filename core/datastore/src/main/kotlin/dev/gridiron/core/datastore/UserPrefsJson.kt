@@ -17,6 +17,7 @@ import dev.gridiron.core.model.YardageBonus
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import java.io.InputStream
 import java.io.OutputStream
 
@@ -37,7 +38,8 @@ internal data class UserPrefsDto(
     val seasonsChosenIn: Int? = null,
     val rosters: List<RosterDto> = emptyList(),
     val oddsApiKey: String? = null,
-    val gridPresets: List<PresetDto> = emptyList(),
+    /** Raw, so one malformed entry (a missing field, a wrong type) costs only itself, never the whole file. */
+    val gridPresets: List<JsonElement> = emptyList(),
 )
 
 @Serializable
@@ -131,7 +133,16 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
     val choice = seasons?.let { s -> seasonsChosenIn?.let { SeasonChoice(s.distinct().sorted(), it) } }
     val rosters = rosters.mapNotNull { r -> orNull { Roster(r.id, r.name, r.playerIds.filter { it.isNotBlank() }.distinct()) } }
         .distinctBy { it.id }
-    val presets = gridPresets.mapNotNull { p -> orNull { p.toDomain() } }
+    val presets = gridPresets.mapNotNull { e ->
+        try {
+            json.decodeFromJsonElement(PresetDto.serializer(), e).toDomain()
+        } catch (_: SerializationException) {
+            null
+        } catch (_: IllegalArgumentException) {
+            null
+        }
+    }
+        .distinctBy { it.id }
         .distinctBy { it.name.lowercase() }
         .take(MAX_PRESETS)
     return UserPrefs(
@@ -213,7 +224,7 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     seasonsChosenIn = seasons?.chosenIn,
     rosters = rosters.map { RosterDto(it.id, it.name, it.playerIds) },
     oddsApiKey = oddsApiKey,
-    gridPresets = gridPresets.map { it.toDto() },
+    gridPresets = gridPresets.map { json.encodeToJsonElement(PresetDto.serializer(), it.toDto()) },
 )
 
 internal object UserPrefsSerializer : Serializer<UserPrefs> {

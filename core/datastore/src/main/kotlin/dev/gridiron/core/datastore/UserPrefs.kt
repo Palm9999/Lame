@@ -14,7 +14,7 @@ import dev.gridiron.core.model.ScoringProfile
  * @property seasons The seasons to build; null means the default (the current season and the two before it).
  * @property rosters The user's fantasy teams, in the order created.
  * @property gridPresets Saved Grid views, in the order created; at most [MAX_PRESETS], names unique ignoring case.
- * @property oddsApiKeyThe user's key for The Odds API (spec §5); null when none is set. Sent only to api.the-odds-api.com.
+ * @property oddsApiKey The user's key for The Odds API (spec §5); null when none is set. Sent only to api.the-odds-api.com.
  */
 public data class UserPrefs(
     val profiles: List<ScoringProfile>,

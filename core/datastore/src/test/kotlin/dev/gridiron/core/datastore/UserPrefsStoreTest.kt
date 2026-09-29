@@ -306,4 +306,31 @@ class UserPrefsStoreTest {
         assertEquals(MAX_PRESETS, kept.size)
         assertEquals("p$MAX_PRESETS", kept.last().id)
     }
+
+    @Test
+    fun `a malformed preset entry is dropped and the rest of the file kept`() {
+        file.writeText(
+            """
+            {"formatVersion":3,"oddsApiKey":"k","rosters":[{"id":"r1","name":"Home"}],"gridPresets":[
+              {"id":"a","name":"No sort","packId":"FANTASY","direction":"DESCENDING","position":"ALL"},
+              {"id":"b","name":"Wrong type","packId":"FANTASY","sort":"TARGETS","direction":"DESCENDING","position":"ALL","perGame":"yes"},
+              {"id":"c","name":"Keeper","packId":"FANTASY","sort":"TARGETS","direction":"DESCENDING","position":"ALL","weeks":{"kind":"WHOLE_SEASON"}}
+            ]}
+            """.trimIndent(),
+        )
+        val prefs = withStore { it.prefs.first() }
+        assertEquals(listOf("c"), prefs.gridPresets.map { it.id })
+        assertEquals("k", prefs.oddsApiKey)
+        assertEquals(listOf("r1"), prefs.rosters.map { it.id })
+        assertFalse(prefs.resetNotice)
+    }
+
+    @Test
+    fun `duplicate preset ids keep the first`() {
+        val json = { id: String, name: String ->
+            """{"id":"$id","name":"$name","packId":"FANTASY","sort":"FANTASY_POINTS","direction":"DESCENDING","position":"ALL","weeks":{"kind":"WHOLE_SEASON"}}"""
+        }
+        file.writeText("""{"formatVersion":3,"gridPresets":[${json("a", "One")},${json("a", "Two")}]}""")
+        assertEquals(listOf("One"), withStore { it.prefs.first() }.gridPresets.map { it.name })
+    }
 }

@@ -156,6 +156,8 @@ sealed interface GridUiState {
         val presetSheet: PresetSheet? = null,
         /** A preset just deleted, offered for undo until the sheet closes. */
         val deletedPreset: GridPreset? = null,
+        /** Why the last save, rename or delete failed, shown in the sheet (the Grid's snackbar sits under its scrim). */
+        val presetError: String? = null,
     ) : GridUiState {
         val presetsFull: Boolean get() = presets.size >= MAX_PRESETS
 
@@ -218,6 +220,7 @@ class GridViewModel(
         .stateIn(viewModelScope, SharingStarted.Eagerly, persistentListOf())
     private val presetSheet = MutableStateFlow<PresetSheet?>(null)
     private val deletedPreset = MutableStateFlow<GridPreset?>(null)
+    private val presetError = MutableStateFlow<String?>(null)
 
     private val trayUi: Flow<ImmutableList<TraySlotUi>> =
         combine(tray.slots, catalogLoad) { slots, load -> slots to (load as? CatalogLoad.Loaded)?.catalog }
@@ -277,7 +280,7 @@ class GridViewModel(
             } else {
                 base
             }
-        }.combine(combine(presetList, presetSheet, deletedPreset, ::Triple)) { base, (list, sheet, deleted) ->
+        }.combine(combine(presetList, presetSheet, deletedPreset, presetError, ::PresetLines)) { base, (list, sheet, deleted, error) ->
             if (base is GridUiState.Ready && presets != null) {
                 base.copy(
                     presetsEnabled = true,
@@ -287,11 +290,19 @@ class GridViewModel(
                     }.toImmutableList(),
                     presetSheet = sheet,
                     deletedPreset = deleted,
+                    presetError = error,
                 )
             } else {
                 base
             }
         }.stateIn(viewModelScope, SharingStarted.Eagerly, GridUiState.Loading)
+
+    private data class PresetLines(
+        val list: ImmutableList<GridPreset>,
+        val sheet: PresetSheet?,
+        val deleted: GridPreset?,
+        val error: String?,
+    )
 
     private data class Extras(
         val profiles: ImmutableList<ScoringProfile>,
@@ -501,52 +512,72 @@ class GridViewModel(
         request.update { current -> current?.let { reduce(it, event, c) } }
     }
 
+    /** Runs a preset write; any failure becomes [presetError] in the sheet instead of a crash. */
+    private fun launchPreset(
+        onNameTaken: (PresetNameTaken) -> Unit = { presetError.value = "Another preset is already called that." },
+        block: suspend () -> Unit,
+    ) {
+        presetError.value = null
+        viewModelScope.launch {
+            try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: PresetNameTaken) {
+                onNameTaken(e)
+            } catch (e: PresetLimitReached) {
+                presetError.value = "You can keep $MAX_PRESETS presets. Delete one first."
+            } catch (e: IllegalArgumentException) {
+                presetError.value = e.message
+            } catch (e: Exception) {
+                presetError.value = "Couldn't save presets: ${e.message ?: e::class.simpleName}"
+            }
+        }
+    }
+
     private fun onPresetEvent(event: GridEvent) {
         val repo = presets ?: return
         val current = request.value
         when (event) {
-            GridEvent.PresetsOpened -> presetSheet.value = PresetSheet.Listing
+            GridEvent.PresetsOpened -> {
+                presetError.value = null
+                presetSheet.value = PresetSheet.Listing
+            }
             GridEvent.PresetsClosed -> {
                 presetSheet.value = null
                 deletedPreset.value = null
+                presetError.value = null
             }
-            GridEvent.PresetDialogDismissed -> presetSheet.value = PresetSheet.Listing
-            GridEvent.PresetSaveRequested -> if (current != null) presetSheet.value = PresetSheet.Saving(repo.weeksRule(current))
+            GridEvent.PresetDialogDismissed -> {
+                presetError.value = null
+                presetSheet.value = PresetSheet.Listing
+            }
+            GridEvent.PresetSaveRequested -> if (current != null) {
+                presetError.value = null
+                presetSheet.value = PresetSheet.Saving(repo.weeksRule(current))
+            }
             is GridEvent.PresetSaved -> if (current != null) {
-                viewModelScope.launch {
-                    try {
-                        repo.save(event.name, current, event.weeks)
-                        presetSheet.value = PresetSheet.Listing
-                    } catch (e: PresetNameTaken) {
-                        presetSheet.value = PresetSheet.ConfirmReplace(event.name.trim(), e.existingId, event.weeks)
-                    } catch (e: PresetLimitReached) {
-                        message.value = "You can keep $MAX_PRESETS presets. Delete one first."
-                    } catch (e: IllegalArgumentException) {
-                        message.value = e.message
-                    }
+                launchPreset(onNameTaken = { presetSheet.value = PresetSheet.ConfirmReplace(event.name.trim(), it.existingId, event.weeks) }) {
+                    repo.save(event.name, current, event.weeks)
+                    presetSheet.value = PresetSheet.Listing
                 }
             }
             GridEvent.PresetReplaceConfirmed -> {
                 val ask = presetSheet.value as? PresetSheet.ConfirmReplace
                 if (ask != null && current != null) {
-                    viewModelScope.launch {
+                    launchPreset {
                         repo.overwrite(ask.id, current, ask.weeks)
                         presetSheet.value = PresetSheet.Listing
                     }
                 }
             }
             is GridEvent.PresetRenameRequested -> presetList.value.firstOrNull { it.id == event.id }?.let {
+                presetError.value = null
                 presetSheet.value = PresetSheet.Renaming(it.id, it.name)
             }
-            is GridEvent.PresetRenamed -> viewModelScope.launch {
-                try {
-                    repo.rename(event.id, event.name)
-                    presetSheet.value = PresetSheet.Listing
-                } catch (e: PresetNameTaken) {
-                    message.value = "Another preset is already called that."
-                } catch (e: IllegalArgumentException) {
-                    message.value = e.message
-                }
+            is GridEvent.PresetRenamed -> launchPreset {
+                repo.rename(event.id, event.name)
+                presetSheet.value = PresetSheet.Listing
             }
             is GridEvent.PresetApplied -> {
                 val preset = presetList.value.firstOrNull { it.id == event.id }
@@ -558,19 +589,22 @@ class GridViewModel(
                             draftCount.value = null
                             presetSheet.value = null
                             deletedPreset.value = null
+                            presetError.value = null
                             request.value = resolved.request
                         }
-                        is Resolved.Unavailable -> message.value = "${preset.name}: ${resolved.reason}"
+                        is Resolved.Unavailable -> presetError.value = "${preset.name}: ${resolved.reason}"
                     }
                 }
             }
             is GridEvent.PresetDeleted -> presetList.value.firstOrNull { it.id == event.id }?.let { preset ->
-                deletedPreset.value = preset
-                viewModelScope.launch { repo.delete(preset.id) }
+                launchPreset {
+                    repo.delete(preset.id)
+                    deletedPreset.value = preset
+                }
             }
             GridEvent.PresetDeleteUndone -> deletedPreset.value?.let { preset ->
                 deletedPreset.value = null
-                viewModelScope.launch { repo.restore(preset) }
+                launchPreset { repo.restore(preset) }
             }
             else -> Unit
         }

@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import dev.gridiron.core.datastore.MAX_PRESETS
 import dev.gridiron.core.datastore.MAX_PRESET_NAME
 import dev.gridiron.core.datastore.PresetWeeks
+import dev.gridiron.core.model.WeekRange
 
 /**
  * The presets list. Saving, renaming and replacing swap the list for a short form
@@ -43,9 +44,13 @@ import dev.gridiron.core.datastore.PresetWeeks
 internal fun PresetsSheet(state: GridUiState.Ready, sheet: PresetSheet, onEvent: (GridEvent) -> Unit) {
     ModalBottomSheet(onDismissRequest = { onEvent(GridEvent.PresetsClosed) }) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp)) {
+            // The Grid's snackbar sits under this sheet's scrim, so failures show here.
+            state.presetError?.let {
+                Text(it, Modifier.padding(bottom = 8.dp).testTag("presets:error"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+            }
             when (sheet) {
                 PresetSheet.Listing -> PresetList(state, onEvent)
-                is PresetSheet.Saving -> SaveForm(sheet.weeks, state.request.season.defaultWeeks.last, onEvent)
+                is PresetSheet.Saving -> SaveForm(sheet.weeks, WeekRange.lastRegularSeasonWeek(state.request.season.season), onEvent)
                 is PresetSheet.Renaming -> RenameForm(sheet, onEvent)
                 is PresetSheet.ConfirmReplace -> {
                     Text("Replace \"${sheet.name}\"?", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
@@ -157,7 +162,7 @@ private fun SaveForm(initial: PresetWeeks, maxWeeks: Int, onEvent: (GridEvent) -
     Text("Weeks", style = MaterialTheme.typography.labelLarge)
     Row(Modifier.padding(vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterChip(selected = whole, onClick = { whole = true }, label = { Text("Whole season") }, modifier = Modifier.testTag("presets:weeks:whole"))
-        FilterChip(selected = !whole, onClick = { whole = false }, label = { Text("Last $n weeks") }, modifier = Modifier.testTag("presets:weeks:last"))
+        FilterChip(selected = !whole, onClick = { whole = false }, label = { Text(if (n == 1) "Last 1 week" else "Last $n weeks") }, modifier = Modifier.testTag("presets:weeks:last"))
     }
     if (!whole) {
         Row(verticalAlignment = Alignment.CenterVertically) {
