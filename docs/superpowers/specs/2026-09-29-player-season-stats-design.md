@@ -21,15 +21,15 @@ Placed after "This week" and "Rosters", before "Status".
 - The percentile is the per-game percentile among qualified players at the position over the season's regular weeks, the same population and bar Compare uses. A player below the bar shows values and no bar, with the note "Below the ranking bar".
 - Rates (target share, CPOE and so on) are recomputed over the season, never averaged. Fantasy points use the active scoring profile.
 
-**Game log.** One row per week the player has stats, oldest first: week, opponent with home or away and result ("@DAL W 27–20"), fantasy points, and three or four key stats. A week with no row (bye, injured, did not play) is omitted. If the schedule row is missing, the opponent cell reads "–".
+**Game log.** One row per week the player has stats, oldest first: week, opponent with home or away and result ("@ DAL W 27–20", "vs DAL L 17–24"), fantasy points, and three or four key stats. A week with no row (bye, injured, did not play) is omitted. If the schedule row is missing, the opponent cell reads "–".
 
 | Position | Season line stats | Game log stats |
 |---|---|---|
 | QB | Compare's QB set | Pass yds, pass TD, INT, rush yds |
-| RB | Compare's RB set | Carries, rush yds, receptions, TD |
+| RB | Compare's RB set | Carries, rush yds, receptions, rec yds |
 | WR, TE | Compare's WR set | Targets, receptions, rec yds, TD |
-| K | FGM, FGA, FG 50+, XPM, XPA, fantasy points | FGM/FGA, FG 50+, XPM |
-| D/ST | Points allowed, sacks, INT, fumble recoveries, TDs, safeties, fantasy points | Points allowed, sacks, INT, fumble recoveries, TD |
+| K | FGM, FGA, FG 50+, XPM, XPA, fantasy points | FGM, FGA, FG 50+, XPM |
+| D/ST | Points allowed, sacks, INT, fumble recoveries, TDs, safeties, fantasy points | Points allowed, sacks, INT, TD |
 
 K and D/ST have no expected points, so they show no xFP or FPOE. An unknown position gets the WR set, as Compare does today.
 
@@ -48,7 +48,7 @@ K and D/ST have no expected points, so they show no xFP or FPOE. An unknown posi
 
 - **`:core:data`** gets `PlayerStatSets` (the table above, one place to tune, reusing `CompareMetricSets` for the offense) and `PlayerStatsRepository(executor)`: `stats(playerId, position, season, scoring, catalog): PlayerStats`, plus `seasons(playerId)`.
 - **Season line:** two Grid queries, `TOTAL` and `PER_GAME`, over the season's default regular weeks, `positions = {position}`, `playerIds` = the player, `includeUnqualified = true`, percentiles on. The query builder computes percentiles before it narrows to the player, as Compare relies on.
-- **Game log:** one Grid query per played week with `WeekRange.single(week)` and the log's columns, plus one parameterized query for each week's team and the `game` row (opponent, scores). At most 18 small queries; they hit the covering index, like the Grid's sparklines.
+- **Game log:** one Grid query per played week with `WeekRange.single(week)` and the log's columns, for only the weeks he played. One query returns those weeks and his team each week (the Grid's team column is his current team, so it can't be used), and one reads the season's regular-season `game` rows (opponent, scores), matched to each week in memory. At most 20 small queries; they hit the covering index, like the Grid's sparklines.
 - **`:app`:** a `PlayerStatsSection` composable and `PlayerPage.stats`, loaded in `PlayerRoute` beside the projection card, off the main thread, reloading on the data version bump, profile change and chip change. Percentile bars reuse `:core:charts`.
 - **`:core:data` (Compare):** `CompareMetricSets` and `CompareRepository` handle the new positions; nothing in `:feature:compare` changes except hiding the scatter tab when the page has no scatter.
 - No schema, ingest or forecast change. No new module.
@@ -56,7 +56,8 @@ K and D/ST have no expected points, so they show no xFP or FPOE. An unknown posi
 ## Testing
 
 - **`PlayerStatSetsTest`:** every position has a season set and a log set, K and D/ST carry no xFP or FPOE, every column is a real `StatColumn`.
-- **`PlayerStatsRepositoryTest`** on a small hand-built database with hand-computed values: a season line's total and per-game, a below-the-bar player, the game log's weeks and opponents, a missing schedule row, a bye week, a player in two seasons, a K and a D/ST.
+- **`PlayerStatsRepositoryTest`** against the real database, like `CompareRepositoryTest` (skipped when `GRIDIRON_STATS_DB` is unset): a season line's totals and per-game values, a below-the-bar player, a game log that adds up to the season line, a chip for a season the player lacks, an unknown player, a K and a D/ST.
+- **`PlayerMatchupTest`** (no database) for the schedule logic: home, away, win, loss, tie, missing scores, missing game.
 - **Contract test** against the real database: for a sample of players in each position, the season line's totals equal the sum of the game log's weekly values, and equal the Grid's row for the same player.
 - **`CompareMetricSetsTest`** and **`CompareRepositoryTest`** extended: K and D/ST sets, qualifiers, no scatter for K or D/ST, a mixed-kind comparison.
 - **Compose test** for the section: chips, the below-the-bar note, the empty state.
