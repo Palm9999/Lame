@@ -37,6 +37,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerHeader
+import dev.gridiron.core.data.PlayerStats
+import dev.gridiron.core.data.PlayerStatsRepository
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.data.ScoringRepository
@@ -65,6 +67,10 @@ data class PlayerPage(
     val news: List<NewsItem>,
     val asOf: Instant?,
     val projection: ProjectionCard? = null,
+    /** The Season stats section, or null when there is no repository, profile or load yet. */
+    val stats: PlayerStats? = null,
+    /** The section failed to load: it says so and the rest of the page stays. */
+    val statsUnavailable: Boolean = false,
 )
 
 private val NO_CHANGES: StateFlow<Long> = MutableStateFlow(0L)
@@ -82,6 +88,7 @@ fun PlayerRoute(
     dataVersion: Flow<Long> = NO_CHANGES,
     rosterRepo: RosterRepository? = null,
     onManageRosters: () -> Unit = {},
+    playerStats: PlayerStatsRepository? = null,
 ) {
     val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList<Roster>()) }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -114,14 +121,35 @@ fun PlayerRoute(
             projection = card,
         )
     }
+    var season by remember(playerId) { mutableStateOf<Int?>(null) }
+    var loaded by remember(playerId) { mutableStateOf<PlayerStats?>(null) }
+    var loadFailed by remember(playerId) { mutableStateOf(false) }
+    val pageHeader = page?.header
+    val pageLoaded = page != null
+    // Reloads on a refresh, a profile change and a season chip; a newer key cancels an older load.
+    LaunchedEffect(playerId, stats, profile, season, pageLoaded, pageHeader) {
+        val repo = playerStats
+        val active = profile
+        if (repo == null || active == null || !pageLoaded) return@LaunchedEffect
+        try {
+            loaded = repo.stats(playerId, pageHeader?.position?.let(Position::fromCode), active, season)
+            loadFailed = false
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            loaded = null
+            loadFailed = true // never blocks the rest of the page
+        }
+    }
     val uri = LocalUriHandler.current
     PlayerScreen(
-        playerId, page, liveAvailable = live != null, onBack = onBack, onOpen = { uri.openSafely(it) }, onProjection = onProjection,
+        playerId, page?.copy(stats = loaded, statsUnavailable = loadFailed), liveAvailable = live != null, onBack = onBack, onOpen = { uri.openSafely(it) }, onProjection = onProjection,
         rosters = if (rosterRepo != null) rosters else null,
         onRosterToggle = { id, on ->
             rosterRepo?.let { repo -> scope.launch { if (on) repo.add(id, playerId) else repo.remove(id, playerId) } }
         },
         onManageRosters = onManageRosters,
+        onSeason = { season = it },
     )
 }
 
@@ -133,6 +161,7 @@ fun PlayerScreen(
     onBack: () -> Unit,
     onOpen: (String) -> Unit,
     onProjection: (season: Int, week: Int) -> Unit = { _, _ -> },
+    onSeason: (Int) -> Unit = {},
     /** The user's rosters, or null to hide the section. */
     rosters: List<Roster>? = null,
     onRosterToggle: (rosterId: String, on: Boolean) -> Unit = { _, _ -> },
@@ -147,7 +176,7 @@ fun PlayerScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 return@Column
             }
-            LazyColumn {
+            LazyColumn(Modifier.testTag("playerPage")) {
                 item {
                     Column(Modifier.padding(horizontal = 16.dp)) {
                         Text(
@@ -169,6 +198,11 @@ fun PlayerScreen(
                 rosters?.let { list ->
                     item { SectionTitle("Rosters") }
                     item { RosterToggles(playerId, list, onRosterToggle, onManageRosters) }
+                }
+                page.stats?.let { s -> playerStatsItems(s, onSeason) }
+                if (page.statsUnavailable) {
+                    item { SectionTitle("Season stats") }
+                    item { Text("Season stats aren't available.", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodyMedium) }
                 }
                 item { SectionTitle("Status") }
                 item {
@@ -246,7 +280,7 @@ private fun RosterToggles(playerId: String, rosters: List<Roster>, onToggle: (St
 }
 
 @Composable
-private fun SectionTitle(text: String) {
+internal fun SectionTitle(text: String) {
     Text(
         text,
         Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),

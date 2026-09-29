@@ -35,6 +35,7 @@ import dev.gridiron.core.data.AccuracyRepository
 import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.PlayerDirectory
+import dev.gridiron.core.data.PlayerStatsRepository
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.model.Roster
@@ -75,6 +76,8 @@ data class Deps(
     val rosters: RosterRepository? = null,
     /** Odds API props, for Settings. Null in tests, like [live]. */
     val props: PropsRepository? = null,
+    /** The Player page's season stats; null where a test doesn't need them. */
+    val playerStats: PlayerStatsRepository? = null,
 )
 
 /**
@@ -202,6 +205,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             dataVersion = deps.stats.dataVersion,
                             rosterRepo = deps.rosters,
                             onManageRosters = { backStack.push(RostersKey) },
+                            playerStats = deps.playerStats,
                         )
                     }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }

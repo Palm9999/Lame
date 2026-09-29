@@ -6,6 +6,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.performScrollToNode
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -17,6 +19,7 @@ import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PlayerDirectory
+import dev.gridiron.core.data.PlayerStatsRepository
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatPack
@@ -71,6 +74,7 @@ class NavigationTest {
             accuracy = AccuracyRepository(executor),
             teams = TeamsRepository(executor),
             players = PlayerDirectory(executor),
+            playerStats = PlayerStatsRepository(executor),
         )
     }
 
@@ -201,7 +205,25 @@ class NavigationTest {
         }
 
         compose.onNodeWithTag("playerName").assertTextEquals(first)
+        // Status sits below the season stats, past the fold of the test screen.
+        compose.onNodeWithTag("playerPage").performScrollToNode(hasText("Live injuries and news aren't available."))
         compose.onNodeWithText("Live injuries and news aren't available.").assertExists()
+    }
+
+    @Test
+    fun aPlayerPageShowsSeasonStats() {
+        val (first, _) = firstTwoPlayerNames()
+        compose.setContent { GridironTheme { GridironNavHost(deps) } }
+        settle()
+
+        compose.onNodeWithContentDescription(first, substring = true).performClick()
+        // The section loads off the main thread: wait for it to land.
+        compose.waitUntil(timeoutMillis = 30_000) {
+            settle()
+            compose.onAllNodesWithText("Season stats").fetchSemanticsNodes().isNotEmpty()
+        }
+
+        compose.onNodeWithText("Season stats").assertExists()
     }
 
     @Test
