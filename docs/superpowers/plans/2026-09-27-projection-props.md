@@ -1,5 +1,7 @@
 # Projection Props Implementation Plan (sub-project 3 of 4)
 
+> **Executed, historical.** Shipped and merged; kept for lookup. It describes intent as written at the time, not current behavior. See `CLAUDE.md` for what exists.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** When the user has entered an Odds API key in Settings, each refresh fetches the upcoming week's player props, and the forecast blends them into that week's projections, shown in the waterfall as a `market` factor.

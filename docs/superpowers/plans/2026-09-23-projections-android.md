@@ -1,5 +1,7 @@
 # Projections Android Implementation Plan
 
+> **Executed, historical.** The on-device half (`:core:projections`: scorer, Monte Carlo, waterfall) was built and is still used. See `CLAUDE.md` for what exists.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the on-device half of Phase 5 (Projections): a pure Kotlin scorer shared

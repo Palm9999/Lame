@@ -251,4 +251,27 @@ class CompareScreenTest {
         // The old page's data is still the one on screen, not a blank/loading page.
         compose.onNodeWithText(refreshing.page.slots[0].name).assertExists()
     }
+
+    @Test
+    fun twoKickersHaveNoScatterTab() {
+        val (a, b) = topIds(StatPack.KICKING, PositionFilter.K, 2)
+        show(ready(CompareSlot(a, 2025, season2025), CompareSlot(b, 2025, season2025)))
+        compose.onNodeWithText("Bars").assertExists()
+        compose.onNodeWithText("Scatter").assertDoesNotExist()
+    }
+
+    @Test
+    fun receiversStillHaveTheScatterTab() {
+        val (a, b) = topIds(StatPack.RECEIVING, PositionFilter.WR, 2)
+        show(ready(CompareSlot(a, 2025, season2025), CompareSlot(b, 2025, season2025)))
+        compose.onNodeWithText("Scatter").assertExists()
+    }
+
+    @Test
+    fun aScatterTabLeftSelectedByAKickerSwapFallsBackToBars() {
+        val (a, b) = topIds(StatPack.KICKING, PositionFilter.K, 2)
+        show(ready(CompareSlot(a, 2025, season2025), CompareSlot(b, 2025, season2025), tab = CompareTab.SCATTER))
+        compose.onNodeWithText("Scatter").assertDoesNotExist()
+        compose.onNodeWithText("Not enough data for a scatter.").assertDoesNotExist()
+    }
 }

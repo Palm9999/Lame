@@ -1,5 +1,7 @@
 # Projection Accuracy Implementation Plan (sub-project 2 of 4)
 
+> **Executed, historical.** Shipped and merged; kept for lookup. It describes intent as written at the time, not current behavior. See `CLAUDE.md` for what exists.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A ☰ → Projection accuracy page shows how the model's past-week projections did against what players scored, by position and season, beside two simple baselines, and CI fails if the model stops beating the season-to-date average.

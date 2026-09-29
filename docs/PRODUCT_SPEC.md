@@ -2,7 +2,7 @@
 
 **A personal-use NFL fantasy football analytics and prediction app for Android.**
 
-Status: Draft v0.2 — personal build, pre-implementation
+Status: Draft v0.2, written before the build (2026-09-22). **Not the current contract.** The app is built; [`README.md`](../README.md) and [`CLAUDE.md`](../CLAUDE.md) describe what exists. Main departures: the phone builds its own `stats.db` (no GitHub Releases CDN); the app reads it with the bundled SQLite driver, not Room; no Hilt or WorkManager; weather is out of scope; projections come from `core/forecast/`, not the layers described here. Sections below have not been reconciled.
 Target device: **Samsung Galaxy S24 Ultra** (single-device app)
 Last updated: 2026-09-22
 

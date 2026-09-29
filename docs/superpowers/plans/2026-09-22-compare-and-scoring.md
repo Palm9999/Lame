@@ -1,5 +1,7 @@
 # Compare and Custom Scoring Implementation Plan
 
+> **Executed, historical.** Shipped and merged; kept for lookup. It describes intent as written at the time, not current behavior. See `CLAUDE.md` for what exists.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add custom fantasy scoring (profiles scored in SQL over any week range, with xFP and FPOE) and a Compare screen (tray, percentile bars, head-to-head table, radar, xFP scatter) to Gridiron.

@@ -1,5 +1,7 @@
 # Projection Share Fix Implementation Plan (layer 2 amendment)
 
+> **Executed, historical.** Shipped and merged; kept for lookup. It describes intent as written at the time, not current behavior. See `CLAUDE.md` for what exists.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans (the user's chosen method) to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix three problems in the projections: backups projected like starters, team totals about double, and stars pulled down early in the season. Layer 2 is rebuilt as the spec's amendment says.

@@ -1,5 +1,7 @@
 # Projection Engine Implementation Plan (sub-project 1 of 4)
 
+> **Executed, historical.** Shipped and merged; kept for lookup. It describes intent as written at the time, not current behavior. See `CLAUDE.md` for what exists.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Refresh computes weekly and rest-of-season projections for QB, RB, WR and TE on the phone, and the app shows them on the Player page and a new Projections list, scored under the user's own league.

@@ -70,12 +70,15 @@ GRIDIRON_STATS_DB=etl/build/accuracy.db GRIDIRON_ACCURACY_GATE=2025 ./gradlew :c
 - `:core:forecast` — The projection model. Reads a freshly built stats.db and writes weekly, rest-of-season and waterfall-factor projections for QB/RB/WR/TE, K and D/ST, walk-forward (each week only from the games before it). Seven layers: team volume, shrunk share (toward the player's last season; starting QB only; each team's shares sum to one), shrunk efficiency, expected TDs, opponent ratings (ridge), game script from nflverse's lines, distributions; then, for the upcoming week only, an inverse-variance blend with betting props when the user has an Odds API key (a `market` factor in the waterfall). K and D/ST have their own models (`Kicker.kt`, `Defense.kt`, run by `UnitProjector`). Kickers' field goal and extra point tries come from implied team points, with their distance mix and accuracy shrunk toward the league's. D/STs get their own sacks and takeaways times the opponent's, and points allowed from the opponent's implied points with a measured spread (stored as the variance, with `g` = 1 a game). Every constant is in `ForecastConstants.kt`; bump `FORECAST_VERSION` when one changes
 
 **Android Modules**:
-- `:app` — App entry point. `RefreshCoordinator` builds `stats.db` on the phone with `:core:ingest` and swaps it in without a restart; News, Player page, live Injury report, Settings (seasons, Odds API key) and Load stats screens
+- `:app` — App entry point. `RefreshCoordinator` builds `stats.db` on the phone with `:core:ingest` and swaps it in without a restart; News, Player page (status, injury notes, news, a 'This week' card, and Season stats: chips, a season line with position percentiles, a game log), live Injury report, Settings (seasons, Odds API key) and Load stats screens
 - `:feature:players` — The Grid screen (main UI) and its ViewModel. The K and D/ST chips bring their own packs (Kicking, Defense); All and the offense's chips leave kickers and D/STs out (`StatsRepository`)
 - `:feature:scoring` — Scoring profiles: the list and the editor (every rule, plus the points-allowed tier editor)
+- `:feature:compare` — The Compare screen: bars, head-to-head table, radar, xFP-vs-actual scatter
 - `:core:table` — Frozen-column stat table with shared horizontal scroll state
+- `:core:charts` — Compose Canvas charts (bars, radar, scatter); no charting library
+- `:core:ui` — Shared screen chrome (profile chip, metric and weeks sheets) so no feature module depends on another
 - `:core:designsystem` — Theme, dark mode, colorblind-safe heat scale
-- `:core:data` — Stat packs, qualifying bars, formatting, repositories; `SettingsRepository` (which seasons to build); `PlayerDirectory` (ESPN id → player via `player_xref`); and the `live` package: the ESPN news/injuries parser and client, the writable `live.db` store, `LiveRepository`, and `PropsRepository` (The Odds API: the upcoming week's player props, fetched within the credit budget)
+- `:core:data` — Stat packs, qualifying bars, formatting, repositories; `SettingsRepository` (which seasons to build); `PlayerDirectory` (ESPN id → player via `player_xref`); `PlayerStatsRepository` (the Player page's season line and game log, built with the Grid's query builder); and the `live` package: the ESPN news/injuries parser and client, the writable `live.db` store, `LiveRepository`, and `PropsRepository` (The Odds API: the upcoming week's player props, fetched within the credit budget)
 - `:feature:projections` — The Projections list (☰ → Projections: the upcoming week or rest of season by position, K and D/ST included, scored with the active profile), the Player page's "This week" card, the waterfall screen (`ProjectionsKey`), and the accuracy page (☰ → Projection accuracy, `AccuracyKey`): each position's backtest for a season under the active profile, computed when the page opens
 
 ### Data Flow
@@ -95,9 +98,9 @@ GRIDIRON_STATS_DB=etl/build/accuracy.db GRIDIRON_ACCURACY_GATE=2025 ./gradlew :c
 
 **Frozen-Column Table** — The Grid has one shared horizontal scroll state across all columns, making sticky-column synchronization straightforward.
 
-**Stats Database Replaced Whole, Never Edited** — The app opens `stats.db` read-only; a refresh builds a complete new file beside it and swaps it in atomically. Live ESPN data lives in a separate `live.db` that is updated in place and can be deleted at any time. User state (presets, rosters) will live in `user.db` when implemented.
+**Stats Database Replaced Whole, Never Edited** — The app opens `stats.db` read-only; a refresh builds a complete new file beside it and swaps it in atomically. Live ESPN data lives in a separate `live.db` that is updated in place and can be deleted at any time. User state (profiles, rosters, settings) lives in the `:core:datastore` prefs JSON. A `user.db` is planned for saved Grid presets but not built.
 
-**No Hilt or Navigation Yet** — Current single-screen setup. Hilt and Navigation 3 will arrive with the second feature.
+**Navigation 3, No Hilt** — Screens navigate through Navigation 3 (`app/.../GridironNavHost.kt`, `NavKeys.kt`). Repositories are wired by hand in `GridironApplication`; Hilt is not used.
 
 ### Database Schema (Version 8)
 
@@ -142,20 +145,18 @@ To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI 
 
 ## Known Gaps & Next Steps
 
-- Only 51 of ~450 catalogued metrics are implemented (play-by-play and snap count; Next Gen Stats, FTN charting, injuries/schedules are wired but not yet transformed)
+- Only the play-by-play, snap count and ffopportunity metrics of the ~450 catalogued are implemented (registry: `core/ingest/.../Metrics.kt`); Next Gen Stats and FTN charting are wired but not yet transformed
 - Pre-aggregated season rollups are specified but not built (next performance target for the common full-season view)
-- Hilt dependency injection and Navigation 3 architecture arrive with the second feature
-- Saved Grid presets not yet implemented. Rosters are stored in the `:core:datastore` prefs JSON (`UserPrefs.rosters`), not a `user.db`: ☰ → Rosters manages them, the Player page toggles membership, and the Grid's roster chip narrows to one (`GridRequest.onlyPlayers`) and stars rostered players
+- Saved Grid presets not yet implemented (planned home: `user.db`). Rosters are stored in the `:core:datastore` prefs JSON (`UserPrefs.rosters`), not a `user.db`: ☰ → Rosters manages them, the Player page toggles membership, and the Grid's roster chip narrows to one (`GridRequest.onlyPlayers`) and stars rostered players
 - APK signing uses a committed keystore (`app/gridiron.keystore`, intentional for a never-published personal app)
-- **Grid entry points**: tapping a Grid row opens the Player page (ESPN status, injury notes, tagged news, and a "This week" projection card that opens the waterfall); the ☰ menu opens Projections (the upcoming week or rest of season by position, K and D/ST included, scored with the active profile), Projection accuracy, News, Injury report (ESPN's live list with nflverse practice for the current season; the official list for past seasons), Team defense, Settings and Refresh stats.
+- **Grid entry points**: tapping a Grid row opens the Player page (ESPN status, injury notes, tagged news, and a "This week" projection card that opens the waterfall, Season stats); the ☰ menu opens Projections (the upcoming week or rest of season by position, K and D/ST included, scored with the active profile), Projection accuracy, News, Injury report (ESPN's live list with nflverse practice for the current season; the official list for past seasons), Team defense, Settings and Refresh stats.
 - **ESPN's endpoints are unofficial and keyless**; a shape change shows as "Not updated: ESPN changed its … format" with the last data kept. Parsing lives in `core/data/.../live/Espn.kt`, tested against recorded responses in `core/data/src/test/resources/espn/`.
 - **Refresh runs in an application-scope coroutine, not WorkManager**: if Android kills the process mid-build, the old database stays and the next refresh starts over.
 - **Props can't be backtested**, because there are no historical props. The blend's weight (`MARKET_VARIANCE_RATIO`) and the one-sided anytime-TD margin (`ONE_SIDED_OVERROUND`) are judgments, not fits, and the accuracy page and CI gate measure the model alone.
 - **The accuracy page recomputes on every open** and after a refresh (off the main thread; its phone time isn't measured yet); nothing is cached between visits.
-- **Not modeled:** weather (wind is only known after kickoff) and shifting an injured player's share to teammates; an Out/IR player just shows Out, and a player returning from injury isn't projected until he plays again.
+- **Not modeled:** weather (out of scope by the user's call) and shifting an injured player's share to teammates; an Out/IR player just shows Out, and a player returning from injury isn't projected until he plays again.
 - **K and D/ST constants are judgments** (`ForecastConstants`), tuned only as far as the gate needs.
 - **ESPN's default D/ST also scores yards allowed and blocked kicks**, which aren't modeled: `team_week_defense` has yards allowed, so a yards-allowed tier editor would be the next step.
-- **Compare and the Player page's season stats show offense columns for a kicker or D/ST.**
 
 ## Codebase Notes
 

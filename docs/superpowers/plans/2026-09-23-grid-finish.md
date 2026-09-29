@@ -1,5 +1,7 @@
 # Grid Finish Implementation Plan
 
+> **Executed, historical.** Shipped and merged; kept for lookup. It describes intent as written at the time, not current behavior. See `CLAUDE.md` for what exists.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Finish the Grid: add team and snap-share quick filters, an advanced filter sheet with a live match count, last-6-week sparklines, and CSV export.

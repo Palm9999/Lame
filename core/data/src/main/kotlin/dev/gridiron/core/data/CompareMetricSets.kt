@@ -9,16 +9,25 @@ import dev.gridiron.core.statquery.StatColumn.CARRY_SHARE
 import dev.gridiron.core.statquery.StatColumn.CATCH_RATE
 import dev.gridiron.core.statquery.StatColumn.CPOE
 import dev.gridiron.core.statquery.StatColumn.DROPBACKS
+import dev.gridiron.core.statquery.StatColumn.DST_FUMBLE_RECOVERIES
+import dev.gridiron.core.statquery.StatColumn.DST_INTERCEPTIONS
+import dev.gridiron.core.statquery.StatColumn.DST_SACKS
+import dev.gridiron.core.statquery.StatColumn.DST_SAFETIES
+import dev.gridiron.core.statquery.StatColumn.DST_TDS
 import dev.gridiron.core.statquery.StatColumn.EPA_PER_DROPBACK
 import dev.gridiron.core.statquery.StatColumn.EXPECTED_FANTASY_POINTS
 import dev.gridiron.core.statquery.StatColumn.EZ_TARGETS
 import dev.gridiron.core.statquery.StatColumn.FANTASY_POINTS
+import dev.gridiron.core.statquery.StatColumn.FG_ATT
+import dev.gridiron.core.statquery.StatColumn.FG_MADE
+import dev.gridiron.core.statquery.StatColumn.FG_MADE_50
 import dev.gridiron.core.statquery.StatColumn.FPOE
 import dev.gridiron.core.statquery.StatColumn.GL_CARRIES
 import dev.gridiron.core.statquery.StatColumn.INTERCEPTIONS
 import dev.gridiron.core.statquery.StatColumn.OFFENSE_SNAPS
 import dev.gridiron.core.statquery.StatColumn.PASSING_TDS
 import dev.gridiron.core.statquery.StatColumn.PASSING_YARDS
+import dev.gridiron.core.statquery.StatColumn.POINTS_ALLOWED
 import dev.gridiron.core.statquery.StatColumn.QB_RUSH_INSIDE_5
 import dev.gridiron.core.statquery.StatColumn.RACR
 import dev.gridiron.core.statquery.StatColumn.RECEIVING_TDS
@@ -37,6 +46,8 @@ import dev.gridiron.core.statquery.StatColumn.TARGET_SHARE
 import dev.gridiron.core.statquery.StatColumn.TOTAL_EPA
 import dev.gridiron.core.statquery.StatColumn.WEIGHTED_OPPORTUNITIES
 import dev.gridiron.core.statquery.StatColumn.WOPR
+import dev.gridiron.core.statquery.StatColumn.XP_ATT
+import dev.gridiron.core.statquery.StatColumn.XP_MADE
 import dev.gridiron.core.statquery.StatColumn.YAC
 import dev.gridiron.core.statquery.StatColumn
 
@@ -71,25 +82,46 @@ public object CompareMetricSets {
         CompareGroup.CONTEXT to listOf(RECEIVING_YARDS, RECEPTIONS, OFFENSE_SNAPS, TOTAL_EPA),
     )
 
+    // Kickers and defenses have no expected points, and a group with no stats is simply absent.
+    private val K_SET = mapOf(
+        CompareGroup.OPPORTUNITY to listOf(FG_ATT, XP_ATT),
+        CompareGroup.EFFICIENCY to listOf(FG_MADE_50),
+        CompareGroup.SCORING to listOf(FANTASY_POINTS, FG_MADE, XP_MADE),
+    )
+    private val DST_SET = mapOf(
+        CompareGroup.EFFICIENCY to listOf(POINTS_ALLOWED),
+        CompareGroup.SCORING to listOf(FANTASY_POINTS, DST_TDS, DST_SAFETIES),
+        CompareGroup.CONTEXT to listOf(DST_SACKS, DST_INTERCEPTIONS, DST_FUMBLE_RECOVERIES),
+    )
+
     public fun groupsFor(position: Position?): Map<CompareGroup, List<StatColumn>> = when (position) {
         Position.QB -> QB_SET
         Position.RB, Position.FB -> RB_SET
+        Position.K -> K_SET
+        Position.DST -> DST_SET
         else -> WR_SET
     }
 
+    /** The compared positions' stats per group, in group order; a group nobody has rows for is left out. */
     public fun union(positions: List<Position?>): List<Pair<CompareGroup, List<StatColumn>>> =
-        CompareGroup.entries.map { g -> g to positions.flatMap { groupsFor(it).getValue(g) }.distinct() }
+        CompareGroup.entries
+            .map { g -> g to positions.flatMap { groupsFor(it)[g].orEmpty() }.distinct() }
+            .filter { (_, columns) -> columns.isNotEmpty() }
 
     public fun radarAxes(position: Position?): List<StatColumn> = when (position) {
         Position.QB -> listOf(EPA_PER_DROPBACK, CPOE, DROPBACKS, CARRIES, PASSING_TDS, FPOE)
         Position.RB, Position.FB -> listOf(CARRY_SHARE, TARGET_SHARE, RUSH_SUCCESS_RATE, RUSH_EPA_PER_CARRY, GL_CARRIES, SNAP_SHARE, FPOE)
+        Position.K -> listOf(FG_ATT, FG_MADE, FG_MADE_50, XP_MADE, FANTASY_POINTS)
+        Position.DST -> listOf(POINTS_ALLOWED, DST_SACKS, DST_INTERCEPTIONS, DST_FUMBLE_RECOVERIES, DST_TDS, FANTASY_POINTS)
         else -> listOf(TARGET_SHARE, AIR_YARDS_SHARE, ADOT, RACR, YAC, RZ_TARGETS, FPOE)
     }
 
-    /** Who is ranked at each position: the spec's population qualifiers. */
+    /** Who is ranked at each position: the spec's population qualifiers. Every team's defense is ranked. */
     public fun qualifier(position: Position?): StatColumn = when (position) {
         Position.QB -> DROPBACKS
         Position.RB, Position.FB -> CARRIES
+        Position.K -> FG_ATT
+        Position.DST -> POINTS_ALLOWED
         else -> TARGETS
     }
 }
