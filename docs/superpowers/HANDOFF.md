@@ -13,10 +13,11 @@
 
 The four projection sub-projects and the Player page season stats are built, reviewed and merged (PRs #4, #5, #6, #7, #9, #10, #11). The projection design is `specs/2026-09-26-projection-model-design.md`, which supersedes the pipeline half of `specs/2026-09-23-projections-design.md`. Only the docs-only draft [PR #12](https://github.com/Palm9999/Lame/pull/12) is open (HANDOFF and the yards-allowed spec).
 
-**In flight (2026-09-29): D/ST yards-allowed tiers.** The design is approved and written up in `specs/2026-09-29-dst-yards-allowed-design.md` (committed on this branch, on the open draft docs PR #12). **Next:** the user reviews the spec; then write the plan with the `writing-plans` skill (expect about 4 tasks: model and SQL, data and Python parity, forecast and Monte Carlo, editor, migration and screens), get the user's plan review and execution choice (native was chosen last time), and execute. The user's rulings for it:
+**In flight (2026-09-29): D/ST yards-allowed tiers.** The spec (`specs/2026-09-29-dst-yards-allowed-design.md`) is approved and the plan is written: `plans/2026-09-29-dst-yards-allowed.md` (4 tasks: model, SQL and `score()`; data, Python parity and the Grid column; forecast, expectation and the joint Monte Carlo with the range refit and the gate; editor, prefs v3, screens and docs). Both are on the open draft docs PR #12. **Next:** the user reviews the plan and picks an execution method (subagent-driven or native; recommended: native, since the four tasks share interfaces), then execute. The user's rulings for it:
 - ESPN's yards tiers are **on by default in every preset and every saved profile** (migrated once, prefs `formatVersion` 3).
 - Yards allowed is **projected as its own stat**, like points allowed, and the Monte Carlo draws it jointly with points allowed.
 - The ESPN tier table in the spec is from memory and unverified; the user can edit it.
+- Measured on 2024–2025 (1,140 team-games): points/yards allowed correlation 0.666 (constant 0.67), yards spread 0.239 of the league mean around each team-season's average (`DST_YA_CV` 0.25).
 
 **The other candidate gaps** (the user picks after this one; each gets its own brainstorm, spec, plan and PR):
 - **Injured player's share to teammates:** the forecast shows an Out/IR player as Out and doesn't move his share.
