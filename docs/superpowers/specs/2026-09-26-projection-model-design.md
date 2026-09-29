@@ -20,7 +20,7 @@ The phone computes weekly and rest-of-season projections for QB, RB, WR, TE, K a
 | Positions | QB, RB, WR, TE, K, DST. |
 | Accuracy | Yes, from a walk-forward backtest; no saved snapshot history. |
 | Weather | Not modeled (wind is only known after a game is played). Roof is recorded for later use. |
-| Injury redistribution | Not modeled. An Out/IR player's own projection shows "Out" and zero; teammates are unchanged. |
+| Injury redistribution | Built (2026-09-29, see `2026-09-29-injury-share-redistribution-design.md`). Out and Doubtful players get no projection and their teams' shares renormalize. |
 | Grid column | Not in this project. |
 
 ## Sub-projects
@@ -259,7 +259,6 @@ The final whole-branch review found layer 2's first design wrong on real data. T
 ## Out of scope
 
 - Weather.
-- Redistributing an injured player's share to teammates.
 - A Grid projection column.
 - IDP.
 - Correlated multi-player simulation (win probability, lineup optimizer).

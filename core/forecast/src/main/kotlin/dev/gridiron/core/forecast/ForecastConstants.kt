@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 5
+public const val FORECAST_VERSION: Int = 6
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's

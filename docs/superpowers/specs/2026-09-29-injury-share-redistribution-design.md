@@ -1,6 +1,6 @@
 # Injured players' share to teammates
 
-**Status:** design approved in conversation (2026-09-29). Next: user review of this spec, then the implementation plan.
+**Status:** built (2026-09-29). Gate numbers are in the PR.
 
 ## Purpose
 
