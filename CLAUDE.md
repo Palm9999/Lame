@@ -95,7 +95,7 @@ To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI 
 
 ## Known Gaps & Next Steps
 
-- Only the play-by-play, snap count, ffopportunity and Next Gen Stats (ten headline metrics; Grid packs NGS Passing, Rushing and Receiving) metrics of the ~450 catalogued are implemented (registry: `core/ingest/.../Metrics.kt`); FTN charting is not wired. NGS shows in the Grid only: Compare and the Player page don't use it yet
+- Only the play-by-play, snap count, ffopportunity, Next Gen Stats (ten headline metrics; Grid packs NGS Passing, Rushing and Receiving) and FTN charting (ten headline metrics from 2022; Grid packs FTN Passing and FTN Receiving) metrics of the ~450 catalogued are implemented (registry: `core/ingest/.../Metrics.kt`). NGS and FTN show in the Grid only: Compare and the Player page don't use them yet. FTN's other flags (screen, RPO, motion, no-huddle, box counts) are not stored
 - Pre-aggregated season rollups are specified but not built (next performance target for the common full-season view)
 - Saved Grid presets not yet implemented (planned home: `user.db`). Rosters are stored in the `:core:datastore` prefs JSON (`UserPrefs.rosters`), not a `user.db`: ☰ → Rosters manages them, the Player page toggles membership, and the Grid's roster chip narrows to one (`GridRequest.onlyPlayers`) and stars rostered players
 - APK signing uses a committed keystore (`app/gridiron.keystore`, intentional for a never-published personal app)
@@ -114,4 +114,4 @@ To run contract tests locally, set `GRIDIRON_STATS_DB` before running tests (CI 
 - **Android SDK** — Platform 37, JDK 17+
 - **Gradle caching & configuration cache** enabled (`gradle.properties`)
 - **Build artifact** — APK auto-published to [releases/download/app/gridiron.apk](https://github.com/Palm9999/Lame/releases/download/app/gridiron.apk) on every push and every Tuesday morning
-- **Data attribution** — nflverse (CC BY 4.0), ffopportunity, ESPN (news and injuries), The Odds API (player props, with the user's own key), Fantasy Football Calculator ADP, US National Weather Service
+- **Data attribution** — nflverse (CC BY 4.0), FTN Data via nflverse (CC BY-SA 4.0), ffopportunity, ESPN (news and injuries), The Odds API (player props, with the user's own key), Fantasy Football Calculator ADP, US National Weather Service
