@@ -236,4 +236,74 @@ class UserPrefsStoreTest {
         assertEquals("Odd", odd.name)
         assertEquals(emptyList<ScoringTier>(), odd.yardsAllowedTiers)
     }
+
+    private val wrView = GridPreset(
+        id = "g1",
+        name = "Buy-low WRs",
+        packId = "FANTASY",
+        sort = "FANTASY_POINTS",
+        direction = "DESCENDING",
+        position = "WR",
+        perGame = true,
+        teams = setOf("KC", "BUF"),
+        minSnapShare = 0.5,
+        filters = listOf(
+            PresetFilter("TARGETS", PresetFilterKind.AT_LEAST, 20.0),
+            PresetFilter("SNAP_SHARE", PresetFilterKind.BETWEEN, 0.5, 0.9),
+        ),
+        weeks = PresetWeeks.LastN(4),
+    )
+
+    @Test
+    fun `gridPresets round trip, and an older file has none`() {
+        assertEquals(emptyList<GridPreset>(), withStore { it.prefs.first() }.gridPresets)
+        val all = listOf(wrView, wrView.copy(id = "g2", name = "Season", weeks = PresetWeeks.WholeSeason, filters = emptyList(), teams = emptySet(), minSnapShare = null))
+        withStore { store -> store.update { it.copy(gridPresets = all) } }
+        assertEquals(all, withStore { it.prefs.first() }.gridPresets)
+        assertTrue(file.readText().contains("\"formatVersion\":3"), file.readText())
+    }
+
+    @Test
+    fun `a file from before presets existed reads as no presets`() {
+        file.writeText("""{"formatVersion": 3}""")
+        assertEquals(emptyList<GridPreset>(), withStore { it.prefs.first() }.gridPresets)
+    }
+
+    @Test
+    fun `bad preset entries are dropped and the rest kept`() {
+        file.writeText(
+            """
+            {"formatVersion":3,"gridPresets":[
+              {"id":"a","name":" ","packId":"FANTASY","sort":"FANTASY_POINTS","direction":"DESCENDING","position":"ALL","weeks":{"kind":"WHOLE_SEASON"}},
+              {"id":"b","name":"Zero","packId":"FANTASY","sort":"FANTASY_POINTS","direction":"DESCENDING","position":"ALL","weeks":{"kind":"LAST_N","n":0}},
+              {"id":"c","name":"Bad between","packId":"FANTASY","sort":"FANTASY_POINTS","direction":"DESCENDING","position":"ALL",
+               "filters":[{"column":"TARGETS","kind":"BETWEEN","a":1.0}],"weeks":{"kind":"WHOLE_SEASON"}},
+              {"id":"d","name":"Keeper","packId":"FANTASY","sort":"FANTASY_POINTS","direction":"DESCENDING","position":"ALL","weeks":{"kind":"LAST_N","n":4}}
+            ]}
+            """.trimIndent(),
+        )
+        val kept = withStore { it.prefs.first() }.gridPresets
+        assertEquals(listOf("d"), kept.map { it.id })
+        assertEquals(PresetWeeks.LastN(4), kept.single().weeks)
+    }
+
+    @Test
+    fun `duplicate preset names keep the first`() {
+        val json = { id: String, name: String ->
+            """{"id":"$id","name":"$name","packId":"FANTASY","sort":"FANTASY_POINTS","direction":"DESCENDING","position":"ALL","weeks":{"kind":"WHOLE_SEASON"}}"""
+        }
+        file.writeText("""{"formatVersion":3,"gridPresets":[${json("a", "Deep")},${json("b", "deep")},${json("c", "Other")}]}""")
+        assertEquals(listOf("a", "c"), withStore { it.prefs.first() }.gridPresets.map { it.id })
+    }
+
+    @Test
+    fun `presets past the limit are dropped on read`() {
+        val many = (1..MAX_PRESETS + 1).joinToString(",") {
+            """{"id":"p$it","name":"View $it","packId":"FANTASY","sort":"FANTASY_POINTS","direction":"DESCENDING","position":"ALL","weeks":{"kind":"WHOLE_SEASON"}}"""
+        }
+        file.writeText("""{"formatVersion":3,"gridPresets":[$many]}""")
+        val kept = withStore { it.prefs.first() }.gridPresets
+        assertEquals(MAX_PRESETS, kept.size)
+        assertEquals("p$MAX_PRESETS", kept.last().id)
+    }
 }

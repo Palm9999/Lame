@@ -37,6 +37,7 @@ internal data class UserPrefsDto(
     val seasonsChosenIn: Int? = null,
     val rosters: List<RosterDto> = emptyList(),
     val oddsApiKey: String? = null,
+    val gridPresets: List<PresetDto> = emptyList(),
 )
 
 @Serializable
@@ -62,6 +63,27 @@ internal data class SlotDto(val playerId: String, val season: Int, val firstWeek
 
 @Serializable
 internal data class RosterDto(val id: String, val name: String, val playerIds: List<String> = emptyList())
+
+@Serializable
+internal data class PresetDto(
+    val id: String,
+    val name: String,
+    val packId: String,
+    val sort: String,
+    val direction: String,
+    val position: String,
+    val perGame: Boolean = false,
+    val teams: List<String> = emptyList(),
+    val minSnapShare: Double? = null,
+    val filters: List<PresetFilterDto> = emptyList(),
+    val weeks: PresetWeeksDto = PresetWeeksDto(),
+)
+
+@Serializable
+internal data class PresetFilterDto(val column: String, val kind: String, val a: Double? = null, val b: Double? = null)
+
+@Serializable
+internal data class PresetWeeksDto(val kind: String = "WHOLE_SEASON", val n: Int? = null)
 
 /**
  * 2: profiles carry points-allowed tiers, and version-1 profiles gain the kicking and team-defense defaults once.
@@ -109,6 +131,9 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
     val choice = seasons?.let { s -> seasonsChosenIn?.let { SeasonChoice(s.distinct().sorted(), it) } }
     val rosters = rosters.mapNotNull { r -> orNull { Roster(r.id, r.name, r.playerIds.filter { it.isNotBlank() }.distinct()) } }
         .distinctBy { it.id }
+    val presets = gridPresets.mapNotNull { p -> orNull { p.toDomain() } }
+        .distinctBy { it.name.lowercase() }
+        .take(MAX_PRESETS)
     return UserPrefs(
         profiles,
         activeProfileId ?: UserPrefs.DEFAULT.activeProfileId,
@@ -117,8 +142,48 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
         choice,
         rosters = rosters,
         oddsApiKey = oddsApiKey?.takeIf { it.isNotBlank() },
+        gridPresets = presets,
     )
 }
+
+/** One stored preset; throws [IllegalArgumentException] when any part is invalid, so the caller drops the entry. */
+private fun PresetDto.toDomain(): GridPreset = GridPreset(
+    id = id,
+    name = name.trim(),
+    packId = packId,
+    sort = sort,
+    direction = direction,
+    position = position,
+    perGame = perGame,
+    teams = teams.filter { it.isNotBlank() }.toSet(),
+    minSnapShare = minSnapShare,
+    filters = filters.map { f ->
+        val kind = PresetFilterKind.entries.firstOrNull { it.name == f.kind } ?: throw IllegalArgumentException("unknown filter kind ${f.kind}")
+        PresetFilter(f.column, kind, requireNotNull(f.a) { "a filter needs a value" }, f.b)
+    },
+    weeks = when (weeks.kind) {
+        "WHOLE_SEASON" -> PresetWeeks.WholeSeason
+        "LAST_N" -> PresetWeeks.LastN(requireNotNull(weeks.n) { "last-N weeks needs n" })
+        else -> throw IllegalArgumentException("unknown weeks rule ${weeks.kind}")
+    },
+)
+
+private fun GridPreset.toDto(): PresetDto = PresetDto(
+    id = id,
+    name = name,
+    packId = packId,
+    sort = sort,
+    direction = direction,
+    position = position,
+    perGame = perGame,
+    teams = teams.sorted(),
+    minSnapShare = minSnapShare,
+    filters = filters.map { PresetFilterDto(it.column, it.kind.name, it.a, it.b) },
+    weeks = when (val w = weeks) {
+        PresetWeeks.WholeSeason -> PresetWeeksDto("WHOLE_SEASON")
+        is PresetWeeks.LastN -> PresetWeeksDto("LAST_N", w.n)
+    },
+)
 
 /** A profile's stored tiers, or none when they don't start at 0 and rise: a bad list must not cost the whole profile. */
 private fun tiersOrNone(stored: List<TierDto>): List<ScoringTier> {
@@ -148,6 +213,7 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     seasonsChosenIn = seasons?.chosenIn,
     rosters = rosters.map { RosterDto(it.id, it.name, it.playerIds) },
     oddsApiKey = oddsApiKey,
+    gridPresets = gridPresets.map { it.toDto() },
 )
 
 internal object UserPrefsSerializer : Serializer<UserPrefs> {
