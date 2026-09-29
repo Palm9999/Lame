@@ -63,12 +63,17 @@ class NgsTest {
         assertEquals(75.0, row.values["ngs_ttt_w"])
         assertEquals(600.0, row.values["ngs_aggr_w"])
         assertEquals(240.0, row.values["ngs_iay_w"])
+        // The weekly averages themselves, under their visible ids.
+        assertEquals(2.5, row.values["ngs_time_to_throw"])
+        assertEquals(20.0, row.values["ngs_aggressiveness"])
+        assertEquals(8.0, row.values["ngs_intended_air_yards"])
     }
 
     @Test
     fun `a missing average stores nothing for it and a zero weight stores nothing at all`() {
         val noAverage = readNgsPassing(stream(passingHeader, passing("avg_time_to_throw" to null)), "ngs_passing.csv.gz").single()
         assertNull(noAverage.values["ngs_ttt_w"])
+        assertNull(noAverage.values["ngs_time_to_throw"])
         assertEquals(600.0, noAverage.values["ngs_aggr_w"])
         val noWeight = readNgsPassing(stream(passingHeader, passing("attempts" to 0)), "ngs_passing.csv.gz")
         assertEquals(0, noWeight.size)
@@ -81,12 +86,25 @@ class NgsTest {
         assertEquals(70.0, row.values["ngs_eff_w"])
         assertEquals(500.0, row.values["ngs_box_w"])
         assertEquals(6.5, row.values["ngs_ryoe"])
+        assertEquals(3.5, row.values["ngs_rush_efficiency"])
+        assertEquals(25.0, row.values["ngs_stacked_box_pct"])
+        assertEquals(0.325, row.values["ngs_ryoe_per_att"])
+    }
+
+    @Test
+    fun `a zero average is kept as a zero, not dropped`() {
+        val row = readNgsRushing(
+            stream(rushingHeader, rushing("percent_attempts_gte_eight_defenders" to 0.0)), "ngs_rushing.csv.gz",
+        ).single()
+        assertEquals(0.0, row.values["ngs_box_w"])
+        assertEquals(0.0, row.values["ngs_stacked_box_pct"])
     }
 
     @Test
     fun `a season without a RYOE model has no RYOE but keeps its other components`() {
         val row = readNgsRushing(stream(rushingHeader, rushing("rush_yards_over_expected" to null)), "ngs_rushing.csv.gz").single()
         assertNull(row.values["ngs_ryoe"])
+        assertNull(row.values["ngs_ryoe_per_att"])
         assertEquals(70.0, row.values["ngs_eff_w"])
     }
 
@@ -98,6 +116,9 @@ class NgsTest {
         assertEquals(30.0, row.values["ngs_sep_w"])
         assertEquals(60.0, row.values["ngs_cush_w"])
         assertEquals(9.0, row.values["ngs_yacoe_w"])
+        assertEquals(6.0, row.values["ngs_cushion"])
+        assertEquals(3.0, row.values["ngs_separation"])
+        assertEquals(1.5, row.values["ngs_yac_over_expected"])
     }
 
     @Test

@@ -12,30 +12,57 @@ import java.io.InputStream
  * NGS publishes averages, so each is stored as average x weight beside its
  * weight (NGS's own attempts, carries, targets or receptions). A range then
  * recomputes as sum(avg x weight) / sum(weight), never a mean of weekly means.
- * A missing average or a weight of 0 stores nothing: absent means no NGS data.
+ * The weekly average is stored too, under the metric's own id. A missing
+ * average or a weight of 0 stores nothing: absent means no NGS data.
  */
 
 private val KEY_COLUMNS = listOf("season", "week", "team_abbr", "player_gsis_id")
 
-/** A weight column, and the columns whose averages it scales into components. */
-private class NgsFile(val weightColumn: String, val weightComponent: String, val weighted: Map<String, String>, val direct: Map<String, String> = emptyMap())
+/** One published average: stored as `column x weight` in [sum], and as itself under the visible id [visible]. */
+private class NgsAverage(val column: String, val sum: String, val visible: String)
+
+/**
+ * A total stored as is under [component] (RYOE), and per weight under [perWeight]. Null before NGS's RYOE model
+ * (2018), when the column is empty.
+ */
+private class NgsTotal(val column: String, val component: String, val perWeight: String)
+
+/** A weight column and the averages it scales. */
+private class NgsFile(
+    val weightColumn: String,
+    val weightComponent: String,
+    val averages: List<NgsAverage>,
+    val totals: List<NgsTotal> = emptyList(),
+)
 
 private val PASSING = NgsFile(
     "attempts", "ngs_attempts",
-    linkedMapOf("avg_time_to_throw" to "ngs_ttt_w", "aggressiveness" to "ngs_aggr_w", "avg_intended_air_yards" to "ngs_iay_w"),
+    listOf(
+        NgsAverage("avg_time_to_throw", "ngs_ttt_w", "ngs_time_to_throw"),
+        NgsAverage("aggressiveness", "ngs_aggr_w", "ngs_aggressiveness"),
+        NgsAverage("avg_intended_air_yards", "ngs_iay_w", "ngs_intended_air_yards"),
+    ),
 )
 private val RUSHING = NgsFile(
     "rush_attempts", "ngs_carries",
-    linkedMapOf("efficiency" to "ngs_eff_w", "percent_attempts_gte_eight_defenders" to "ngs_box_w"),
-    direct = linkedMapOf("rush_yards_over_expected" to "ngs_ryoe"),
+    listOf(
+        NgsAverage("efficiency", "ngs_eff_w", "ngs_rush_efficiency"),
+        NgsAverage("percent_attempts_gte_eight_defenders", "ngs_box_w", "ngs_stacked_box_pct"),
+    ),
+    totals = listOf(NgsTotal("rush_yards_over_expected", "ngs_ryoe", "ngs_ryoe_per_att")),
 )
 
 /** Receiving has two weights: separation and cushion are per target, YAC over expected per reception. */
 private val RECEIVING_TARGETS = NgsFile(
-    "targets", "ngs_targets", linkedMapOf("avg_cushion" to "ngs_cush_w", "avg_separation" to "ngs_sep_w"),
+    "targets", "ngs_targets",
+    listOf(
+        NgsAverage("avg_cushion", "ngs_cush_w", "ngs_cushion"),
+        NgsAverage("avg_separation", "ngs_sep_w", "ngs_separation"),
+    ),
 )
 private val RECEIVING_RECEPTIONS = NgsFile(
-    "receptions", "ngs_receptions", linkedMapOf("avg_yac_above_expectation" to "ngs_yacoe_w"),
+    "receptions", "ngs_receptions",
+    listOf(NgsAverage("avg_yac_above_expectation", "ngs_yacoe_w", "ngs_yac_over_expected")),
 )
 
 internal fun readNgsPassing(input: InputStream, source: String): List<PlayerWeek> = readNgs(input, source, listOf(PASSING))
@@ -46,7 +73,7 @@ internal fun readNgsReceiving(input: InputStream, source: String): List<PlayerWe
     readNgs(input, source, listOf(RECEIVING_TARGETS, RECEIVING_RECEPTIONS))
 
 private fun readNgs(input: InputStream, source: String, files: List<NgsFile>): List<PlayerWeek> = buildList {
-    val columns = KEY_COLUMNS + files.flatMap { listOf(it.weightColumn) + it.weighted.keys + it.direct.keys }
+    val columns = KEY_COLUMNS + files.flatMap { f -> listOf(f.weightColumn) + f.averages.map { it.column } + f.totals.map { it.column } }
     readCsv(input, source, columns) { row ->
         val playerId = row.text("player_gsis_id") ?: return@readCsv
         val season = row.int("season") ?: return@readCsv
@@ -61,8 +88,14 @@ private fun readNgs(input: InputStream, source: String, files: List<NgsFile>): L
 private fun CsvRow.addComponents(file: NgsFile, into: MutableMap<String, Double?>) {
     val weight = double(file.weightColumn)?.takeIf { it > 0 } ?: return
     into[file.weightComponent] = weight
-    for ((column, component) in file.weighted) double(column)?.let { into[component] = it * weight }
-    for ((column, component) in file.direct) double(column)?.let { into[component] = it }
+    for (a in file.averages) double(a.column)?.let {
+        into[a.sum] = it * weight
+        into[a.visible] = it
+    }
+    for (t in file.totals) double(t.column)?.let {
+        into[t.component] = it
+        into[t.perWeight] = it / weight
+    }
 }
 
 /**

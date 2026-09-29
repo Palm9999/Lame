@@ -323,9 +323,10 @@ _M: list[Metric] = [
     # ---------------- Next Gen Stats (tier B; core/ingest's Ngs.kt is the twin) ----------------
     # NGS publishes per-week averages. Each is stored as average x weight beside its
     # weight, so a range recomputes as sum(avg x weight) / sum(weight), never a mean of means.
+    # The weekly average is stored too, under the metric's own id. None is sparse: a 0% stacked-box week is real.
     *[
         Metric(mid, name, abbr, "ngs", definition, positions=positions, tier="B",
-               higher_is_better=better, decimals=dec, sparse=True)
+               higher_is_better=better, decimals=dec)
         for mid, abbr, name, positions, better, dec, definition in [
             ("ngs_time_to_throw", "TTT", "Time to Throw", ("QB",), True, 2,
              "Average seconds from snap to release on attempts, sacks excluded. Under 2.5 is a quick game; over 3.0 holds the ball."),
@@ -351,7 +352,7 @@ _M: list[Metric] = [
     ],
     *[
         Metric(mid, name, mid.upper(), "ngs", definition, positions=("QB", "RB", "WR", "TE"),
-               tier="B", decimals=dec, internal=True, sparse=True)
+               tier="B", decimals=dec, internal=True)
         for mid, name, definition, dec in [
             ("ngs_attempts", "NGS Attempts", "Attempts in NGS's passing file: the weight behind its passing averages.", 0),
             ("ngs_carries", "NGS Carries", "Carries in NGS's rushing file: the weight behind its rushing averages.", 0),

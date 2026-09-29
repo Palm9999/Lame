@@ -51,7 +51,7 @@ class MetricsTest {
     )
 
     @Test
-    fun `the ten NGS metrics are visible tier B sparse and position-scoped`() {
+    fun `the ten NGS metrics are visible tier B not sparse and position-scoped`() {
         for ((id, positions) in ngsVisible) {
             val m = byId.getValue(id)
             assertFalse(m.isInternal, id)
@@ -59,17 +59,18 @@ class MetricsTest {
             assertEquals("B", m.tier, id)
             assertEquals("ngs", m.group, id)
             assertEquals(positions.sorted(), m.positions.sorted(), id)
-            assertTrue(id in SPARSE_METRIC_IDS, id)
+            // Zeros are real (a 0% stacked-box week), so none of these is sparse.
+            assertFalse(id in SPARSE_METRIC_IDS, id)
         }
         assertFalse(byId.getValue("ngs_rush_efficiency").higherIsBetter)
     }
 
     @Test
-    fun `the twelve NGS components are internal and sparse`() {
+    fun `the twelve NGS components are internal and not sparse`() {
         for (id in ngsInternal) {
             val m = byId.getValue(id)
             assertTrue(m.isInternal, id)
-            assertTrue(id in SPARSE_METRIC_IDS, id)
+            assertFalse(id in SPARSE_METRIC_IDS, id)
         }
     }
 

@@ -104,8 +104,8 @@ def test_ngs_metrics():
         m = METRICS[mid]
         assert not m.internal and not m.computed and m.tier == "B" and m.group == "ngs", mid
         assert sorted(m.positions) == sorted(positions), mid
-        assert mid in sparse_metric_ids(), mid
+        assert mid not in sparse_metric_ids(), mid  # zeros are real: a 0% stacked-box week
     assert not METRICS["ngs_rush_efficiency"].higher_is_better
     for mid in NGS_INTERNAL:
-        assert METRICS[mid].internal and mid in sparse_metric_ids(), mid
+        assert METRICS[mid].internal and mid not in sparse_metric_ids(), mid
 

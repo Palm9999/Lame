@@ -128,14 +128,14 @@ public enum class StatPack(
     ),
     NGS_PASSING(
         "NGS Passing",
-        listOf(NGS_TIME_TO_THROW, NGS_AGGRESSIVENESS, NGS_INTENDED_AIR_YARDS, ATTEMPTS),
+        listOf(NGS_INTENDED_AIR_YARDS, NGS_TIME_TO_THROW, NGS_AGGRESSIVENESS, ATTEMPTS),
         NGS_INTENDED_AIR_YARDS,
         ATTEMPTS,
     ),
     NGS_RUSHING(
         "NGS Rushing",
         listOf(NGS_RYOE, NGS_RYOE_PER_ATT, NGS_RUSH_EFFICIENCY, NGS_STACKED_BOX_PCT, CARRIES),
-        NGS_RYOE_PER_ATT,
+        NGS_RYOE,
         CARRIES,
     ),
     NGS_RECEIVING(

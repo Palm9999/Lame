@@ -141,7 +141,9 @@ private val DEFENSE: List<Metric> = listOf(
 /**
  * Next Gen Stats, a twin of `metrics.py`'s NGS block. NGS publishes per-week
  * averages; each is stored as average x weight beside its weight, so a range
- * recomputes as sum(avg x weight) / sum(weight), never a mean of means.
+ * recomputes as sum(avg x weight) / sum(weight), never a mean of means. The
+ * weekly average is stored too, under the metric's own id. None is sparse:
+ * a 0% stacked-box week is a real zero.
  */
 private class NgsMetric(
     val id: String,
@@ -177,7 +179,7 @@ private val NGS: List<Metric> = listOf(
 ).map {
     Metric(
         it.id, it.name, it.abbr, "ngs", it.definition, positions = it.positions, tier = "B",
-        higherIsBetter = it.higherIsBetter, decimals = it.decimals, sparse = true,
+        higherIsBetter = it.higherIsBetter, decimals = it.decimals,
     )
 } + listOf(
     Triple("ngs_attempts", "NGS Attempts", "Attempts in NGS's passing file: the weight behind its passing averages." to 0),
@@ -195,7 +197,7 @@ private val NGS: List<Metric> = listOf(
 ).map { (id, name, text) ->
     Metric(
         id, name, id.uppercase(), "ngs", text.first, positions = ALL_POSITIONS, tier = "B",
-        decimals = text.second, isInternal = true, sparse = true,
+        decimals = text.second, isInternal = true,
     )
 }
 

@@ -47,6 +47,8 @@ def test_passing_components_are_each_average_times_attempts():
     assert r["ngs_ttt_w"] == 75.0
     assert r["ngs_aggr_w"] == 600.0
     assert r["ngs_iay_w"] == 240.0
+    # The weekly averages themselves, under their visible ids.
+    assert (r["ngs_time_to_throw"], r["ngs_aggressiveness"], r["ngs_intended_air_yards"]) == (2.5, 20.0, 8.0)
 
 
 def test_a_missing_average_stores_nothing_for_it_and_a_zero_weight_nothing_at_all():
@@ -62,6 +64,12 @@ def test_rushing_stores_ryoe_directly_and_the_other_averages_times_carries():
     assert r["ngs_eff_w"] == 70.0
     assert r["ngs_box_w"] == 500.0
     assert r["ngs_ryoe"] == 6.5
+    assert (r["ngs_rush_efficiency"], r["ngs_stacked_box_pct"], r["ngs_ryoe_per_att"]) == (3.5, 25.0, 0.325)
+
+
+def test_a_zero_average_is_kept_as_a_zero_not_dropped():
+    r = row(build(r=[rushing(percent_attempts_gte_eight_defenders=0.0)]), "RB1")
+    assert r["ngs_box_w"] == 0.0 and r["ngs_stacked_box_pct"] == 0.0
 
 
 def test_a_season_without_a_ryoe_model_keeps_its_other_components():
@@ -74,6 +82,7 @@ def test_receiving_weights_separation_and_cushion_by_targets_and_yac_by_receptio
     r = row(build(c=[receiving()]), "WR1")
     assert (r["ngs_targets"], r["ngs_receptions"]) == (10.0, 6.0)
     assert (r["ngs_sep_w"], r["ngs_cush_w"], r["ngs_yacoe_w"]) == (30.0, 60.0, 9.0)
+    assert (r["ngs_cushion"], r["ngs_separation"], r["ngs_yac_over_expected"]) == (6.0, 3.0, 1.5)
 
 
 def test_week_23_becomes_22_only_when_the_season_has_no_week_22():
@@ -91,6 +100,11 @@ def test_a_player_in_two_files_becomes_one_row_with_both_sets_of_components():
 def test_an_impossible_average_removes_only_that_sum():
     df = ngs.drop_impossible(build(c=[receiving(avg_separation=-2.0)]))
     r = row(df, "WR1")
-    assert r["ngs_sep_w"] is None
+    assert r["ngs_sep_w"] is None and r["ngs_separation"] is None
     assert r["ngs_targets"] == 10.0
     assert r["ngs_cush_w"] == 60.0
+
+
+def test_a_huge_yac_over_expected_on_one_catch_is_real_and_stays():
+    df = ngs.drop_impossible(build(c=[receiving(receptions=1, avg_yac_above_expectation=75.0)]))
+    assert row(df, "WR1")["ngs_yacoe_w"] == 75.0

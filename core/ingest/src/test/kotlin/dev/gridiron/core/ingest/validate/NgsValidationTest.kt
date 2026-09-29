@@ -7,7 +7,7 @@ import org.junit.jupiter.api.Test
 
 class NgsValidationTest {
     private fun ngs(id: String, targets: Double, sepAvg: Double = 3.0) =
-        PlayerWeek(2025, 1, "AAA", id, mutableMapOf("ngs_targets" to targets, "ngs_sep_w" to sepAvg * targets))
+        PlayerWeek(2025, 1, "AAA", id, mutableMapOf("ngs_targets" to targets, "ngs_sep_w" to sepAvg * targets, "ngs_separation" to sepAvg))
 
     private fun pbp(id: String, targets: Double) = PlayerWeek(2025, 1, "AAA", id, mutableMapOf("targets" to targets))
 
@@ -39,7 +39,18 @@ class NgsValidationTest {
         val warnings = mutableListOf<String>()
         checkNgs(2025, listOf(row), emptyList(), warnings)
         assertEquals(null, row.values["ngs_sep_w"])
+        assertEquals(null, row.values["ngs_separation"])
         assertEquals(10.0, row.values["ngs_targets"])
         assertTrue(warnings.single().contains("dropped"), "$warnings")
+    }
+
+    @Test
+    fun `a huge YAC over expected on one catch is real and stays`() {
+        // An 80-yard screen on a play the model expected to gain 5 after the catch.
+        val row = PlayerWeek(2025, 1, "AAA", "P1", mutableMapOf("ngs_receptions" to 1.0, "ngs_yacoe_w" to 75.0))
+        val warnings = mutableListOf<String>()
+        checkNgs(2025, listOf(row), emptyList(), warnings)
+        assertEquals(75.0, row.values["ngs_yacoe_w"])
+        assertEquals(emptyList<String>(), warnings)
     }
 }

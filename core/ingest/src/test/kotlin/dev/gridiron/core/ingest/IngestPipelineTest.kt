@@ -586,6 +586,7 @@ class IngestPipelineTest {
         val out = File(dir, "stats.db")
         pipeline.build(listOf(2025), null, out)
         assertEquals(30.0, ngsFact(out, "WR1", 2025, "ngs_sep_w"))
+        assertEquals(3.0, ngsFact(out, "WR1", 2025, "ngs_separation"))
         assertEquals(60.0, ngsFact(out, "WR1", 2025, "ngs_cush_w"))
         assertEquals(75.0, ngsFact(out, "QB1", 2025, "ngs_ttt_w"))
         assertEquals(6.5, ngsFact(out, "RB1", 2025, "ngs_ryoe"))
