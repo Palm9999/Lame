@@ -235,4 +235,41 @@ class CompareRepositoryTest {
         // Player headers, the shared ranked query and the scatter population.
         assertEquals(3, counting.count)
     }
+
+    @Test
+    fun `two kickers are ranked on their own stats, with no scatter`() = runTest {
+        val (a, b) = topIds(StatPack.KICKING, PositionFilter.K, 2)
+        val page = compare.compare(request(CompareSlot(a, 2025, season2025), CompareSlot(b, 2025, season2025)), catalog)
+        assertEquals(listOf(SlotStatus.OK, SlotStatus.OK), page.slots.map { it.status })
+        val rows = page.groups.flatMap { it.rows }
+        assertTrue(StatColumn.FG_ATT in rows.map { it.column })
+        assertTrue(StatColumn.EXPECTED_FANTASY_POINTS !in rows.map { it.column })
+        assertTrue(rows.all { r -> r.cells.all { it.text != "—" } })
+        assertNull(page.scatter)
+        assertEquals(5, page.radar!!.axes.size)
+    }
+
+    @Test
+    fun `two defenses are ranked on points allowed and read D-ST`() = runTest {
+        val (a, b) = topIds(StatPack.DEFENSE, PositionFilter.DST, 2)
+        val page = compare.compare(request(CompareSlot(a, 2025, season2025), CompareSlot(b, 2025, season2025)), catalog)
+        assertEquals(listOf(SlotStatus.OK, SlotStatus.OK), page.slots.map { it.status })
+        val allowed = page.groups.flatMap { it.rows }.first { it.column == StatColumn.POINTS_ALLOWED }
+        assertTrue(allowed.cells.all { it.percentile != null })
+        assertNull(page.scatter)
+        assertEquals(6, page.radar!!.axes.size)
+        assertTrue(page.slots.all { "D/ST" in it.detail }, page.slots.map { it.detail }.toString())
+    }
+
+    @Test
+    fun `a kicker beside a receiver shows dashes where a stat does not apply`() = runTest {
+        val kicker = topIds(StatPack.KICKING, PositionFilter.K, 1).single()
+        val receiver = topIds(StatPack.RECEIVING, PositionFilter.WR, 1).single()
+        val page = compare.compare(request(CompareSlot(kicker, 2025, season2025), CompareSlot(receiver, 2025, season2025)), catalog)
+        val fgAtt = page.groups.flatMap { it.rows }.first { it.column == StatColumn.FG_ATT }
+        assertNotEquals("—", fgAtt.cells[0].text)
+        assertEquals("—", fgAtt.cells[1].text)
+        val targets = page.groups.flatMap { it.rows }.first { it.column == StatColumn.TARGETS }
+        assertEquals("—", targets.cells[0].text)
+    }
 }

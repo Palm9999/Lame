@@ -164,7 +164,7 @@ public class CompareRepository(
             SlotStatus.MISSING -> "Not in the database"
             SlotStatus.NO_GAMES -> "No games in this range"
             else -> buildString {
-                append(position?.code ?: "–")
+                append(position?.let { Position.label(it.code) } ?: "–")
                 append(" · ")
                 append(player?.team ?: "FA")
                 append(" · ")
@@ -231,7 +231,8 @@ public class CompareRepository(
         headers: Map<String, PlayerHeader>,
         catalog: Catalog,
     ): ScatterUi? {
-        if (position == null) return null
+        // Kickers and defenses have no expected points, so there is nothing to plot.
+        if (position == null || position == Position.K || position == Position.DST) return null
         val qualifier = CompareMetricSets.qualifier(position)
         val seasonInfo = catalog.season(slot.season)
         val playedWeeks = (minOf(slot.weeks.last, seasonInfo.lastWeek) - slot.weeks.first + 1).coerceAtLeast(1)

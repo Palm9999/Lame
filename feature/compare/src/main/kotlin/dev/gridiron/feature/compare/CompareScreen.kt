@@ -129,9 +129,13 @@ private fun CompareContent(
     }
 
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val tabs = if (landscape) listOf(CompareTab.BARS, CompareTab.RADAR, CompareTab.SCATTER) else CompareTab.entries.toList()
-    val combinedLandscapeBars = landscape && (state.tab == CompareTab.BARS || state.tab == CompareTab.TABLE)
-    val selectedIndex = tabs.indexOf(if (combinedLandscapeBars) CompareTab.BARS else state.tab).coerceAtLeast(0)
+    // Kickers and defenses have no expected points, so a page without a scatter has no Scatter tab.
+    val hasScatter = state.page.scatter != null
+    val tab = if (state.tab == CompareTab.SCATTER && !hasScatter) CompareTab.BARS else state.tab
+    val tabs = (if (landscape) listOf(CompareTab.BARS, CompareTab.RADAR, CompareTab.SCATTER) else CompareTab.entries.toList())
+        .filter { it != CompareTab.SCATTER || hasScatter }
+    val combinedLandscapeBars = landscape && (tab == CompareTab.BARS || tab == CompareTab.TABLE)
+    val selectedIndex = tabs.indexOf(if (combinedLandscapeBars) CompareTab.BARS else tab).coerceAtLeast(0)
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -141,7 +145,7 @@ private fun CompareContent(
             PrimaryTabRow(selectedTabIndex = selectedIndex) {
                 tabs.forEach { t ->
                     Tab(
-                        selected = t == (if (combinedLandscapeBars) CompareTab.BARS else state.tab),
+                        selected = t == (if (combinedLandscapeBars) CompareTab.BARS else tab),
                         onClick = { onEvent(CompareEvent.TabSelected(t)) },
                         text = { Text(if (landscape && t == CompareTab.BARS) "Bars + Table" else t.label) },
                     )
@@ -160,15 +164,15 @@ private fun CompareContent(
                         BarsTab(state.page.groups, state.page.chartedSlots, Modifier.weight(1f))
                         TablePane(state, onEvent, Modifier.weight(1f))
                     }
-                    state.tab == CompareTab.BARS -> BarsTab(state.page.groups, state.page.chartedSlots, Modifier.fillMaxSize())
-                    state.tab == CompareTab.TABLE -> TablePane(state, onEvent, Modifier.fillMaxSize())
-                    state.tab == CompareTab.RADAR -> RadarTab(
+                    tab == CompareTab.BARS -> BarsTab(state.page.groups, state.page.chartedSlots, Modifier.fillMaxSize())
+                    tab == CompareTab.TABLE -> TablePane(state, onEvent, Modifier.fillMaxSize())
+                    tab == CompareTab.RADAR -> RadarTab(
                         state.page,
                         state.radarPair,
                         onRadarPairChanged = { a, b -> onEvent(CompareEvent.RadarPairChanged(a, b)) },
                         modifier = Modifier.fillMaxSize(),
                     )
-                    state.tab == CompareTab.SCATTER -> ScatterTab(
+                    tab == CompareTab.SCATTER -> ScatterTab(
                         state.page,
                         state.catalog,
                         state.selectedPoint,
