@@ -49,6 +49,7 @@ import dev.gridiron.core.statquery.StatColumn.WOPR
 import dev.gridiron.core.statquery.StatColumn.XP_ATT
 import dev.gridiron.core.statquery.StatColumn.XP_MADE
 import dev.gridiron.core.statquery.StatColumn.YAC
+import dev.gridiron.core.statquery.StatColumn.YARDS_ALLOWED
 import dev.gridiron.core.statquery.StatColumn
 
 public enum class CompareGroup(public val label: String) {
@@ -89,7 +90,7 @@ public object CompareMetricSets {
         CompareGroup.SCORING to listOf(FANTASY_POINTS, FG_MADE, XP_MADE),
     )
     private val DST_SET = mapOf(
-        CompareGroup.EFFICIENCY to listOf(POINTS_ALLOWED),
+        CompareGroup.EFFICIENCY to listOf(POINTS_ALLOWED, YARDS_ALLOWED),
         CompareGroup.SCORING to listOf(FANTASY_POINTS, DST_TDS, DST_SAFETIES),
         CompareGroup.CONTEXT to listOf(DST_SACKS, DST_INTERCEPTIONS, DST_FUMBLE_RECOVERIES),
     )
@@ -112,7 +113,7 @@ public object CompareMetricSets {
         Position.QB -> listOf(EPA_PER_DROPBACK, CPOE, DROPBACKS, CARRIES, PASSING_TDS, FPOE)
         Position.RB, Position.FB -> listOf(CARRY_SHARE, TARGET_SHARE, RUSH_SUCCESS_RATE, RUSH_EPA_PER_CARRY, GL_CARRIES, SNAP_SHARE, FPOE)
         Position.K -> listOf(FG_ATT, FG_MADE, FG_MADE_50, XP_MADE, FANTASY_POINTS)
-        Position.DST -> listOf(POINTS_ALLOWED, DST_SACKS, DST_INTERCEPTIONS, DST_FUMBLE_RECOVERIES, DST_TDS, FANTASY_POINTS)
+        Position.DST -> listOf(POINTS_ALLOWED, YARDS_ALLOWED, DST_SACKS, DST_INTERCEPTIONS, DST_FUMBLE_RECOVERIES, DST_TDS, FANTASY_POINTS)
         else -> listOf(TARGET_SHARE, AIR_YARDS_SHARE, ADOT, RACR, YAC, RZ_TARGETS, FPOE)
     }
 

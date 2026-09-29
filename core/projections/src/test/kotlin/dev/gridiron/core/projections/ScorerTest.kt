@@ -54,4 +54,12 @@ class ScorerTest {
     fun `a week without points allowed scores no tier`() {
         assertEquals(3.0, score(mapOf(Components.FG_MADE_0_39 to 1.0), ScoringPresets.PPR, Position.K), 1e-9)
     }
+
+    @Test
+    fun `a D-ST week scores its yards tier, and a week without yards scores none`() {
+        val defense = mapOf(Components.DST_SACKS to 2.0, Components.POINTS_ALLOWED to 0.0, Components.YARDS_ALLOWED to 250.0)
+        // 2 sacks, 5 for a shutout, 2 for 200-299 yards.
+        assertEquals(9.0, score(defense, ScoringPresets.STANDARD, Position.DST), 1e-9)
+        assertEquals(7.0, score(defense - Components.YARDS_ALLOWED, ScoringPresets.STANDARD, Position.DST), 1e-9)
+    }
 }

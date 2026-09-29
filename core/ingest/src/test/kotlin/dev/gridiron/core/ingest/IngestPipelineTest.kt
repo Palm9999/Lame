@@ -134,7 +134,7 @@ class IngestPipelineTest {
         assertEquals(emptyList<Int>(), report.reused)
         val meta = readMeta(out)!!
         assertEquals("8", meta["schema_version"])
-        assertEquals("4", meta["ingest_version"])
+        assertEquals("5", meta["ingest_version"])
         assertEquals("2024,2025", meta["seasons"])
         assertEquals("1", meta["expected_through_week:2025"])
         assertNotNull(meta[Sources.metaKey(Input.PBP, 2025)])
@@ -519,9 +519,9 @@ class IngestPipelineTest {
 
         pipeline.build(listOf(2025), previous = null, out = out)
 
-        // The fixture's plays score nothing: both defenses allowed 0, a shutout, and nothing else.
+        // The fixture's plays score nothing (a shutout) and gain 15 + 4 yards: BBB's defense allowed 19 net yards.
         assertEquals(
-            listOf(listOf("g", "1.0"), listOf("points_allowed", "0.0")),
+            listOf(listOf("g", "1.0"), listOf("points_allowed", "0.0"), listOf("yards_allowed", "19.0")),
             query(out, "SELECT metric_id, value FROM player_week_stat WHERE player_id = 'DST_BBB' ORDER BY 1"),
         )
         assertEquals(listOf(listOf("BBB D/ST", "DST", "BBB")), query(out, "SELECT full_name, position, team FROM player WHERE player_id = 'DST_BBB'"))

@@ -8,11 +8,11 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.gridiron.core.data.DecimalInput
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.model.BonusStat
-import dev.gridiron.core.model.PointsAllowedTier
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.ScoringRule
+import dev.gridiron.core.model.ScoringTier
 import dev.gridiron.core.model.YardageBonus
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
@@ -26,7 +26,10 @@ import kotlinx.coroutines.launch
 /** One bonus row's fields as typed, before they're parsed into a [YardageBonus]. */
 internal data class BonusDraft(val key: Int, val stat: BonusStat, val min: String, val max: String, val points: String)
 
-/** One points-allowed tier's fields as typed. */
+/** Yards-tier drafts index from here, so no draft key repeats across the two lists; new rows count from 1000. */
+private const val YARD_KEY_BASE = 100
+
+/** One tier's fields as typed (points allowed or yards allowed). */
 internal data class TierDraft(val key: Int, val min: String, val points: String)
 
 /** Which field an error message belongs to. */
@@ -39,6 +42,8 @@ internal sealed interface FieldKey {
     data class BonusPoints(val key: Int) : FieldKey
     data class TierMin(val key: Int) : FieldKey
     data class TierPoints(val key: Int) : FieldKey
+    data class YardTierMin(val key: Int) : FieldKey
+    data class YardTierPoints(val key: Int) : FieldKey
 }
 
 internal sealed interface EditState {
@@ -52,6 +57,7 @@ internal sealed interface EditState {
         val reception: ImmutableMap<Position, String>,
         val bonuses: ImmutableList<BonusDraft>,
         val tiers: ImmutableList<TierDraft>,
+        val yardTiers: ImmutableList<TierDraft>,
         val readOnly: Boolean,
         val saved: Boolean = false,
     ) : EditState {
@@ -74,6 +80,9 @@ internal sealed interface EditEvent {
     data object TierAdded : EditEvent
     data class TierChanged(val key: Int, val draft: TierDraft) : EditEvent
     data class TierRemoved(val key: Int) : EditEvent
+    data object YardTierAdded : EditEvent
+    data class YardTierChanged(val key: Int, val draft: TierDraft) : EditEvent
+    data class YardTierRemoved(val key: Int) : EditEvent
     data object ResetToPreset : EditEvent
     data object Save : EditEvent
 }
@@ -111,30 +120,45 @@ private fun EditState.Editing.validate(): Pair<Map<FieldKey, String>, ScoringPro
         if (points == null) errors[FieldKey.BonusPoints(b.key)] = NUMBER
         if (min == null || points == null || (max != null && max <= min)) null else YardageBonus(b.stat, min, max, points)
     }
-    val starts = tiers.map { it.min.trim().toIntOrNull()?.takeIf { m -> m in 0..99 } }
-    val tiers = tiers.mapIndexedNotNull { i, t ->
-        val min = starts[i]
-        when {
-            min == null -> errors[FieldKey.TierMin(t.key)] = "Whole points, 0–99"
-            starts.take(i).contains(min) -> errors[FieldKey.TierMin(t.key)] = "Another tier starts at $min"
-        }
-        val points = (DecimalInput.parse(t.points) as? DecimalInput.Result.Value)?.value
-        if (points == null) errors[FieldKey.TierPoints(t.key)] = NUMBER
-        if (min == null || points == null) null else PointsAllowedTier(min, points)
-    }.sortedBy { it.min }
-    // Every game must land in a tier, so one has to start at 0. The first row carries the message, unless it has its own.
-    if (tiers.isNotEmpty() && tiers.first().min != 0) {
-        val firstRow = FieldKey.TierMin(this@validate.tiers.first().key)
-        if (firstRow !in errors) errors[firstRow] = "One tier must start at 0"
-    }
+    val pointsTiers = tierList(tiers, 99, "points", FieldKey::TierMin, FieldKey::TierPoints, errors)
+    val yardsTiers = tierList(yardTiers, 9999, "yards", FieldKey::YardTierMin, FieldKey::YardTierPoints, errors)
     if (errors.isNotEmpty()) return errors to null
     return errors to original.copy(
         name = name.trim(),
         weights = weights.filterValues { it != 0.0 },
         receptionByPosition = reception,
         yardageBonuses = bonuses,
-        pointsAllowedTiers = tiers,
+        pointsAllowedTiers = pointsTiers,
+        yardsAllowedTiers = yardsTiers,
     )
+}
+
+/** Validates one tier list's drafts: a whole start in 0..[maxStart], no repeats, one at 0, and a number for the points. */
+private fun tierList(
+    drafts: List<TierDraft>,
+    maxStart: Int,
+    unit: String,
+    minKey: (Int) -> FieldKey,
+    pointsKey: (Int) -> FieldKey,
+    errors: MutableMap<FieldKey, String>,
+): List<ScoringTier> {
+    val starts = drafts.map { it.min.trim().toIntOrNull()?.takeIf { m -> m in 0..maxStart } }
+    val tiers = drafts.mapIndexedNotNull { i, t ->
+        val min = starts[i]
+        when {
+            min == null -> errors[minKey(t.key)] = "Whole $unit, 0–$maxStart"
+            starts.take(i).contains(min) -> errors[minKey(t.key)] = "Another tier starts at $min"
+        }
+        val points = (DecimalInput.parse(t.points) as? DecimalInput.Result.Value)?.value
+        if (points == null) errors[pointsKey(t.key)] = NUMBER
+        if (min == null || points == null) null else ScoringTier(min, points)
+    }.sortedBy { it.min }
+    // Every game must land in a tier, so one has to start at 0. The first row carries the message, unless it has its own.
+    if (tiers.isNotEmpty() && tiers.first().min != 0) {
+        val firstRow = minKey(drafts.first().key)
+        if (firstRow !in errors) errors[firstRow] = "One tier must start at 0"
+    }
+    return tiers
 }
 
 internal fun ScoringProfile.toEditing(readOnly: Boolean): EditState.Editing = EditState.Editing(
@@ -147,6 +171,7 @@ internal fun ScoringProfile.toEditing(readOnly: Boolean): EditState.Editing = Ed
         BonusDraft(i, b.stat, b.min.toString(), b.maxExclusive?.toString().orEmpty(), DecimalInput.format(b.points))
     }.toImmutableList(),
     tiers = pointsAllowedTiers.mapIndexed { i, t -> TierDraft(i, t.min.toString(), DecimalInput.format(t.points)) }.toImmutableList(),
+    yardTiers = yardsAllowedTiers.mapIndexed { i, t -> TierDraft(YARD_KEY_BASE + i, t.min.toString(), DecimalInput.format(t.points)) }.toImmutableList(),
     readOnly = readOnly,
 )
 
@@ -183,6 +208,12 @@ internal class ScoringEditViewModel(private val profileId: String, private val r
             }
             is EditEvent.TierChanged -> s.copy(tiers = s.tiers.map { if (it.key == event.key) event.draft else it }.toImmutableList())
             is EditEvent.TierRemoved -> s.copy(tiers = s.tiers.filterNot { it.key == event.key }.toImmutableList())
+            EditEvent.YardTierAdded -> {
+                val next = (s.yardTiers.mapNotNull { it.min.trim().toIntOrNull() }.maxOrNull() ?: -50) + 50
+                s.copy(yardTiers = (s.yardTiers + TierDraft(nextKey++, next.toString(), "0")).toImmutableList())
+            }
+            is EditEvent.YardTierChanged -> s.copy(yardTiers = s.yardTiers.map { if (it.key == event.key) event.draft else it }.toImmutableList())
+            is EditEvent.YardTierRemoved -> s.copy(yardTiers = s.yardTiers.filterNot { it.key == event.key }.toImmutableList())
             EditEvent.ResetToPreset -> {
                 val preset = s.original.basedOn?.let(ScoringPresets::byId) ?: return
                 preset.copy(id = s.original.id, name = s.name.ifBlank { s.original.name }, basedOn = s.original.basedOn)

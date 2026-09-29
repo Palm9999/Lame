@@ -5,6 +5,7 @@ import dev.gridiron.core.model.PointsAllowedTier
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.ScoringRule
+import dev.gridiron.core.model.ScoringTier
 import dev.gridiron.core.model.YardageBonus
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.testing.FakePrefsSource
@@ -218,5 +219,68 @@ class ScoringEditViewModelTest {
         (vm.state.value as EditState.Editing).tiers.forEach { vm.onEvent(EditEvent.TierRemoved(it.key)) }
         vm.onEvent(EditEvent.ResetToPreset)
         assertEquals(ScoringPresets.PPR.pointsAllowedTiers, (vm.state.value as EditState.Editing).profile!!.pointsAllowedTiers)
+    }
+
+    @Test
+    fun editingYardsTiersAndSavingPersistsThemInOrder() = runTest(dispatcher) {
+        repo.duplicate(ScoringPresets.PPR.id, "Mine")
+        val vm = ScoringEditViewModel("u1", repo)
+        advanceUntilIdle()
+        val drafts = (vm.state.value as EditState.Editing).yardTiers
+        assertEquals(9, drafts.size)
+        assertEquals(100, drafts.first().key)
+        // Keep 0, 200 and 300 (changing 200's points), drop the rest.
+        for (d in drafts.filter { it.min !in setOf("0", "200", "300") }) vm.onEvent(EditEvent.YardTierRemoved(d.key))
+        val two = (vm.state.value as EditState.Editing).yardTiers.single { it.min == "200" }
+        vm.onEvent(EditEvent.YardTierChanged(two.key, two.copy(points = "2.5")))
+        vm.onEvent(EditEvent.YardTierAdded)
+        val added = (vm.state.value as EditState.Editing).yardTiers.last()
+        assertEquals("350", added.min) // 50 above the highest start
+        vm.onEvent(EditEvent.YardTierChanged(added.key, added.copy(min = "400", points = "-3")))
+        vm.onEvent(EditEvent.Save)
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf(ScoringTier(0, 5.0), ScoringTier(200, 2.5), ScoringTier(300, 0.0), ScoringTier(400, -3.0)),
+            prefs.current.profiles.single().yardsAllowedTiers,
+        )
+        assertEquals(ScoringPresets.PPR.pointsAllowedTiers, prefs.current.profiles.single().pointsAllowedTiers)
+    }
+
+    @Test
+    fun yardsTiersNeedAZeroStartAndNoRepeatsAndSayWholeYards() = runTest(dispatcher) {
+        repo.duplicate(ScoringPresets.PPR.id, "Mine")
+        val vm = ScoringEditViewModel("u1", repo)
+        advanceUntilIdle()
+        val tiers = (vm.state.value as EditState.Editing).yardTiers
+        val zero = tiers.first()
+        vm.onEvent(EditEvent.YardTierChanged(zero.key, zero.copy(min = "50")))
+        var s = vm.state.value as EditState.Editing
+        assertEquals("One tier must start at 0", s.errors[FieldKey.YardTierMin(zero.key)])
+        assertNull(s.profile)
+
+        vm.onEvent(EditEvent.YardTierChanged(zero.key, zero))
+        vm.onEvent(EditEvent.YardTierChanged(tiers[2].key, tiers[2].copy(min = "100")))
+        s = vm.state.value as EditState.Editing
+        assertEquals("Another tier starts at 100", s.errors[FieldKey.YardTierMin(tiers[2].key)])
+
+        vm.onEvent(EditEvent.YardTierChanged(tiers[2].key, tiers[2].copy(min = "10000")))
+        assertEquals("Whole yards, 0–9999", (vm.state.value as EditState.Editing).errors[FieldKey.YardTierMin(tiers[2].key)])
+
+        // A points tier at 100 (its own list allows 0–99 only) keeps its own message.
+        vm.onEvent(EditEvent.YardTierChanged(tiers[2].key, tiers[2]))
+        val points = (vm.state.value as EditState.Editing).tiers.first()
+        vm.onEvent(EditEvent.TierChanged(points.key, points.copy(min = "100")))
+        assertEquals("Whole points, 0–99", (vm.state.value as EditState.Editing).errors[FieldKey.TierMin(points.key)])
+    }
+
+    @Test
+    fun resetToPresetRestoresTheYardsTiers() = runTest(dispatcher) {
+        repo.duplicate(ScoringPresets.PPR.id, "Mine")
+        val vm = ScoringEditViewModel("u1", repo)
+        advanceUntilIdle()
+        (vm.state.value as EditState.Editing).yardTiers.forEach { vm.onEvent(EditEvent.YardTierRemoved(it.key)) }
+        vm.onEvent(EditEvent.ResetToPreset)
+        assertEquals(ScoringPresets.PPR.yardsAllowedTiers, (vm.state.value as EditState.Editing).profile!!.yardsAllowedTiers)
     }
 }

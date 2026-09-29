@@ -19,6 +19,7 @@ internal val RANGE_CHECKS: List<RangeCheck> = listOf(
     RangeCheck("receptions", 0.0, 30.0),
     RangeCheck("targets", 0.0, 35.0),
     RangeCheck("carries", 0.0, 50.0),
+    RangeCheck("yards_allowed", 0.0, 800.0, "net yards in one game"),
     RangeCheck("carries_eff", 0.0, 50.0),
     RangeCheck("passing_yards", -50.0, 800.0),
     RangeCheck("receiving_yards", -50.0, 400.0),
@@ -130,15 +131,17 @@ internal fun validateDatabase(conn: SQLiteConnection): List<String> {
         if (orphan > 0) problems += "coherence: 50+ $kind TDs without a 40+ count in $orphan player-weeks"
     }
 
-    // The profile's tiers score points allowed, so every D/ST week needs it (a shutout stores 0).
-    val unscored = conn.count(
-        """SELECT COUNT(*) FROM (
-             SELECT MAX(metric_id = 'points_allowed') AS scored
-             FROM player_week_stat WHERE player_id LIKE 'DST\_%' ESCAPE '\'
-             GROUP BY player_id, season, week)
-           WHERE scored = 0""",
-    )
-    if (unscored > 0) problems += "D/ST weeks without their points allowed: $unscored"
+    // The profile's tiers score points and yards allowed, so every D/ST week needs both (a shutout stores 0).
+    for ((id, label) in listOf("points_allowed" to "points allowed", "yards_allowed" to "yards allowed")) {
+        val unscored = conn.count(
+            """SELECT COUNT(*) FROM (
+                 SELECT MAX(metric_id = '$id') AS scored
+                 FROM player_week_stat WHERE player_id LIKE 'DST\_%' ESCAPE '\'
+                 GROUP BY player_id, season, week)
+               WHERE scored = 0""",
+        )
+        if (unscored > 0) problems += "D/ST weeks without their $label: $unscored"
+    }
 
     val computed = conn.prepare(
         "SELECT m.id FROM metric m JOIN player_week_stat s ON s.metric_id = m.id WHERE m.computed = 1 GROUP BY m.id",

@@ -48,5 +48,6 @@ public fun score(components: Map<Component, Double>, profile: ScoringProfile,
     // One D/ST game's points allowed land in one of the profile's tiers. A map
     // without them (anyone else's week) scores no tier.
     components[Components.POINTS_ALLOWED]?.let { total += profile.pointsAllowedPoints(it) }
+    components[Components.YARDS_ALLOWED]?.let { total += profile.yardsAllowedPoints(it) }
     return total
 }

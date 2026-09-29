@@ -75,7 +75,7 @@ The third chip row filters by team, minimum snap share and any stat (**Filters**
 | **Custom scoring** | **Done.** PPR/Half/Standard presets plus your own profiles, edited on-device; FPTS, xFP and FPOE flow into the Grid and Compare under whichever profile is active. |
 | **Live data** | **Done.** Stats build on the phone; ESPN injuries and news on a News screen, Player pages and Grid badges; seasons chosen in Settings. |
 | **Projections** | **Done.** Weekly and rest-of-season projections for QB, RB, WR, TE, K and D/ST from `core/forecast/`, a factor waterfall, betting-props blend (with your Odds API key), and an accuracy page backed by a CI gate. Details in [`CLAUDE.md`](CLAUDE.md). |
-| **Kickers and D/ST** | **Done.** Own stat packs, editable points-allowed tiers, and K and D/ST chips on the Grid. Compare and the Player page's season stats cover them too. |
+| **Kickers and D/ST** | **Done.** Own stat packs, editable points-allowed and yards-allowed tiers, and K and D/ST chips on the Grid. Compare and the Player page's season stats cover them too. |
 | Saved Grid presets | Not built. |
 
 ## Modules

@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 4
+public const val FORECAST_VERSION: Int = 5
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -85,6 +85,14 @@ internal object K {
     // What defenses got against an offense, shrunk this many games, and capped to 1 ± DST_CAP of the league's.
     const val DST_OPP_K = 8.0
     const val DST_CAP = 0.30
+    // Yards allowed (net): a defense's own rate is shrunk this many games toward the league's. The opponent's yards
+    // use DST_OPP_K and DST_CAP. A line scales them by (its ratio to expected points) ^ DST_YA_SCRIPT_ELASTICITY,
+    // since yards move about half as far as points do. The spread is DST_YA_CV of the mean: real games' residual
+    // around each team-season's own average was 0.239 of the league mean (2024-2025, 1,140 team-games); there is no
+    // posted yards line to measure misses against.
+    const val DST_YA_K = 6.0
+    const val DST_YA_SCRIPT_ELASTICITY = 0.5
+    const val DST_YA_CV = 0.25
     // Points allowed are about normal around their mean. Its spread, stored as the projection's variance,
     // is real team scores' spread around their implied points, measured once this many lined team-games
     // are in; about 10 points before that.

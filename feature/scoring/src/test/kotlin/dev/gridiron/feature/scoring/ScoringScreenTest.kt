@@ -130,4 +130,18 @@ class ScoringScreenTest {
 
         assertEquals(listOf(EditEvent.TierRemoved(8), EditEvent.TierAdded), events)
     }
+
+    @Test
+    fun yardsTiersLight() {
+        val state = custom.toEditing(readOnly = false)
+        val events = mutableListOf<EditEvent>()
+        compose.setContent { GridironTheme(darkTheme = false) { ScoringEditScreen(state, { events += it }, {}) } }
+
+        compose.onNodeWithTag("editorFields").performScrollToNode(hasTestTag("addYTier"))
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/scoring_5_yards_tiers.png")
+        compose.onNodeWithTag("ytier:remove:108").performClick() // the 550+ tier
+        compose.onNodeWithTag("addYTier").performClick()
+
+        assertEquals(listOf(EditEvent.YardTierRemoved(108), EditEvent.YardTierAdded), events)
+    }
 }

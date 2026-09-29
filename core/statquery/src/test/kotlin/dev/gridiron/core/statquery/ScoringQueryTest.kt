@@ -6,6 +6,7 @@ import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.ScoringRule
+import dev.gridiron.core.model.ScoringTier
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.model.YardageBonus
 import dev.gridiron.core.statquery.StatColumn.EXPECTED_FANTASY_POINTS
@@ -216,6 +217,48 @@ class ScoringQueryTest {
         val yahoo = custom().copy(pointsAllowedTiers = listOf(PointsAllowedTier(0, 10.0), PointsAllowedTier(14, 1.0), PointsAllowedTier(21, 0.0)))
         assertEquals(1.0, db.grid(fantasy(yahoo)).single().value(FANTASY_POINTS)!!, EPS)
         assertEquals(0.0, db.grid(fantasy(custom())).single().value(FANTASY_POINTS)!!, EPS)
+    }
+
+    @Test
+    fun `a team defense's week scores its yards tier as well as its points tier`() {
+        db.player("DST_KC", "KC D/ST", position = "DST", team = "KC")
+        db.week("DST_KC", 1, C.DST_SACKS to 3, C.POINTS_ALLOWED to 10, C.YARDS_ALLOWED to 250)
+        db.week("DST_KC", 2, C.POINTS_ALLOWED to 46, C.YARDS_ALLOWED to 560)
+        db.week("DST_KC", 3, C.POINTS_ALLOWED to 0, C.YARDS_ALLOWED to 0)
+        // Week 1: 3 sacks, 7-13 allowed is 3, 200-299 yards is 2: 8. Week 2: -5 and -7: -12. Week 3, a shutout of 0 yards: 5 and 5: 10.
+        assertEquals(6.0, db.grid(fantasy(ScoringPresets.PPR)).single().value(FANTASY_POINTS)!!, EPS)
+    }
+
+    @Test
+    fun `each week scores its own yards tier, never the tier of the weeks' total`() {
+        db.player("DST_KC", "KC D/ST", position = "DST", team = "KC")
+        db.week("DST_KC", 1, C.YARDS_ALLOWED to 299)
+        db.week("DST_KC", 2, C.YARDS_ALLOWED to 300)
+        // 2 + 0, and the points-allowed CASE sees NULL and adds nothing. The total, 599, would be one -7 tier.
+        assertEquals(2.0, db.grid(fantasy(ScoringPresets.PPR.copy(pointsAllowedTiers = emptyList()))).single().value(FANTASY_POINTS)!!, EPS)
+    }
+
+    @Test
+    fun `no yards tiers score no yards, and a week without yards scores none`() {
+        db.player("DST_KC", "KC D/ST", position = "DST", team = "KC")
+        db.player("k1", "Place Kicker", position = "K")
+        db.week("DST_KC", 1, C.POINTS_ALLOWED to 20, C.YARDS_ALLOWED to 100)
+        db.week("k1", 1, C.FG_MADE_0_39 to 1)
+        val none = ScoringPresets.PPR.copy(yardsAllowedTiers = emptyList())
+        val rows = db.grid(fantasy(none)).associate { it.playerId to it.value(FANTASY_POINTS)!! }
+        assertEquals(0.0, rows.getValue("DST_KC"), EPS) // 18-21 points allowed: 0, and no yards tiers
+        assertEquals(3.0, rows.getValue("k1"), EPS)
+        // With ESPN's tiers a kicker still scores no yards: his pivot column is NULL, not a shutout.
+        assertEquals(3.0, db.grid(fantasy(ScoringPresets.PPR)).single { it.playerId == "k1" }.value(FANTASY_POINTS)!!, EPS)
+    }
+
+    @Test
+    fun `a profile's own yards tiers score yards allowed, and equal profiles give identical SQL`() {
+        db.player("DST_KC", "KC D/ST", position = "DST", team = "KC")
+        db.week("DST_KC", 1, C.YARDS_ALLOWED to 320)
+        val own = ScoringPresets.PPR.copy(pointsAllowedTiers = emptyList(), yardsAllowedTiers = listOf(ScoringTier(0, 10.0), ScoringTier(300, -2.0)))
+        assertEquals(-2.0, db.grid(fantasy(own)).single().value(FANTASY_POINTS)!!, EPS)
+        assertEquals(StatQueryBuilder.grid(fantasy(own)), StatQueryBuilder.grid(fantasy(own.copy())))
     }
 
     @Test

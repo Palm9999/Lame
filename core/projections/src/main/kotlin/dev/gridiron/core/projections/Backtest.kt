@@ -27,9 +27,12 @@ public const val BACKTEST_DRAWS: Int = 250
 /** The short-memory baseline's window, in games played. */
 private const val LAST_GAMES = 4
 
-/** Every stat a real game's fantasy score reads, points allowed (the tiers') included. */
+/** Every stat a real game's fantasy score reads, points and yards allowed (the tiers') included. */
 public val ACTUAL_SCORING_COMPONENTS: List<Component> =
-    (RULE_INPUTS.values.flatMap { inputs -> inputs.actual.map { it.component } } + BONUS_INPUTS.values.flatten() + Components.POINTS_ALLOWED)
+    (
+        RULE_INPUTS.values.flatMap { inputs -> inputs.actual.map { it.component } } + BONUS_INPUTS.values.flatten() +
+            Components.POINTS_ALLOWED + Components.YARDS_ALLOWED
+    )
         .distinct()
         .sortedBy { it.id }
 

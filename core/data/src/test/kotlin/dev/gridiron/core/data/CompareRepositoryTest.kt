@@ -257,7 +257,9 @@ class CompareRepositoryTest {
         val allowed = page.groups.flatMap { it.rows }.first { it.column == StatColumn.POINTS_ALLOWED }
         assertTrue(allowed.cells.all { it.percentile != null })
         assertNull(page.scatter)
-        assertEquals(6, page.radar!!.axes.size)
+        val yards = page.groups.flatMap { it.rows }.first { it.column == StatColumn.YARDS_ALLOWED }
+        assertTrue(yards.cells.all { it.percentile != null })
+        assertEquals(7, page.radar!!.axes.size)
         assertTrue(page.slots.all { "D/ST" in it.detail }, page.slots.map { it.detail }.toString())
     }
 

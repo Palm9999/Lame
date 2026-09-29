@@ -287,6 +287,9 @@ _M: list[Metric] = [
     Metric("points_allowed", "Points Allowed", "PA", "defense",
            "Points the opponent scored, however it scored them.",
            positions=("DST",), higher_is_better=False, decimals=0),
+    Metric("yards_allowed", "Yards Allowed", "YA", "defense",
+           "Net yards the opponent gained: rushing plus passing, sacks subtracted.",
+           positions=("DST",), higher_is_better=False, decimals=0),
 
     # ---------------- Internal range-aggregation components ----------------
     *[
@@ -340,6 +343,7 @@ DIST_FAMILIES: dict[str, str] = {
     )},
     "dst_sacks": "negbinom",
     "points_allowed": "normal",
+    "yards_allowed": "normal",
 }
 
 METRICS: dict[str, Metric] = {

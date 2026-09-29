@@ -24,7 +24,7 @@ class MetricsTest {
     @Test
     fun `ids are unique and every Python metric is here`() {
         assertEquals(METRICS.size, byId.size)
-        assertEquals(99, METRICS.size)
+        assertEquals(100, METRICS.size)
     }
 
     @Test
@@ -74,7 +74,7 @@ class MetricsTest {
             "receiving_first_downs", "receiving_2pt", "fumbles_lost",
             "fg_att", "fg_made", "fg_att_0_39", "fg_att_40_49", "fg_att_50", "fg_made_0_39", "fg_made_40_49", "fg_made_50",
             "fg_missed", "xp_att", "xp_made", "xp_missed",
-            "dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "points_allowed",
+            "dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "points_allowed", "yards_allowed",
         )
         for (id in projected) {
             assertTrue(byId.getValue(id).distFamily in setOf("negbinom", "binomial", "gamma", "poisson", "normal"), id)
@@ -104,18 +104,22 @@ class MetricsTest {
     }
 
     @Test
-    fun `team defense metrics are visible, and only points allowed keeps its zeros`() {
+    fun `team defense metrics are visible, and only points and yards allowed keep their zeros`() {
         val defense = listOf("dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties")
-        for (id in defense + "points_allowed") {
+        val allowed = listOf("points_allowed", "yards_allowed")
+        for (id in defense + allowed) {
             val m = byId.getValue(id)
             assertFalse(m.isInternal, id)
             assertEquals(listOf("DST"), m.positions, id)
             assertEquals("defense", m.group, id)
-            assertEquals(id != "points_allowed", id in SPARSE_METRIC_IDS, id)
+            assertEquals(id !in allowed, id in SPARSE_METRIC_IDS, id)
         }
         assertEquals("negbinom", byId.getValue("dst_sacks").distFamily)
         assertEquals("poisson", byId.getValue("dst_tds").distFamily)
-        assertEquals("normal", byId.getValue("points_allowed").distFamily)
-        assertFalse(byId.getValue("points_allowed").higherIsBetter)
+        for (id in allowed) {
+            assertEquals("normal", byId.getValue(id).distFamily, id)
+            assertFalse(byId.getValue(id).higherIsBetter, id)
+        }
+        assertEquals("YA", byId.getValue("yards_allowed").abbr)
     }
 }

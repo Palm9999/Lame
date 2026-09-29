@@ -127,9 +127,15 @@ private val DEFENSE: List<Metric> = listOf(
     Triple("dst_safeties", "SAF", "D/ST Safeties" to "Safeties the team's defense scored."),
 ).map { (id, abbr, text) ->
     Metric(id, text.first, abbr, "defense", text.second, positions = TEAM_DEFENSE, decimals = 0, sparse = true)
-} + Metric(
-    "points_allowed", "Points Allowed", "PA", "defense", "Points the opponent scored, however it scored them.",
-    positions = TEAM_DEFENSE, higherIsBetter = false, decimals = 0,
+} + listOf(
+    Metric(
+        "points_allowed", "Points Allowed", "PA", "defense", "Points the opponent scored, however it scored them.",
+        positions = TEAM_DEFENSE, higherIsBetter = false, decimals = 0,
+    ),
+    Metric(
+        "yards_allowed", "Yards Allowed", "YA", "defense", "Net yards the opponent gained: rushing plus passing, sacks subtracted.",
+        positions = TEAM_DEFENSE, higherIsBetter = false, decimals = 0,
+    ),
 )
 
 private val REGISTRY: List<Metric> = listOf(
@@ -313,8 +319,9 @@ internal val DIST_FAMILIES: Map<String, String> = buildMap {
     )) put(id, "poisson")
     put("dst_sacks", "negbinom")
     for (id in listOf("dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties")) put(id, "poisson")
-    // One game's points allowed: the simulation draws it from a normal distribution and scores its tier.
+    // One game's points and yards allowed: the simulation draws them from a joint normal and scores their tiers.
     put("points_allowed", "normal")
+    put("yards_allowed", "normal")
 }
 
 internal val METRICS: List<Metric> = REGISTRY.map { it.copy(distFamily = DIST_FAMILIES[it.id] ?: it.distFamily) }

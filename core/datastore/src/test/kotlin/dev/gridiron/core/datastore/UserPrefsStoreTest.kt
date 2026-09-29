@@ -3,11 +3,13 @@ package dev.gridiron.core.datastore
 import dev.gridiron.core.model.BonusStat
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.ESPN_POINTS_ALLOWED
+import dev.gridiron.core.model.ESPN_YARDS_ALLOWED
 import dev.gridiron.core.model.PointsAllowedTier
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.ScoringRule
+import dev.gridiron.core.model.ScoringTier
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.model.YardageBonus
 import kotlinx.coroutines.CoroutineScope
@@ -182,7 +184,7 @@ class UserPrefsStoreTest {
         assertEquals(0.0, reread.weight(ScoringRule.FG_MISSED))
         assertEquals(0.0, reread.weight(ScoringRule.DST_SAFETY))
         assertEquals(emptyList<PointsAllowedTier>(), reread.pointsAllowedTiers)
-        assertTrue(file.readText().contains("\"formatVersion\":2"), file.readText())
+        assertTrue(file.readText().contains("\"formatVersion\":3"), file.readText())
     }
 
     @Test
@@ -197,5 +199,41 @@ class UserPrefsStoreTest {
         val odd = withStore { it.prefs.first() }.profiles.single()
         assertEquals("Odd", odd.name)
         assertEquals(emptyList<PointsAllowedTier>(), odd.pointsAllowedTiers)
+    }
+
+    @Test
+    fun `a version-2 profile gets ESPN's yards tiers once, and a saved empty list stays empty at version 3`() {
+        file.writeText(
+            """{"formatVersion": 2, "profiles": [{"id": "u1", "name": "League", "pointsAllowed": [{"min": 0, "points": 8.0}]}], "activeProfileId": "u1"}""",
+        )
+        val migrated = withStore { it.prefs.first() }.profiles.single()
+        assertEquals(ESPN_YARDS_ALLOWED, migrated.yardsAllowedTiers)
+        assertEquals(listOf(ScoringTier(0, 8.0)), migrated.pointsAllowedTiers) // points tiers untouched
+
+        withStore { store -> store.update { p -> p.copy(profiles = listOf(migrated.copy(yardsAllowedTiers = emptyList()))) } }
+        assertTrue(file.readText().contains("\"formatVersion\":3"), file.readText())
+        assertEquals(emptyList<ScoringTier>(), withStore { it.prefs.first() }.profiles.single().yardsAllowedTiers)
+    }
+
+    @Test
+    fun `a version-1 profile gets both tier lists, and yards tiers survive a reopen`() {
+        file.writeText("""{"formatVersion": 1, "profiles": [{"id": "u1", "name": "Old league"}], "activeProfileId": "u1"}""")
+        val migrated = withStore { it.prefs.first() }.profiles.single()
+        assertEquals(ESPN_POINTS_ALLOWED, migrated.pointsAllowedTiers)
+        assertEquals(ESPN_YARDS_ALLOWED, migrated.yardsAllowedTiers)
+
+        val tiers = listOf(ScoringTier(0, 6.0), ScoringTier(250, 1.5), ScoringTier(400, -2.0))
+        withStore { store -> store.update { it.copy(profiles = listOf(migrated.copy(yardsAllowedTiers = tiers))) } }
+        assertEquals(tiers, withStore { it.prefs.first() }.profiles.single().yardsAllowedTiers)
+    }
+
+    @Test
+    fun `an invalid stored yards list is dropped with the profile kept`() {
+        file.writeText(
+            """{"formatVersion": 3, "profiles": [{"id": "u1", "name": "Odd", "yardsAllowed": [{"min": 100, "points": 3.0}]}]}""",
+        )
+        val odd = withStore { it.prefs.first() }.profiles.single()
+        assertEquals("Odd", odd.name)
+        assertEquals(emptyList<ScoringTier>(), odd.yardsAllowedTiers)
     }
 }

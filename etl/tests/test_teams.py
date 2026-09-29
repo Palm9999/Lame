@@ -78,6 +78,13 @@ def test_a_shutout_stores_its_zero_points_allowed():
     assert teams.dst_weekly(_defense(0)).to_dicts()[0]["points_allowed"] == 0
 
 
+def test_a_team_week_carries_its_yards_allowed_and_a_shutout_keeps_its_zero():
+    row = teams.dst_weekly(_defense(17)).to_dicts()[0]
+    assert row["yards_allowed"] == 300
+    zero = _defense(0).with_columns(yards_allowed=pl.lit(0.0))
+    assert teams.dst_weekly(zero).to_dicts()[0]["yards_allowed"] == 0
+
+
 def test_a_team_defense_is_named_for_its_team():
     assert teams.dst_players(["KC"]).to_dicts() == [
         {"player_id": "DST_KC", "full_name": "KC D/ST", "position": "DST", "team": "KC", "pfr_player_id": None},

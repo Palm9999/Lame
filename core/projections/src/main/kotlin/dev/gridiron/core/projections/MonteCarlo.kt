@@ -47,20 +47,29 @@ public fun simulate(
     val samples = DoubleArray(draws)
     val componentMap = HashMap<Component, Double>(distributions.size)
 
-    // A D/ST's points allowed score a tier per game, so each of its `g` games is drawn on its own
-    // and scored through the profile's tiers; everything else is drawn once and scored by score().
+    // A D/ST's points and yards allowed score a tier per game, so each of its `g` games is drawn on its own,
+    // the two together, and scored through the profile's tiers; everything else is drawn once and scored by score().
     val allowed = distributions.firstOrNull { it.component == Components.POINTS_ALLOWED }
-    val independent = distributions.filter { it.component != Components.POINTS_ALLOWED }
+    val yards = distributions.firstOrNull { it.component == Components.YARDS_ALLOWED }
+    val independent = distributions.filter { it.component != Components.POINTS_ALLOWED && it.component != Components.YARDS_ALLOWED }
     val games = distributions.firstOrNull { it.component == Components.GAMES }?.mean?.roundToInt()?.coerceAtLeast(1) ?: 1
-    val perGameMean = (allowed?.mean ?: 0.0) / games
-    val perGameSd = sqrt((allowed?.variance ?: 0.0).coerceAtLeast(0.0) / games)
+    fun perGameMean(d: DistributionSpec?) = (d?.mean ?: 0.0) / games
+    fun perGameSd(d: DistributionSpec?) = sqrt((d?.variance ?: 0.0).coerceAtLeast(0.0) / games)
 
     for (i in 0 until draws) {
         for (spec in independent) {
             componentMap[spec.component] = drawOne(spec, rng)
         }
         var points = score(componentMap, profile, position)
-        if (allowed != null) repeat(games) { points += profile.pointsAllowedPoints(drawAllowed(perGameMean, perGameSd, rng)) }
+        if (allowed != null || yards != null) {
+            repeat(games) {
+                val (pa, ya) = drawJointAllowed(
+                    perGameMean(allowed), perGameSd(allowed), perGameMean(yards), perGameSd(yards), DST_POINTS_YARDS_CORRELATION, rng,
+                )
+                if (allowed != null) points += profile.pointsAllowedPoints(pa)
+                if (yards != null) points += profile.yardsAllowedPoints(ya)
+            }
+        }
         samples[i] = points
     }
     samples.sort()
@@ -92,6 +101,27 @@ private fun drawOne(spec: DistributionSpec, rng: SplittableRandom): Double {
 /** One game's points allowed: Normal([mean], [sd]) on whole points, never below 0. */
 private fun drawAllowed(mean: Double, sd: Double, rng: SplittableRandom): Double =
     Math.round(mean + sd * gaussian(rng)).toDouble().coerceAtLeast(0.0)
+
+/**
+ * One game's points and yards allowed, Normal on whole units, never below 0,
+ * correlated at [correlation]. One gaussian draw decides the points, and the
+ * yards take [correlation] of it plus an independent draw for the rest. With
+ * no yards (a zero spread and mean) the draw is the same as [drawAllowed]'s.
+ */
+internal fun drawJointAllowed(
+    pointsMean: Double,
+    pointsSd: Double,
+    yardsMean: Double,
+    yardsSd: Double,
+    correlation: Double,
+    rng: SplittableRandom,
+): Pair<Double, Double> {
+    val z1 = gaussian(rng)
+    val points = Math.round(pointsMean + pointsSd * z1).toDouble().coerceAtLeast(0.0)
+    if (yardsSd <= 0.0 && yardsMean <= 0.0) return points to 0.0
+    val z2 = correlation * z1 + sqrt(1.0 - correlation * correlation) * gaussian(rng)
+    return points to Math.round(yardsMean + yardsSd * z2).toDouble().coerceAtLeast(0.0)
+}
 
 // internal (not private) so MonteCarloTest can call it directly to verify the
 // shape<1 boost trick's raw mean/variance, matching this module's existing
