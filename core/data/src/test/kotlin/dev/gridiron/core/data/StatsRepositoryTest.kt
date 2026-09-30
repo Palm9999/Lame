@@ -111,6 +111,50 @@ class StatsRepositoryTest {
         }
     }
 
+    private suspend fun page(pack: StatPack): GridPage {
+        val season = catalog.season(2025)
+        return repo.grid(GridRequest(season, season.defaultWeeks, pack), catalog)
+    }
+
+    @Test
+    fun `a percent column's cell shows digits only and keeps its percent sign in text`() = runTest {
+        val page = page(StatPack.OPPORTUNITY)
+        val i = page.columns.indexOfFirst { it.column == StatColumn.TARGET_SHARE }
+        val cells = page.rows.map { it.cells[i] }.filter { it.text != StatFormat.MISSING }
+        assertTrue(cells.isNotEmpty())
+        cells.forEach {
+            assertTrue(it.text.endsWith("%"), it.text)
+            assertEquals(it.text.removeSuffix("%"), it.display)
+        }
+    }
+
+    @Test
+    fun `a non-percent column's display equals its text`() = runTest {
+        val page = page(StatPack.OPPORTUNITY)
+        val i = page.columns.indexOfFirst { it.column == StatColumn.TARGETS }
+        page.rows.forEach { assertEquals(it.cells[i].text, it.cells[i].display) }
+    }
+
+    @Test
+    fun `a percent column's header ends in a percent sign`() = runTest {
+        val opportunity = page(StatPack.OPPORTUNITY)
+        for (c in opportunity.columns) {
+            if (StatFormat.isPercent(c.column)) assertTrue(c.header.endsWith("%"), c.header)
+        }
+        // RSR has no % in its abbreviation, so one is appended.
+        val efficiency = page(StatPack.EFFICIENCY)
+        val rsr = efficiency.columns.firstOrNull { it.column == StatColumn.RUSH_SUCCESS_RATE }
+        if (rsr != null) assertEquals("RSR %", rsr.header)
+    }
+
+    @Test
+    fun `an NGS percentage column (already in points) is unchanged`() = runTest {
+        val page = page(StatPack.NGS_RUSHING)
+        val i = page.columns.indexOfFirst { it.column == StatColumn.NGS_STACKED_BOX_PCT }
+        assertEquals("8+ BOX%", page.columns[i].header)
+        page.rows.forEach { assertEquals(it.cells[i].text, it.cells[i].display) }
+    }
+
     @Test
     fun `a rate sort carries its sample floor and shows it`() = runTest {
         val season = catalog.season(2025)

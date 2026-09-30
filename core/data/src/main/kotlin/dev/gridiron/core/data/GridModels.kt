@@ -107,8 +107,10 @@ public data class GridRowUi(
 /**
  * @property heat Positional percentile mapped to -1..1: +1 best at the
  *   position, -1 worst, null when there's no value to rank.
+ * @property display What the Grid draws: [text] without its unit for a percent column (the header carries the %).
+ *   CSV export, filters and screen-reader descriptions keep [text].
  */
-public data class CellUi(val text: String, val heat: Float?)
+public data class CellUi(val text: String, val heat: Float?, val display: String = text)
 
 public data class PlayerHeader(val playerId: String, val name: String, val position: String?, val team: String?)
 

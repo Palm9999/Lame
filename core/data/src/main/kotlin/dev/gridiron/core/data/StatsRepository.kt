@@ -70,9 +70,11 @@ public class StatsRepository(
                 games = games,
                 cells = spec.columns.map { column ->
                     val pct = r.doubleOrNull(layout.percentileIndex(column))
+                    val text = format.format(column, r.doubleOrNull(layout.valueIndex(column)), request.perGame)
                     CellUi(
-                        text = format.format(column, r.doubleOrNull(layout.valueIndex(column)), request.perGame),
+                        text = text,
                         heat = pct?.let { ((it - 0.5) * 2).toFloat() },
+                        display = if (StatFormat.isPercent(column)) text.removeSuffix("%") else text,
                     )
                 }.toImmutableList(),
             )
@@ -80,7 +82,9 @@ public class StatsRepository(
 
         val columns = spec.columns.map { column ->
             val info = catalog.metrics[column.metricId]
-            ColumnUi(column, info?.abbr ?: column.metricId, info)
+            val abbr = info?.abbr ?: column.metricId
+            // A percent cell shows digits only, so its header must carry the %.
+            ColumnUi(column, if (StatFormat.isPercent(column) && !abbr.endsWith("%")) "$abbr %" else abbr, info)
         }
         return GridPage(request, columns.toImmutableList(), rows.toImmutableList(), threshold?.description)
     }
