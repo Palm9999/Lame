@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import dev.gridiron.core.data.Catalog
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.GridPage
+import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PositionFilter
@@ -15,7 +16,6 @@ import dev.gridiron.core.data.PresetLimitReached
 import dev.gridiron.core.data.PresetNameTaken
 import dev.gridiron.core.data.Resolved
 import dev.gridiron.core.data.ScoringRepository
-import dev.gridiron.core.data.Sparkline
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TraySlotUi
@@ -23,6 +23,7 @@ import dev.gridiron.core.data.describeSlot
 import dev.gridiron.core.datastore.GridPreset
 import dev.gridiron.core.datastore.MAX_PRESETS
 import dev.gridiron.core.datastore.PresetWeeks
+import dev.gridiron.core.datastore.RowDensity
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringPresets
@@ -71,6 +72,7 @@ sealed interface GridEvent {
     data class NameChanged(val name: String) : GridEvent
     data object PerGameToggled : GridEvent
     data object HeatToggled : GridEvent
+    data class DensitySelected(val density: RowDensity) : GridEvent
     data class ProfileSelected(val id: String) : GridEvent
     data class AddToCompare(val playerId: String, val name: String) : GridEvent
     data class RemoveFromTray(val slot: CompareSlot) : GridEvent
@@ -138,8 +140,6 @@ sealed interface GridUiState {
         val message: String? = null,
         /** The tray slot the season/weeks sheet is editing, or null when the sheet is closed. */
         val editingSlot: CompareSlot? = null,
-        /** Sparklines for [page]'s rows, by player id; empty until they load or if they fail. */
-        val sparklines: ImmutableMap<String, Sparkline> = persistentMapOf(),
         /** The open filter sheet's match count; null when the sheet is closed. */
         val draftCount: DraftCount? = null,
         /** ESPN injury letters (Q, D, O, IR, …) by player id; empty when there is no live data. */
@@ -158,8 +158,25 @@ sealed interface GridUiState {
         val deletedPreset: GridPreset? = null,
         /** Why the last save, rename or delete failed, shown in the sheet (the Grid's snackbar sits under its scrim). */
         val presetError: String? = null,
+        /** The saved row height. */
+        val density: RowDensity = RowDensity.COMFORTABLE,
     ) : GridUiState {
         val presetsFull: Boolean get() = presets.size >= MAX_PRESETS
+
+        /**
+         * How many controls in the View & filters sheet differ from their defaults: each advanced filter, and one
+         * apiece for teams, a roster, a snap floor, per game, heat off and compact rows.
+         */
+        val viewChanges: Int
+            get() = request.filters.size +
+                listOf(
+                    request.teams.isNotEmpty(),
+                    rosterId != null,
+                    request.minSnapShare != null,
+                    request.perGame,
+                    !heat,
+                    density == RowDensity.COMPACT,
+                ).count { it }
 
         val refreshing: Boolean get() = page?.request != request && error == null
     }
@@ -187,6 +204,8 @@ class GridViewModel(
     rosters: Flow<List<Roster>> = flowOf(emptyList()),
     /** Saved views; null turns the presets off. */
     private val presets: GridPresetRepository? = null,
+    /** Row height; null keeps it comfortable and ignores changes. */
+    private val display: GridDisplayRepository? = null,
 ) : ViewModel() {
 
     private sealed interface CatalogLoad {
@@ -207,8 +226,6 @@ class GridViewModel(
 
     private val message = MutableStateFlow<String?>(null)
     private val editingSlot = MutableStateFlow<CompareSlot?>(null)
-    /** Sparklines tagged with the page they were computed for, so a stale set is never shown. */
-    private val sparklines = MutableStateFlow<Pair<GridPage, Map<String, Sparkline>>?>(null)
     private val draft = MutableStateFlow<List<Filter>?>(null)
     /** Count results tagged with the draft they were computed for, so a stale count never resurfaces after the sheet closes or a newer draft supersedes it. */
     private val draftCount = MutableStateFlow<Pair<List<Filter>, DraftCount>?>(null)
@@ -218,6 +235,7 @@ class GridViewModel(
     private val rosterList = rosters.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     private val presetList = (presets?.presets ?: flowOf(persistentListOf<GridPreset>()))
         .stateIn(viewModelScope, SharingStarted.Eagerly, persistentListOf())
+    private val densityFlow = display?.density ?: flowOf(RowDensity.COMFORTABLE)
     private val presetSheet = MutableStateFlow<PresetSheet?>(null)
     private val deletedPreset = MutableStateFlow<GridPreset?>(null)
     private val presetError = MutableStateFlow<String?>(null)
@@ -246,10 +264,9 @@ class GridViewModel(
                     else GridUiState.Ready(load.catalog, r, h, page, err?.takeIf { it.first == r }?.second)
             }
         }.combine(
-            combine(scoring.profiles, trayUi, message, editingSlot, combine(sparklines, draft, draftCount, badges, ::Lines), ::Extras),
+            combine(scoring.profiles, trayUi, message, editingSlot, combine(draft, draftCount, badges, ::Lines), ::Extras),
         ) { base, extras ->
             if (base is GridUiState.Ready) {
-                val lines = extras.lines.sparklines?.takeIf { (page, _) -> page == base.page }?.second.orEmpty()
                 // A count is only shown when it was computed for the draft the sheet
                 // currently holds; a stale in-flight or completed count is ignored
                 // rather than resurrecting after the draft moved on or the sheet closed.
@@ -263,7 +280,6 @@ class GridViewModel(
                     tray = extras.tray,
                     message = extras.message,
                     editingSlot = extras.editingSlot,
-                    sparklines = lines.toImmutableMap(),
                     draftCount = draftCount,
                     badges = extras.lines.badges.toImmutableMap(),
                 )
@@ -295,6 +311,8 @@ class GridViewModel(
             } else {
                 base
             }
+        }.combine(densityFlow) { base, density ->
+            if (base is GridUiState.Ready) base.copy(density = density) else base
         }.stateIn(viewModelScope, SharingStarted.Eagerly, GridUiState.Loading)
 
     private data class PresetLines(
@@ -312,9 +330,8 @@ class GridViewModel(
         val lines: Lines,
     )
 
-    /** The sparkline, draft-count and badge sources, combined once so each carries its own staleness tag. */
+    /** The draft-count and badge sources, combined once so each carries its own staleness tag. */
     private data class Lines(
-        val sparklines: Pair<GridPage, Map<String, Sparkline>>?,
         val draft: List<Filter>?,
         val count: Pair<List<Filter>, DraftCount>?,
         val badges: Map<String, String>,
@@ -364,21 +381,6 @@ class GridViewModel(
                 .collect()
         }
         viewModelScope.launch {
-            // After each page, never before it: the table must not wait on its sparklines.
-            lastPage.filterNotNull()
-                .mapLatest { page ->
-                    val lines = try {
-                        repository.sparklines(page)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        emptyMap()
-                    }
-                    sparklines.value = page to lines
-                }
-                .collect()
-        }
-        viewModelScope.launch {
             draft.debounce(countDebounceMillis)
                 .mapLatest { filters ->
                     val r = request.value
@@ -424,6 +426,19 @@ class GridViewModel(
         when (event) {
             GridEvent.HeatToggled -> {
                 heat.update { !it }
+                return
+            }
+            is GridEvent.DensitySelected -> {
+                val repo = display ?: return
+                viewModelScope.launch {
+                    try {
+                        repo.setDensity(event.density)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        message.value = "Couldn't save row height: ${e.message ?: e::class.simpleName}"
+                    }
+                }
                 return
             }
             is GridEvent.ProfileSelected -> {
@@ -641,6 +656,7 @@ class GridViewModel(
             is GridEvent.NameChanged -> r.copy(name = event.name)
             GridEvent.PerGameToggled -> r.copy(perGame = !r.perGame)
             GridEvent.HeatToggled -> r
+            is GridEvent.DensitySelected -> r
             is GridEvent.ProfileSelected -> r
             is GridEvent.AddToCompare -> r
             is GridEvent.RemoveFromTray -> r
@@ -686,9 +702,10 @@ class GridViewModel(
             badges: Flow<Map<String, String>> = flowOf(emptyMap()),
             rosters: Flow<List<Roster>> = flowOf(emptyList()),
             presets: GridPresetRepository? = null,
+            display: GridDisplayRepository? = null,
         ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { GridViewModel(repository, scoring, tray, badges = badges, rosters = rosters, presets = presets) }
+                initializer { GridViewModel(repository, scoring, tray, badges = badges, rosters = rosters, presets = presets, display = display) }
             }
     }
 }

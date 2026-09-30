@@ -37,6 +37,7 @@ import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerStatsRepository
 import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.model.Roster
@@ -76,6 +77,7 @@ data class Deps(
     val refresher: Refresher? = null,
     val rosters: RosterRepository? = null,
     val gridPresets: GridPresetRepository? = null,
+    val gridDisplay: GridDisplayRepository? = null,
     /** Odds API props, for Settings. Null in tests, like [live]. */
     val props: PropsRepository? = null,
     /** The Player page's season stats; null where a test doesn't need them. */
@@ -165,6 +167,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             badges = deps.live?.badges ?: flowOf(emptyMap()),
                             rosters = deps.rosters?.rosters ?: flowOf(emptyList<Roster>()),
                             presets = deps.gridPresets,
+                            display = deps.gridDisplay,
                             recovery = buildList {
                                 if (refresher != null) add("Refresh stats" to { refresh() })
                                 if (deps.settings != null) add("Settings" to { backStack.push(SettingsKey) })

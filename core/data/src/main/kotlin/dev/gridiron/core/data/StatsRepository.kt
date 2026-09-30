@@ -70,9 +70,11 @@ public class StatsRepository(
                 games = games,
                 cells = spec.columns.map { column ->
                     val pct = r.doubleOrNull(layout.percentileIndex(column))
+                    val text = format.format(column, r.doubleOrNull(layout.valueIndex(column)), request.perGame)
                     CellUi(
-                        text = format.format(column, r.doubleOrNull(layout.valueIndex(column)), request.perGame),
+                        text = text,
                         heat = pct?.let { ((it - 0.5) * 2).toFloat() },
+                        display = if (StatFormat.isPercent(column)) text.removeSuffix("%") else text,
                     )
                 }.toImmutableList(),
             )
@@ -80,51 +82,14 @@ public class StatsRepository(
 
         val columns = spec.columns.map { column ->
             val info = catalog.metrics[column.metricId]
-            ColumnUi(column, info?.abbr ?: column.metricId, info)
+            val abbr = info?.abbr ?: column.metricId
+            // A percent cell shows digits only, so its header must carry the %.
+            ColumnUi(column, if (StatFormat.isPercent(column) && !abbr.endsWith("%")) "$abbr %" else abbr, info)
         }
         return GridPage(request, columns.toImmutableList(), rows.toImmutableList(), threshold?.description)
     }
 
     public suspend fun players(ids: Collection<String>): Map<String, PlayerHeader> = executor.playerHeaders(ids)
-
-    /**
-     * The sorted column's last six played weeks for every row on [page]. Each
-     * week reuses the Grid query itself, restricted to the page's players, so
-     * a week's rate or fantasy points are exactly what the Grid shows for that
-     * single week. The page already decided who is listed, so no filters apply.
-     */
-    public suspend fun sparklines(page: GridPage): Map<String, Sparkline> {
-        val r = page.request
-        val window = sparklineWeeks(r.season, r.weeks) ?: return emptyMap()
-        if (page.rows.isEmpty()) return emptyMap()
-        val ids = page.rows.mapTo(LinkedHashSet()) { it.playerId }
-        val column = r.sort
-        val byWeek = window.map { week ->
-            val q = StatQueryBuilder.grid(
-                StatQuerySpec(
-                    season = r.season.season,
-                    weeks = WeekRange.single(week),
-                    columns = listOf(column),
-                    playerIds = ids,
-                    includeUnqualified = true,
-                    minGames = 1,
-                    limit = StatQuerySpec.MAX_LIMIT,
-                    scoring = r.scoring,
-                ),
-            )
-            executor.query(q.query) { row ->
-                // Every returned row played that week. A total with no fact is a
-                // zero the database stores sparsely, not a missing week.
-                val v = row.doubleOrNull(q.layout.valueIndex(column))
-                    ?: if (column.aggregate is Aggregate.Total) 0.0 else null
-                row.text(GridLayout.PLAYER_ID) to v
-            }.toMap()
-        }
-        return ids.associateWith { id ->
-            val values = byWeek.map { it[id] }
-            Sparkline(window, values, values.map { format.format(column, it, perGame = false) })
-        }
-    }
 
     private fun spec(request: GridRequest, threshold: SampleThreshold?): StatQuerySpec {
         val searching = request.name.isNotBlank()
