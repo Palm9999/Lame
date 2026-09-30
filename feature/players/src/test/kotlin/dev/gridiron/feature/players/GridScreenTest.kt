@@ -6,6 +6,8 @@ import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertWidthIsAtLeast
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -16,6 +18,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
@@ -25,6 +28,7 @@ import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import dev.gridiron.core.data.Catalog
+import dev.gridiron.core.data.CsvExport
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PositionFilter
 import dev.gridiron.core.data.SeasonInfo
@@ -38,12 +42,14 @@ import dev.gridiron.core.datastore.PresetWeeks
 import dev.gridiron.core.datastore.RowDensity
 import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.core.model.CompareSlot
+import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.statquery.Condition
 import dev.gridiron.core.statquery.Filter
 import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.runBlocking
@@ -383,6 +389,97 @@ class GridScreenTest {
         // Rows expose one merged description; the badge is part of it.
         compose.onNodeWithContentDescription("${first.name} (injury status Q)", substring = true).assertExists()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/11_injury_badge.png")
+    }
+
+    // --- View & filters sheet ---
+
+    /** A control inside the open View & filters sheet (the bar may carry the same tag until it is slimmed). */
+    private fun inSheet(tag: String) = compose.onNode(hasTestTag(tag) and hasAnyAncestor(hasTestTag("viewSheet")))
+
+    private fun openSheet(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit = {}) {
+        show(state, onEvent = onEvent)
+        compose.onNodeWithTag("chip:filters").performClick()
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun theSheetListsPresetsTeamsSnapsPerGameHeatRowHeightAndExport() {
+        openSheet(presetState(sheet = null))
+        for (tag in listOf("chip:presets", "chip:teams", "chip:snaps", "switch:perGame", "switch:heat", "density:comfortable", "density:compact", "chip:export")) {
+            inSheet(tag).assertExists()
+        }
+        compose.onNodeWithText("Row height").assertExists()
+        compose.onNodeWithText("View & filters").assertExists()
+    }
+
+    @Test
+    fun rosterShowsOnlyWhenARosterExists() {
+        val season = catalog.season(2025)
+        val base = ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING))
+        openSheet(base)
+        inSheet("chip:roster").assertDoesNotExist()
+    }
+
+    @Test
+    fun rosterShowsWhenARosterExists() {
+        val season = catalog.season(2025)
+        val base = ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING))
+        openSheet(base.copy(rosters = persistentListOf(Roster("r1", "Home", emptyList()))))
+        inSheet("chip:roster").assertExists()
+    }
+
+    @Test
+    fun theSnapFloorIsHiddenOnTheKickerChip() {
+        val season = catalog.season(2025)
+        openSheet(ready(GridRequest(season, season.defaultWeeks, StatPack.KICKING, positions = PositionFilter.K)))
+        inSheet("chip:snaps").assertDoesNotExist()
+        inSheet("chip:teams").assertExists()
+    }
+
+    @Test
+    fun tappingCompactSendsDensitySelected() {
+        val season = catalog.season(2025)
+        val events = mutableListOf<GridEvent>()
+        openSheet(ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING)), onEvent = { events += it })
+        inSheet("density:compact").performScrollTo().performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.DensitySelected(RowDensity.COMPACT)), events.filterIsInstance<GridEvent.DensitySelected>())
+    }
+
+    @Test
+    fun theSwitchesSendPerGameAndHeatEvents() {
+        val season = catalog.season(2025)
+        val events = mutableListOf<GridEvent>()
+        openSheet(ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING)), onEvent = { events += it })
+        inSheet("switch:perGame").performScrollTo().performClick()
+        inSheet("switch:heat").performScrollTo().performClick()
+        assertTrue(GridEvent.PerGameToggled in events)
+        assertTrue(GridEvent.HeatToggled in events)
+    }
+
+    @Test
+    fun exportFromTheSheetSharesTheCsv() {
+        val season = catalog.season(2025)
+        val state = ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING))
+        var shared: Pair<String, String>? = null
+        compose.setContent {
+            GridironTheme { GridScreen(state, {}, share = { _, name, csv -> shared = name to csv; true }) }
+        }
+        compose.onNodeWithTag("chip:filters").performClick()
+        compose.waitForIdle()
+        inSheet("chip:export").performScrollTo().performClick()
+        compose.waitUntil(5_000) { shared != null }
+        val (name, csv) = checkNotNull(shared)
+        assertEquals(CsvExport.fileName(state.request), name)
+        assertTrue(csv.isNotBlank())
+    }
+
+    @Test
+    fun theSheetsTeamsRowOpensTheTeamSheet() {
+        val season = catalog.season(2025)
+        openSheet(ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING)))
+        inSheet("chip:teams").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("team:KC").assertExists()
     }
 
     // --- presets ---

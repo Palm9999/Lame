@@ -44,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
@@ -122,6 +123,8 @@ fun GridScreen(
     menu: List<Pair<String, (season: Int) -> Unit>> = emptyList(),
     /** Offered when the database won't open (the ☰ menu needs a season, so it can't show): a way out. */
     recovery: List<Pair<String, () -> Unit>> = emptyList(),
+    /** Hands the exported CSV to the share sheet; a seam so tests needn't declare a FileProvider. */
+    share: suspend (Context, fileName: String, csv: String) -> Boolean = CsvShare::share,
 ) {
     // A Surface, not a Box with a background: it also sets the content color
     // that every Text inherits. Without it, text defaults to black, which is
@@ -144,7 +147,7 @@ fun GridScreen(
                 Text(state.message, color = MaterialTheme.colorScheme.error)
                 recovery.forEach { (label, action) -> TextButton(onClick = action) { Text(label) } }
             }
-            is GridUiState.Ready -> GridContent(state, onEvent, onCompare, onEditProfiles, onPlayer, menu)
+            is GridUiState.Ready -> GridContent(state, onEvent, onCompare, onEditProfiles, onPlayer, menu, share)
         }
       }
     }
@@ -158,6 +161,7 @@ private fun GridContent(
     onEditProfiles: () -> Unit,
     onPlayer: (playerId: String, season: Int, week: Int) -> Unit,
     menu: List<Pair<String, (season: Int) -> Unit>>,
+    share: suspend (Context, fileName: String, csv: String) -> Boolean,
 ) {
     val r = state.request
     var showWeeks by remember { mutableStateOf(false) }
@@ -166,6 +170,25 @@ private fun GridContent(
     var info by remember { mutableStateOf<MetricInfo?>(null) }
     val haptics = LocalHapticFeedback.current
     val snackbar = remember { SnackbarHostState() }
+
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var exporting by remember { mutableStateOf(false) }
+    fun export() {
+        if (exporting) return
+        val page = state.page ?: return
+        exporting = true
+        scope.launch {
+            try {
+                val csv = withContext(Dispatchers.Default) { CsvExport.build(page, state.catalog) }
+                val ok = share(context, CsvExport.fileName(page.request), csv)
+                exporting = false
+                if (!ok) snackbar.showSnackbar("Couldn't export")
+            } finally {
+                exporting = false
+            }
+        }
+    }
 
     LaunchedEffect(state.message) {
         state.message?.let {
@@ -236,25 +259,8 @@ private fun GridContent(
                     label = { Text(if (r.filters.isEmpty()) "Filters" else "Filters (${r.filters.size})") },
                     modifier = Modifier.testTag("chip:filters"),
                 )
-                val context = LocalContext.current
-                val scope = rememberCoroutineScope()
-                var exporting by remember { mutableStateOf(false) }
                 AssistChip(
-                    onClick = {
-                        if (exporting) return@AssistChip
-                        val page = state.page ?: return@AssistChip
-                        exporting = true
-                        scope.launch {
-                            try {
-                                val csv = withContext(Dispatchers.Default) { CsvExport.build(page, state.catalog) }
-                                val ok = CsvShare.share(context, CsvExport.fileName(page.request), csv)
-                                exporting = false
-                                if (!ok) snackbar.showSnackbar("Couldn't export")
-                            } finally {
-                                exporting = false
-                            }
-                        }
-                    },
+                    onClick = ::export,
                     enabled = state.page != null && !exporting,
                     label = { Text("Export") },
                     modifier = Modifier.testTag("chip:export"),
@@ -319,12 +325,15 @@ private fun GridContent(
     }
     if (showFilters) {
         FilterSheet(
-            catalog = state.catalog,
-            pack = r.pack,
-            sort = r.sort,
-            perGame = r.perGame,
-            applied = r.filters,
-            count = state.draftCount,
+            state = state,
+            onEvent = onEvent,
+            onOpenTeams = {
+                onEvent(GridEvent.FilterSheetClosed)
+                showFilters = false
+                showTeams = true
+            },
+            onExport = ::export,
+            exporting = exporting,
             onDraftChanged = { onEvent(GridEvent.FilterDraftChanged(it)) },
             onApply = {
                 onEvent(GridEvent.FiltersApplied(it))
@@ -405,7 +414,7 @@ private fun ChipRow(content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun RosterChip(rosters: ImmutableList<Roster>, selected: String?, onSelect: (String?) -> Unit) {
+internal fun RosterChip(rosters: ImmutableList<Roster>, selected: String?, onSelect: (String?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
         FilterChip(
@@ -424,7 +433,7 @@ private fun RosterChip(rosters: ImmutableList<Roster>, selected: String?, onSele
 }
 
 @Composable
-private fun SnapChip(share: Double?, onSelect: (Double?) -> Unit) {
+internal fun SnapChip(share: Double?, onSelect: (Double?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     fun label(s: Double?) = if (s == null) "Any snaps" else "${(s * 100).toInt()}%+ snaps"
     Box {

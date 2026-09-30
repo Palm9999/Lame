@@ -1,5 +1,13 @@
 package dev.gridiron.feature.players
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.selection.toggleable
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Switch
+import androidx.compose.ui.semantics.Role
+import dev.gridiron.core.data.PositionFilter
+import dev.gridiron.core.datastore.RowDensity
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -38,9 +46,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import dev.gridiron.core.data.Catalog
 import dev.gridiron.core.data.StatFormat
-import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.filterColumnOrder
 import dev.gridiron.core.statquery.Filter
 import dev.gridiron.core.statquery.StatColumn
@@ -73,34 +79,80 @@ internal fun TeamSheet(teams: List<String>, selected: Set<String>, onChange: (Se
 }
 
 /**
- * Edits a draft of the advanced filters. Every change to the draft's complete
- * rows is reported for the live count; nothing reaches the Grid until Apply.
+ * The "View & filters" sheet. The top section's controls apply as you tap;
+ * below it, the advanced filters are a draft that reaches the Grid only on
+ * Apply, and every change to the draft's complete rows is reported for the live count.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun FilterSheet(
-    catalog: Catalog,
-    pack: StatPack,
-    sort: StatColumn,
-    perGame: Boolean,
-    applied: List<Filter>,
-    count: DraftCount?,
+    state: GridUiState.Ready,
+    onEvent: (GridEvent) -> Unit,
+    onOpenTeams: () -> Unit,
+    onExport: () -> Unit,
+    exporting: Boolean,
     onDraftChanged: (List<Filter>) -> Unit,
     onApply: (List<Filter>) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var draft by remember { mutableStateOf(FilterDraft.of(applied)) }
+    val r = state.request
+    var draft by remember { mutableStateOf(FilterDraft.of(r.filters)) }
     LaunchedEffect(draft.complete) { onDraftChanged(draft.complete) }
-    val columns = remember(pack) { filterColumnOrder(pack) }
-    fun name(c: StatColumn) = catalog.metrics[c.metricId]?.name ?: c.metricId
+    val columns = remember(r.pack) { filterColumnOrder(r.pack) }
+    fun name(c: StatColumn) = state.catalog.metrics[c.metricId]?.name ?: c.metricId
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
+        Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState()).testTag("viewSheet")) {
+            Text("View & filters", Modifier.semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+
+            if (state.presetsEnabled) {
+                SheetRow(
+                    "Presets",
+                    if (state.presets.isEmpty()) "" else "${state.presets.size} saved",
+                    "chip:presets",
+                ) {
+                    onDismiss()
+                    onEvent(GridEvent.PresetsOpened)
+                }
+            }
+            SheetRow(
+                "Teams",
+                when (r.teams.size) { 0 -> "All teams"; 1 -> r.teams.single(); else -> "${r.teams.size} teams" },
+                "chip:teams",
+                onClick = onOpenTeams,
+            )
+            if (state.rosters.isNotEmpty()) {
+                SheetControl("Roster") { RosterChip(state.rosters, state.rosterId) { onEvent(GridEvent.RosterSelected(it)) } }
+            }
+            if (r.positions != PositionFilter.K && r.positions != PositionFilter.DST) {
+                SheetControl("Snap floor") { SnapChip(r.minSnapShare) { onEvent(GridEvent.MinSnapShareSelected(it)) } }
+            }
+            SheetSwitch("Per game", r.perGame, "switch:perGame") { onEvent(GridEvent.PerGameToggled) }
+            SheetSwitch("Heat", state.heat, "switch:heat") { onEvent(GridEvent.HeatToggled) }
+            SheetControl("Row height") {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = state.density == RowDensity.COMFORTABLE,
+                        onClick = { onEvent(GridEvent.DensitySelected(RowDensity.COMFORTABLE)) },
+                        label = { Text("Comfortable") },
+                        modifier = Modifier.testTag("density:comfortable"),
+                    )
+                    FilterChip(
+                        selected = state.density == RowDensity.COMPACT,
+                        onClick = { onEvent(GridEvent.DensitySelected(RowDensity.COMPACT)) },
+                        label = { Text("Compact") },
+                        modifier = Modifier.testTag("density:compact"),
+                    )
+                }
+            }
+            SheetRow("Export CSV", "", "chip:export", enabled = state.page != null && !exporting, onClick = onExport)
+
+            HorizontalDivider(Modifier.padding(vertical = 8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Filters", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleMedium)
+                Text("Filters", Modifier.weight(1f).semantics { heading() }, style = MaterialTheme.typography.titleSmall)
                 TextButton(onClick = { draft = draft.clear() }, enabled = draft.rows.isNotEmpty()) { Text("Clear all") }
             }
-            if (perGame) {
+            if (r.perGame) {
                 Text("Values are per game.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             draft.rows.forEachIndexed { index, row ->
@@ -109,13 +161,13 @@ internal fun FilterSheet(
                 }
             }
             TextButton(
-                onClick = { draft = draft.add(sort) },
+                onClick = { draft = draft.add(r.sort) },
                 enabled = draft.canAdd,
                 modifier = Modifier.testTag("filter:add"),
             ) { Text("+ Add filter") }
             Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    when (count) {
+                    when (val count = state.draftCount) {
                         null, DraftCount.Counting -> "Counting…"
                         is DraftCount.Matches -> if (count.count == 1) "1 player matches" else "${count.count} players match"
                         DraftCount.Unavailable -> "Count unavailable"
@@ -127,6 +179,40 @@ internal fun FilterSheet(
                 Button(onClick = { onApply(draft.complete) }, modifier = Modifier.testTag("filter:apply")) { Text("Apply") }
             }
         }
+    }
+}
+
+/** A tappable line: [label], the current [value] at the end. */
+@Composable
+private fun SheetRow(label: String, value: String, tag: String, enabled: Boolean = true, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(enabled = enabled, onClick = onClick).testTag(tag),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        if (value.isNotEmpty()) Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** A labelled control (a chip or a segmented pair) at the end of the line. */
+@Composable
+private fun SheetControl(label: String, control: @Composable () -> Unit) {
+    Row(Modifier.fillMaxWidth().heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        control()
+    }
+}
+
+@Composable
+private fun SheetSwitch(label: String, checked: Boolean, tag: String, onToggle: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+            .toggleable(value = checked, role = Role.Switch, onValueChange = { onToggle() })
+            .testTag(tag),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, Modifier.weight(1f), style = MaterialTheme.typography.bodyLarge)
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 
