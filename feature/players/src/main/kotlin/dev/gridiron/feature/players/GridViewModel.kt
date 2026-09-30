@@ -23,6 +23,7 @@ import dev.gridiron.core.data.describeSlot
 import dev.gridiron.core.datastore.GridPreset
 import dev.gridiron.core.datastore.MAX_PRESETS
 import dev.gridiron.core.datastore.PresetWeeks
+import dev.gridiron.core.datastore.RowDensity
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringPresets
@@ -158,6 +159,8 @@ sealed interface GridUiState {
         val deletedPreset: GridPreset? = null,
         /** Why the last save, rename or delete failed, shown in the sheet (the Grid's snackbar sits under its scrim). */
         val presetError: String? = null,
+        /** The saved row height. */
+        val density: RowDensity = RowDensity.COMFORTABLE,
     ) : GridUiState {
         val presetsFull: Boolean get() = presets.size >= MAX_PRESETS
 

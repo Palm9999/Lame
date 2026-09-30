@@ -2,6 +2,7 @@ package dev.gridiron.feature.players
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -15,11 +16,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -52,7 +53,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import dev.gridiron.core.charts.Sparkline
 import dev.gridiron.core.data.ColumnUi
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.CsvExport
@@ -63,11 +63,11 @@ import dev.gridiron.core.data.GridRowUi
 import dev.gridiron.core.data.MetricInfo
 import dev.gridiron.core.data.PositionFilter
 import dev.gridiron.core.data.ScoringRepository
-import dev.gridiron.core.data.Sparkline as SparklineData
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.describeFilter
 import dev.gridiron.core.data.weeksLabel
+import dev.gridiron.core.datastore.RowDensity
 import dev.gridiron.core.designsystem.HeaderStyle
 import dev.gridiron.core.designsystem.NumberStyle
 import dev.gridiron.core.designsystem.heatColor
@@ -273,7 +273,7 @@ private fun GridContent(
                     else -> PlayerTable(
                         page,
                         state.heat,
-                        state.sparklines,
+                        state.density,
                         state.badges,
                         state.rostered,
                         onSort = { onEvent(GridEvent.SortBy(it.column)) },
@@ -468,9 +468,10 @@ private fun Summary(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit) {
     }
 }
 
-private val FrozenWidth = 172.sp
-private val ColumnWidth = 78.sp
-private val RowHeight = 48.sp
+private val FrozenWidth = 148.sp
+private val ColumnWidth = 72.sp
+private val ComfortableRowHeight = 48.sp
+private val CompactRowHeight = 40.sp
 private val HeaderHeight = 44.sp
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -478,7 +479,7 @@ private val HeaderHeight = 44.sp
 private fun PlayerTable(
     page: GridPage,
     heat: Boolean,
-    sparklines: ImmutableMap<String, SparklineData>,
+    density: RowDensity,
     badges: ImmutableMap<String, String>,
     rostered: ImmutableSet<String>,
     onSort: (ColumnUi) -> Unit,
@@ -497,14 +498,24 @@ private fun PlayerTable(
         rows = page.rows,
         rowKey = GridRowUi::playerId,
         frozenWidth = FrozenWidth,
-        rowHeight = RowHeight,
+        rowHeight = if (density == RowDensity.COMPACT) CompactRowHeight else ComfortableRowHeight,
+        zebra = false,
+        rowDivider = true,
+        sortedColumnIndex = sortIndex.takeIf { it >= 0 },
+        sortedTint = MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
         headerHeight = HeaderHeight,
         listState = listState,
         modifier = Modifier.testTag("grid"),
         frozenHeader = {
             Column(Modifier.align(Alignment.CenterStart).padding(start = 16.dp)) {
                 Text("PLAYER", style = HeaderStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text("hold a player to compare", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    "hold a player to compare",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         },
         header = { i ->
@@ -524,18 +535,28 @@ private fun PlayerTable(
                     color = if (sorted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
+                if (sorted) {
+                    Box(
+                        Modifier.align(Alignment.BottomCenter).fillMaxWidth().height(2.dp)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .testTag("sortedUnderline:${column.column.name}"),
+                    )
+                }
             }
         },
         frozenCell = { index, row ->
-            Row(Modifier.align(Alignment.CenterStart).padding(start = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.fillMaxWidth().align(Alignment.CenterStart).padding(start = 8.dp, end = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Text(
                     "${index + 1}",
-                    Modifier.width(26.dp),
+                    Modifier.width(20.dp),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
-                Column {
+                Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (row.playerId in rostered) {
                             Text("★ ", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
@@ -548,20 +569,16 @@ private fun PlayerTable(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
-                        badges[row.playerId]?.let { InjuryBadge(it, Modifier.padding(start = 4.dp)) }
                     }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(row.detail, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                        sparklines[row.playerId]?.takeIf { it.drawable }?.let { line ->
-                            val values = remember(line) { line.values.map { it?.toFloat() }.toImmutableList() }
-                            Sparkline(
-                                values,
-                                MaterialTheme.colorScheme.onSurfaceVariant,
-                                Modifier.padding(start = 6.dp).size(44.dp, 14.dp).testTag("spark:${row.playerId}"),
-                            )
-                        }
-                    }
+                    Text(
+                        row.detail,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
+                badges[row.playerId]?.let { InjuryBadge(it, Modifier.padding(start = 4.dp).testTag("injuryPill:${row.playerId}")) }
             }
         },
         cell = { row, i ->
@@ -571,7 +588,7 @@ private fun PlayerTable(
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 Text(
-                    c.text,
+                    c.display,
                     Modifier.padding(end = 10.dp),
                     style = NumberStyle,
                     fontWeight = if (i == sortIndex) FontWeight.SemiBold else FontWeight.Normal,
@@ -589,9 +606,6 @@ private fun PlayerTable(
                     append(col.info?.name ?: col.header).append(' ').append(row.cells[i].text)
                     if (i < page.columns.lastIndex) append(", ")
                 }
-                sparklines[row.playerId]?.takeIf { it.drawable }?.let { line ->
-                    append(". Last ${line.values.size} weeks: ").append(line.labels.joinToString(", "))
-                }
             }
         },
         onRowLongClick = onRowLongClick,
@@ -600,12 +614,19 @@ private fun PlayerTable(
     )
 }
 
-/** ESPN's injury letter after a name: red for O, IR and D, the accent color for Q and anything else. */
+/** ESPN's injury letter as an outlined pill: red for O, IR and D, the accent color for Q and anything else. */
 @Composable
 private fun InjuryBadge(abbr: String, modifier: Modifier = Modifier) {
     val color = when (abbr) {
         "O", "IR", "D" -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.tertiary
     }
-    Text(abbr, modifier, color = color, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, maxLines = 1)
+    Text(
+        abbr,
+        modifier.border(1.dp, color, RoundedCornerShape(4.dp)).padding(horizontal = 4.dp, vertical = 1.dp),
+        color = color,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = FontWeight.Bold,
+        maxLines = 1,
+    )
 }

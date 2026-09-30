@@ -79,6 +79,13 @@ public fun <R> StatTable(
     rowLongClickLabel: String? = null,
     /** Tap on a row. */
     onRowClick: ((R) -> Unit)? = null,
+    /** Alternate row shading; off, a table usually wants [rowDivider] instead. */
+    zebra: Boolean = true,
+    /** A 1 dp line under each row. */
+    rowDivider: Boolean = false,
+    /** The column to tint in every row (the sort column), or null for none. */
+    sortedColumnIndex: Int? = null,
+    sortedTint: Color = Color.Transparent,
 ) {
     val density = LocalDensity.current
     val frozen = with(density) { frozenWidth.toDp() }
@@ -102,7 +109,8 @@ public fun <R> StatTable(
     }
 
     val surface = MaterialTheme.colorScheme.surface
-    val zebra = MaterialTheme.colorScheme.surfaceContainerLow
+    val zebraColor = MaterialTheme.colorScheme.surfaceContainerLow
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant
 
     Column(modifier) {
         Row(Modifier.height(headerH).background(MaterialTheme.colorScheme.surfaceContainer)) {
@@ -115,11 +123,19 @@ public fun <R> StatTable(
 
         LazyColumn(state = listState) {
             itemsIndexed(rows, key = { _, row -> rowKey(row) }) { index, row ->
-                val background = if (index % 2 == 1) zebra else surface
+                val background = if (zebra && index % 2 == 1) zebraColor else surface
                 Row(
                     Modifier
                         .height(rowH)
                         .background(background)
+                        .then(
+                            if (!rowDivider) Modifier
+                            else Modifier.drawWithContent {
+                                drawContent()
+                                val y = size.height - 0.5.dp.toPx()
+                                drawLine(dividerColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1.dp.toPx())
+                            },
+                        )
                         .then(
                             if (onRowLongClick == null && onRowClick == null) Modifier
                             else Modifier.pointerInput(row) {
@@ -143,7 +159,10 @@ public fun <R> StatTable(
                         frozenCell(index, row)
                     }
                     Row(Modifier.horizontalScroll(horizontalState)) {
-                        widths.forEachIndexed { i, w -> Box(Modifier.width(w).fillMaxHeight()) { cell(row, i) } }
+                        widths.forEachIndexed { i, w ->
+                            val tint = if (i == sortedColumnIndex) Modifier.background(sortedTint) else Modifier
+                            Box(Modifier.width(w).fillMaxHeight().then(tint)) { cell(row, i) }
+                        }
                     }
                 }
             }

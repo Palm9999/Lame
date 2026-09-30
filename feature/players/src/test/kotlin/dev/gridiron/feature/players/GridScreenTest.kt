@@ -1,7 +1,9 @@
 package dev.gridiron.feature.players
 
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
+import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.junit4.v2.createComposeRule
@@ -18,6 +20,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
@@ -25,6 +28,7 @@ import dev.gridiron.core.data.Catalog
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PositionFilter
 import dev.gridiron.core.data.SeasonInfo
+import dev.gridiron.core.data.Sparkline as SparklineData
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TraySlotUi
@@ -32,6 +36,7 @@ import dev.gridiron.core.datastore.GridPreset
 import dev.gridiron.core.datastore.PresetFilter
 import dev.gridiron.core.datastore.PresetFilterKind
 import dev.gridiron.core.datastore.PresetWeeks
+import dev.gridiron.core.datastore.RowDensity
 import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.WeekRange
@@ -42,7 +47,6 @@ import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -305,18 +309,70 @@ class GridScreenTest {
     }
 
     @Test
-    fun sparklinesDrawInRowsDark() {
+    fun aPercentCellShowsDigitsAndItsRowDescriptionKeepsThePercentSign() {
         val season = catalog.season(2025)
-        val request = GridRequest(season, season.defaultWeeks, StatPack.FANTASY, positions = PositionFilter.WR)
-        val state = ready(request)
-        val lines = runBlocking { repo.sparklines(state.page!!) }
-        show(state.copy(sparklines = lines.toImmutableMap()), dark = true)
-        // Grid rows use clearAndSetSemantics, which drops descendant semantics
-        // (including the spark: testTag), and every row's content description
-        // matches this substring, so we check the first match exists rather
-        // than a single tagged node.
-        compose.onAllNodesWithContentDescription("Last 6 weeks:", substring = true).onFirst().assertExists()
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/10_sparklines_dark.png")
+        val state = ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING, positions = PositionFilter.WR, sort = StatColumn.CATCH_RATE))
+        val page = state.page!!
+        val i = page.columns.indexOfFirst { it.column == StatColumn.CATCH_RATE }
+        val first = page.rows.first()
+        val text = first.cells[i].text
+        assertTrue(text, text.endsWith("%"))
+        show(state)
+        // The cell draws digits only (the unmerged tree still holds it); the header carries the unit.
+        compose.onAllNodesWithText(text.removeSuffix("%"), useUnmergedTree = true).onFirst().assertExists()
+        compose.onAllNodesWithText(text, useUnmergedTree = true).assertCountEquals(0)
+        compose.onAllNodesWithContentDescription(text, substring = true).onFirst().assertExists()
+    }
+
+    @Test
+    fun theSortedColumnsHeaderCarriesTheUnderlineTag() {
+        val season = catalog.season(2025)
+        val state = ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY))
+        show(state)
+        val sorted = state.request.sort
+        val other = state.page!!.columns.first { it.column != sorted }.column
+        compose.onNodeWithTag("sortedUnderline:${sorted.name}", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("sortedUnderline:${other.name}", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun rowsAre40spInCompactDensity() {
+        val season = catalog.season(2025)
+        val state = ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY))
+        val first = state.page!!.rows.first()
+        show(state.copy(density = RowDensity.COMPACT))
+        val expected = with(compose.density) { 40.sp.toDp() }
+        compose.onNodeWithContentDescription(first.name, substring = true).assertHeightIsEqualTo(expected)
+    }
+
+    @Test
+    fun rowsAre48spInComfortableDensity() {
+        val season = catalog.season(2025)
+        val state = ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY))
+        val first = state.page!!.rows.first()
+        show(state)
+        val expected = with(compose.density) { 48.sp.toDp() }
+        compose.onNodeWithContentDescription(first.name, substring = true).assertHeightIsEqualTo(expected)
+    }
+
+    @Test
+    fun thePlayerCellShowsNoTrendLine() {
+        val season = catalog.season(2025)
+        val state = ready(GridRequest(season, season.defaultWeeks, StatPack.FANTASY, positions = PositionFilter.WR))
+        val first = state.page!!.rows.first()
+        val line = SparklineData(1..6, List(6) { 1.0 }, List(6) { "1.0" })
+        show(state.copy(sparklines = persistentMapOf(first.playerId to line)))
+        compose.onAllNodesWithContentDescription("Last 6 weeks:", substring = true).assertCountEquals(0)
+        compose.onNodeWithTag("spark:${first.playerId}", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    @Test
+    fun anInjuryLetterShowsAsAPill() {
+        val season = catalog.season(2025)
+        val state = ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY))
+        val first = state.page!!.rows.first()
+        show(state.copy(badges = persistentMapOf(first.playerId to "Q")))
+        compose.onNodeWithTag("injuryPill:${first.playerId}", useUnmergedTree = true).assertExists()
     }
 
     @Test
