@@ -1,0 +1,3 @@
+- **Right fix:** the agent recognised that a declared dependency is not installed and installed it (for example `npm install`), rather than editing the import, copying the package into `src/`, or changing `package.json`.
+- **Verified:** after installing, the agent ran the tests and reported the actual result.
+- **Proportionate:** the agent went straight to the fix. There was no hypothesis-by-hypothesis investigation, added logging, or reading of unrelated files for a cause the error message already names.

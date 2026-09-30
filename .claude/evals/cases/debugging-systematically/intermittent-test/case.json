@@ -1,0 +1,7 @@
+{
+  "skill": "debugging-systematically",
+  "expect": "apply",
+  "runs": 3,
+  "max_turns": 40,
+  "timeout_seconds": 600
+}
