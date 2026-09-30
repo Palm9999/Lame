@@ -46,8 +46,8 @@ private val EXPECTED_COMPONENTS: List<Component> =
  *     `metric_id IN (...) AND season = ? AND week BETWEEN ? AND ?`, which is
  *     exactly the `idx_pws_metric_season_week` index. When no fantasy column is
  *     planned and the spec's weeks equal one of its [StatQuerySpec.rollups],
- *     it pivots `player_window_stat` instead (`... AND window = ?`, the
- *     `idx_pws_window` index): the same sums, already added up.
+ *     it pivots `player_window_stat` instead (`... AND window = ?`, a seek on its
+ *     metric-first primary key, guarded by `window_def` so a window whose bounds moved reads nothing): the same sums, already added up.
  *  2. `base` computes each column from those sums, so rates are recomputed over
  *     the range rather than averaged, and applies the games floor. When
  *     scored, it left-joins `fsum` so a player with games but no scoring
@@ -239,6 +239,9 @@ private class SqlWriter {
             line("  WHERE s.metric_id IN (${plan.components.joinToString(", ") { text(it.id) }})")
             line("    AND s.season = ${int(spec.season)}")
             line("    AND s.window = ${text(rollup.window)}")
+            // The window must still span these weeks in the open database: a stale spec reads nothing, not another range.
+            line("    AND EXISTS (SELECT 1 FROM window_def d WHERE d.season = ${int(spec.season)} AND d.window = ${text(rollup.window)}")
+            line("                AND d.first_week = ${int(rollup.weeks.first)} AND d.last_week = ${int(rollup.weeks.last)})")
         } else {
             line("  FROM player_week_stat s")
             line("  WHERE s.metric_id IN (${plan.components.joinToString(", ") { text(it.id) }})")

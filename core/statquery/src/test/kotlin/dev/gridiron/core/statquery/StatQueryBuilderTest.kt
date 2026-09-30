@@ -136,6 +136,16 @@ class StatQueryBuilderTest {
         }
 
         @Test
+        fun `a window whose stored bounds moved returns nothing rather than another range's sums`() {
+            seed()
+            // The database was replaced: its S now ends at week 7, but the spec still carries the old S (1..6).
+            db.conn.createStatement().use { it.executeUpdate("UPDATE window_def SET last_week = 7 WHERE window = 'S'") }
+
+            assertEquals(emptyList<GridRow>(), db.grid(rollupSpec(WeekRange(1, 6), TARGETS)))
+            assertEquals(3, db.grid(rollupSpec(WeekRange(4, 6), TARGETS)).size) // L3 is unchanged
+        }
+
+        @Test
         fun `count reads the rollup and agrees with the weekly path`() {
             seed()
             val fast = rollupSpec(WeekRange(4, 6), TARGETS)

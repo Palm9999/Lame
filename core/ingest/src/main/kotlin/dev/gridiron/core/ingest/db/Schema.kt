@@ -69,11 +69,12 @@ internal val SCHEMA: List<String> = listOf(
         spread_line REAL, total_line REAL, roof TEXT, home_qb_id TEXT, away_qb_id TEXT,
         home_coach TEXT, away_coach TEXT) WITHOUT ROWID""",
     // Component sums over a season's whole regular season (`S`) and its last 3, 4, 5 and 8 weeks, built from
-    // player_week_stat; `window_def` holds each window's week bounds so a query can tell when a range matches.
+    // player_week_stat, keyed metric first so the Grid's read is a primary-key seek and needs no second index;
+    // `window_def` holds each window's week bounds so a query can tell when a range matches.
     """CREATE TABLE player_window_stat (
         player_id TEXT NOT NULL, season INTEGER NOT NULL, window TEXT NOT NULL,
         metric_id TEXT NOT NULL, value REAL NOT NULL,
-        PRIMARY KEY (player_id, season, window, metric_id)) WITHOUT ROWID""",
+        PRIMARY KEY (metric_id, season, window, player_id)) WITHOUT ROWID""",
     """CREATE TABLE window_def (
         season INTEGER NOT NULL, window TEXT NOT NULL, first_week INTEGER NOT NULL, last_week INTEGER NOT NULL,
         PRIMARY KEY (season, window)) WITHOUT ROWID""",
@@ -93,5 +94,4 @@ internal val INDEXES: List<String> = listOf(
     "CREATE INDEX idx_player_search ON player (search_name)",
     "CREATE INDEX idx_player_position ON player (position)",
     "CREATE INDEX idx_game_week ON game (season, week)",
-    "CREATE INDEX idx_pws_window ON player_window_stat (metric_id, season, window, value)",
 )

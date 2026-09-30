@@ -29,7 +29,12 @@ internal class FixtureDb : AutoCloseable {
                 """CREATE TABLE player_window_stat (
                      player_id TEXT NOT NULL, season INTEGER NOT NULL, window TEXT NOT NULL,
                      metric_id TEXT NOT NULL, value REAL NOT NULL,
-                     PRIMARY KEY (player_id, season, window, metric_id)) WITHOUT ROWID""",
+                     PRIMARY KEY (metric_id, season, window, player_id)) WITHOUT ROWID""",
+            )
+            st.executeUpdate(
+                """CREATE TABLE window_def (
+                     season INTEGER NOT NULL, window TEXT NOT NULL, first_week INTEGER NOT NULL,
+                     last_week INTEGER NOT NULL, PRIMARY KEY (season, window)) WITHOUT ROWID""",
             )
             st.executeUpdate("CREATE INDEX idx_pws_metric_season_week ON player_week_stat (metric_id, season, week)")
             st.executeUpdate("CREATE INDEX idx_player_search ON player (search_name)")
@@ -71,6 +76,15 @@ internal class FixtureDb : AutoCloseable {
             ).use { ps ->
                 ps.setString(1, window)
                 ps.setInt(2, season)
+                ps.setInt(3, weeks.first)
+                ps.setInt(4, weeks.last)
+                ps.executeUpdate()
+            }
+        }
+        for ((window, weeks) in windows) {
+            conn.prepareStatement("INSERT INTO window_def VALUES (?, ?, ?, ?)").use { ps ->
+                ps.setInt(1, season)
+                ps.setString(2, window)
                 ps.setInt(3, weeks.first)
                 ps.setInt(4, weeks.last)
                 ps.executeUpdate()

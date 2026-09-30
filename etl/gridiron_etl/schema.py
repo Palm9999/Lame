@@ -175,7 +175,8 @@ CREATE TABLE injury_report (
 ) WITHOUT ROWID;
 
 -- Component sums over a season's whole regular season (`S`) and its last 3, 4,
--- 5 and 8 weeks, built from player_week_stat by write_windows(). window_def
+-- 5 and 8 weeks, built from player_week_stat by write_windows(), keyed metric
+-- first so the Grid's read is a primary-key seek with no second index. window_def
 -- holds each window's week bounds so a query can tell when a range matches.
 CREATE TABLE player_window_stat (
     player_id TEXT NOT NULL,
@@ -183,7 +184,7 @@ CREATE TABLE player_window_stat (
     window    TEXT NOT NULL,
     metric_id TEXT NOT NULL,
     value     REAL NOT NULL,
-    PRIMARY KEY (player_id, season, window, metric_id)
+    PRIMARY KEY (metric_id, season, window, player_id)
 ) WITHOUT ROWID;
 
 CREATE TABLE window_def (
@@ -214,7 +215,6 @@ INDEXES = """
 CREATE INDEX idx_pws_metric_season_week ON player_week_stat (metric_id, season, week, value);
 CREATE INDEX idx_player_search          ON player (search_name);
 CREATE INDEX idx_player_position        ON player (position);
-CREATE INDEX idx_pws_window             ON player_window_stat (metric_id, season, window, value);
 """
 
 

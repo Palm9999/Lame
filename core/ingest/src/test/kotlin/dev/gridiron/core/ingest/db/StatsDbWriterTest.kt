@@ -96,6 +96,16 @@ class StatsDbWriterTest {
     }
 
     @Test
+    fun `the rollup is keyed metric first, so it needs no second index`() {
+        val file = File(dir, "stats.db")
+        buildWeeks(file, 2025, 1, 2, 3)
+        assertEquals(emptyList<List<String?>>(), query(file, "SELECT name FROM sqlite_master WHERE name = 'idx_pws_window'"))
+        val plan = query(file, "EXPLAIN QUERY PLAN SELECT player_id, SUM(value) FROM player_window_stat WHERE metric_id IN ('targets') AND season = 2025 AND window = 'S' GROUP BY player_id")
+            .joinToString { it.last().orEmpty() }
+        assertTrue("PRIMARY KEY (metric_id=? AND season=? AND window=?)" in plan, plan)
+    }
+
+    @Test
     fun `a last window clips to the weeks played`() {
         val file = File(dir, "stats.db")
         buildWeeks(file, 2025, 1, 2)
