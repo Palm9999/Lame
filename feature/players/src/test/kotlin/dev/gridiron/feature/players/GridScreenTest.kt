@@ -318,7 +318,7 @@ class GridScreenTest {
             }
         }
         compose.onNodeWithTag("menu").assertIsDisplayed()
-        compose.onNodeWithTag("chip:filters").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("chip:filters").assertIsDisplayed()
         compose.onNodeWithTag("chip:pack").performScrollTo().assertIsDisplayed()
         compose.onNodeWithTag("chip:position:WR").performScrollTo().assertIsDisplayed()
         val first = state.page!!.rows.first()

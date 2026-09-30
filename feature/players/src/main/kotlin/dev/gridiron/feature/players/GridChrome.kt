@@ -169,12 +169,12 @@ private fun ControlRow(
     onCloseSearch: () -> Unit,
 ) {
     val r = state.request
-    Row(
-        Modifier.fillMaxWidth().heightIn(min = 48.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (searching) {
+    if (searching) {
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             val focus = remember { FocusRequester() }
             LaunchedEffect(Unit) { focus.requestFocus() }
             OutlinedTextField(
@@ -190,16 +190,29 @@ private fun ControlRow(
                 modifier = Modifier.width(300.dp).focusRequester(focus).testTag("search"),
             )
             TextButton(onClick = onCloseSearch, modifier = Modifier.testTag("searchClose")) { Text("Done") }
-        } else {
-            PackChip(state, onEvent)
-            PositionSegments(r.positions) { onEvent(GridEvent.PositionsSelected(it)) }
+        }
+    } else {
+        // Filters stays pinned at the end; the pack and positions scroll sideways when they don't fit beside it.
+        Row(
+            Modifier.fillMaxWidth().heightIn(min = 48.dp).padding(start = 12.dp, end = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                Modifier.weight(1f).horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                PackChip(state, onEvent)
+                PositionSegments(r.positions) { onEvent(GridEvent.PositionsSelected(it)) }
+            }
             val changes = state.viewChanges
             FilterChip(
                 selected = changes > 0,
                 onClick = onOpenFilters,
                 label = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(if (changes == 0) "Filters" else "Filters ($changes)")
+                        Text(if (changes == 0) "Filters" else "Filters ($changes)", maxLines = 1)
                         if (r.name.isNotEmpty()) {
                             Box(Modifier.padding(start = 6.dp).size(6.dp).background(MaterialTheme.colorScheme.primary, CircleShape).testTag("searchDot"))
                         }
@@ -272,7 +285,7 @@ private fun Segment(label: String, selected: Boolean, tag: String, onClick: () -
             .heightIn(min = 40.dp)
             .background(if (selected) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent, shape)
             .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 10.dp)
+            .padding(horizontal = 8.dp)
             .testTag(tag),
         contentAlignment = Alignment.Center,
     ) {
