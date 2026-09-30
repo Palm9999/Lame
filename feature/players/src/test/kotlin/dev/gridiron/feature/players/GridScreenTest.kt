@@ -1,12 +1,23 @@
 package dev.gridiron.feature.players
 
 import androidx.compose.ui.semantics.SemanticsProperties
+import org.junit.Assert.assertFalse
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.performScrollToIndex
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertWidthIsAtLeast
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.longClick
@@ -149,22 +160,179 @@ class GridScreenTest {
     fun teamDefensesShowTheirOwnPackAndNoSnapChip() {
         val season = catalog.season(2025)
         show(ready(GridRequest(season, season.defaultWeeks, StatPack.DEFENSE, positions = PositionFilter.DST)))
-        compose.onNodeWithText("Defense").assertIsDisplayed()
+        compose.onNodeWithText("Defense ▾").assertIsDisplayed()
         compose.onNodeWithText("Opportunity").assertDoesNotExist()
         compose.onNodeWithTag("chip:snaps").assertDoesNotExist()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/grid_dst.png")
     }
 
     @Test
-    fun everyControlIsOnScreenWithoutScrolling() {
+    fun theBarShowsThePackChipPositionSegmentsAndFilters() {
         val season = catalog.season(2025)
         show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)))
-        for (label in listOf(
-            "2025 ▾", "Wk 1–18 ▾", "PPR ▾", "Per game", "Heat", "All", "FLEX", "Opportunity", "Fantasy",
-            "All teams", "Any snaps", "Filters", "Export",
-        )) {
+        for (label in listOf("2025 ▾", "Wk 1–18 ▾", "PPR ▾", "Opportunity ▾", "All", "QB", "RB", "WR", "TE", "More ▾", "Filters")) {
             compose.onNodeWithText(label).assertIsDisplayed()
         }
+        // What moved into the sheet is not on the bar.
+        for (label in listOf("Per game", "Heat", "All teams", "Any snaps", "Export")) compose.onNodeWithText(label).assertDoesNotExist()
+        compose.onNodeWithTag("summary").assertIsDisplayed()
+    }
+
+    @Test
+    fun theFiltersChipCountsEveryNonDefaultControl() {
+        val season = catalog.season(2025)
+        val request = GridRequest(
+            season, season.defaultWeeks, StatPack.RECEIVING, positions = PositionFilter.WR,
+            teams = setOf("KC"), minSnapShare = 0.5,
+            filters = listOf(Filter(StatColumn.TARGETS, Condition.AtLeast(40.0))),
+        )
+        show(ready(request))
+        compose.onNodeWithText("Filters (3)").assertIsDisplayed()
+        compose.onNodeWithText("TGT ≥ 40", substring = true).assertExists()
+    }
+
+    @Test
+    fun theMorePositionsMenuOffersFlexKAndDst() {
+        val season = catalog.season(2025)
+        val events = mutableListOf<GridEvent>()
+        show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)), onEvent = { events += it })
+        compose.onNodeWithTag("chip:position:more").performClick()
+        for (p in listOf("FLEX", "K", "DST")) compose.onNodeWithTag("chip:position:$p").assertExists()
+        compose.onNodeWithTag("chip:position:K").performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.PositionsSelected(PositionFilter.K)), events)
+    }
+
+    @Test
+    fun pickingKShowsTheKickingPack() {
+        val season = catalog.season(2025)
+        show(ready(GridRequest(season, season.defaultWeeks, StatPack.KICKING, positions = PositionFilter.K)))
+        compose.onNodeWithText("Kicking ▾").assertIsDisplayed()
+        compose.onNodeWithText("K ▾").assertIsDisplayed()
+    }
+
+    @Test
+    fun thePackDropdownListsOnlyThatChipsPacks() {
+        val season = catalog.season(2025)
+        val events = mutableListOf<GridEvent>()
+        show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY, positions = PositionFilter.QB)), onEvent = { events += it })
+        compose.onNodeWithTag("chip:pack").performClick()
+        for (pack in PositionFilter.QB.packs) compose.onNodeWithTag("pack:${pack.name}").assertExists()
+        compose.onNodeWithTag("pack:KICKING").assertDoesNotExist()
+        compose.onNodeWithTag("pack:${PositionFilter.QB.packs.last().name}").performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.PackSelected(PositionFilter.QB.packs.last())), events)
+    }
+
+    @Test
+    fun searchOpensFromTheIconKeepsTheQueryWhenClosedAndShowsTheDot() {
+        val season = catalog.season(2025)
+        val request = GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY, name = "mah")
+        show(ready(request))
+        compose.onNodeWithTag("search").assertDoesNotExist()
+        compose.onNodeWithTag("searchDot", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("searchIcon").performClick()
+        compose.onNodeWithTag("search").assertExists()
+        compose.onNodeWithText("mah").assertExists()
+        compose.onNodeWithTag("searchClose").performClick()
+        compose.onNodeWithTag("search").assertDoesNotExist()
+        compose.onNodeWithTag("searchDot", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun typingInSearchAndClearingSendNameEvents() {
+        val season = catalog.season(2025)
+        val events = mutableListOf<GridEvent>()
+        show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY, name = "mah")), onEvent = { events += it })
+        compose.onNodeWithTag("searchIcon").performClick()
+        compose.onNodeWithTag("search").performTextReplacement("maho")
+        assertEquals(GridEvent.NameChanged("maho"), events.last())
+        compose.onNodeWithTag("searchClear").performClick()
+        assertEquals(GridEvent.NameChanged(""), events.last())
+    }
+
+    @Test
+    fun theDotIsAbsentWithoutASearch() {
+        val season = catalog.season(2025)
+        show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)))
+        compose.onNodeWithTag("searchDot", useUnmergedTree = true).assertDoesNotExist()
+    }
+
+    private fun isHidden(): Boolean =
+        compose.onNodeWithTag("chrome").fetchSemanticsNode().config.contains(SemanticsProperties.HideFromAccessibility)
+
+    @Test
+    fun scrollingDownHidesTheBarAndScrollingUpShowsIt() {
+        val season = catalog.season(2025)
+        show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)))
+        assertFalse(isHidden())
+        compose.onNodeWithTag("grid").performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        assertTrue(isHidden())
+        compose.onNodeWithTag("grid").performTouchInput { swipeDown(startY = centerY, endY = centerY + 200f) }
+        compose.waitForIdle()
+        assertFalse(isHidden())
+    }
+
+    @Test
+    fun reachingTheTopShowsTheBar() {
+        val season = catalog.season(2025)
+        show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)))
+        compose.onNodeWithTag("grid").performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        assertTrue(isHidden())
+        compose.onNode(hasScrollToIndexAction()).performScrollToIndex(0)
+        compose.waitForIdle()
+        assertFalse(isHidden())
+    }
+
+    @Test
+    fun aNewSortShowsAHiddenBar() {
+        val season = catalog.season(2025)
+        val first = ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY))
+        var state by mutableStateOf(first)
+        compose.setContent { GridironTheme { GridScreen(state, {}) } }
+        compose.onNodeWithTag("grid").performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        assertTrue(isHidden())
+        state = first.copy(request = first.request.copy(sort = StatColumn.TARGETS))
+        compose.waitForIdle()
+        assertFalse(isHidden())
+    }
+
+    @Test
+    fun anEmptyPageKeepsTheBar() {
+        val season = catalog.season(2025)
+        show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY, name = "zzzzzzzz")))
+        compose.onNodeWithText("No players match.").assertIsDisplayed()
+        compose.onNodeWithTag("chip:filters").assertIsDisplayed()
+        assertFalse(isHidden())
+    }
+
+    @Test
+    fun atLargeFontScaleTheBarsControlsAreStillReachableAndRowsDontClip() {
+        val season = catalog.season(2025)
+        val state = ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY))
+        compose.setContent {
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(d.density, fontScale = 2f)) {
+                GridironTheme { GridScreen(state, {}, menu = listOf("Settings" to { _: Int -> })) }
+            }
+        }
+        compose.onNodeWithTag("menu").assertIsDisplayed()
+        compose.onNodeWithTag("chip:filters").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("chip:pack").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithTag("chip:position:WR").performScrollTo().assertIsDisplayed()
+        val first = state.page!!.rows.first()
+        // Rows are in sp, so they grow (Android's nonlinear font scaling takes 48 sp to about 54 dp at 200%).
+        compose.onNodeWithContentDescription(first.name, substring = true).assertHeightIsAtLeast(52.dp)
+    }
+
+    @Test
+    fun aHiddenBarIsNotInTheAccessibilityTree() {
+        val season = catalog.season(2025)
+        show(ready(GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)))
+        compose.onNodeWithTag("grid").performTouchInput { swipeUp() }
+        compose.waitForIdle()
+        assertTrue(isHidden())
     }
 
     @Test
@@ -241,33 +409,19 @@ class GridScreenTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/6_fantasy_tray_dark.png")
     }
 
-    @Test
-    fun filtersInTheChipsAndSummary() {
-        val season = catalog.season(2025)
-        val request = GridRequest(
-            season, season.defaultWeeks, StatPack.RECEIVING, positions = PositionFilter.WR,
-            teams = setOf("KC"), minSnapShare = 0.5,
-            filters = listOf(Filter(StatColumn.TARGETS, Condition.AtLeast(40.0))),
-        )
-        show(ready(request))
-        compose.onNodeWithText("KC").assertIsDisplayed()
-        compose.onNodeWithText("50%+ snaps").assertIsDisplayed()
-        compose.onNodeWithText("Filters (1)").assertIsDisplayed()
-        compose.onNodeWithText("TGT ≥ 40", substring = true).assertExists()
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/7_filters_chips.png")
-    }
-
     @OptIn(ExperimentalRoborazziApi::class)
     @Test
     fun teamSheetTogglesATeam() {
         val season = catalog.season(2025)
         val events = mutableListOf<GridEvent>()
         show(ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING)), onEvent = { events += it })
-        compose.onNodeWithTag("chip:teams").performClick()
+        compose.onNodeWithTag("chip:filters").performClick()
+        compose.waitForIdle()
+        inSheet("chip:teams").performScrollTo().performClick()
         compose.waitForIdle()
         captureScreenRoboImage("build/outputs/roborazzi/8_team_sheet.png")
         compose.onNodeWithTag("team:KC").performClick()
-        assertEquals(listOf<GridEvent>(GridEvent.TeamsSelected(setOf("KC"))), events)
+        assertEquals(GridEvent.TeamsSelected(setOf("KC")), events.last())
     }
 
     @OptIn(ExperimentalRoborazziApi::class)
@@ -508,9 +662,9 @@ class GridScreenTest {
     @Test
     fun theChipOpensTheSheet() {
         val events = mutableListOf<GridEvent>()
-        show(presetState(sheet = null), onEvent = { events += it })
-        compose.onNodeWithTag("chip:presets").performClick()
-        assertEquals(listOf<GridEvent>(GridEvent.PresetsOpened), events)
+        openSheet(presetState(sheet = null), onEvent = { events += it })
+        inSheet("chip:presets").performScrollTo().performClick()
+        assertEquals(GridEvent.PresetsOpened, events.last())
     }
 
     @OptIn(ExperimentalRoborazziApi::class)

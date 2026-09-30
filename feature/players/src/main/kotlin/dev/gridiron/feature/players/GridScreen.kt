@@ -40,10 +40,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalDensity
 import android.content.Context
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -171,6 +174,10 @@ private fun GridContent(
     val haptics = LocalHapticFeedback.current
     val snackbar = remember { SnackbarHostState() }
 
+    val chromeHide = with(LocalDensity.current) { 24.dp.toPx() }
+    val chrome = remember(chromeHide) { ChromeScrollState(chromeHide) }
+    // A new sort, filter or pack must never leave the user unable to see the controls that changed it.
+    LaunchedEffect(r) { chrome.show() }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var exporting by remember { mutableStateOf(false) }
@@ -199,75 +206,15 @@ private fun GridContent(
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            TitleBar(state, onEvent, onWeeks = { showWeeks = true }, onEditProfiles = onEditProfiles, menu = menu)
-
-            OutlinedTextField(
-                value = r.name,
-                onValueChange = { onEvent(GridEvent.NameChanged(it)) },
-                placeholder = { Text("Search players") },
-                singleLine = true,
-                trailingIcon = if (r.name.isNotEmpty()) {
-                    { TextButton(onClick = { onEvent(GridEvent.NameChanged("")) }) { Text("✕") } }
-                } else {
-                    null
-                },
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).testTag("search"),
+            GridChrome(
+                state = state,
+                onEvent = onEvent,
+                onOpenWeeks = { showWeeks = true },
+                onOpenFilters = { showFilters = true },
+                onEditProfiles = onEditProfiles,
+                menu = menu,
+                scroll = chrome,
             )
-
-            ChipRow {
-                r.positions.packs.forEach { pack ->
-                    FilterChip(
-                        selected = r.pack == pack,
-                        onClick = { onEvent(GridEvent.PackSelected(pack)) },
-                        label = { Text(pack.label) },
-                    )
-                }
-            }
-            ChipRow {
-                PositionFilter.entries.forEach { p ->
-                    FilterChip(
-                        selected = r.positions == p,
-                        onClick = { onEvent(GridEvent.PositionsSelected(p)) },
-                        label = { Text(p.label) },
-                    )
-                }
-            }
-            ChipRow {
-                val teams = r.teams
-                FilterChip(
-                    selected = teams.isNotEmpty(),
-                    onClick = { showTeams = true },
-                    label = { Text(when (teams.size) { 0 -> "All teams"; 1 -> teams.single(); else -> "${teams.size} teams" }) },
-                    modifier = Modifier.testTag("chip:teams"),
-                )
-                if (state.rosters.isNotEmpty()) {
-                    RosterChip(state.rosters, state.rosterId) { onEvent(GridEvent.RosterSelected(it)) }
-                }
-                if (r.positions != PositionFilter.K && r.positions != PositionFilter.DST) {
-                    SnapChip(r.minSnapShare) { onEvent(GridEvent.MinSnapShareSelected(it)) }
-                }
-                if (state.presetsEnabled) {
-                    AssistChip(
-                        onClick = { onEvent(GridEvent.PresetsOpened) },
-                        label = { Text(if (state.presets.isEmpty()) "Presets" else "Presets (${state.presets.size})") },
-                        modifier = Modifier.testTag("chip:presets"),
-                    )
-                }
-                FilterChip(
-                    selected = r.filters.isNotEmpty(),
-                    onClick = { showFilters = true },
-                    label = { Text(if (r.filters.isEmpty()) "Filters" else "Filters (${r.filters.size})") },
-                    modifier = Modifier.testTag("chip:filters"),
-                )
-                AssistChip(
-                    onClick = ::export,
-                    enabled = state.page != null && !exporting,
-                    label = { Text("Export") },
-                    modifier = Modifier.testTag("chip:export"),
-                )
-            }
-
-            Summary(state, onEvent)
 
             Box(Modifier.weight(1f)) {
                 val page = state.page
@@ -284,6 +231,7 @@ private fun GridContent(
                         state.density,
                         state.badges,
                         state.rostered,
+                        chrome,
                         onSort = { onEvent(GridEvent.SortBy(it.column)) },
                         onInfo = { info = it.info },
                         onRowLongClick = { row ->
@@ -348,72 +296,6 @@ private fun GridContent(
 }
 
 @Composable
-private fun TitleBar(
-    state: GridUiState.Ready,
-    onEvent: (GridEvent) -> Unit,
-    onWeeks: () -> Unit,
-    onEditProfiles: () -> Unit,
-    menu: List<Pair<String, (season: Int) -> Unit>>,
-) {
-    var open by remember { mutableStateOf(false) }
-    var menuOpen by remember { mutableStateOf(false) }
-    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text("Gridiron", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(
-                "Data through week ${state.request.season.lastWeek}, ${state.request.season.season}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        ProfileChip(
-            active = state.request.scoring,
-            profiles = state.profiles,
-            onSelect = { onEvent(GridEvent.ProfileSelected(it)) },
-            onEditProfiles = onEditProfiles,
-        )
-        TextButton(onClick = onWeeks) {
-            Text(weeksLabel(state.request.season, state.request.weeks) + " ▾", style = MaterialTheme.typography.titleSmall)
-        }
-        Box {
-            TextButton(onClick = { open = true }) { Text("${state.request.season.season} ▾", style = MaterialTheme.typography.titleSmall) }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                state.catalog.seasons.asReversed().forEach { s ->
-                    DropdownMenuItem(
-                        text = { Text(s.season.toString()) },
-                        onClick = {
-                            open = false
-                            onEvent(GridEvent.SeasonSelected(s.season))
-                        },
-                    )
-                }
-            }
-        }
-        if (menu.isNotEmpty()) {
-            Box {
-                TextButton(onClick = { menuOpen = true }, modifier = Modifier.testTag("menu")) { Text("☰") }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    menu.forEach { (label, action) ->
-                        DropdownMenuItem(text = { Text(label) }, onClick = { menuOpen = false; action(state.request.season.season) })
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ChipRow(content: @Composable () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) { content() }
-}
-
-@Composable
 internal fun RosterChip(rosters: ImmutableList<Roster>, selected: String?, onSelect: (String?) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Box {
@@ -446,39 +328,6 @@ internal fun SnapChip(share: Double?, onSelect: (Double?) -> Unit) {
     }
 }
 
-@Composable
-private fun Summary(state: GridUiState.Ready, onEvent: (GridEvent) -> Unit) {
-    val page = state.page
-    val parts = buildList {
-        state.error?.let { add("Error: $it") }
-        if (page != null) add("${page.rows.size} players")
-        page?.threshold?.let(::add)
-        state.request.filters.forEach { add(describeFilter(it, state.catalog)) }
-    }
-    Column {
-        Row(
-            Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(
-                parts.joinToString(" · "),
-                Modifier.weight(1f).testTag("summary"),
-                style = MaterialTheme.typography.labelMedium,
-                color = if (state.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-            FilterChip(selected = state.request.perGame, onClick = { onEvent(GridEvent.PerGameToggled) }, label = { Text("Per game") })
-            FilterChip(selected = state.heat, onClick = { onEvent(GridEvent.HeatToggled) }, label = { Text("Heat") })
-        }
-        // Reserve the bar's height so the table doesn't jump when it appears.
-        Box(Modifier.fillMaxWidth().height(2.dp)) {
-            if (state.refreshing) LinearProgressIndicator(Modifier.fillMaxWidth())
-        }
-    }
-}
-
 private val FrozenWidth = 148.sp
 private val ColumnWidth = 72.sp
 private val ComfortableRowHeight = 48.sp
@@ -493,6 +342,7 @@ private fun PlayerTable(
     density: RowDensity,
     badges: ImmutableMap<String, String>,
     rostered: ImmutableSet<String>,
+    chrome: ChromeScrollState,
     onSort: (ColumnUi) -> Unit,
     onInfo: (ColumnUi) -> Unit,
     onRowLongClick: (GridRowUi) -> Unit,
@@ -503,6 +353,11 @@ private fun PlayerTable(
     val listState = rememberLazyListState()
     // A new sort or filter starts at the top; the same request never re-scrolls.
     LaunchedEffect(page.request) { listState.scrollToItem(0) }
+    // Back at the very top the bar always returns, however the list got there.
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0 }
+            .collect { atTop -> if (atTop) chrome.show() }
+    }
 
     StatTable(
         columns = columns,
@@ -516,7 +371,7 @@ private fun PlayerTable(
         sortedTint = MaterialTheme.colorScheme.primary.copy(alpha = 0.07f),
         headerHeight = HeaderHeight,
         listState = listState,
-        modifier = Modifier.testTag("grid"),
+        modifier = Modifier.nestedScroll(chrome.connection).testTag("grid"),
         frozenHeader = {
             Column(Modifier.align(Alignment.CenterStart).padding(start = 16.dp)) {
                 Text("PLAYER", style = HeaderStyle, color = MaterialTheme.colorScheme.onSurfaceVariant)
