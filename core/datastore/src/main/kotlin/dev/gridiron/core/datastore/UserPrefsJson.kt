@@ -40,6 +40,7 @@ internal data class UserPrefsDto(
     val oddsApiKey: String? = null,
     /** Raw, so one malformed entry (a missing field, a wrong type) costs only itself, never the whole file. */
     val gridPresets: List<JsonElement> = emptyList(),
+    val gridDensity: String? = null,
 )
 
 @Serializable
@@ -154,6 +155,7 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
         rosters = rosters,
         oddsApiKey = oddsApiKey?.takeIf { it.isNotBlank() },
         gridPresets = presets,
+        gridDensity = RowDensity.entries.firstOrNull { it.name == gridDensity } ?: RowDensity.COMFORTABLE,
     )
 }
 
@@ -225,6 +227,7 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     rosters = rosters.map { RosterDto(it.id, it.name, it.playerIds) },
     oddsApiKey = oddsApiKey,
     gridPresets = gridPresets.map { json.encodeToJsonElement(PresetDto.serializer(), it.toDto()) },
+    gridDensity = gridDensity.name,
 )
 
 internal object UserPrefsSerializer : Serializer<UserPrefs> {

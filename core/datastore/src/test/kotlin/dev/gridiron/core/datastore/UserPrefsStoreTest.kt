@@ -264,6 +264,31 @@ class UserPrefsStoreTest {
     }
 
     @Test
+    fun `gridDensity round-trips`() {
+        withStore { store -> store.update { it.copy(gridDensity = RowDensity.COMPACT) } }
+        assertEquals(RowDensity.COMPACT, withStore { it.prefs.first() }.gridDensity)
+        assertTrue(file.readText().contains("\"gridDensity\":\"COMPACT\""), file.readText())
+    }
+
+    @Test
+    fun `an absent gridDensity reads as COMFORTABLE`() {
+        file.writeText("""{"formatVersion": 3}""")
+        assertEquals(RowDensity.COMFORTABLE, withStore { it.prefs.first() }.gridDensity)
+    }
+
+    @Test
+    fun `an unknown gridDensity reads as COMFORTABLE and keeps presets and rosters`() {
+        file.writeText(
+            """{"formatVersion":3,"gridDensity":"TINY","rosters":[{"id":"r1","name":"Home","playerIds":["p1"]}],""" +
+                """"gridPresets":[{"id":"g1","name":"Deep","packId":"pack","sort":"S","direction":"DESC","position":"WR"}]}""",
+        )
+        val prefs = withStore { it.prefs.first() }
+        assertEquals(RowDensity.COMFORTABLE, prefs.gridDensity)
+        assertEquals(listOf("r1"), prefs.rosters.map { it.id })
+        assertEquals(listOf("g1"), prefs.gridPresets.map { it.id })
+    }
+
+    @Test
     fun `a file from before presets existed reads as no presets`() {
         file.writeText("""{"formatVersion": 3}""")
         assertEquals(emptyList<GridPreset>(), withStore { it.prefs.first() }.gridPresets)
