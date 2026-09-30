@@ -28,7 +28,6 @@ import dev.gridiron.core.data.Catalog
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PositionFilter
 import dev.gridiron.core.data.SeasonInfo
-import dev.gridiron.core.data.Sparkline as SparklineData
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TraySlotUi
@@ -360,8 +359,7 @@ class GridScreenTest {
         val season = catalog.season(2025)
         val state = ready(GridRequest(season, season.defaultWeeks, StatPack.FANTASY, positions = PositionFilter.WR))
         val first = state.page!!.rows.first()
-        val line = SparklineData(1..6, List(6) { 1.0 }, List(6) { "1.0" })
-        show(state.copy(sparklines = persistentMapOf(first.playerId to line)))
+        show(state)
         compose.onAllNodesWithContentDescription("Last 6 weeks:", substring = true).assertCountEquals(0)
         compose.onNodeWithTag("spark:${first.playerId}", useUnmergedTree = true).assertDoesNotExist()
     }

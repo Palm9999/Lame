@@ -7,6 +7,7 @@ import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerStatsRepository
 import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.data.ScoringRepository
@@ -97,6 +98,7 @@ class GridironApplication : Application() {
             refresher = refresher,
             rosters = RosterRepository(prefs),
             gridPresets = GridPresetRepository(prefs),
+            gridDisplay = GridDisplayRepository(prefs),
             props = propsRepo,
             playerStats = PlayerStatsRepository(executor),
         )

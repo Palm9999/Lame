@@ -56,6 +56,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.gridiron.core.data.ColumnUi
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.CsvExport
+import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPage
 import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.GridRequest
@@ -103,8 +104,9 @@ fun GridRoute(
     recovery: List<Pair<String, () -> Unit>> = emptyList(),
     rosters: Flow<List<Roster>> = flowOf(emptyList()),
     presets: GridPresetRepository? = null,
+    display: GridDisplayRepository? = null,
 ) {
-    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges, rosters, presets))
+    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges, rosters, presets, display))
     val state by vm.state.collectAsStateWithLifecycle()
     GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu, recovery)
 }
