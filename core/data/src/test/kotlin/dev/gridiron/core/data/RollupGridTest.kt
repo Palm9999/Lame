@@ -39,6 +39,7 @@ class RollupGridTest {
     private lateinit var fastRepo: StatsRepository
     private lateinit var slowRepo: StatsRepository
     private lateinit var catalog: Catalog
+    private lateinit var slowCatalog: Catalog
 
     @BeforeEach
     fun setUp() = runTest {
@@ -58,6 +59,7 @@ class RollupGridTest {
         fastRepo = StatsRepository(fast, Locale.US)
         slowRepo = StatsRepository(stripped, Locale.US)
         catalog = fastRepo.catalog()
+        slowCatalog = slowRepo.catalog()
     }
 
     @AfterEach
@@ -66,25 +68,23 @@ class RollupGridTest {
         if (::stripped.isInitialized) stripped.close()
     }
 
-    private fun request(weeks: WeekRange, pack: StatPack, perGame: Boolean = false) =
-        GridRequest(catalog.season(2025), weeks, pack, PositionFilter.ALL, perGame = perGame)
+    private fun request(of: Catalog, weeks: WeekRange, pack: StatPack, perGame: Boolean = false) =
+        GridRequest(of.season(2025), weeks, pack, PositionFilter.ALL, perGame = perGame)
 
     private fun GridPage.snapshot() = rows.map { r -> Triple(r.playerId, r.detail, r.cells.map { it.text to it.heat }) }
 
     @Test
     fun `every window gives the weekly path's grid for each non-fantasy pack`() = runTest {
-        val windows = real.query(dev.gridiron.core.statquery.CatalogQueries.windows(2025)) {
-            it.text(0) to WeekRange(it.long(1).toInt(), it.long(2).toInt())
-        }
-        assertTrue(windows.map { it.first }.containsAll(listOf("S", "L3", "L4", "L5", "L8")), "windows: $windows")
+        val windows = catalog.season(2025).rollups
+        assertTrue(windows.map { it.window }.containsAll(listOf("S", "L3", "L4", "L5", "L8")), "windows: $windows")
+        assertTrue(slowCatalog.season(2025).rollups.isEmpty())
         for ((window, weeks) in windows) {
             for (pack in StatPack.entries.filter { p -> p.columns.none { it.isFantasy } }) {
                 for (perGame in listOf(false, true)) {
-                    val r = request(weeks, pack, perGame)
                     fast.sql.clear()
-                    val a = fastRepo.grid(r, catalog)
+                    val a = fastRepo.grid(request(catalog, weeks, pack, perGame), catalog)
                     assertTrue(fast.sql.any { "player_window_stat" in it }, "$window $pack did not read the rollup")
-                    val b = slowRepo.grid(r, catalog)
+                    val b = slowRepo.grid(request(slowCatalog, weeks, pack, perGame), slowCatalog)
                     assertEquals(b.snapshot(), a.snapshot(), "$window $pack perGame=$perGame")
                 }
             }
@@ -93,15 +93,15 @@ class RollupGridTest {
 
     @Test
     fun `a database without the window tables still serves the grid from weekly facts`() = runTest {
-        val r = request(catalog.season(2025).defaultWeeks, StatPack.RECEIVING)
-        assertTrue(slowRepo.grid(r, catalog).rows.isNotEmpty())
-        assertEquals(slowRepo.count(r), fastRepo.count(r))
+        val weeks = catalog.season(2025).defaultWeeks
+        assertTrue(slowRepo.grid(request(slowCatalog, weeks, StatPack.RECEIVING), slowCatalog).rows.isNotEmpty())
+        assertEquals(slowRepo.count(request(slowCatalog, weeks, StatPack.RECEIVING)), fastRepo.count(request(catalog, weeks, StatPack.RECEIVING)))
     }
 
     @Test
     fun `the fantasy pack stays on the weekly facts`() = runTest {
         fast.sql.clear()
-        fastRepo.grid(request(catalog.season(2025).defaultWeeks, StatPack.FANTASY), catalog)
+        fastRepo.grid(request(catalog, catalog.season(2025).defaultWeeks, StatPack.FANTASY), catalog)
         assertTrue(fast.sql.none { "player_window_stat" in it })
     }
 }

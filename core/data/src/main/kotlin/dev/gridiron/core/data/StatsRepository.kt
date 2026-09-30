@@ -35,7 +35,11 @@ public class StatsRepository(
     private val format = StatFormat(locale)
 
     public suspend fun catalog(): Catalog {
-        val seasons = executor.query(CatalogQueries.seasons) { SeasonInfo(it.long(0).toInt(), it.long(1).toInt()) }
+        val windows = rollups().groupBy({ it.first }, { it.second })
+        val seasons = executor.query(CatalogQueries.seasons) {
+            val season = it.long(0).toInt()
+            SeasonInfo(season, it.long(1).toInt(), windows[season].orEmpty())
+        }
         check(seasons.isNotEmpty()) { "the stats database has no seasons" }
         val metrics = executor.query(CatalogQueries.metrics) {
             MetricInfo(
@@ -54,7 +58,7 @@ public class StatsRepository(
 
     public suspend fun grid(request: GridRequest, catalog: Catalog): GridPage {
         val threshold = threshold(request)
-        val spec = spec(request, threshold).copy(rollups = rollups(request.season.season))
+        val spec = spec(request, threshold).copy(rollups = request.season.rollups)
         val q = StatQueryBuilder.grid(spec)
         val layout = q.layout
 
@@ -124,12 +128,9 @@ public class StatsRepository(
         )
     }
 
-    /**
-     * The season's pre-aggregated windows, read with every query so they always belong to the open database. A
-     * database built before schema 9 has none, and the grid aggregates the weekly facts as before.
-     */
-    private suspend fun rollups(season: Int): List<RollupWindow> = try {
-        executor.query(CatalogQueries.windows(season)) { RollupWindow(it.text(0), WeekRange(it.long(1).toInt(), it.long(2).toInt())) }
+    /** Season and window for every stored rollup. A database built before schema 9 has none. */
+    private suspend fun rollups(): List<Pair<Int, RollupWindow>> = try {
+        executor.query(CatalogQueries.windows) { it.long(0).toInt() to RollupWindow(it.text(1), WeekRange(it.long(2).toInt(), it.long(3).toInt())) }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -144,7 +145,7 @@ public class StatsRepository(
         if (request.onlyPlayers?.isEmpty() == true) {
             0
         } else {
-            val spec = spec(request, threshold(request)).copy(rollups = rollups(request.season.season))
+            val spec = spec(request, threshold(request)).copy(rollups = request.season.rollups)
             executor.query(StatQueryBuilder.count(spec)) { it.long(0).toInt() }.single()
         }
 }
