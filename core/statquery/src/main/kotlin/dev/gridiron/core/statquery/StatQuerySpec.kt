@@ -27,6 +27,8 @@ import dev.gridiron.core.model.WeekRange
  * @property name Free-text player name filter, matched on name and word prefixes.
  * @property scoring The profile fantasy columns are scored with. Required when
  *   any column, sort, filter or qualifier is a fantasy column.
+ * @property rollups The pre-aggregated windows the database holds for [season]. When [weeks] equals one and no
+ *   fantasy column is planned, the component sums are read from the rollup instead of the weekly facts.
  */
 public data class StatQuerySpec(
     val season: Int,
@@ -47,6 +49,7 @@ public data class StatQuerySpec(
     val limit: Int = DEFAULT_LIMIT,
     val offset: Int = 0,
     val scoring: ScoringProfile? = null,
+    val rollups: List<RollupWindow> = emptyList(),
 ) {
     init {
         require(season in MIN_SEASON..MAX_SEASON) { "season $season outside $MIN_SEASON..$MAX_SEASON" }
@@ -70,6 +73,9 @@ public data class StatQuerySpec(
         public const val MAX_SEASON: Int = 2100
     }
 }
+
+/** A window of `player_window_stat` (`S`, `L3`, ...) and the weeks its sums cover. */
+public data class RollupWindow(val window: String, val weeks: WeekRange)
 
 public data class Sort(val column: StatColumn, val direction: Direction = Direction.DESCENDING)
 

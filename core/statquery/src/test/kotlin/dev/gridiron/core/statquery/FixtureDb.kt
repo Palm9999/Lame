@@ -1,5 +1,6 @@
 package dev.gridiron.core.statquery
 
+import dev.gridiron.core.model.WeekRange
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.PreparedStatement
@@ -23,6 +24,12 @@ internal class FixtureDb : AutoCloseable {
                      player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
                      team TEXT, metric_id TEXT NOT NULL, value REAL NOT NULL,
                      PRIMARY KEY (player_id, season, week, metric_id)) WITHOUT ROWID""",
+            )
+            st.executeUpdate(
+                """CREATE TABLE player_window_stat (
+                     player_id TEXT NOT NULL, season INTEGER NOT NULL, window TEXT NOT NULL,
+                     metric_id TEXT NOT NULL, value REAL NOT NULL,
+                     PRIMARY KEY (player_id, season, window, metric_id)) WITHOUT ROWID""",
             )
             st.executeUpdate("CREATE INDEX idx_pws_metric_season_week ON player_week_stat (metric_id, season, week)")
             st.executeUpdate("CREATE INDEX idx_player_search ON player (search_name)")
@@ -53,6 +60,23 @@ internal class FixtureDb : AutoCloseable {
                 ps.executeUpdate()
             }
         }
+    }
+
+    /** Fills `player_window_stat` from the weekly facts, as the ingest does, and returns the windows it defines. */
+    fun buildRollup(season: Int, windows: Map<String, WeekRange>): List<RollupWindow> {
+        for ((window, weeks) in windows) {
+            conn.prepareStatement(
+                """INSERT INTO player_window_stat SELECT player_id, season, ?, metric_id, SUM(value)
+                   FROM player_week_stat WHERE season = ? AND week BETWEEN ? AND ? GROUP BY player_id, metric_id""",
+            ).use { ps ->
+                ps.setString(1, window)
+                ps.setInt(2, season)
+                ps.setInt(3, weeks.first)
+                ps.setInt(4, weeks.last)
+                ps.executeUpdate()
+            }
+        }
+        return windows.map { (window, weeks) -> RollupWindow(window, weeks) }
     }
 
     fun rows(query: SqlQuery): List<List<Any?>> =

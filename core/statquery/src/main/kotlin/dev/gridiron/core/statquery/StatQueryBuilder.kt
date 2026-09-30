@@ -44,7 +44,10 @@ private val EXPECTED_COMPONENTS: List<Component> =
  *  1. `agg` pivots `player_week_stat` to one row per player, summing only the
  *     components the requested columns need. Its predicate is
  *     `metric_id IN (...) AND season = ? AND week BETWEEN ? AND ?`, which is
- *     exactly the `idx_pws_metric_season_week` index.
+ *     exactly the `idx_pws_metric_season_week` index. When no fantasy column is
+ *     planned and the spec's weeks equal one of its [StatQuerySpec.rollups],
+ *     it pivots `player_window_stat` instead (`... AND window = ?`, the
+ *     `idx_pws_window` index): the same sums, already added up.
  *  2. `base` computes each column from those sums, so rates are recomputed over
  *     the range rather than averaged, and applies the games floor. When
  *     scored, it left-joins `fsum` so a player with games but no scoring
@@ -229,10 +232,19 @@ private class SqlWriter {
         plan.components.forEachIndexed { i, c ->
             line("       , SUM(CASE WHEN s.metric_id = ${text(c.id)} THEN s.value END) AS k$i")
         }
-        line("  FROM player_week_stat s")
-        line("  WHERE s.metric_id IN (${plan.components.joinToString(", ") { text(it.id) }})")
-        line("    AND s.season = ${int(spec.season)}")
-        line("    AND s.week BETWEEN ${int(spec.weeks.first)} AND ${int(spec.weeks.last)}")
+        // Fantasy columns score each week, so they stay on the weekly facts.
+        val rollup = if (plan.scored) null else spec.rollups.firstOrNull { it.weeks == spec.weeks }
+        if (rollup != null) {
+            line("  FROM player_window_stat s")
+            line("  WHERE s.metric_id IN (${plan.components.joinToString(", ") { text(it.id) }})")
+            line("    AND s.season = ${int(spec.season)}")
+            line("    AND s.window = ${text(rollup.window)}")
+        } else {
+            line("  FROM player_week_stat s")
+            line("  WHERE s.metric_id IN (${plan.components.joinToString(", ") { text(it.id) }})")
+            line("    AND s.season = ${int(spec.season)}")
+            line("    AND s.week BETWEEN ${int(spec.weeks.first)} AND ${int(spec.weeks.last)}")
+        }
         line("  GROUP BY s.player_id")
         line("), base AS (")
         line("  SELECT p.player_id, p.full_name, p.position, p.team, p.search_name, ${plan.games} AS games")
