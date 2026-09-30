@@ -1,0 +1,107 @@
+package dev.gridiron.core.data
+
+import dev.gridiron.core.database.QueryExecutor
+import dev.gridiron.core.database.ResultRow
+import dev.gridiron.core.model.WeekRange
+import dev.gridiron.core.statquery.SqlQuery
+import dev.gridiron.core.testing.JdbcQueryExecutor
+import dev.gridiron.core.testing.StatsDb
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Assumptions.assumeTrue
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.io.TempDir
+import java.io.File
+import java.sql.DriverManager
+import java.util.Locale
+
+/** Records the SQL it runs, to see which table a grid read. */
+private class Recording(private val inner: QueryExecutor) : QueryExecutor {
+    val sql = mutableListOf<String>()
+
+    override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
+        sql += query.sql
+        return inner.query(query, map)
+    }
+}
+
+/** The pre-aggregated windows against the real database: same grid as the weekly facts, or the weekly path. */
+class RollupGridTest {
+    @TempDir
+    lateinit var dir: File
+
+    private lateinit var real: JdbcQueryExecutor
+    private lateinit var stripped: JdbcQueryExecutor
+    private lateinit var fast: Recording
+    private lateinit var fastRepo: StatsRepository
+    private lateinit var slowRepo: StatsRepository
+    private lateinit var catalog: Catalog
+
+    @BeforeEach
+    fun setUp() = runTest {
+        assumeTrue(StatsDb.path != null, "GRIDIRON_STATS_DB not set")
+        // The same database without the rollup tables: what the phone holds before its first refresh.
+        val copy = File(dir, "old.db")
+        File(StatsDb.path!!).copyTo(copy)
+        DriverManager.getConnection("jdbc:sqlite:${copy.path}").use { c ->
+            c.createStatement().use {
+                it.executeUpdate("DROP TABLE player_window_stat")
+                it.executeUpdate("DROP TABLE window_def")
+            }
+        }
+        real = JdbcQueryExecutor(StatsDb.path!!)
+        stripped = JdbcQueryExecutor(copy.path)
+        fast = Recording(real)
+        fastRepo = StatsRepository(fast, Locale.US)
+        slowRepo = StatsRepository(stripped, Locale.US)
+        catalog = fastRepo.catalog()
+    }
+
+    @AfterEach
+    fun tearDown() {
+        if (::real.isInitialized) real.close()
+        if (::stripped.isInitialized) stripped.close()
+    }
+
+    private fun request(weeks: WeekRange, pack: StatPack, perGame: Boolean = false) =
+        GridRequest(catalog.season(2025), weeks, pack, PositionFilter.ALL, perGame = perGame)
+
+    private fun GridPage.snapshot() = rows.map { r -> Triple(r.playerId, r.detail, r.cells.map { it.text to it.heat }) }
+
+    @Test
+    fun `every window gives the weekly path's grid for each non-fantasy pack`() = runTest {
+        val windows = real.query(dev.gridiron.core.statquery.CatalogQueries.windows(2025)) {
+            it.text(0) to WeekRange(it.long(1).toInt(), it.long(2).toInt())
+        }
+        assertTrue(windows.map { it.first }.containsAll(listOf("S", "L3", "L4", "L5", "L8")), "windows: $windows")
+        for ((window, weeks) in windows) {
+            for (pack in StatPack.entries.filter { p -> p.columns.none { it.isFantasy } }) {
+                for (perGame in listOf(false, true)) {
+                    val r = request(weeks, pack, perGame)
+                    fast.sql.clear()
+                    val a = fastRepo.grid(r, catalog)
+                    assertTrue(fast.sql.any { "player_window_stat" in it }, "$window $pack did not read the rollup")
+                    val b = slowRepo.grid(r, catalog)
+                    assertEquals(b.snapshot(), a.snapshot(), "$window $pack perGame=$perGame")
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a database without the window tables still serves the grid from weekly facts`() = runTest {
+        val r = request(catalog.season(2025).defaultWeeks, StatPack.RECEIVING)
+        assertTrue(slowRepo.grid(r, catalog).rows.isNotEmpty())
+        assertEquals(slowRepo.count(r), fastRepo.count(r))
+    }
+
+    @Test
+    fun `the fantasy pack stays on the weekly facts`() = runTest {
+        fast.sql.clear()
+        fastRepo.grid(request(catalog.season(2025).defaultWeeks, StatPack.FANTASY), catalog)
+        assertTrue(fast.sql.none { "player_window_stat" in it })
+    }
+}

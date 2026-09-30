@@ -366,6 +366,41 @@ class RealDatabaseContractTest {
         assertTrue(median < 1_000, "median $median ms")
     }
 
+    @Test
+    fun `a rollup grid equals the weekly grid for every window, and its speed is printed`() {
+        val season = lastCompleteSeason
+        val windows = conn.prepareStatement("SELECT window, first_week, last_week FROM window_def WHERE season = ?").use { ps ->
+            ps.setInt(1, season)
+            ps.executeQuery().use { rs ->
+                buildList { while (rs.next()) add(RollupWindow(rs.getString(1), WeekRange(rs.getInt(2), rs.getInt(3)))) }
+            }
+        }
+        assertEquals(setOf("S", "L3", "L4", "L5", "L8"), windows.map { it.window }.toSet())
+        val columns = listOf(
+            StatColumn.TARGETS, StatColumn.TARGET_SHARE, StatColumn.AIR_YARDS_SHARE, StatColumn.WOPR,
+            StatColumn.ADOT, StatColumn.RACR, StatColumn.CATCH_RATE, StatColumn.RECEIVING_YARDS,
+            StatColumn.RZ_TARGETS, StatColumn.EZ_TARGETS, StatColumn.SNAP_SHARE, StatColumn.TOTAL_EPA,
+        )
+        for (window in windows) {
+            val weekly = StatQuerySpec(
+                season, window.weeks, columns, positions = Position.FLEX, percentiles = true, minGames = 1,
+                sort = listOf(Sort(StatColumn.WOPR)), limit = StatQuerySpec.MAX_LIMIT,
+            )
+            val rollup = weekly.copy(rollups = listOf(window))
+            val slow = StatQueryBuilder.grid(weekly).query
+            val fast = StatQueryBuilder.grid(rollup).query
+            assertTrue("player_window_stat" in fast.sql && "player_week_stat" !in fast.sql, window.window)
+            assertEquals(run(slow), run(fast), "window ${window.window}")
+            if (window.window == "S") {
+                fun median(q: SqlQuery): Double {
+                    repeat(3) { run(q) }
+                    return (1..10).map { val t0 = System.nanoTime(); run(q); (System.nanoTime() - t0) / 1e6 }.sorted()[5]
+                }
+                println("full-season 12-column FLEX grid: weekly %.1f ms, rollup %.1f ms".format(median(slow), median(fast)))
+            }
+        }
+    }
+
     /** The spec both the speed test and its index-plan sibling below run. */
     private fun scoredSpec(): StatQuerySpec {
         // A complete season, not seasons.last(): the season in progress has far

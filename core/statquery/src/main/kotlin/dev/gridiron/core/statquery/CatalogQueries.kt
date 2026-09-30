@@ -21,6 +21,15 @@ public object CatalogQueries {
         listOf(Bind.Text(Components.GAMES.id)),
     )
 
+    /**
+     * The pre-aggregated windows stored for one season: window, first_week, last_week. The table is missing from a
+     * database built before schema 9.
+     */
+    public fun windows(season: Int): SqlQuery = SqlQuery(
+        "SELECT window, first_week, last_week FROM window_def WHERE season = ? ORDER BY window",
+        listOf(Bind.Integer(season.toLong())),
+    )
+
     /** Every team a player is currently on, alphabetically: team. */
     public val teams: SqlQuery = SqlQuery(
         "SELECT DISTINCT team FROM player WHERE team IS NOT NULL ORDER BY team",

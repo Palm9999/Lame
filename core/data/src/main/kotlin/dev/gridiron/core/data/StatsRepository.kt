@@ -10,6 +10,7 @@ import dev.gridiron.core.statquery.CatalogQueries
 import dev.gridiron.core.statquery.Condition
 import dev.gridiron.core.statquery.Filter
 import dev.gridiron.core.statquery.GridLayout
+import dev.gridiron.core.statquery.RollupWindow
 import dev.gridiron.core.statquery.Sort
 import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.statquery.StatQueryBuilder
@@ -17,6 +18,7 @@ import dev.gridiron.core.statquery.StatQuerySpec
 import dev.gridiron.core.statquery.ValueMode
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import java.util.Locale
@@ -52,7 +54,7 @@ public class StatsRepository(
 
     public suspend fun grid(request: GridRequest, catalog: Catalog): GridPage {
         val threshold = threshold(request)
-        val spec = spec(request, threshold)
+        val spec = spec(request, threshold).copy(rollups = rollups(request.season.season))
         val q = StatQueryBuilder.grid(spec)
         val layout = q.layout
 
@@ -122,10 +124,27 @@ public class StatsRepository(
         )
     }
 
+    /**
+     * The season's pre-aggregated windows, read with every query so they always belong to the open database. A
+     * database built before schema 9 has none, and the grid aggregates the weekly facts as before.
+     */
+    private suspend fun rollups(season: Int): List<RollupWindow> = try {
+        executor.query(CatalogQueries.windows(season)) { RollupWindow(it.text(0), WeekRange(it.long(1).toInt(), it.long(2).toInt())) }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyList()
+    }
+
     private fun threshold(request: GridRequest): SampleThreshold? =
         SampleThreshold.forRequest(request.sort, request.pack, request.playedWeeks, request.perGame)
 
     /** How many players [request] matches, ignoring the page limit. Backs the filter sheet's live count. */
     public suspend fun count(request: GridRequest): Int =
-        if (request.onlyPlayers?.isEmpty() == true) 0 else executor.query(StatQueryBuilder.count(spec(request, threshold(request)))) { it.long(0).toInt() }.single()
+        if (request.onlyPlayers?.isEmpty() == true) {
+            0
+        } else {
+            val spec = spec(request, threshold(request)).copy(rollups = rollups(request.season.season))
+            executor.query(StatQueryBuilder.count(spec)) { it.long(0).toInt() }.single()
+        }
 }
