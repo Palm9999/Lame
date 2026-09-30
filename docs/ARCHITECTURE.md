@@ -47,13 +47,14 @@ Module map, data flow, design decisions and database schema. `CLAUDE.md` keeps o
 
 **Navigation 3, No Hilt** — Screens navigate through Navigation 3 (`app/.../GridironNavHost.kt`, `NavKeys.kt`). Repositories are wired by hand in `GridironApplication`; Hilt is not used.
 
-## Database Schema (Version 8)
+## Database Schema (Version 9)
 
 Long/narrow design: adding a metric is an `INSERT`, not a migration.
 
 | Table | Purpose |
 |---|---|
 | `player_week_stat` | Facts: `(player_id, season, week, team, metric_id, value)`, indexed as covering index on `(metric_id, season, week, value)` |
+| `player_window_stat` | Component sums per `(player_id, season, window, metric_id)` for `S` (the regular season played so far) and `L3`, `L4`, `L5`, `L8` (the last N weeks ending there), filled from `player_week_stat` at the end of a build; indexed `(metric_id, season, window, value)`. `window_def (season, window, first_week, last_week)` gives each window's bounds. `StatQueryBuilder` reads the rollup, not the weekly facts, when the Grid's week range equals a window and no fantasy column is planned (fantasy points are scored per week, so they keep the weekly path); `SeasonInfo.rollups` carries the windows from the catalog, and a database without the tables falls back silently |
 | `metric` | Metric registry: name, definition, formula, tier, predictive use, stability, internal flag, plus `dist_family` (distribution for on-device Monte Carlo/percentile reconstruction) and `zero_inflated` |
 | `player` | Players with at least one stat in the built seasons, plus a `DST_<TEAM>` pseudo-player per team |
 | `player_xref` | ESPN athlete id → `player_id` for every player nflverse lists, stats or not; links ESPN news and injuries |
