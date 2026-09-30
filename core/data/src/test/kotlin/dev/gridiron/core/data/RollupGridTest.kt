@@ -99,9 +99,13 @@ class RollupGridTest {
     }
 
     @Test
-    fun `the fantasy pack stays on the weekly facts`() = runTest {
-        fast.sql.clear()
-        fastRepo.grid(request(catalog, catalog.season(2025).defaultWeeks, StatPack.FANTASY), catalog)
-        assertTrue(fast.sql.none { "player_window_stat" in it })
+    fun `the fantasy pack reads the rollup and gives the weekly path's grid`() = runTest {
+        for ((window, weeks) in catalog.season(2025).rollups) {
+            fast.sql.clear()
+            val a = fastRepo.grid(request(catalog, weeks, StatPack.FANTASY), catalog)
+            assertTrue(fast.sql.any { "player_window_stat" in it }, "$window did not read the rollup")
+            val b = slowRepo.grid(request(slowCatalog, weeks, StatPack.FANTASY), slowCatalog)
+            assertEquals(b.snapshot(), a.snapshot(), window)
+        }
     }
 }

@@ -154,13 +154,15 @@ class StatQueryBuilderTest {
         }
 
         @Test
-        fun `a fantasy column uses the weekly path`() {
+        fun `a fantasy column reads the rollup and, with no bonus or tier, no weekly fact`() {
             seed()
             val fast = StatQuerySpec(
                 season = 2025, weeks = WeekRange(1, 6), columns = listOf(TARGETS, FANTASY_POINTS),
-                scoring = ScoringPresets.PPR, rollups = rollups,
+                scoring = ScoringPresets.PPR.copy(yardageBonuses = emptyList(), pointsAllowedTiers = emptyList(), yardsAllowedTiers = emptyList()),
+                rollups = rollups,
             )
-            assertTrue("player_window_stat" !in StatQueryBuilder.grid(fast).query.sql)
+            val sql = StatQueryBuilder.grid(fast).query.sql
+            assertTrue("player_window_stat" in sql && "player_week_stat" !in sql)
         }
 
         @Test

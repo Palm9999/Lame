@@ -27,8 +27,9 @@ import dev.gridiron.core.model.WeekRange
  * @property name Free-text player name filter, matched on name and word prefixes.
  * @property scoring The profile fantasy columns are scored with. Required when
  *   any column, sort, filter or qualifier is a fantasy column.
- * @property rollups The pre-aggregated windows the database holds for [season]. When [weeks] equals one and no
- *   fantasy column is planned, the component sums are read from the rollup instead of the weekly facts.
+ * @property rollups The pre-aggregated windows the database holds for [season]. When [weeks] equals one, the component sums
+ *   are read from the rollup instead of the weekly facts; fantasy points weight those sums and read weekly facts
+ *   only for yardage bonuses and points- and yards-allowed tiers.
  */
 public data class StatQuerySpec(
     val season: Int,
