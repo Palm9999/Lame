@@ -217,8 +217,36 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
             buildList { while (st.step()) add(st.getText(0)) }
         }
 
-    /** Indexes, provenance, then ANALYZE so the planner has statistics on the first query. */
+    /**
+     * Fills `window_def` and `player_window_stat` from `player_week_stat` for every season: `S` is weeks 1 through
+     * the last regular-season week played (the Grid's default range), `L<N>` the N weeks ending there, clipped at
+     * week 1. The last week played is the newest `g` row, as the Grid's season list reads it. Playoff weeks are
+     * outside every window.
+     */
+    fun writeWindows() {
+        val lastPlayed = connection.prepare("SELECT season, MAX(week) FROM player_week_stat WHERE metric_id = 'g' GROUP BY season").use { st ->
+            buildList { while (st.step()) add(st.getLong(0).toInt() to st.getLong(1).toInt()) }
+        }
+        transaction {
+            for ((season, played) in lastPlayed) {
+                val last = minOf(played, lastRegularSeasonWeek(season))
+                val windows = listOf(WINDOW_SEASON to 1) + WINDOWS_LAST.map { "L$it" to maxOf(1, last - it + 1) }
+                for ((window, first) in windows) {
+                    execute("INSERT INTO window_def (season, window, first_week, last_week) VALUES (?, ?, ?, ?)", season, window, first, last)
+                    execute(
+                        """INSERT INTO player_window_stat (player_id, season, window, metric_id, value)
+                           SELECT player_id, season, ?, metric_id, SUM(value) FROM player_week_stat
+                           WHERE season = ? AND week BETWEEN ? AND ? GROUP BY player_id, metric_id""",
+                        window, season, first, last,
+                    )
+                }
+            }
+        }
+    }
+
+    /** Windows, indexes, provenance, then ANALYZE so the planner has statistics on the first query. */
     fun finish(seasons: Collection<Int>, meta: Map<String, String>, builtAt: Instant) {
+        writeWindows()
         for (statement in INDEXES) connection.execSQL(statement)
         val rows = linkedMapOf(
             "schema_version" to SCHEMA_VERSION.toString(),

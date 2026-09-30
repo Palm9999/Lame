@@ -44,8 +44,8 @@ class StatsDbWriterTest {
         build(file, listOf(2025))
 
         val meta = readMeta(file)!!
-        assertEquals("8", meta["schema_version"])
-        assertEquals("7", meta["ingest_version"])
+        assertEquals("9", meta["schema_version"])
+        assertEquals("8", meta["ingest_version"])
         assertEquals("2025", meta["seasons"])
         assertEquals("3", meta["expected_through_week:2025"])
         assertEquals("2026-09-25T12:00:00Z", meta["built_at"])
@@ -60,6 +60,72 @@ class StatsDbWriterTest {
         assertEquals(1, query(file, "SELECT name FROM sqlite_master WHERE name = 'sqlite_stat1'").size)
         assertEquals(listOf(listOf("Questionable")), query(file, "SELECT status FROM injury_report"))
         assertEquals(listOf(listOf("300.0")), query(file, "SELECT yards_allowed FROM team_week_defense"))
+    }
+
+    private fun weekly(season: Int, vararg weeks: Int): List<Fact> = weeks.flatMap { w ->
+        listOf(Fact("WR1", season, w, "AAA", "g", 1.0), Fact("WR1", season, w, "AAA", "targets", w.toDouble()))
+    }
+
+    private fun windows(file: File, season: Int): Map<String, List<String?>> =
+        query(file, "SELECT window, first_week, last_week FROM window_def WHERE season = $season ORDER BY window")
+            .associate { it[0]!! to it.drop(1) }
+
+    private fun sums(file: File, season: Int, window: String, metric: String): String? =
+        query(file, "SELECT value FROM player_window_stat WHERE season = $season AND window = '$window' AND metric_id = '$metric'")
+            .singleOrNull()?.get(0)
+
+    private fun buildWeeks(file: File, season: Int, vararg weeks: Int) {
+        StatsDbWriter.create(file).use { w ->
+            w.writeMetrics(METRICS)
+            w.writeFacts(weekly(season, *weeks))
+            w.writePlayers(listOf(wr1))
+            w.finish(listOf(season), emptyMap(), Instant.parse("2026-09-25T12:00:00Z"))
+        }
+    }
+
+    @Test
+    fun `windows match the weekly sums`() {
+        val file = File(dir, "stats.db")
+        buildWeeks(file, 2025, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+        assertEquals(listOf("1", "10"), windows(file, 2025)["S"])
+        assertEquals(listOf("8", "10"), windows(file, 2025)["L3"])
+        assertEquals("55.0", sums(file, 2025, "S", "targets"))
+        assertEquals("27.0", sums(file, 2025, "L3", "targets"))
+        assertEquals("10.0", sums(file, 2025, "S", "g"))
+        assertEquals("8.0", sums(file, 2025, "L8", "g"))
+    }
+
+    @Test
+    fun `a last window clips to the weeks played`() {
+        val file = File(dir, "stats.db")
+        buildWeeks(file, 2025, 1, 2)
+        assertEquals(listOf("1", "2"), windows(file, 2025)["L5"])
+        assertEquals("3.0", sums(file, 2025, "L5", "targets"))
+    }
+
+    @Test
+    fun `a bye week inside a window counts no game`() {
+        val file = File(dir, "stats.db")
+        buildWeeks(file, 2025, 1, 2, 3, 4, 6, 7)
+        assertEquals(listOf("4", "7"), windows(file, 2025)["L4"])
+        assertEquals("3.0", sums(file, 2025, "L4", "g"))
+        assertEquals("17.0", sums(file, 2025, "L4", "targets"))
+    }
+
+    @Test
+    fun `playoff weeks stay out of the windows`() {
+        val file = File(dir, "stats.db")
+        buildWeeks(file, 2025, 17, 18, 19)
+        assertEquals(listOf("1", "18"), windows(file, 2025)["S"])
+        assertEquals(listOf("16", "18"), windows(file, 2025)["L3"])
+        assertEquals("35.0", sums(file, 2025, "S", "targets"))
+    }
+
+    @Test
+    fun `a season before 2021 ends its regular season at week 17`() {
+        val file = File(dir, "stats.db")
+        buildWeeks(file, 2020, 16, 17, 18)
+        assertEquals(listOf("1", "17"), windows(file, 2020)["S"])
     }
 
     @Test
