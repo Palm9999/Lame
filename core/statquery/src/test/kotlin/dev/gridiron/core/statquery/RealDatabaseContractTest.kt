@@ -401,6 +401,46 @@ class RealDatabaseContractTest {
         }
     }
 
+    @Test
+    fun `a rollup scores every window as the weekly path does, and its speed is printed`() {
+        val season = lastCompleteSeason
+        val windows = conn.prepareStatement("SELECT window, first_week, last_week FROM window_def WHERE season = ?").use { ps ->
+            ps.setInt(1, season)
+            ps.executeQuery().use { rs ->
+                buildList { while (rs.next()) add(RollupWindow(rs.getString(1), WeekRange(rs.getInt(2), rs.getInt(3)))) }
+            }
+        }
+        val columns = listOf(StatColumn.FANTASY_POINTS, StatColumn.EXPECTED_FANTASY_POINTS, StatColumn.FPOE, StatColumn.TARGETS)
+        for (window in windows) {
+            val weekly = StatQuerySpec(
+                season, window.weeks, columns, scoring = everyRule, minGames = 1, limit = StatQuerySpec.MAX_LIMIT,
+                sort = listOf(Sort(StatColumn.TARGETS)),
+            )
+            val slow = StatQueryBuilder.grid(weekly).query
+            val fast = StatQueryBuilder.grid(weekly.copy(rollups = listOf(window))).query
+            assertTrue("player_window_stat" in fast.sql, window.window)
+            // Summing weeks in another order moves the last float bits: compare by player, to a millionth of a point.
+            val a = run(fast).associateBy { it[0] }
+            val b = run(slow).associateBy { it[0] }
+            assertEquals(b.keys, a.keys, window.window)
+            for ((id, row) in b) {
+                for (i in 5 until row.size) {
+                    val x = (a.getValue(id)[i] as Number?)?.toDouble()
+                    val y = (row[i] as Number?)?.toDouble()
+                    if (y == null || x == null) assertEquals(y, x, "window ${window.window} $id column $i")
+                    else assertEquals(y, x, 1e-6, "window ${window.window} $id column $i")
+                }
+            }
+            if (window.window == "S") {
+                fun median(q: SqlQuery): Double {
+                    repeat(3) { run(q) }
+                    return (1..10).map { val t0 = System.nanoTime(); run(q); (System.nanoTime() - t0) / 1e6 }.sorted()[5]
+                }
+                println("full-season scored grid (every rule): weekly %.1f ms, rollup %.1f ms".format(median(slow), median(fast)))
+            }
+        }
+    }
+
     /** The spec both the speed test and its index-plan sibling below run. */
     private fun scoredSpec(): StatQuerySpec {
         // A complete season, not seasons.last(): the season in progress has far
