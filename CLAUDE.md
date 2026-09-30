@@ -72,7 +72,7 @@ Detail (module behavior, data flow, design decisions, schema): `docs/ARCHITECTUR
 - **Plans:** for native execution, write a short plan: tasks, interfaces and test names, no full code. The spec carries the design.
 - **PRs:** one PR per feature. HANDOFF updates ride in that PR: no docs-only PRs, no check-ins or subscriptions for docs-only changes.
 - **Specs and plans** are deleted once executed; they stay in git history (`git log --diff-filter=D -- docs/superpowers`).
-- **One session at a time** on `claude/dreamy-euler-phbdq1`; reset it to main after each merge.
+- **Branch:** work directly on `claude/relaxed-hypatia-73hhub`; never create a new branch.
 
 ## Testing Strategy
 
