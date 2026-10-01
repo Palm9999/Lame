@@ -111,6 +111,50 @@ class StatsRepositoryTest {
         }
     }
 
+    private suspend fun page(pack: StatPack): GridPage {
+        val season = catalog.season(2025)
+        return repo.grid(GridRequest(season, season.defaultWeeks, pack), catalog)
+    }
+
+    @Test
+    fun `a percent column's cell shows digits only and keeps its percent sign in text`() = runTest {
+        val page = page(StatPack.OPPORTUNITY)
+        val i = page.columns.indexOfFirst { it.column == StatColumn.TARGET_SHARE }
+        val cells = page.rows.map { it.cells[i] }.filter { it.text != StatFormat.MISSING }
+        assertTrue(cells.isNotEmpty())
+        cells.forEach {
+            assertTrue(it.text.endsWith("%"), it.text)
+            assertEquals(it.text.removeSuffix("%"), it.display)
+        }
+    }
+
+    @Test
+    fun `a non-percent column's display equals its text`() = runTest {
+        val page = page(StatPack.OPPORTUNITY)
+        val i = page.columns.indexOfFirst { it.column == StatColumn.TARGETS }
+        page.rows.forEach { assertEquals(it.cells[i].text, it.cells[i].display) }
+    }
+
+    @Test
+    fun `a percent column's header ends in a percent sign`() = runTest {
+        val opportunity = page(StatPack.OPPORTUNITY)
+        for (c in opportunity.columns) {
+            if (StatFormat.isPercent(c.column)) assertTrue(c.header.endsWith("%"), c.header)
+        }
+        // RSR has no % in its abbreviation, so one is appended.
+        val efficiency = page(StatPack.EFFICIENCY)
+        val rsr = efficiency.columns.firstOrNull { it.column == StatColumn.RUSH_SUCCESS_RATE }
+        if (rsr != null) assertEquals("RSR %", rsr.header)
+    }
+
+    @Test
+    fun `an NGS percentage column (already in points) is unchanged`() = runTest {
+        val page = page(StatPack.NGS_RUSHING)
+        val i = page.columns.indexOfFirst { it.column == StatColumn.NGS_STACKED_BOX_PCT }
+        assertEquals("8+ BOX%", page.columns[i].header)
+        page.rows.forEach { assertEquals(it.cells[i].text, it.cells[i].display) }
+    }
+
     @Test
     fun `a rate sort carries its sample floor and shows it`() = runTest {
         val season = catalog.season(2025)
@@ -254,91 +298,4 @@ class StatsRepositoryTest {
                 listOf(Bind.Text(playerId), Bind.Integer(week.toLong()), Bind.Text(metric)),
             ),
         ) { it.double(0) }.singleOrNull()
-
-    @Test
-    fun `sparklines are each week's own value, zero when played and empty, a gap when not played`() = runTest {
-        val season = catalog.season(2025)
-        val page = repo.grid(
-            GridRequest(season, season.defaultWeeks, StatPack.RECEIVING, positions = PositionFilter.WR, sort = StatColumn.RECEIVING_YARDS),
-            catalog,
-        )
-        val lines = repo.sparklines(page)
-        assertEquals(page.rows.map { it.playerId }.toSet(), lines.keys)
-        var gaps = 0
-        var zeros = 0
-        for (row in page.rows.take(60)) {
-            val line = lines.getValue(row.playerId)
-            assertEquals(13..18, line.weeks)
-            line.weeks.forEachIndexed { i, week ->
-                val played = (fact(row.playerId, week, "g") ?: 0.0) > 0
-                val yards = line.values[i]
-                if (!played) {
-                    assertNull(yards, "${row.name} wk $week: not played but $yards")
-                    gaps++
-                } else {
-                    // Sparse storage: a played week with no receiving-yards fact is 0, not a gap.
-                    assertEquals(fact(row.playerId, week, "receiving_yards") ?: 0.0, yards!!, 1e-9, "${row.name} wk $week")
-                    if (yards == 0.0) zeros++
-                }
-            }
-        }
-        assertTrue(gaps > 0, "expected at least one bye among 60 WRs over six weeks")
-        println("sparkline check: $gaps gaps, $zeros played-zero weeks")
-    }
-
-    @Test
-    fun `sparklines for rate and fantasy sorts match that week's single-week value`() = runTest {
-        val season = catalog.season(2025)
-        for (sort in listOf(StatColumn.CATCH_RATE, StatColumn.FANTASY_POINTS)) {
-            val pack = if (sort == StatColumn.FANTASY_POINTS) StatPack.FANTASY else StatPack.RECEIVING
-            val page = repo.grid(GridRequest(season, season.defaultWeeks, pack, sort = sort), catalog)
-            val lines = repo.sparklines(page)
-            val row = page.rows.first()
-            val line = lines.getValue(row.playerId)
-            line.weeks.forEachIndexed { i, week ->
-                val spec = StatQuerySpec(
-                    season = 2025, weeks = WeekRange.single(week), columns = listOf(sort),
-                    playerIds = setOf(row.playerId), includeUnqualified = true, scoring = page.request.scoring,
-                )
-                val q = StatQueryBuilder.grid(spec)
-                val expected = executor.query(q.query) { it.doubleOrNull(q.layout.valueIndex(sort)) }.singleOrNull()
-                assertEquals(expected, line.values[i], "$sort ${row.name} wk $week")
-            }
-        }
-    }
-
-    @Test
-    fun `no sparklines for a single week or an unplayed range`() = runTest {
-        var queries = 0
-        val counting = object : dev.gridiron.core.database.QueryExecutor {
-            override suspend fun <T> query(query: SqlQuery, map: (dev.gridiron.core.database.ResultRow) -> T): List<T> {
-                queries++
-                return executor.query(query, map)
-            }
-        }
-        val r = StatsRepository(counting, Locale.US)
-        val season = catalog.season(2025)
-        val page = r.grid(GridRequest(season, WeekRange.single(7), StatPack.RECEIVING), catalog)
-        val before = queries
-        assertEquals(emptyMap<String, Sparkline>(), r.sparklines(page))
-        assertEquals(before, queries)
-    }
-
-    @Test
-    fun `sparklines for a full page are fast`() = runTest {
-        val season = catalog.season(2025)
-        // The Fantasy pack with no position filter: the most rows and the most expensive (scored) column.
-        val page = repo.grid(GridRequest(season, season.defaultWeeks, StatPack.FANTASY), catalog)
-        repeat(2) { repo.sparklines(page) }
-        val times = (1..7).map {
-            val t0 = System.nanoTime()
-            repo.sparklines(page)
-            (System.nanoTime() - t0) / 1e6
-        }.sorted()
-        val median = times[times.size / 2]
-        val ci = System.getenv("CI") != null
-        val budget = if (ci) 1_200 else 300
-        println("sparklines, ${page.rows.size} rows x 6 weeks: median %.1f ms (budget %d ms%s)".format(median, budget, if (ci) ", CI" else ""))
-        assertTrue(median < budget, "median $median ms (budget ${budget}ms)")
-    }
 }

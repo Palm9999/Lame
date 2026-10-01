@@ -81,4 +81,4 @@ Every build runs [`validate.py`](gridiron_etl/validate.py). The database checks 
 
 - **Only part of the ~450 catalogued metrics** are implemented: the play-by-play, snap-count and ffopportunity metrics in `metrics.py`. Next Gen Stats (`ngs.py`) and FTN charting (`ftn.py`, ten headline metrics from 2022) are the only tracking and charting sources transformed.
 - **`opportunity_share`** (RB backfield share) is registered but not computed. `fpoe` is now computable on-device, since the ETL loads ffopportunity's `x_*` expected components alongside the actuals.
-- **Pre-aggregated season rollups** (season totals, L3/L5/L8 splits) are specified but not built. They're the next performance step: a full-season Grid query is ~85 ms today, and a rollup would serve the most common view without aggregating weekly facts at all.
+- **Season rollups** (`player_window_stat`, `window_def`; whole season and last 3, 4, 5 and 8 weeks) are built here and in Kotlin and compared by `tools/parity.py`. They serve any Grid view whose weeks match a window; fantasy points weight the window's sums, and only yardage bonuses and tiers read weekly facts (Kotlin query builder only).

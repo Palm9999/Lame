@@ -40,6 +40,16 @@ internal data class UserPrefsDto(
     val oddsApiKey: String? = null,
     /** Raw, so one malformed entry (a missing field, a wrong type) costs only itself, never the whole file. */
     val gridPresets: List<JsonElement> = emptyList(),
+    val gridDensity: String? = null,
+    val espnLeague: EspnLeagueDto? = null,
+)
+
+@Serializable
+internal data class EspnLeagueDto(
+    val leagueId: String,
+    val espnS2: String? = null,
+    val swid: String? = null,
+    val teamId: Int? = null,
 )
 
 @Serializable
@@ -154,6 +164,19 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
         rosters = rosters,
         oddsApiKey = oddsApiKey?.takeIf { it.isNotBlank() },
         gridPresets = presets,
+        gridDensity = RowDensity.entries.firstOrNull { it.name == gridDensity } ?: RowDensity.COMFORTABLE,
+        espnLeague = espnLeague?.let {
+            try {
+                EspnLeagueConfig(
+                    it.leagueId.trim(),
+                    it.espnS2?.takeIf { c -> c.isNotBlank() },
+                    it.swid?.takeIf { c -> c.isNotBlank() },
+                    it.teamId,
+                )
+            } catch (_: IllegalArgumentException) {
+                null
+            }
+        },
     )
 }
 
@@ -225,6 +248,8 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     rosters = rosters.map { RosterDto(it.id, it.name, it.playerIds) },
     oddsApiKey = oddsApiKey,
     gridPresets = gridPresets.map { json.encodeToJsonElement(PresetDto.serializer(), it.toDto()) },
+    gridDensity = gridDensity.name,
+    espnLeague = espnLeague?.let { EspnLeagueDto(it.leagueId, it.espnS2, it.swid, it.teamId) },
 )
 
 internal object UserPrefsSerializer : Serializer<UserPrefs> {

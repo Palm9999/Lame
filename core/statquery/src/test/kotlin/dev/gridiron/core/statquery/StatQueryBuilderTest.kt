@@ -1,9 +1,11 @@
 package dev.gridiron.core.statquery
 
 import dev.gridiron.core.model.Position
+import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.statquery.StatColumn.ADOT
 import dev.gridiron.core.statquery.StatColumn.AIR_YARDS_SHARE
+import dev.gridiron.core.statquery.StatColumn.FANTASY_POINTS
 import dev.gridiron.core.statquery.StatColumn.INTERCEPTIONS
 import dev.gridiron.core.statquery.StatColumn.RACR
 import dev.gridiron.core.statquery.StatColumn.RECEPTIONS
@@ -77,6 +79,103 @@ class StatQueryBuilderTest {
             assertNull(rows.getValue("rb1").value(RACR))
             assertEquals(-3.0, rows.getValue("rb1").value(ADOT)!!, EPS)
             assertNull(rows.getValue("rb2").value(ADOT))
+        }
+    }
+
+    @Nested
+    inner class Rollups {
+        private val windows = mapOf("S" to WeekRange(1, 6), "L3" to WeekRange(4, 6), "L5" to WeekRange(2, 6))
+
+        private var rollups: List<RollupWindow> = emptyList()
+
+        private fun seed() {
+            db.player("wr1", "Alpha Receiver")
+            db.player("wr2", "Beta Receiver")
+            db.player("te1", "Gamma Tight", position = "TE")
+            for (w in 1..6) {
+                db.week("wr1", w, C.TARGETS to w, C.TEAM_TARGETS to 30 + w, C.RECEPTIONS to w - 1, C.AIR_YARDS to 10 * w)
+                if (w != 3) db.week("wr2", w, C.TARGETS to 2 * w, C.TEAM_TARGETS to 30 + w, C.RECEPTIONS to w, C.AIR_YARDS to 7 * w)
+                if (w >= 5) db.week("te1", w, C.TARGETS to 4, C.TEAM_TARGETS to 30 + w, C.RECEPTIONS to 3)
+            }
+            rollups = db.buildRollup(2025, windows)
+        }
+
+        private fun rollupSpec(weeks: WeekRange, vararg columns: StatColumn) =
+            spec(*columns, weeks = weeks).copy(rollups = rollups, percentiles = true)
+
+        @Test
+        fun `a whole-season range reads the rollup and no weekly rows`() {
+            seed()
+            val sql = StatQueryBuilder.grid(rollupSpec(WeekRange(1, 6), TARGETS)).query
+
+            assertTrue("player_window_stat" in sql.sql)
+            assertTrue("player_week_stat" !in sql.sql)
+            assertTrue(Bind.Text("S") in sql.binds)
+        }
+
+        @Test
+        fun `each window gives the weekly path's values, games and percentiles`() {
+            seed()
+            for ((window, weeks) in windows) {
+                val columns = arrayOf(TARGETS, TARGET_SHARE, RECEPTIONS, ADOT)
+                val fast = rollupSpec(weeks, *columns)
+                val slow = fast.copy(rollups = emptyList())
+                assertTrue(Bind.Text(window) in StatQueryBuilder.grid(fast).query.binds, window)
+
+                val a = db.grid(fast)
+                val b = db.grid(slow)
+                assertEquals(b.map { it.playerId }, a.map { it.playerId }, window)
+                for ((x, y) in a.zip(b)) {
+                    assertEquals(y.games, x.games, EPS)
+                    for (c in columns) {
+                        assertEquals(y.value(c), x.value(c), "$window ${x.playerId} $c")
+                        assertEquals(y.percentile(c), x.percentile(c), "$window ${x.playerId} $c percentile")
+                    }
+                }
+            }
+        }
+
+        @Test
+        fun `a window whose stored bounds moved returns nothing rather than another range's sums`() {
+            seed()
+            // The database was replaced: its S now ends at week 7, but the spec still carries the old S (1..6).
+            db.conn.createStatement().use { it.executeUpdate("UPDATE window_def SET last_week = 7 WHERE window = 'S'") }
+
+            assertEquals(emptyList<GridRow>(), db.grid(rollupSpec(WeekRange(1, 6), TARGETS)))
+            assertEquals(3, db.grid(rollupSpec(WeekRange(4, 6), TARGETS)).size) // L3 is unchanged
+        }
+
+        @Test
+        fun `count reads the rollup and agrees with the weekly path`() {
+            seed()
+            val fast = rollupSpec(WeekRange(4, 6), TARGETS)
+            assertTrue("player_week_stat" !in StatQueryBuilder.count(fast).sql)
+            assertEquals(db.count(fast.copy(rollups = emptyList())), db.count(fast))
+        }
+
+        @Test
+        fun `a fantasy column reads the rollup and, with no bonus or tier, no weekly fact`() {
+            seed()
+            val fast = StatQuerySpec(
+                season = 2025, weeks = WeekRange(1, 6), columns = listOf(TARGETS, FANTASY_POINTS),
+                scoring = ScoringPresets.PPR.copy(yardageBonuses = emptyList(), pointsAllowedTiers = emptyList(), yardsAllowedTiers = emptyList()),
+                rollups = rollups,
+            )
+            val sql = StatQueryBuilder.grid(fast).query.sql
+            assertTrue("player_window_stat" in sql && "player_week_stat" !in sql)
+        }
+
+        @Test
+        fun `a range that is no stored window uses the weekly path`() {
+            seed()
+            assertTrue("player_window_stat" !in StatQueryBuilder.grid(rollupSpec(WeekRange(2, 5), TARGETS)).query.sql)
+        }
+
+        @Test
+        fun `no stored windows use the weekly path`() {
+            seed()
+            val sql = StatQueryBuilder.grid(spec(TARGETS, weeks = WeekRange(1, 6))).query.sql
+            assertTrue("player_window_stat" !in sql)
         }
     }
 

@@ -16,14 +16,14 @@ Module map, data flow, design decisions and database schema. `CLAUDE.md` keeps o
 
 **Android Modules**:
 - `:app` — App entry point. `RefreshCoordinator` builds `stats.db` on the phone with `:core:ingest` and swaps it in without a restart; News, Player page (status, injury notes, news, a 'This week' card, and Season stats: chips, a season line with position percentiles, a game log), live Injury report, Settings (seasons, Odds API key) and Load stats screens
-- `:feature:players` — The Grid screen (main UI) and its ViewModel. The K and D/ST chips bring their own packs (Kicking, Defense); All and the offense's chips leave kickers and D/STs out (`StatsRepository`)
+- `:feature:players` — The Grid screen (main UI) and its ViewModel. The K and D/ST chips bring their own packs (Kicking, Defense); All and the offense's chips leave kickers and D/STs out (`StatsRepository`). The top bar (`GridChrome.kt`) is two slim rows (title, profile, weeks, season, search, ☰; then the pack dropdown, All/QB/RB/WR/TE plus a More segment for FLEX, K and D/ST, and a pinned Filters (n) chip) and a one-line summary; `ChromeScrollState` hides it after 24 dp of downward scroll and shows it on any upward scroll, at the top and on a new request, and never consumes scroll. Presets, Teams, Roster, Snap floor, Per game, Heat, Row height and Export live in the "View & filters" sheet (`FilterSheets.kt`) above the advanced-filter draft. Row height is `gridDensity` in the prefs JSON (`RowDensity`, via `GridDisplayRepository`). Percent cells show digits only (`CellUi.display`; the header carries the %), and the player cell has no trend line
 - `:feature:scoring` — Scoring profiles: the list and the editor (every rule, plus the points-allowed and yards-allowed tier editors)
 - `:feature:compare` — The Compare screen: bars, head-to-head table, radar, xFP-vs-actual scatter
 - `:core:table` — Frozen-column stat table with shared horizontal scroll state
 - `:core:charts` — Compose Canvas charts (bars, radar, scatter); no charting library
 - `:core:ui` — Shared screen chrome (profile chip, metric and weeks sheets) so no feature module depends on another
 - `:core:designsystem` — Theme, dark mode, colorblind-safe heat scale
-- `:core:data` — Stat packs, qualifying bars, formatting, repositories; `SettingsRepository` (which seasons to build); `PlayerDirectory` (ESPN id → player via `player_xref`); `PlayerStatsRepository` (the Player page's season line and game log, built with the Grid's query builder); and the `live` package: the ESPN news/injuries parser and client, the writable `live.db` store, `LiveRepository`, and `PropsRepository` (The Odds API: the upcoming week's player props, fetched within the credit budget)
+- `:core:data` — Stat packs, qualifying bars, formatting, repositories; `SettingsRepository` (which seasons to build); `PlayerDirectory` (ESPN id → player via `player_xref`); `PlayerStatsRepository` (the Player page's season line and game log, built with the Grid's query builder); and the `live` package: the ESPN news/injuries parser and client, the writable `live.db` store, `LiveRepository`, `FantasyLeagueRepository` (the user's ESPN fantasy league: standings and rosters in `league.json`, the user's team saved as roster `espn-<league>`; `matchups(season, week, profile)` reads a week's head-to-heads from ESPN's `mMatchup` view and adds the app's points per player through `weekPoints`, the query it shares with the Scores game view, held in memory only), and `PropsRepository` (The Odds API: the upcoming week's player props, fetched within the credit budget)
 - `:feature:projections` — The Projections list (☰ → Projections: the upcoming week or rest of season by position, K and D/ST included, scored with the active profile), the Player page's "This week" card, the waterfall screen (`ProjectionsKey`), and the accuracy page (☰ → Projection accuracy, `AccuracyKey`): each position's backtest for a season under the active profile, computed when the page opens
 
 ## Data Flow
@@ -47,13 +47,14 @@ Module map, data flow, design decisions and database schema. `CLAUDE.md` keeps o
 
 **Navigation 3, No Hilt** — Screens navigate through Navigation 3 (`app/.../GridironNavHost.kt`, `NavKeys.kt`). Repositories are wired by hand in `GridironApplication`; Hilt is not used.
 
-## Database Schema (Version 8)
+## Database Schema (Version 9)
 
 Long/narrow design: adding a metric is an `INSERT`, not a migration.
 
 | Table | Purpose |
 |---|---|
 | `player_week_stat` | Facts: `(player_id, season, week, team, metric_id, value)`, indexed as covering index on `(metric_id, season, week, value)` |
+| `player_window_stat` | Component sums per `(player_id, season, window, metric_id)` for `S` (the regular season played so far) and `L3`, `L4`, `L5`, `L8` (the last N weeks ending there), filled from `player_week_stat` at the end of a build; primary key `(metric_id, season, window, player_id)`, so the Grid's read is a key seek and the table needs no second index. `window_def (season, window, first_week, last_week)` gives each window's bounds. `StatQueryBuilder` reads the rollup, not the weekly facts, when the Grid's week range equals a window and no fantasy column is planned (fantasy points are scored per week, so they keep the weekly path); `SeasonInfo.rollups` carries the windows from the catalog, and a window whose `window_def` bounds no longer match the spec reads nothing, and a database without the tables falls back silently |
 | `metric` | Metric registry: name, definition, formula, tier, predictive use, stability, internal flag, plus `dist_family` (distribution for on-device Monte Carlo/percentile reconstruction) and `zero_inflated` |
 | `player` | Players with at least one stat in the built seasons, plus a `DST_<TEAM>` pseudo-player per team |
 | `player_xref` | ESPN athlete id → `player_id` for every player nflverse lists, stats or not; links ESPN news and injuries |

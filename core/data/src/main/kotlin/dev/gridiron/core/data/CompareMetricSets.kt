@@ -22,8 +22,28 @@ import dev.gridiron.core.statquery.StatColumn.FG_ATT
 import dev.gridiron.core.statquery.StatColumn.FG_MADE
 import dev.gridiron.core.statquery.StatColumn.FG_MADE_50
 import dev.gridiron.core.statquery.StatColumn.FPOE
+import dev.gridiron.core.statquery.StatColumn.FTN_BLITZ_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_CATCHABLE_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_CONTESTED_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_CREATED_REC
+import dev.gridiron.core.statquery.StatColumn.FTN_DROPS
+import dev.gridiron.core.statquery.StatColumn.FTN_DROP_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_INT_WORTHY_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_OUT_OF_POCKET_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_PLAY_ACTION_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_THROWAWAY_RATE
 import dev.gridiron.core.statquery.StatColumn.GL_CARRIES
 import dev.gridiron.core.statquery.StatColumn.INTERCEPTIONS
+import dev.gridiron.core.statquery.StatColumn.NGS_AGGRESSIVENESS
+import dev.gridiron.core.statquery.StatColumn.NGS_CUSHION
+import dev.gridiron.core.statquery.StatColumn.NGS_INTENDED_AIR_YARDS
+import dev.gridiron.core.statquery.StatColumn.NGS_RUSH_EFFICIENCY
+import dev.gridiron.core.statquery.StatColumn.NGS_RYOE
+import dev.gridiron.core.statquery.StatColumn.NGS_RYOE_PER_ATT
+import dev.gridiron.core.statquery.StatColumn.NGS_SEPARATION
+import dev.gridiron.core.statquery.StatColumn.NGS_STACKED_BOX_PCT
+import dev.gridiron.core.statquery.StatColumn.NGS_TIME_TO_THROW
+import dev.gridiron.core.statquery.StatColumn.NGS_YAC_OVER_EXPECTED
 import dev.gridiron.core.statquery.StatColumn.OFFENSE_SNAPS
 import dev.gridiron.core.statquery.StatColumn.PASSING_TDS
 import dev.gridiron.core.statquery.StatColumn.PASSING_YARDS
@@ -66,21 +86,29 @@ public enum class CompareGroup(public val label: String) {
 public object CompareMetricSets {
     private val QB_SET = mapOf(
         CompareGroup.OPPORTUNITY to listOf(DROPBACKS, ATTEMPTS, CARRIES, QB_RUSH_INSIDE_5, SNAP_SHARE),
-        CompareGroup.EFFICIENCY to listOf(EPA_PER_DROPBACK, CPOE, SACKS_TAKEN, INTERCEPTIONS),
+        CompareGroup.EFFICIENCY to listOf(
+            EPA_PER_DROPBACK, CPOE, SACKS_TAKEN, INTERCEPTIONS, NGS_TIME_TO_THROW, NGS_INTENDED_AIR_YARDS, NGS_AGGRESSIVENESS,
+            FTN_PLAY_ACTION_RATE, FTN_BLITZ_RATE, FTN_OUT_OF_POCKET_RATE, FTN_THROWAWAY_RATE, FTN_INT_WORTHY_RATE,
+        ),
         CompareGroup.SCORING to listOf(FANTASY_POINTS, EXPECTED_FANTASY_POINTS, FPOE, PASSING_TDS, RUSHING_TDS),
         CompareGroup.CONTEXT to listOf(PASSING_YARDS, OFFENSE_SNAPS, TOTAL_EPA),
     )
     private val RB_SET = mapOf(
         CompareGroup.OPPORTUNITY to listOf(CARRIES, CARRY_SHARE, TARGETS, TARGET_SHARE, WEIGHTED_OPPORTUNITIES, RZ_CARRIES, GL_CARRIES, SNAP_SHARE),
-        CompareGroup.EFFICIENCY to listOf(RUSH_SUCCESS_RATE, RUSH_EPA_PER_CARRY, CATCH_RATE),
+        CompareGroup.EFFICIENCY to listOf(
+            RUSH_SUCCESS_RATE, RUSH_EPA_PER_CARRY, CATCH_RATE, NGS_RYOE, NGS_RYOE_PER_ATT, NGS_RUSH_EFFICIENCY, NGS_STACKED_BOX_PCT,
+        ),
         CompareGroup.SCORING to listOf(FANTASY_POINTS, EXPECTED_FANTASY_POINTS, FPOE, RUSHING_TDS, RECEIVING_TDS),
         CompareGroup.CONTEXT to listOf(RUSHING_YARDS, RECEIVING_YARDS, OFFENSE_SNAPS, TOTAL_EPA),
     )
     private val WR_SET = mapOf(
         CompareGroup.OPPORTUNITY to listOf(TARGETS, TARGET_SHARE, AIR_YARDS_SHARE, WOPR, RZ_TARGETS, EZ_TARGETS, SNAP_SHARE),
-        CompareGroup.EFFICIENCY to listOf(ADOT, RACR, CATCH_RATE, YAC),
+        CompareGroup.EFFICIENCY to listOf(
+            ADOT, RACR, CATCH_RATE, YAC, NGS_SEPARATION, NGS_CUSHION, NGS_YAC_OVER_EXPECTED,
+            FTN_CATCHABLE_RATE, FTN_DROP_RATE, FTN_CONTESTED_RATE,
+        ),
         CompareGroup.SCORING to listOf(FANTASY_POINTS, EXPECTED_FANTASY_POINTS, FPOE, RECEIVING_TDS),
-        CompareGroup.CONTEXT to listOf(RECEIVING_YARDS, RECEPTIONS, OFFENSE_SNAPS, TOTAL_EPA),
+        CompareGroup.CONTEXT to listOf(RECEIVING_YARDS, RECEPTIONS, OFFENSE_SNAPS, TOTAL_EPA, FTN_DROPS, FTN_CREATED_REC),
     )
 
     // Kickers and defenses have no expected points, and a group with no stats is simply absent.
@@ -93,6 +121,17 @@ public object CompareMetricSets {
         CompareGroup.EFFICIENCY to listOf(POINTS_ALLOWED, YARDS_ALLOWED),
         CompareGroup.SCORING to listOf(FANTASY_POINTS, DST_TDS, DST_SAFETIES),
         CompareGroup.CONTEXT to listOf(DST_SACKS, DST_INTERCEPTIONS, DST_FUMBLE_RECOVERIES),
+    )
+
+    /**
+     * Next Gen Stats and FTN charting: published for some seasons and players only, so a missing value is a dash, never a
+     * zero. Compare and the Player page's season line show them, the line only when the player has the stat.
+     */
+    public val CHARTED: Set<StatColumn> = setOf(
+        NGS_AGGRESSIVENESS, NGS_CUSHION, NGS_INTENDED_AIR_YARDS, NGS_RUSH_EFFICIENCY, NGS_RYOE, NGS_RYOE_PER_ATT,
+        NGS_SEPARATION, NGS_STACKED_BOX_PCT, NGS_TIME_TO_THROW, NGS_YAC_OVER_EXPECTED,
+        FTN_BLITZ_RATE, FTN_CATCHABLE_RATE, FTN_CONTESTED_RATE, FTN_CREATED_REC, FTN_DROPS, FTN_DROP_RATE,
+        FTN_INT_WORTHY_RATE, FTN_OUT_OF_POCKET_RATE, FTN_PLAY_ACTION_RATE, FTN_THROWAWAY_RATE,
     )
 
     public fun groupsFor(position: Position?): Map<CompareGroup, List<StatColumn>> = when (position) {

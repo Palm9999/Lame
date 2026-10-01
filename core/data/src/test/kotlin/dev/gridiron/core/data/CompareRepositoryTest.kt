@@ -274,4 +274,42 @@ class CompareRepositoryTest {
         val targets = page.groups.flatMap { it.rows }.first { it.column == StatColumn.TARGETS }
         assertEquals("—", targets.cells[0].text)
     }
+
+    @Test
+    fun `charted stats fill for ranked players and read as dashes, never zeros, for a player nobody charted`() = runTest {
+        val star = topIds(StatPack.RECEIVING, PositionFilter.WR, 1).single()
+        val unseen = executor.query(
+            SqlQuery(
+                "SELECT s.player_id FROM player_week_stat s JOIN player p USING (player_id) " +
+                    "WHERE s.metric_id = ? AND s.season = ? AND p.position = ? " +
+                    "AND s.player_id NOT IN (SELECT player_id FROM player_week_stat WHERE metric_id = ? AND season = ?) " +
+                    "GROUP BY s.player_id HAVING SUM(s.value) >= 1 LIMIT 1",
+                listOf(Bind.Text("targets"), Bind.Integer(2025), Bind.Text("WR"), Bind.Text("ngs_targets"), Bind.Integer(2025)),
+            ),
+        ) { it.text(0) }.single()
+        val page = compare.compare(request(CompareSlot(star, 2025, season2025), CompareSlot(unseen, 2025, season2025)), catalog)
+        val rows = page.groups.flatMap { it.rows }.associateBy { it.column }
+        for (column in listOf(StatColumn.NGS_SEPARATION, StatColumn.NGS_CUSHION, StatColumn.NGS_YAC_OVER_EXPECTED, StatColumn.FTN_CATCHABLE_RATE, StatColumn.FTN_DROP_RATE, StatColumn.FTN_DROPS)) {
+            val row = rows.getValue(column)
+            assertNotNull(row.cells[0].value, "$column for the star")
+        }
+        for (column in listOf(StatColumn.NGS_SEPARATION, StatColumn.NGS_CUSHION, StatColumn.NGS_YAC_OVER_EXPECTED)) {
+            val cell = rows.getValue(column).cells[1]
+            assertNull(cell.value, "$column for a player with no Next Gen rows")
+            assertEquals("–", cell.text)
+        }
+    }
+
+    @Test
+    fun `a quarterback and a running back each show their own charted stats`() = runTest {
+        val qb = topIds(StatPack.PASSING, PositionFilter.QB, 1).single()
+        val rb = topIds(StatPack.RUSHING, PositionFilter.RB, 1).single()
+        val page = compare.compare(request(CompareSlot(qb, 2025, season2025), CompareSlot(rb, 2025, season2025)), catalog)
+        val rows = page.groups.flatMap { it.rows }.associateBy { it.column }
+        assertNotNull(rows.getValue(StatColumn.NGS_TIME_TO_THROW).cells[0].value)
+        assertNotNull(rows.getValue(StatColumn.FTN_PLAY_ACTION_RATE).cells[0].value)
+        assertEquals("—", rows.getValue(StatColumn.NGS_TIME_TO_THROW).cells[1].text)
+        assertNotNull(rows.getValue(StatColumn.NGS_RYOE_PER_ATT).cells[1].value)
+        assertEquals("—", rows.getValue(StatColumn.NGS_RYOE_PER_ATT).cells[0].text)
+    }
 }

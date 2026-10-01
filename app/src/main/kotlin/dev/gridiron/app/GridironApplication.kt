@@ -7,12 +7,15 @@ import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerStatsRepository
 import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.ScoresRepository
 import dev.gridiron.core.data.TeamsRepository
+import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.LiveDb
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.PropsRepository
@@ -97,8 +100,11 @@ class GridironApplication : Application() {
             refresher = refresher,
             rosters = RosterRepository(prefs),
             gridPresets = GridPresetRepository(prefs),
+            gridDisplay = GridDisplayRepository(prefs),
             props = propsRepo,
             playerStats = PlayerStatsRepository(executor),
+            scores = ScoresRepository(executor, UrlConnectionHttpGet()),
+            league = FantasyLeagueRepository(prefs, UrlConnectionHttpGet(), players, File(noBackupFilesDir, "league.json")),
         )
     }
 }

@@ -21,7 +21,7 @@ import polars as pl
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 DDL = """
 PRAGMA journal_mode = OFF;
@@ -173,7 +173,30 @@ CREATE TABLE injury_report (
     practice  TEXT,
     PRIMARY KEY (player_id, season, week)
 ) WITHOUT ROWID;
+
+-- Component sums over a season's whole regular season (`S`) and its last 3, 4,
+-- 5 and 8 weeks, built from player_week_stat by write_windows(), keyed metric
+-- first so the Grid's read is a primary-key seek with no second index. window_def
+-- holds each window's week bounds so a query can tell when a range matches.
+CREATE TABLE player_window_stat (
+    player_id TEXT NOT NULL,
+    season    INTEGER NOT NULL,
+    window    TEXT NOT NULL,
+    metric_id TEXT NOT NULL,
+    value     REAL NOT NULL,
+    PRIMARY KEY (metric_id, season, window, player_id)
+) WITHOUT ROWID;
+
+CREATE TABLE window_def (
+    season     INTEGER NOT NULL,
+    window     TEXT NOT NULL,
+    first_week INTEGER NOT NULL,
+    last_week  INTEGER NOT NULL,
+    PRIMARY KEY (season, window)
+) WITHOUT ROWID;
 """
+
+WINDOWS_LAST = (3, 4, 5, 8)
 
 # Index budget matters here. The fact table is WITHOUT ROWID with a 4-column
 # text primary key, so every secondary index stores that whole key as its row
@@ -243,6 +266,34 @@ def load_facts(conn: sqlite3.Connection, long: pl.DataFrame, chunk: int = 100_00
     return len(rows)
 
 
+def _last_regular_season_week(season: int) -> int:
+    # The NFL moved from 17 to 18 regular-season weeks in 2021.
+    return 18 if season >= 2021 else 17
+
+
+def write_windows(conn: sqlite3.Connection) -> None:
+    """Fill window_def and player_window_stat from player_week_stat.
+
+    `S` is weeks 1 through the last regular-season week played (the newest `g`
+    row, as the Grid's season list reads it); `L<N>` is the N weeks ending
+    there, clipped at week 1. Playoff weeks are outside every window."""
+    played = conn.execute(
+        "SELECT season, MAX(week) FROM player_week_stat WHERE metric_id = 'g' GROUP BY season"
+    ).fetchall()
+    for season, newest in played:
+        last = min(newest, _last_regular_season_week(season))
+        windows = [("S", 1)] + [(f"L{n}", max(1, last - n + 1)) for n in WINDOWS_LAST]
+        for window, first in windows:
+            conn.execute("INSERT INTO window_def VALUES (?, ?, ?, ?)", (season, window, first, last))
+            conn.execute(
+                """INSERT INTO player_window_stat (player_id, season, window, metric_id, value)
+                   SELECT player_id, season, ?, metric_id, SUM(value) FROM player_week_stat
+                   WHERE season = ? AND week BETWEEN ? AND ? GROUP BY player_id, metric_id""",
+                (window, season, first, last),
+            )
+    conn.commit()
+
+
 def finalize(conn: sqlite3.Connection, seasons: list[int],
              extra_meta: dict[str, str] | None = None) -> None:
     """Index, record provenance, then ANALYZE and VACUUM so the shipped file is
@@ -250,6 +301,7 @@ def finalize(conn: sqlite3.Connection, seasons: list[int],
 
     `extra_meta` adds build-specific provenance, such as
     `expected_through_week:<season>`."""
+    write_windows(conn)
     conn.executescript(INDEXES)
     conn.executemany(
         "INSERT OR REPLACE INTO schema_meta (key, value) VALUES (?, ?)",

@@ -10,6 +10,7 @@ import dev.gridiron.core.statquery.CatalogQueries
 import dev.gridiron.core.statquery.Condition
 import dev.gridiron.core.statquery.Filter
 import dev.gridiron.core.statquery.GridLayout
+import dev.gridiron.core.statquery.RollupWindow
 import dev.gridiron.core.statquery.Sort
 import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.statquery.StatQueryBuilder
@@ -17,6 +18,7 @@ import dev.gridiron.core.statquery.StatQuerySpec
 import dev.gridiron.core.statquery.ValueMode
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import java.util.Locale
@@ -33,7 +35,11 @@ public class StatsRepository(
     private val format = StatFormat(locale)
 
     public suspend fun catalog(): Catalog {
-        val seasons = executor.query(CatalogQueries.seasons) { SeasonInfo(it.long(0).toInt(), it.long(1).toInt()) }
+        val windows = rollups().groupBy({ it.first }, { it.second })
+        val seasons = executor.query(CatalogQueries.seasons) {
+            val season = it.long(0).toInt()
+            SeasonInfo(season, it.long(1).toInt(), windows[season].orEmpty())
+        }
         check(seasons.isNotEmpty()) { "the stats database has no seasons" }
         val metrics = executor.query(CatalogQueries.metrics) {
             MetricInfo(
@@ -52,7 +58,7 @@ public class StatsRepository(
 
     public suspend fun grid(request: GridRequest, catalog: Catalog): GridPage {
         val threshold = threshold(request)
-        val spec = spec(request, threshold)
+        val spec = spec(request, threshold).copy(rollups = request.season.rollups)
         val q = StatQueryBuilder.grid(spec)
         val layout = q.layout
 
@@ -70,9 +76,11 @@ public class StatsRepository(
                 games = games,
                 cells = spec.columns.map { column ->
                     val pct = r.doubleOrNull(layout.percentileIndex(column))
+                    val text = format.format(column, r.doubleOrNull(layout.valueIndex(column)), request.perGame)
                     CellUi(
-                        text = format.format(column, r.doubleOrNull(layout.valueIndex(column)), request.perGame),
+                        text = text,
                         heat = pct?.let { ((it - 0.5) * 2).toFloat() },
+                        display = if (StatFormat.isPercent(column)) text.removeSuffix("%") else text,
                     )
                 }.toImmutableList(),
             )
@@ -80,51 +88,14 @@ public class StatsRepository(
 
         val columns = spec.columns.map { column ->
             val info = catalog.metrics[column.metricId]
-            ColumnUi(column, info?.abbr ?: column.metricId, info)
+            val abbr = info?.abbr ?: column.metricId
+            // A percent cell shows digits only, so its header must carry the %.
+            ColumnUi(column, if (StatFormat.isPercent(column) && !abbr.endsWith("%")) "$abbr %" else abbr, info)
         }
         return GridPage(request, columns.toImmutableList(), rows.toImmutableList(), threshold?.description)
     }
 
     public suspend fun players(ids: Collection<String>): Map<String, PlayerHeader> = executor.playerHeaders(ids)
-
-    /**
-     * The sorted column's last six played weeks for every row on [page]. Each
-     * week reuses the Grid query itself, restricted to the page's players, so
-     * a week's rate or fantasy points are exactly what the Grid shows for that
-     * single week. The page already decided who is listed, so no filters apply.
-     */
-    public suspend fun sparklines(page: GridPage): Map<String, Sparkline> {
-        val r = page.request
-        val window = sparklineWeeks(r.season, r.weeks) ?: return emptyMap()
-        if (page.rows.isEmpty()) return emptyMap()
-        val ids = page.rows.mapTo(LinkedHashSet()) { it.playerId }
-        val column = r.sort
-        val byWeek = window.map { week ->
-            val q = StatQueryBuilder.grid(
-                StatQuerySpec(
-                    season = r.season.season,
-                    weeks = WeekRange.single(week),
-                    columns = listOf(column),
-                    playerIds = ids,
-                    includeUnqualified = true,
-                    minGames = 1,
-                    limit = StatQuerySpec.MAX_LIMIT,
-                    scoring = r.scoring,
-                ),
-            )
-            executor.query(q.query) { row ->
-                // Every returned row played that week. A total with no fact is a
-                // zero the database stores sparsely, not a missing week.
-                val v = row.doubleOrNull(q.layout.valueIndex(column))
-                    ?: if (column.aggregate is Aggregate.Total) 0.0 else null
-                row.text(GridLayout.PLAYER_ID) to v
-            }.toMap()
-        }
-        return ids.associateWith { id ->
-            val values = byWeek.map { it[id] }
-            Sparkline(window, values, values.map { format.format(column, it, perGame = false) })
-        }
-    }
 
     private fun spec(request: GridRequest, threshold: SampleThreshold?): StatQuerySpec {
         val searching = request.name.isNotBlank()
@@ -157,10 +128,24 @@ public class StatsRepository(
         )
     }
 
+    /** Season and window for every stored rollup. A database built before schema 9 has none. */
+    private suspend fun rollups(): List<Pair<Int, RollupWindow>> = try {
+        executor.query(CatalogQueries.windows) { it.long(0).toInt() to RollupWindow(it.text(1), WeekRange(it.long(2).toInt(), it.long(3).toInt())) }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyList()
+    }
+
     private fun threshold(request: GridRequest): SampleThreshold? =
         SampleThreshold.forRequest(request.sort, request.pack, request.playedWeeks, request.perGame)
 
     /** How many players [request] matches, ignoring the page limit. Backs the filter sheet's live count. */
     public suspend fun count(request: GridRequest): Int =
-        if (request.onlyPlayers?.isEmpty() == true) 0 else executor.query(StatQueryBuilder.count(spec(request, threshold(request)))) { it.long(0).toInt() }.single()
+        if (request.onlyPlayers?.isEmpty() == true) {
+            0
+        } else {
+            val spec = spec(request, threshold(request)).copy(rollups = request.season.rollups)
+            executor.query(StatQueryBuilder.count(spec)) { it.long(0).toInt() }.single()
+        }
 }

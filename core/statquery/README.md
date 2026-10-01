@@ -54,7 +54,7 @@ CI runs all three tiers on every change, building a fresh database first.
 
 ## Performance
 
-A full-regular-season, 12-column FLEX grid with percentiles runs in **~85 ms** on the CI-class JVM, down from 173 ms before the ETL's index became covering. It has not yet been measured on the target device. It must run off the main thread, like any database query. Precomputed season rollups are the next step for the common full-season view.
+A full-regular-season, 12-column FLEX grid with percentiles runs in **~85 ms** on the CI-class JVM, down from 173 ms before the ETL's index became covering. It has not yet been measured on the target device. It must run off the main thread, like any database query. Season rollups (`player_window_stat`) serve a full-season or last-N-weeks view in ~36 ms, where the weekly facts take ~86 ms; fantasy columns use them too, reading weekly facts only for yardage bonuses and points- and yards-allowed tiers.
 
 ## Decisions
 

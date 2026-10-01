@@ -2,6 +2,7 @@ package dev.gridiron.feature.players
 
 import dev.gridiron.core.data.Catalog
 import dev.gridiron.core.data.CompareTrayRepository
+import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.GridRequest
 import dev.gridiron.core.data.PositionFilter
@@ -9,7 +10,6 @@ import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SeasonInfo
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
-import dev.gridiron.core.data.sparklineWeeks
 import dev.gridiron.core.data.weeksLabel
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.ResultRow
@@ -18,6 +18,7 @@ import dev.gridiron.core.datastore.MAX_PRESETS
 import dev.gridiron.core.datastore.PresetFilter
 import dev.gridiron.core.datastore.PresetFilterKind
 import dev.gridiron.core.datastore.PresetWeeks
+import dev.gridiron.core.datastore.RowDensity
 import dev.gridiron.core.datastore.UserPrefs
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.WeekRange
@@ -36,6 +37,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -94,24 +96,48 @@ class GridViewModelTest {
     }
 
     @Test
-    fun `sparklines load for the current page`() = runTest(dispatcher) {
-        val vm = viewModel()
+    fun `the sparkline query is never made`() = runTest(dispatcher) {
+        // Only the removed sparkline queries restricted to a player list.
+        var restricted = 0
+        val tracking = trackingExecutor { if ("player_id IN (" in it.sql) restricted++ }
+        val vm = GridViewModel(StatsRepository(tracking, Locale.US), ScoringRepository(prefs), CompareTrayRepository(prefs))
         val s = ready(vm)
-        val page = s.page!!
-        assertEquals(page.rows.map { it.playerId }.toSet(), s.sparklines.keys)
-        val window = sparklineWeeks(page.request.season, page.request.weeks)
-        assertTrue(s.sparklines.values.all { it.weeks == window })
+        assertTrue(s.page!!.rows.isNotEmpty())
+        assertEquals(0, restricted)
+    }
+
+    private fun displayVm(source: dev.gridiron.core.datastore.PrefsSource = prefs) =
+        GridViewModel(repo, ScoringRepository(prefs), CompareTrayRepository(prefs), display = GridDisplayRepository(source))
+
+    @Test
+    fun `density flows into state and DensitySelected writes it`() = runTest(dispatcher) {
+        val vm = displayVm()
+        assertEquals(RowDensity.COMFORTABLE, ready(vm).density)
+        vm.onEvent(GridEvent.DensitySelected(RowDensity.COMPACT))
+        assertEquals(RowDensity.COMPACT, ready(vm).density)
+        assertEquals(RowDensity.COMPACT, prefs.prefs.first().gridDensity)
     }
 
     @Test
-    fun `a sparkline failure leaves the Grid alone`() = runTest(dispatcher) {
-        // Only the sparkline queries restrict to a player list.
-        val failing = trackingExecutor { if ("player_id IN (" in it.sql) error("boom") }
-        val vm = GridViewModel(StatsRepository(failing, Locale.US), ScoringRepository(prefs), CompareTrayRepository(prefs))
+    fun `a failed density write leaves the state on its old value and posts a message`() = runTest(dispatcher) {
+        val inner = prefs
+        val failing = object : dev.gridiron.core.datastore.PrefsSource {
+            override val prefs: kotlinx.coroutines.flow.Flow<UserPrefs> = inner.prefs
+            override suspend fun update(transform: (UserPrefs) -> UserPrefs): UserPrefs = throw java.io.IOException("disk full")
+        }
+        val vm = displayVm(failing)
+        ready(vm)
+        vm.onEvent(GridEvent.DensitySelected(RowDensity.COMPACT))
         val s = ready(vm)
-        assertTrue(s.page!!.rows.isNotEmpty())
-        assertNull(s.error)
-        assertTrue(s.sparklines.isEmpty())
+        assertEquals(RowDensity.COMFORTABLE, s.density)
+        assertTrue(s.message.orEmpty().contains("disk full"))
+    }
+
+    @Test
+    fun `with no display repository the density stays comfortable`() = runTest(dispatcher) {
+        val vm = viewModel()
+        vm.onEvent(GridEvent.DensitySelected(RowDensity.COMPACT))
+        assertEquals(RowDensity.COMFORTABLE, ready(vm).density)
     }
 
     @Test
@@ -261,8 +287,7 @@ class GridViewModelTest {
     @Test
     fun `a burst of events runs one query for the final state`() = runTest(dispatcher) {
         var queries = 0
-        // Sparklines run their own queries after each page, so only count grid queries.
-        val counting = trackingExecutor { if (!("player_id IN (" in it.sql)) queries++ }
+        val counting = trackingExecutor { queries++ }
         val vm = GridViewModel(StatsRepository(counting, Locale.US), ScoringRepository(prefs), CompareTrayRepository(prefs), debounceMillis = 150)
         ready(vm)
         val before = queries
@@ -646,6 +671,24 @@ class GridReduceTest {
         kotlinx.collections.immutable.persistentMapOf(),
     )
     private val start = dev.gridiron.core.data.GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)
+
+    private fun ready(request: dev.gridiron.core.data.GridRequest = start, heat: Boolean = true, density: RowDensity = RowDensity.COMFORTABLE) =
+        GridUiState.Ready(catalog, request, heat, page = null, error = null, density = density)
+
+    @org.junit.Test
+    fun `viewChanges counts each non-default control once`() {
+        org.junit.Assert.assertEquals(0, ready().viewChanges)
+        val filter = dev.gridiron.core.statquery.Filter(StatColumn.TARGETS, dev.gridiron.core.statquery.Condition.AtLeast(10.0))
+        org.junit.Assert.assertEquals(2, ready(start.copy(filters = listOf(filter, filter))).viewChanges)
+        org.junit.Assert.assertEquals(1, ready(start.copy(teams = setOf("KC", "BUF"))).viewChanges)
+        org.junit.Assert.assertEquals(1, ready(start.copy(minSnapShare = 0.5)).viewChanges)
+        org.junit.Assert.assertEquals(1, ready(start.copy(perGame = true)).viewChanges)
+        org.junit.Assert.assertEquals(1, ready(heat = false).viewChanges)
+        org.junit.Assert.assertEquals(1, ready(density = RowDensity.COMPACT).viewChanges)
+        org.junit.Assert.assertEquals(1, ready().copy(rosterId = "r1").viewChanges)
+        val all = ready(start.copy(filters = listOf(filter), teams = setOf("KC"), minSnapShare = 0.5, perGame = true), heat = false, density = RowDensity.COMPACT)
+        org.junit.Assert.assertEquals(7, all.copy(rosterId = "r1").viewChanges)
+    }
 
     private fun reduce(vararg events: GridEvent) =
         events.fold(start) { r, e -> GridViewModel.reduce(r, e, catalog) }

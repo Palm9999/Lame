@@ -276,4 +276,81 @@ class ScoringQueryTest {
         val profile = custom(ScoringRule.FG_MADE_50 to 6.0, ScoringRule.FG_MISSED to 0.0)
         assertEquals(6.0, db.grid(fantasy(profile)).single().value(FANTASY_POINTS)!!, EPS)
     }
+
+    private val windows = mapOf("S" to WeekRange(1, 6), "L3" to WeekRange(4, 6), "L5" to WeekRange(2, 6))
+
+    /** Receivers, a quarterback, a kicker and a defense over six weeks, each with games either side of every bonus and tier edge. */
+    private fun seedSeason(): List<RollupWindow> {
+        db.player("wr1", "Alpha Receiver", position = "WR")
+        db.player("te1", "Tight End", position = "TE")
+        db.player("qb1", "Quarter Back", position = "QB")
+        db.player("k1", "Kick Er", position = "K")
+        db.player("d1", "Some Defense", position = "D/ST")
+        for (w in 1..6) {
+            db.week("wr1", w, C.RECEPTIONS to w, C.RECEIVING_YARDS to 60 + 25 * w, C.RECEIVING_TDS to w % 2,
+                C.X_RECEPTIONS to w + 1, C.X_RECEIVING_YARDS to 55 + 20 * w, C.RUSHING_YARDS to 10 * w)
+            if (w != 4) db.week("te1", w, C.RECEPTIONS to 3, C.RECEIVING_YARDS to 99 + w, C.X_RECEPTIONS to 4)
+            db.week("qb1", w, C.PASSING_YARDS to 240 + 20 * w, C.PASSING_TDS to 2, C.COMPLETIONS to 20, C.ATTEMPTS to 30)
+            db.week("k1", w, C.FG_MADE_0_39 to 1, C.FG_MADE_50 to w % 2, C.XP_MADE to 2)
+            db.week("d1", w, C.DST_SACKS to w, C.POINTS_ALLOWED to 6 * w, C.YARDS_ALLOWED to 180 + 60 * w)
+        }
+        return db.buildRollup(2025, windows)
+    }
+
+    @Test
+    fun `a rollup window scores every player as the weekly path does`() {
+        val rollups = seedSeason()
+        val plain = custom(ScoringRule.RECEPTION to 1.0, ScoringRule.REC_YARD to 0.1, ScoringRule.PASS_YARD to 0.04)
+        val profiles = listOf(
+            ScoringPresets.PPR,
+            ScoringPresets.PPR.copy(
+                receptionByPosition = mapOf(Position.TE to 1.5),
+                yardageBonuses = listOf(YardageBonus(BonusStat.RECEIVING_YARDS, 100, 150, 2.0), YardageBonus(BonusStat.PASSING_YARDS, 300, null, 3.0), YardageBonus(BonusStat.RUSH_REC_YARDS, 120, null, 1.0)),
+                pointsAllowedTiers = listOf(ScoringTier(0, 5.0), ScoringTier(13, 1.0), ScoringTier(25, -3.0)),
+                yardsAllowedTiers = listOf(ScoringTier(0, 4.0), ScoringTier(250, 0.0), ScoringTier(400, -2.0)),
+            ),
+            plain,
+            plain.copy(yardageBonuses = listOf(YardageBonus(BonusStat.RECEIVING_YARDS, 100, null, 2.0))),
+            plain.copy(pointsAllowedTiers = listOf(ScoringTier(0, 5.0), ScoringTier(20, -1.0))),
+        )
+        for (profile in profiles) {
+            for ((window, weeks) in windows) {
+                for (mode in ValueMode.entries) {
+                    val slow = fantasy(profile, FANTASY_POINTS, EXPECTED_FANTASY_POINTS, FPOE, weeks = weeks, mode = mode, percentiles = true)
+                    val fast = slow.copy(rollups = rollups)
+                    val a = db.grid(fast).associateBy { it.playerId }
+                    val b = db.grid(slow).associateBy { it.playerId }
+                    assertEquals(b.keys, a.keys, "$window ${profile.name}")
+                    for ((id, y) in b) {
+                        for (c in listOf(FANTASY_POINTS, EXPECTED_FANTASY_POINTS, FPOE)) {
+                            assertEquals(y.value(c)!!, a.getValue(id).value(c)!!, EPS, "$window ${profile.name} $mode $id $c")
+                            assertEquals(y.percentile(c), a.getValue(id).percentile(c), "$window ${profile.name} $mode $id $c percentile")
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `a rollup scored without bonuses or tiers reads no weekly fact`() {
+        val rollups = seedSeason()
+        val plain = custom(ScoringRule.RECEPTION to 1.0)
+        val sql = StatQueryBuilder.grid(fantasy(plain, weeks = WeekRange(1, 6)).copy(rollups = rollups)).query.sql
+        assertTrue("player_window_stat" in sql && "player_week_stat" !in sql)
+    }
+
+    @Test
+    fun `a rollup scored with bonuses and tiers reads weekly facts only for those components`() {
+        val rollups = seedSeason()
+        val profile = ScoringPresets.PPR.copy(
+            yardageBonuses = listOf(YardageBonus(BonusStat.RECEIVING_YARDS, 100, null, 2.0)),
+            pointsAllowedTiers = listOf(ScoringTier(0, 5.0)),
+        )
+        val q = StatQueryBuilder.grid(fantasy(profile, weeks = WeekRange(1, 6)).copy(rollups = rollups)).query
+        val weeklyIds = q.binds.filterIsInstance<Bind.Text>().map { it.value }
+        assertTrue(Bind.Text(C.RECEIVING_YARDS.id) in q.binds && Bind.Text(C.POINTS_ALLOWED.id) in q.binds)
+        assertTrue("player_week_stat" in q.sql)
+        assertTrue(q.sql.indexOf("player_week_stat") > q.sql.indexOf("player_window_stat"), weeklyIds.toString())
+    }
 }

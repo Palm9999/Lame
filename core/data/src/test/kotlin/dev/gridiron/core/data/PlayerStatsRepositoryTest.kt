@@ -140,4 +140,42 @@ class PlayerStatsRepositoryTest {
     fun `an unknown player has no stats`() = runTest {
         assertEquals(PlayerStats.EMPTY, repo.stats("00-0000000", Position.WR, ppr))
     }
+
+    @Test
+    fun `a charted receiver's season line carries his Next Gen Stats and FTN rows with values`() = runTest {
+        val id = topId(StatPack.RECEIVING, PositionFilter.WR)
+        val line = repo.stats(id, Position.WR, ppr, season = 2025).line
+        val charted = line.filter { it.column in CompareMetricSets.CHARTED }.map { it.column }
+        assertTrue(
+            charted.containsAll(
+                listOf(StatColumn.NGS_SEPARATION, StatColumn.NGS_CUSHION, StatColumn.NGS_YAC_OVER_EXPECTED, StatColumn.FTN_CATCHABLE_RATE, StatColumn.FTN_DROP_RATE, StatColumn.FTN_DROPS),
+            ),
+            "$charted",
+        )
+        assertTrue(line.filter { it.column in CompareMetricSets.CHARTED }.none { it.total.isBlank() || it.total == "–" })
+    }
+
+    @Test
+    fun `a player nobody charted has no Next Gen Stats rows, and no zeros in their place`() = runTest {
+        val id = executor.query(
+            SqlQuery(
+                "SELECT s.player_id FROM player_week_stat s JOIN player p USING (player_id) " +
+                    "WHERE s.metric_id = ? AND s.season = ? AND p.position = ? " +
+                    "AND s.player_id NOT IN (SELECT player_id FROM player_week_stat WHERE metric_id = ? AND season = ?) " +
+                    "GROUP BY s.player_id HAVING SUM(s.value) >= 1 LIMIT 1",
+                listOf(Bind.Text("targets"), Bind.Integer(2025), Bind.Text("WR"), Bind.Text("ngs_targets"), Bind.Integer(2025)),
+            ),
+        ) { it.text(0) }.single()
+        val columns = repo.stats(id, Position.WR, ppr, season = 2025).line.map { it.column }
+        assertTrue(columns.none { it.name.startsWith("NGS_") }, "$columns")
+        assertTrue(StatColumn.TARGETS in columns)
+    }
+
+    @Test
+    fun `a quarterback's season line carries the passing set, and a back's the rushing set`() = runTest {
+        val qb = repo.stats(topId(StatPack.PASSING, PositionFilter.QB), Position.QB, ppr, season = 2025).line.map { it.column }
+        assertTrue(qb.containsAll(listOf(StatColumn.NGS_TIME_TO_THROW, StatColumn.FTN_PLAY_ACTION_RATE, StatColumn.FTN_BLITZ_RATE)), "$qb")
+        val rb = repo.stats(topId(StatPack.RUSHING, PositionFilter.RB), Position.RB, ppr, season = 2025).line.map { it.column }
+        assertTrue(rb.containsAll(listOf(StatColumn.NGS_RYOE, StatColumn.NGS_RYOE_PER_ATT, StatColumn.NGS_STACKED_BOX_PCT)), "$rb")
+    }
 }

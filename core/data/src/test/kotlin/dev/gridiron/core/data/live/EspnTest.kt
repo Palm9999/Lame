@@ -92,4 +92,44 @@ class EspnTest {
         assertEquals(Instant.parse("2026-09-25T23:01:03Z"), parseEspnTime("2026-09-25T23:01:03Z"))
         assertNull(parseEspnTime("yesterday"))
     }
+
+    @Test
+    fun `a scoreboard reads each game's teams in nflverse codes, scores, state and clock`() {
+        val games = EspnParser.scoreboard(recorded("scoreboard.json"))
+
+        assertEquals(5, games.size)
+        val final = games[0]
+        assertEquals(EspnGame("401772938", "ARI", "SEA", Instant.parse("2025-09-26T00:15:00Z"), EspnGame.State.FINAL, "Final", 20, 23), final)
+        // ESPN writes WSH; nflverse, and so the game table, writes WAS.
+        assertEquals("ATL" to "WAS", games[1].home to games[1].away)
+        assertEquals("Final/OT", games[2].detail)
+        assertEquals(40, games[2].homeScore)
+        val scheduled = games[3]
+        assertEquals(EspnGame.State.SCHEDULED, scheduled.state)
+        assertNull(scheduled.homeScore)
+        assertEquals("10/1 - 8:15 PM EDT", scheduled.detail)
+        // Built by hand from the ATL game: ESPN's in-progress shape (state "in", the quarter and clock in shortDetail).
+        val live = games[4]
+        assertEquals(EspnGame.State.LIVE, live.state)
+        assertEquals("4:14 - 3rd", live.detail)
+        assertEquals(17 to 13, live.homeScore to live.awayScore)
+    }
+
+    @Test
+    fun `the scoreboard url maps nflverse's weeks to ESPN's seasons and weeks`() {
+        assertEquals("https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=4&dates=2025", EspnParser.scoreboardUrl(2025, 4))
+        assertEquals("seasontype=2&week=18&dates=2025", EspnParser.scoreboardUrl(2025, 18).substringAfter('?'))
+        assertEquals("seasontype=3&week=1&dates=2025", EspnParser.scoreboardUrl(2025, 19).substringAfter('?'))
+        assertEquals("seasontype=3&week=3&dates=2025", EspnParser.scoreboardUrl(2025, 21).substringAfter('?'))
+        // The Pro Bowl is ESPN's fourth postseason week; the Super Bowl is its fifth.
+        assertEquals("seasontype=3&week=5&dates=2025", EspnParser.scoreboardUrl(2025, 22).substringAfter('?'))
+    }
+
+    @Test
+    fun `a scoreboard that is not one, or whose games all fail to read, is a format error`() {
+        assertThrows<LiveFormatException> { EspnParser.scoreboard("""{"events": "none"}""") }
+        assertThrows<LiveFormatException> { EspnParser.scoreboard("[]") }
+        assertThrows<LiveFormatException> { EspnParser.scoreboard("""{"events": [{"id": "1"}]}""") }
+        assertEquals(emptyList<EspnGame>(), EspnParser.scoreboard("""{"events": []}"""))
+    }
 }

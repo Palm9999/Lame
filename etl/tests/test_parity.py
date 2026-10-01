@@ -24,11 +24,16 @@ def _db(path, value: float, team: str = "AAA"):
                                         safeties REAL, kick_return_tds REAL);
         CREATE TABLE injury_report (player_id TEXT, season INTEGER, week INTEGER, team TEXT, name TEXT,
                                     position TEXT, status TEXT, injury TEXT, practice TEXT);
+        CREATE TABLE player_window_stat (player_id TEXT, season INTEGER, window TEXT, metric_id TEXT,
+                                         value REAL);
+        CREATE TABLE window_def (season INTEGER, window TEXT, first_week INTEGER, last_week INTEGER);
         INSERT INTO schema_meta VALUES ('seasons', '2025');
         INSERT INTO player VALUES ('p1', 'P One', 'p one', 'WR', 'AAA', NULL);
         """
     )
     conn.execute("INSERT INTO player_week_stat VALUES ('p1', 2025, 1, ?, 'target_share', ?)", (team, value))
+    conn.execute("INSERT INTO player_window_stat VALUES ('p1', 2025, 'S', 'targets', ?)", (value,))
+    conn.execute("INSERT INTO window_def VALUES (2025, 'S', 1, 1)")
     conn.commit()
     conn.close()
 
@@ -61,3 +66,16 @@ def test_missing_rows_are_reported(tmp_path):
     conn.close()
     problems = compare(str(tmp_path / "a.db"), str(tmp_path / "b.db"))
     assert any("only in Python" in p for p in problems)
+
+
+def test_a_differing_window_sum_is_reported(tmp_path):
+    _db(tmp_path / "a.db", 0.25)
+    _db(tmp_path / "b.db", 0.25)
+    conn = sqlite3.connect(tmp_path / "b.db")
+    conn.execute("UPDATE player_window_stat SET value = 9")
+    conn.execute("UPDATE window_def SET last_week = 2")
+    conn.commit()
+    conn.close()
+    problems = compare(str(tmp_path / "a.db"), str(tmp_path / "b.db"))
+    assert any("player_window_stat" in p and "differ" in p for p in problems)
+    assert any("window_def" in p and "differ" in p for p in problems)

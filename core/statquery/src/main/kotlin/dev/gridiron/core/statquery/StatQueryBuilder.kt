@@ -27,6 +27,11 @@ private val SPECIAL_COMPONENTS: List<Component> =
         .distinct()
         .sortedBy { it.id }
 
+/** What the rollup path reads weekly: the components a yardage bonus or a tier is decided on in one game. */
+private val BONUS_COMPONENTS: List<Component> = BONUS_INPUTS.values.flatten().distinct().sortedBy { it.id }
+
+private val TIER_COMPONENTS: List<Component> = listOf(Components.POINTS_ALLOWED, Components.YARDS_ALLOWED).sortedBy { it.id }
+
 private val EXPECTED_COMPONENTS: List<Component> =
     RULE_INPUTS.values.flatMap { it.expected }.map { it.component }.distinct().sortedBy { it.id }
 
@@ -40,11 +45,17 @@ private val EXPECTED_COMPONENTS: List<Component> =
  *     team-defense and points-allowed components, `fw` and `fs` apply the
  *     spec's scoring profile to each week (so per-game bonuses and
  *     points- and yards-allowed tiers see single games), and `fsum` totals them per
- *     player into fantasy points, expected fantasy points and FPOE.
+ *     player into fantasy points, expected fantasy points and FPOE. When the
+ *     spec's weeks equal a rollup window, `ra`, `rs` and `re` weight the window's
+ *     sums instead, and only the yardage bonuses and tiers (`bw`, `tw`, summed as
+ *     `fb`) read weekly facts, since one game decides them.
  *  1. `agg` pivots `player_week_stat` to one row per player, summing only the
  *     components the requested columns need. Its predicate is
  *     `metric_id IN (...) AND season = ? AND week BETWEEN ? AND ?`, which is
- *     exactly the `idx_pws_metric_season_week` index.
+ *     exactly the `idx_pws_metric_season_week` index. When the spec's weeks equal
+ *     one of its [StatQuerySpec.rollups],
+ *     it pivots `player_window_stat` instead (`... AND window = ?`, a seek on its
+ *     metric-first primary key, guarded by `window_def` so a window whose bounds moved reads nothing): the same sums, already added up.
  *  2. `base` computes each column from those sums, so rates are recomputed over
  *     the range rather than averaged, and applies the games floor. When
  *     scored, it left-joins `fsum` so a player with games but no scoring
@@ -223,16 +234,26 @@ private class SqlWriter {
     fun build(): SqlQuery = SqlQuery(sql.toString().trimEnd(), binds.toList())
 
     fun aggregateAndBase(spec: StatQuerySpec, plan: Plan) {
-        if (plan.scored) scoring(spec, checkNotNull(spec.scoring))
+        val rollup = spec.rollups.firstOrNull { it.weeks == spec.weeks }
+        if (plan.scored) {
+            val profile = checkNotNull(spec.scoring)
+            if (rollup != null) rollupScoring(spec, profile, rollup) else scoring(spec, profile)
+        }
         line(if (plan.scored) ", agg AS (" else "WITH agg AS (")
         line("  SELECT s.player_id")
         plan.components.forEachIndexed { i, c ->
             line("       , SUM(CASE WHEN s.metric_id = ${text(c.id)} THEN s.value END) AS k$i")
         }
-        line("  FROM player_week_stat s")
-        line("  WHERE s.metric_id IN (${plan.components.joinToString(", ") { text(it.id) }})")
-        line("    AND s.season = ${int(spec.season)}")
-        line("    AND s.week BETWEEN ${int(spec.weeks.first)} AND ${int(spec.weeks.last)}")
+        if (rollup != null) {
+            line("  FROM player_window_stat s")
+            line("  WHERE s.metric_id IN (${plan.components.joinToString(", ") { text(it.id) }})")
+            rollupFilter(spec, rollup)
+        } else {
+            line("  FROM player_week_stat s")
+            line("  WHERE s.metric_id IN (${plan.components.joinToString(", ") { text(it.id) }})")
+            line("    AND s.season = ${int(spec.season)}")
+            line("    AND s.week BETWEEN ${int(spec.weeks.first)} AND ${int(spec.weeks.last)}")
+        }
         line("  GROUP BY s.player_id")
         line("), base AS (")
         line("  SELECT p.player_id, p.full_name, p.position, p.team, p.search_name, ${plan.games} AS games")
@@ -243,6 +264,100 @@ private class SqlWriter {
         line("  JOIN player p ON p.player_id = agg.player_id")
         if (plan.scored) line("  LEFT JOIN fsum ON fsum.player_id = agg.player_id")
         line("  WHERE ${plan.games} >= ${int(spec.minGames)}")
+        line(")")
+    }
+
+    /** Season, window and the `window_def` guard: a window whose bounds moved in the open database reads nothing, not another range. */
+    private fun rollupFilter(spec: StatQuerySpec, rollup: RollupWindow) {
+        line("    AND s.season = ${int(spec.season)}")
+        line("    AND s.window = ${text(rollup.window)}")
+        line("    AND EXISTS (SELECT 1 FROM window_def d WHERE d.season = ${int(spec.season)} AND d.window = ${text(rollup.window)}")
+        line("                AND d.first_week = ${int(rollup.weeks.first)} AND d.last_week = ${int(rollup.weeks.last)})")
+    }
+
+    private fun pivot(table: String, components: List<Component>, prefix: String, byWeek: Boolean) {
+        line(if (byWeek) "  SELECT s.player_id, s.week" else "  SELECT s.player_id")
+        components.forEachIndexed { i, c ->
+            line("       , SUM(s.value) FILTER (WHERE s.metric_id = ${text(c.id)}) AS $prefix$i")
+        }
+        line("  FROM $table s")
+        line("  WHERE s.metric_id IN (${components.joinToString(", ") { text(it.id) }})")
+    }
+
+    /**
+     * [scoring]'s results from a rollup window. Everything linear in a stat (every rule,
+     * expected points, the kicking and team-defense rules) is weighted from the window's
+     * sums: `ra`, `rs` and `re`. Only what a single game decides stays weekly: yardage
+     * bonuses (`bw`) and points- and yards-allowed tiers (`tw`), summed per player as `fb`.
+     * `fsum` has the same columns as [scoring]'s, so a profile with neither reads no weekly row.
+     */
+    fun rollupScoring(spec: StatQuerySpec, profile: ScoringProfile, rollup: RollupWindow) {
+        val wActual = { c: Component -> "COALESCE(ra.w${ACTUAL_COMPONENTS.indexOf(c)}, 0)" }
+        val wSpecial = { c: Component -> "COALESCE(rs.s${SPECIAL_COMPONENTS.indexOf(c)}, 0)" }
+        val wExpected = { c: Component -> "COALESCE(re.e${EXPECTED_COMPONENTS.indexOf(c)}, 0)" }
+        val wBonus = { c: Component -> "COALESCE(bw.b${BONUS_COMPONENTS.indexOf(c)}, 0)" }
+        val hasBonus = profile.yardageBonuses.isNotEmpty()
+        val hasTiers = profile.pointsAllowedTiers.isNotEmpty() || profile.yardsAllowedTiers.isNotEmpty()
+
+        line("WITH ra AS (")
+        pivot("player_window_stat", ACTUAL_COMPONENTS, "w", byWeek = false)
+        rollupFilter(spec, rollup)
+        line("  GROUP BY s.player_id")
+        line("), rs AS (")
+        pivot("player_window_stat", SPECIAL_COMPONENTS, "s", byWeek = false)
+        rollupFilter(spec, rollup)
+        line("  GROUP BY s.player_id")
+        line("), re AS (")
+        pivot("player_window_stat", EXPECTED_COMPONENTS, "e", byWeek = false)
+        rollupFilter(spec, rollup)
+        line("  GROUP BY s.player_id")
+        val weekly = mutableListOf<String>()
+        if (hasBonus) {
+            line("), bw AS (")
+            pivot("player_week_stat", BONUS_COMPONENTS, "b", byWeek = true)
+            line("    AND s.season = ${int(spec.season)}")
+            line("    AND s.week BETWEEN ${int(spec.weeks.first)} AND ${int(spec.weeks.last)}")
+            line("  GROUP BY s.player_id, s.week")
+            weekly += "bw"
+        }
+        if (hasTiers) {
+            line("), tw AS (")
+            pivot("player_week_stat", TIER_COMPONENTS, "t", byWeek = true)
+            line("    AND s.season = ${int(spec.season)}")
+            line("    AND s.week BETWEEN ${int(spec.weeks.first)} AND ${int(spec.weeks.last)}")
+            line("  GROUP BY s.player_id, s.week")
+            weekly += "tw"
+        }
+        if (weekly.isNotEmpty()) {
+            line("), fb AS (")
+            line("  SELECT player_id, SUM(fp) AS fp")
+            line("  FROM (")
+            val parts = mutableListOf<String>()
+            if (hasBonus) parts += "    SELECT player_id, ${bonusTerms(profile, wBonus).joinToString(" + ")} AS fp FROM bw"
+            if (hasTiers) {
+                val pa = tiers(profile.pointsAllowedTiers, "tw.t${TIER_COMPONENTS.indexOf(Components.POINTS_ALLOWED)}")
+                val ya = tiers(profile.yardsAllowedTiers, "tw.t${TIER_COMPONENTS.indexOf(Components.YARDS_ALLOWED)}")
+                parts += "    SELECT player_id, $pa + $ya AS fp FROM tw"
+            }
+            line(parts.joinToString("\n    UNION ALL\n"))
+            line("  )")
+            line("  GROUP BY player_id")
+        }
+        line("), players_scored AS (")
+        line("  SELECT player_id FROM ra UNION SELECT player_id FROM rs UNION SELECT player_id FROM re" + if (weekly.isNotEmpty()) " UNION SELECT player_id FROM fb" else "")
+        line("), fsum AS (")
+        line("  SELECT t.player_id, t.fp AS fp, t.xfp AS xfp, t.fp - t.xfp AS oe")
+        line("  FROM (")
+        line("    SELECT u.player_id")
+        line("         , ${points(profile, OFFENSE_RULES, expected = false, bonuses = false, wActual)} + ${points(profile, SPECIAL_RULE_LIST, expected = false, bonuses = false, wSpecial)}" + (if (weekly.isNotEmpty()) " + COALESCE(fb.fp, 0)" else "") + " AS fp")
+        line("         , ${points(profile, OFFENSE_RULES, expected = true, bonuses = false, wExpected)} AS xfp")
+        line("    FROM players_scored u")
+        line("    JOIN player p ON p.player_id = u.player_id")
+        line("    LEFT JOIN ra ON ra.player_id = u.player_id")
+        line("    LEFT JOIN rs ON rs.player_id = u.player_id")
+        line("    LEFT JOIN re ON re.player_id = u.player_id")
+        if (weekly.isNotEmpty()) line("    LEFT JOIN fb ON fb.player_id = u.player_id")
+        line("  ) t")
         line(")")
     }
 
@@ -306,7 +421,7 @@ private class SqlWriter {
         line("  JOIN player p ON p.player_id = wk.player_id")
         line("), fs AS (")
         line("  SELECT ws.player_id")
-        line("       , ${points(profile, SPECIAL_RULE_LIST, expected = false, bonuses = false, wSpecial)} + ${tiers(profile.pointsAllowedTiers, Components.POINTS_ALLOWED)} + ${tiers(profile.yardsAllowedTiers, Components.YARDS_ALLOWED)} AS fp")
+        line("       , ${points(profile, SPECIAL_RULE_LIST, expected = false, bonuses = false, wSpecial)} + ${tiers(profile.pointsAllowedTiers, "ws.s${SPECIAL_COMPONENTS.indexOf(Components.POINTS_ALLOWED)}")} + ${tiers(profile.yardsAllowedTiers, "ws.s${SPECIAL_COMPONENTS.indexOf(Components.YARDS_ALLOWED)}")} AS fp")
         line("  FROM ws")
         line("), xf AS (")
         line("  SELECT we.player_id")
@@ -350,27 +465,27 @@ private class SqlWriter {
                 terms += "$weight * ${w(term.component)}"
             }
         }
-        if (bonuses) {
-            // Bonuses have no expectation; they only ever add to the offense's actual points.
-            for (bonus in profile.yardageBonuses) {
-                val yards = BONUS_INPUTS.getValue(bonus.stat).joinToString(" + ", "(", ")") { w(it) }
-                val lower = int(bonus.min)
-                val upper = bonus.maxExclusive?.let { " AND $yards < ${int(it)}" }.orEmpty()
-                val points = real(bonus.points)
-                terms += "CASE WHEN $yards >= $lower$upper THEN $points ELSE 0 END"
-            }
-        }
+        if (bonuses) terms += bonusTerms(profile, w)
         return terms.joinToString(" + ", "(", ")")
     }
 
+    /** One week's yardage-bonus points. Bonuses have no expectation; they only ever add to the offense's actual points. */
+    private fun bonusTerms(profile: ScoringProfile, w: (Component) -> String): List<String> =
+        profile.yardageBonuses.map { bonus ->
+            val yards = BONUS_INPUTS.getValue(bonus.stat).joinToString(" + ", "(", ")") { w(it) }
+            val lower = int(bonus.min)
+            val upper = bonus.maxExclusive?.let { " AND $yards < ${int(it)}" }.orEmpty()
+            val points = real(bonus.points)
+            "CASE WHEN $yards >= $lower$upper THEN $points ELSE 0 END"
+        }
+
     /**
-     * One week's tier from a profile's own [tiers] for [component], checked
-     * highest first. A week with none (a kicker's) scores none: the pivot's
-     * column is NULL there, while a shutout stores 0.
+     * One week's tier from a profile's own [tiers] for the pivot column [value],
+     * checked highest first. A week with none (a kicker's) scores none: the
+     * pivot's column is NULL there, while a shutout stores 0.
      */
-    private fun tiers(tiers: List<ScoringTier>, component: Component): String {
+    private fun tiers(tiers: List<ScoringTier>, value: String): String {
         if (tiers.isEmpty()) return "0"
-        val value = "ws.s${SPECIAL_COMPONENTS.indexOf(component)}"
         val cases = tiers.asReversed().joinToString(" ") { "WHEN $value >= ${int(it.min)} THEN ${real(it.points)}" }
         return "(CASE WHEN $value IS NULL THEN 0 $cases ELSE 0 END)"
     }

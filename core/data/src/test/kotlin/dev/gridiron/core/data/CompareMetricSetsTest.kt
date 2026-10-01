@@ -2,6 +2,26 @@ package dev.gridiron.core.data
 
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.statquery.StatColumn
+import dev.gridiron.core.statquery.StatColumn.FTN_BLITZ_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_CATCHABLE_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_CONTESTED_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_CREATED_REC
+import dev.gridiron.core.statquery.StatColumn.FTN_DROPS
+import dev.gridiron.core.statquery.StatColumn.FTN_DROP_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_INT_WORTHY_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_OUT_OF_POCKET_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_PLAY_ACTION_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_THROWAWAY_RATE
+import dev.gridiron.core.statquery.StatColumn.NGS_AGGRESSIVENESS
+import dev.gridiron.core.statquery.StatColumn.NGS_CUSHION
+import dev.gridiron.core.statquery.StatColumn.NGS_INTENDED_AIR_YARDS
+import dev.gridiron.core.statquery.StatColumn.NGS_RUSH_EFFICIENCY
+import dev.gridiron.core.statquery.StatColumn.NGS_RYOE
+import dev.gridiron.core.statquery.StatColumn.NGS_RYOE_PER_ATT
+import dev.gridiron.core.statquery.StatColumn.NGS_SEPARATION
+import dev.gridiron.core.statquery.StatColumn.NGS_STACKED_BOX_PCT
+import dev.gridiron.core.statquery.StatColumn.NGS_TIME_TO_THROW
+import dev.gridiron.core.statquery.StatColumn.NGS_YAC_OVER_EXPECTED
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
@@ -69,5 +89,27 @@ class CompareMetricSetsTest {
         assertEquals(CompareGroup.entries, union.map { it.first })
         val opportunity = union.first().second
         assertTrue(StatColumn.FG_ATT in opportunity && StatColumn.DROPBACKS in opportunity)
+    }
+
+    @Test
+    fun `each position's efficiency group carries its Next Gen Stats and FTN charting`() {
+        fun efficiency(p: Position) = CompareMetricSets.groupsFor(p).getValue(CompareGroup.EFFICIENCY)
+        run {
+            assertTrue(efficiency(Position.QB).containsAll(listOf(NGS_TIME_TO_THROW, NGS_INTENDED_AIR_YARDS, NGS_AGGRESSIVENESS, FTN_PLAY_ACTION_RATE, FTN_BLITZ_RATE, FTN_OUT_OF_POCKET_RATE, FTN_THROWAWAY_RATE, FTN_INT_WORTHY_RATE)))
+            assertTrue(efficiency(Position.RB).containsAll(listOf(NGS_RYOE, NGS_RYOE_PER_ATT, NGS_RUSH_EFFICIENCY, NGS_STACKED_BOX_PCT)))
+            for (p in listOf(Position.WR, Position.TE)) {
+                assertTrue(efficiency(p).containsAll(listOf(NGS_SEPARATION, NGS_CUSHION, NGS_YAC_OVER_EXPECTED, FTN_CATCHABLE_RATE, FTN_DROP_RATE, FTN_CONTESTED_RATE)), "$p")
+                assertTrue(CompareMetricSets.groupsFor(p).getValue(CompareGroup.CONTEXT).containsAll(listOf(FTN_DROPS, FTN_CREATED_REC)), "$p")
+            }
+        }
+        for (p in listOf(Position.K, Position.DST)) {
+            assertTrue(CompareMetricSets.groupsFor(p).values.flatten().none { it in CompareMetricSets.CHARTED }, "$p")
+        }
+    }
+
+    @Test
+    fun `every charted column belongs to some position's set`() {
+        val shown = listOf(Position.QB, Position.RB, Position.WR).flatMap { CompareMetricSets.groupsFor(it).values.flatten() }.toSet()
+        assertEquals(CompareMetricSets.CHARTED, shown.filter { it in CompareMetricSets.CHARTED }.toSet())
     }
 }

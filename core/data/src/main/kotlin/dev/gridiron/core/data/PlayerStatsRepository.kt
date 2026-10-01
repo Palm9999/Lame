@@ -55,7 +55,8 @@ public class PlayerStatsRepository(
 
         val total = seasonValues(playerId, position, chosen, weeks, columns, qualifier, playedWeeks, perGame = false, scoring)
         val perGame = seasonValues(playerId, position, chosen, weeks, columns, qualifier, playedWeeks, perGame = true, scoring)
-        val line = lineColumns.map { column ->
+        // A charted stat the player has no data for is left out: a dash or a zero there would say nothing true.
+        val line = lineColumns.filter { it !in CompareMetricSets.CHARTED || total?.values?.get(it) != null }.map { column ->
             SeasonLineRow(
                 column = column,
                 label = names[column.metricId]?.name ?: column.metricId,

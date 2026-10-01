@@ -24,6 +24,8 @@ TABLES: dict[str, tuple[list[str], list[str]]] = {
                            "fumbles_recovered", "defensive_tds", "safeties", "kick_return_tds"]),
     "injury_report": (["player_id", "season", "week"],
                       ["team", "name", "position", "status", "injury", "practice"]),
+    "player_window_stat": (["player_id", "season", "window", "metric_id"], ["value"]),
+    "window_def": (["season", "window"], ["first_week", "last_week"]),
 }
 META_PREFIXES = ("seasons", "expected_through_week:")
 

@@ -6,6 +6,7 @@ import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.statquery.Direction
 import dev.gridiron.core.statquery.Filter
+import dev.gridiron.core.statquery.RollupWindow
 import dev.gridiron.core.statquery.StatColumn
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
@@ -22,8 +23,13 @@ public data class Catalog(
     public fun season(year: Int): SeasonInfo = seasons.first { it.season == year }
 }
 
-/** A season in the database and the last week that has data. */
-public data class SeasonInfo(val season: Int, val lastWeek: Int) {
+/**
+ * A season in the database and the last week that has data.
+ *
+ * @property rollups The season's pre-aggregated windows, read when the catalog loads so they always belong to the
+ *   open database; empty for a database built before schema 9.
+ */
+public data class SeasonInfo(val season: Int, val lastWeek: Int, val rollups: List<RollupWindow> = emptyList()) {
     /** Regular season, cut off at the last week actually played. */
     public val defaultWeeks: WeekRange
         get() = WeekRange(1, minOf(WeekRange.lastRegularSeasonWeek(season), lastWeek))
@@ -107,8 +113,10 @@ public data class GridRowUi(
 /**
  * @property heat Positional percentile mapped to -1..1: +1 best at the
  *   position, -1 worst, null when there's no value to rank.
+ * @property display What the Grid draws: [text] without its unit for a percent column (the header carries the %).
+ *   CSV export, filters and screen-reader descriptions keep [text].
  */
-public data class CellUi(val text: String, val heat: Float?)
+public data class CellUi(val text: String, val heat: Float?, val display: String = text)
 
 public data class PlayerHeader(val playerId: String, val name: String, val position: String?, val team: String?)
 

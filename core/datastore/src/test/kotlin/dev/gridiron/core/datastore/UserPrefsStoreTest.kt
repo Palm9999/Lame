@@ -159,6 +159,17 @@ class UserPrefsStoreTest {
     }
 
     @Test
+    fun `the ESPN league survives a restart, never prints its cookies, and a bad id reads as none`() {
+        val league = EspnLeagueConfig("42", "s2secret", "{SWID-secret}", 3)
+        withStore { it.update { p -> p.copy(espnLeague = league) } }
+        assertEquals(league, withStore { it.prefs.first().espnLeague })
+        assertFalse("s2secret" in UserPrefs.DEFAULT.copy(espnLeague = league).toString())
+        assertFalse("SWID-secret" in league.toString())
+        file.writeText("""{"formatVersion": 3, "espnLeague": {"leagueId": "abc"}}""")
+        assertNull(withStore { it.prefs.first().espnLeague })
+    }
+
+    @Test
     fun `a profile saved before kicking and defense scoring gets the defaults once`() {
         file.writeText(
             """{"formatVersion": 1, "profiles": [{"id": "u1", "name": "Old league", "weights": {"PASS_TD": 6.0}}], "activeProfileId": "u1"}""",
@@ -261,6 +272,31 @@ class UserPrefsStoreTest {
         withStore { store -> store.update { it.copy(gridPresets = all) } }
         assertEquals(all, withStore { it.prefs.first() }.gridPresets)
         assertTrue(file.readText().contains("\"formatVersion\":3"), file.readText())
+    }
+
+    @Test
+    fun `gridDensity round-trips`() {
+        withStore { store -> store.update { it.copy(gridDensity = RowDensity.COMPACT) } }
+        assertEquals(RowDensity.COMPACT, withStore { it.prefs.first() }.gridDensity)
+        assertTrue(file.readText().contains("\"gridDensity\":\"COMPACT\""), file.readText())
+    }
+
+    @Test
+    fun `an absent gridDensity reads as COMFORTABLE`() {
+        file.writeText("""{"formatVersion": 3}""")
+        assertEquals(RowDensity.COMFORTABLE, withStore { it.prefs.first() }.gridDensity)
+    }
+
+    @Test
+    fun `an unknown gridDensity reads as COMFORTABLE and keeps presets and rosters`() {
+        file.writeText(
+            """{"formatVersion":3,"gridDensity":"TINY","rosters":[{"id":"r1","name":"Home","playerIds":["p1"]}],""" +
+                """"gridPresets":[{"id":"g1","name":"Deep","packId":"pack","sort":"S","direction":"DESC","position":"WR"}]}""",
+        )
+        val prefs = withStore { it.prefs.first() }
+        assertEquals(RowDensity.COMFORTABLE, prefs.gridDensity)
+        assertEquals(listOf("r1"), prefs.rosters.map { it.id })
+        assertEquals(listOf("g1"), prefs.gridPresets.map { it.id })
     }
 
     @Test

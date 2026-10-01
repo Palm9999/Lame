@@ -1,0 +1,252 @@
+{
+ "season": {
+  "type": 2,
+  "year": 2025
+ },
+ "week": {
+  "number": 4
+ },
+ "events": [
+  {
+   "id": "401772938",
+   "date": "2025-09-26T00:15Z",
+   "name": "Seattle Seahawks at Arizona Cardinals",
+   "shortName": "SEA @ ARI",
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 4,
+    "type": {
+     "id": "3",
+     "name": "STATUS_FINAL",
+     "state": "post",
+     "completed": true,
+     "description": "Final",
+     "detail": "Final",
+     "shortDetail": "Final"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401772938",
+     "date": "2025-09-26T00:15Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "winner": false,
+       "score": "20",
+       "team": {
+        "id": "22",
+        "abbreviation": "ARI",
+        "displayName": "Arizona Cardinals"
+       }
+      },
+      {
+       "homeAway": "away",
+       "winner": true,
+       "score": "23",
+       "team": {
+        "id": "26",
+        "abbreviation": "SEA",
+        "displayName": "Seattle Seahawks"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401772739",
+   "date": "2025-09-28T17:00Z",
+   "name": "Washington Commanders at Atlanta Falcons",
+   "shortName": "WSH @ ATL",
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 4,
+    "type": {
+     "id": "3",
+     "name": "STATUS_FINAL",
+     "state": "post",
+     "completed": true,
+     "description": "Final",
+     "detail": "Final",
+     "shortDetail": "Final"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401772739",
+     "date": "2025-09-28T17:00Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "winner": true,
+       "score": "34",
+       "team": {
+        "id": "1",
+        "abbreviation": "ATL",
+        "displayName": "Atlanta Falcons"
+       }
+      },
+      {
+       "homeAway": "away",
+       "winner": false,
+       "score": "27",
+       "team": {
+        "id": "28",
+        "abbreviation": "WSH",
+        "displayName": "Washington Commanders"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401772921",
+   "date": "2025-09-29T00:20Z",
+   "name": "Green Bay Packers at Dallas Cowboys",
+   "shortName": "GB @ DAL",
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 5,
+    "type": {
+     "id": "3",
+     "name": "STATUS_FINAL",
+     "state": "post",
+     "completed": true,
+     "description": "Final",
+     "detail": "Final/OT",
+     "shortDetail": "Final/OT",
+     "altDetail": "OT"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401772921",
+     "date": "2025-09-29T00:20Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "winner": false,
+       "score": "40",
+       "team": {
+        "id": "6",
+        "abbreviation": "DAL",
+        "displayName": "Dallas Cowboys"
+       }
+      },
+      {
+       "homeAway": "away",
+       "winner": false,
+       "score": "40",
+       "team": {
+        "id": "9",
+        "abbreviation": "GB",
+        "displayName": "Green Bay Packers"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "401872964",
+   "date": "2026-10-02T00:15Z",
+   "name": "Pittsburgh Steelers at Cleveland Browns",
+   "shortName": "PIT @ CLE",
+   "status": {
+    "clock": 0.0,
+    "displayClock": "0:00",
+    "period": 0,
+    "type": {
+     "id": "1",
+     "name": "STATUS_SCHEDULED",
+     "state": "pre",
+     "completed": false,
+     "description": "Scheduled",
+     "detail": "Thu, October 1st at 8:15 PM EDT",
+     "shortDetail": "10/1 - 8:15 PM EDT"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401872964",
+     "date": "2026-10-02T00:15Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "winner": null,
+       "score": "0",
+       "team": {
+        "id": "5",
+        "abbreviation": "CLE",
+        "displayName": "Cleveland Browns"
+       }
+      },
+      {
+       "homeAway": "away",
+       "winner": null,
+       "score": "0",
+       "team": {
+        "id": "23",
+        "abbreviation": "PIT",
+        "displayName": "Pittsburgh Steelers"
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "id": "live-1",
+   "date": "2025-09-28T17:00Z",
+   "name": "Washington Commanders at Atlanta Falcons",
+   "shortName": "WSH @ ATL",
+   "status": {
+    "clock": 254.0,
+    "displayClock": "4:14",
+    "period": 3,
+    "type": {
+     "id": "2",
+     "name": "STATUS_IN_PROGRESS",
+     "state": "in",
+     "completed": false,
+     "description": "In Progress",
+     "detail": "4:14 - 3rd Quarter",
+     "shortDetail": "4:14 - 3rd"
+    }
+   },
+   "competitions": [
+    {
+     "id": "401772739",
+     "date": "2025-09-28T17:00Z",
+     "competitors": [
+      {
+       "homeAway": "home",
+       "winner": null,
+       "score": "17",
+       "team": {
+        "id": "1",
+        "abbreviation": "ATL",
+        "displayName": "Atlanta Falcons"
+       }
+      },
+      {
+       "homeAway": "away",
+       "winner": null,
+       "score": "13",
+       "team": {
+        "id": "28",
+        "abbreviation": "WSH",
+        "displayName": "Washington Commanders"
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}
