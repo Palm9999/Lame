@@ -1,0 +1,206 @@
+package dev.gridiron.core.data.live
+
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
+
+/** One player on a league team. [playerId] is the app's id, null when the ESPN id isn't in `player_xref`. */
+public data class LeaguePlayer(val espnId: String, val name: String, val slot: String, val playerId: String? = null)
+
+/** One team in the league, with its record and roster. [rank] is by wins, then points for. */
+public data class LeagueTeam(
+    val id: Int,
+    val name: String,
+    val owner: String?,
+    val wins: Int,
+    val losses: Int,
+    val ties: Int,
+    val pointsFor: Double,
+    val pointsAgainst: Double,
+    val rank: Int,
+    val players: List<LeaguePlayer>,
+    /** ESPN's owner ids (SWIDs), for finding the user's own team. */
+    val ownerIds: List<String> = emptyList(),
+)
+
+/** A league as last read from ESPN. */
+public data class FantasyLeague(
+    val leagueId: String,
+    val name: String,
+    val season: Int,
+    val week: Int,
+    val teams: List<LeagueTeam>,
+    val fetchedAtMillis: Long = 0,
+)
+
+/**
+ * ESPN's fantasy API (unofficial). Like [EspnParser] it walks the JSON tree and
+ * skips what it can't read; a response that isn't a league, or whose teams all
+ * fail, is a [LiveFormatException].
+ */
+internal object EspnFantasyParser {
+    fun url(leagueId: String, season: Int): String =
+        "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/$season/segments/0/leagues/$leagueId" +
+            "?view=mTeam&view=mRoster&view=mStandings&view=mSettings"
+
+    private val SLOTS = mapOf(
+        0 to "QB", 2 to "RB", 4 to "WR", 6 to "TE", 16 to "D/ST", 17 to "K", 23 to "FLEX",
+        20 to "BE", 21 to "IR", 7 to "OP", 3 to "RB/WR", 5 to "WR/TE", 25 to "RB/WR/TE",
+    )
+
+    /** ESPN's pro team ids, as nflverse writes the teams; a D/ST's player id is -16000 minus its team's. */
+    private val PRO_TEAMS = mapOf(
+        1 to "ATL", 2 to "BUF", 3 to "CHI", 4 to "CIN", 5 to "CLE", 6 to "DAL", 7 to "DEN", 8 to "DET",
+        9 to "GB", 10 to "TEN", 11 to "IND", 12 to "KC", 13 to "LV", 14 to "LA", 15 to "MIA", 16 to "MIN",
+        17 to "NE", 18 to "NO", 19 to "NYG", 20 to "NYJ", 21 to "PHI", 22 to "ARI", 23 to "PIT", 24 to "LAC",
+        25 to "SF", 26 to "SEA", 27 to "TB", 28 to "WAS", 29 to "CAR", 30 to "JAX", 33 to "BAL", 34 to "HOU",
+    )
+
+    /** The app's id for a D/ST, from its ESPN player id. */
+    fun dstPlayerId(espnId: String): String? {
+        val n = espnId.toIntOrNull() ?: return null
+        return if (n < -16000) PRO_TEAMS[-16000 - n]?.let { "DST_$it" } else null
+    }
+
+    fun parse(text: String, leagueId: String, fetchedAtMillis: Long): FantasyLeague {
+        val root = try {
+            Json.parseToJsonElement(text) as? JsonObject
+        } catch (_: SerializationException) {
+            null
+        } ?: throw LiveFormatException("ESPN sent something that isn't league JSON")
+        val teams = root.array("teams") ?: throw LiveFormatException("ESPN changed its league format (no teams list)")
+        val members = root.array("members").orEmpty().mapNotNull { it as? JsonObject }
+            .mapNotNull { m -> m.string("id")?.let { it to (m.string("displayName") ?: "") } }.toMap()
+        val parsed = teams.mapNotNull { (it as? JsonObject)?.let { t -> team(t, members) } }
+        if (parsed.isEmpty() && teams.isNotEmpty()) throw LiveFormatException("ESPN changed its league format (no team could be read)")
+        val ranked = parsed.sortedWith(compareByDescending<LeagueTeam> { (it.wins * 2 + it.ties).toDouble() }.thenByDescending { it.pointsFor })
+            .mapIndexed { i, t -> t.copy(rank = i + 1) }
+        return FantasyLeague(
+            leagueId = leagueId,
+            name = root.obj("settings")?.string("name") ?: "League $leagueId",
+            season = root.int("seasonId") ?: throw LiveFormatException("ESPN changed its league format (no season)"),
+            week = root.int("scoringPeriodId") ?: 1,
+            teams = ranked,
+            fetchedAtMillis = fetchedAtMillis,
+        )
+    }
+
+    private fun team(t: JsonObject, members: Map<String, String>): LeagueTeam? {
+        val id = t.int("id") ?: return null
+        val name = t.string("name")
+            ?: listOfNotNull(t.string("location"), t.string("nickname")).joinToString(" ").takeIf { it.isNotBlank() }
+            ?: "Team $id"
+        val overall = t.obj("record")?.obj("overall")
+        val ownerIds = (t.array("owners").orEmpty().mapNotNull { (it as? JsonPrimitive)?.content } + listOfNotNull(t.string("primaryOwner"))).distinct()
+        val players = t.obj("roster")?.array("entries").orEmpty().mapNotNull { (it as? JsonObject)?.let(::player) }
+        return LeagueTeam(
+            id = id,
+            name = name,
+            owner = ownerIds.firstNotNullOfOrNull { members[it] }?.takeIf { it.isNotBlank() },
+            wins = overall?.int("wins") ?: 0,
+            losses = overall?.int("losses") ?: 0,
+            ties = overall?.int("ties") ?: 0,
+            pointsFor = overall?.double("pointsFor") ?: 0.0,
+            pointsAgainst = overall?.double("pointsAgainst") ?: 0.0,
+            rank = 0,
+            players = players,
+            ownerIds = ownerIds,
+        )
+    }
+
+    private fun player(e: JsonObject): LeaguePlayer? {
+        val espnId = e.string("playerId") ?: return null
+        val info = e.obj("playerPoolEntry")?.obj("player")
+        val name = info?.string("fullName") ?: dstPlayerId(espnId)?.let { "${it.removePrefix("DST_")} D/ST" } ?: return null
+        return LeaguePlayer(espnId, name, SLOTS[e.int("lineupSlotId")] ?: "BE")
+    }
+}
+
+private fun JsonObject.int(key: String): Int? = (this[key] as? JsonPrimitive)?.intOrNull
+private fun JsonObject.double(key: String): Double? = (this[key] as? JsonPrimitive)?.doubleOrNull
+
+/** The snapshot as a JSON document, so the last sync reads offline. */
+internal fun FantasyLeague.toJson(): String = buildJsonObject {
+    put("leagueId", leagueId)
+    put("name", name)
+    put("season", season)
+    put("week", week)
+    put("fetchedAtMillis", fetchedAtMillis)
+    put(
+        "teams",
+        buildJsonArray {
+            for (t in teams) {
+                add(
+                    buildJsonObject {
+                        put("id", t.id)
+                        t.owner?.let { put("owner", it) }
+                        put("name", t.name)
+                        put("wins", t.wins)
+                        put("losses", t.losses)
+                        put("ties", t.ties)
+                        put("pointsFor", t.pointsFor)
+                        put("pointsAgainst", t.pointsAgainst)
+                        put("rank", t.rank)
+                        put("ownerIds", buildJsonArray { t.ownerIds.forEach { add(JsonPrimitive(it)) } })
+                        put(
+                            "players",
+                            buildJsonArray {
+                                for (p in t.players) {
+                                    add(
+                                        buildJsonObject {
+                                            put("espnId", p.espnId)
+                                            put("name", p.name)
+                                            put("slot", p.slot)
+                                            p.playerId?.let { put("playerId", it) }
+                                        },
+                                    )
+                                }
+                            },
+                        )
+                    },
+                )
+            }
+        },
+    )
+}.toString()
+
+/** Reads [toJson]'s document back; null if it isn't one. */
+internal fun fantasyLeagueFromJson(text: String): FantasyLeague? = try {
+    val o = Json.parseToJsonElement(text) as JsonObject
+    FantasyLeague(
+        leagueId = o.string("leagueId")!!,
+        name = o.string("name")!!,
+        season = o.int("season")!!,
+        week = o.int("week")!!,
+        fetchedAtMillis = (o["fetchedAtMillis"] as? JsonPrimitive)?.longOrNull ?: 0,
+        teams = o.array("teams")!!.map { e ->
+            val t = e as JsonObject
+            LeagueTeam(
+                id = t.int("id")!!,
+                name = t.string("name")!!,
+                owner = t.string("owner"),
+                wins = t.int("wins")!!,
+                losses = t.int("losses")!!,
+                ties = t.int("ties")!!,
+                pointsFor = t.double("pointsFor")!!,
+                pointsAgainst = t.double("pointsAgainst")!!,
+                rank = t.int("rank")!!,
+                ownerIds = t.array("ownerIds").orEmpty().mapNotNull { (it as? JsonPrimitive)?.content },
+                players = t.array("players").orEmpty().map { pe ->
+                    val p = pe as JsonObject
+                    LeaguePlayer(p.string("espnId")!!, p.string("name")!!, p.string("slot")!!, p.string("playerId"))
+                },
+            )
+        },
+    )
+} catch (_: Exception) {
+    null
+}

@@ -45,6 +45,7 @@ import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TeamsRepository
+import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.PropsRepository
 import dev.gridiron.core.ingest.currentSeason
@@ -82,6 +83,8 @@ data class Deps(
     val props: PropsRepository? = null,
     /** The Player page's season stats; null where a test doesn't need them. */
     val playerStats: PlayerStatsRepository? = null,
+    /** The user's ESPN fantasy league. Null where a test doesn't need it. */
+    val league: FantasyLeagueRepository? = null,
 )
 
 /**
@@ -159,6 +162,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 add("Projection accuracy" to { s: Int -> backStack.push(AccuracyKey(s)) })
                                 if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
                                 add("Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) })
+                                if (deps.league != null) add("ESPN league" to { _: Int -> backStack.push(LeagueKey) })
                                 if (deps.rosters != null) add("Rosters" to { _: Int -> backStack.push(RostersKey) })
                                 add("Team defense" to { s: Int -> backStack.push(DefenseKey(s)) })
                                 if (deps.settings != null) add("Settings" to { _: Int -> backStack.push(SettingsKey) })
@@ -217,6 +221,9 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }
                     entry<RostersKey> {
                         deps.rosters?.let { RostersScreen(it, deps.players, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
+                    }
+                    entry<LeagueKey> {
+                        deps.league?.let { LeagueScreen(it, currentSeason(), onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
                     }
                     entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back, props = deps.props?.status) } }
                 },

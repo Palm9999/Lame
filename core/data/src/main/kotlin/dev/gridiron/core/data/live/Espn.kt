@@ -126,9 +126,9 @@ internal fun parseEspnTime(text: String): Instant? =
     }
 
 /** A non-blank string (numbers as their text), or null. */
-private fun JsonObject.string(key: String): String? =
+internal fun JsonObject.string(key: String): String? =
     (this[key] as? JsonPrimitive)?.takeIf { it !is JsonNull }?.content?.takeIf { it.isNotBlank() }
 
-private fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
+internal fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
 
-private fun JsonObject.array(key: String): JsonArray? = this[key] as? JsonArray
+internal fun JsonObject.array(key: String): JsonArray? = this[key] as? JsonArray

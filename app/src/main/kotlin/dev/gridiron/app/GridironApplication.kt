@@ -14,6 +14,7 @@ import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TeamsRepository
+import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.LiveDb
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.PropsRepository
@@ -101,6 +102,7 @@ class GridironApplication : Application() {
             gridDisplay = GridDisplayRepository(prefs),
             props = propsRepo,
             playerStats = PlayerStatsRepository(executor),
+            league = FantasyLeagueRepository(prefs, UrlConnectionHttpGet(), players, File(noBackupFilesDir, "league.json")),
         )
     }
 }

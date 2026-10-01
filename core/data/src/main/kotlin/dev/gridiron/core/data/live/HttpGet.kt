@@ -12,6 +12,11 @@ public fun interface HttpGet {
     public suspend fun get(url: String): String
 }
 
+/** Like [HttpGet], with request headers (a login cookie). */
+public fun interface HeaderHttpGet {
+    public suspend fun get(url: String, headers: Map<String, String>): String
+}
+
 /**
  * [HttpGet] over the JDK's connection. Asks for gzip (ESPN's injuries feed is
  * about 350 KB compressed, several MB plain) and throws [IOException] on any
@@ -20,13 +25,18 @@ public fun interface HttpGet {
 public class UrlConnectionHttpGet(
     private val connectTimeoutMs: Int = 15_000,
     private val readTimeoutMs: Int = 30_000,
-) : HttpGet {
-    override suspend fun get(url: String): String = withContext(Dispatchers.IO) {
+) : HttpGet, HeaderHttpGet {
+    override suspend fun get(url: String): String = get(url, emptyMap())
+
+    override suspend fun get(url: String, headers: Map<String, String>): String = withContext(Dispatchers.IO) {
         val connection = URI(url).toURL().openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = connectTimeoutMs
             connection.readTimeout = readTimeoutMs
             connection.setRequestProperty("Accept-Encoding", "gzip")
+            // A cookie must stay with the host it was meant for.
+            connection.instanceFollowRedirects = headers.isEmpty()
+            headers.forEach { (k, v) -> connection.setRequestProperty(k, v) }
             val code = connection.responseCode
             if (code != HttpURLConnection.HTTP_OK) throw IOException("HTTP $code from ${connection.url.host}")
             val body = connection.inputStream

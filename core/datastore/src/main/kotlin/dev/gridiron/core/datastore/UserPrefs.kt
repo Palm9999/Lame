@@ -16,6 +16,7 @@ import dev.gridiron.core.model.ScoringProfile
  * @property gridPresets Saved Grid views, in the order created; at most [MAX_PRESETS], names unique ignoring case.
  * @property gridDensity The Grid's row height; absent or unknown reads as [RowDensity.COMFORTABLE].
  * @property oddsApiKey The user's key for The Odds API (spec §5); null when none is set. Sent only to api.the-odds-api.com.
+ * @property espnLeague The user's ESPN fantasy league to import; null when none is set. Its cookies are sent only to ESPN.
  */
 public data class UserPrefs(
     val profiles: List<ScoringProfile>,
@@ -27,6 +28,7 @@ public data class UserPrefs(
     val oddsApiKey: String? = null,
     val gridPresets: List<GridPreset> = emptyList(),
     val gridDensity: RowDensity = RowDensity.COMFORTABLE,
+    val espnLeague: EspnLeagueConfig? = null,
 ) {
     /** The active profile, falling back to PPR if its id no longer exists. */
     public val active: ScoringProfile
@@ -37,7 +39,7 @@ public data class UserPrefs(
     /** Like the generated one, but the key shows only as set or not: prefs must be safe to log. */
     override fun toString(): String =
         "UserPrefs(profiles=$profiles, activeProfileId=$activeProfileId, tray=$tray, resetNotice=$resetNotice, " +
-            "seasons=$seasons, rosters=$rosters, oddsApiKey=${if (oddsApiKey == null) "null" else "…"})"
+            "seasons=$seasons, rosters=$rosters, oddsApiKey=${if (oddsApiKey == null) "null" else "…"}, espnLeague=$espnLeague)"
 
     public companion object {
         public val DEFAULT: UserPrefs = UserPrefs(emptyList(), ScoringPresets.PPR.id, emptyList())
@@ -51,3 +53,24 @@ public data class UserPrefs(
  *   that included it keeps following the current season as new ones start.
  */
 public data class SeasonChoice(val seasons: List<Int>, val chosenIn: Int)
+
+/**
+ * Which ESPN fantasy league to import. [espnS2] and [swid] are the login
+ * cookies a private league needs; both null reads a public league. [teamId] is
+ * the user's own team, or null to find it from [swid].
+ */
+public data class EspnLeagueConfig(
+    val leagueId: String,
+    val espnS2: String? = null,
+    val swid: String? = null,
+    val teamId: Int? = null,
+) {
+    init {
+        require(leagueId.isNotBlank() && leagueId.all { it.isDigit() }) { "an ESPN league id is digits" }
+    }
+
+    /** Safe to log: the cookies show only as set or not. */
+    override fun toString(): String =
+        "EspnLeagueConfig(leagueId=$leagueId, espnS2=${if (espnS2 == null) "null" else "…"}, " +
+            "swid=${if (swid == null) "null" else "…"}, teamId=$teamId)"
+}

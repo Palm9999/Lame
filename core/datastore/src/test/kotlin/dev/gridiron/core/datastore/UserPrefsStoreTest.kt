@@ -159,6 +159,17 @@ class UserPrefsStoreTest {
     }
 
     @Test
+    fun `the ESPN league survives a restart, never prints its cookies, and a bad id reads as none`() {
+        val league = EspnLeagueConfig("42", "s2secret", "{SWID-secret}", 3)
+        withStore { it.update { p -> p.copy(espnLeague = league) } }
+        assertEquals(league, withStore { it.prefs.first().espnLeague })
+        assertFalse("s2secret" in UserPrefs.DEFAULT.copy(espnLeague = league).toString())
+        assertFalse("SWID-secret" in league.toString())
+        file.writeText("""{"formatVersion": 3, "espnLeague": {"leagueId": "abc"}}""")
+        assertNull(withStore { it.prefs.first().espnLeague })
+    }
+
+    @Test
     fun `a profile saved before kicking and defense scoring gets the defaults once`() {
         file.writeText(
             """{"formatVersion": 1, "profiles": [{"id": "u1", "name": "Old league", "weights": {"PASS_TD": 6.0}}], "activeProfileId": "u1"}""",
