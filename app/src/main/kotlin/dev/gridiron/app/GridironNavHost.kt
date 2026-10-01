@@ -44,6 +44,7 @@ import dev.gridiron.core.model.Roster
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.ScoresRepository
 import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.LiveRepository
@@ -85,6 +86,8 @@ data class Deps(
     val playerStats: PlayerStatsRepository? = null,
     /** The user's ESPN fantasy league. Null where a test doesn't need it. */
     val league: FantasyLeagueRepository? = null,
+    /** Week-by-week NFL scores; null where a test doesn't need them. */
+    val scores: ScoresRepository? = null,
 )
 
 /**
@@ -161,6 +164,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 add("Projections" to { s: Int -> backStack.push(ProjectionListKey(s)) })
                                 add("Projection accuracy" to { s: Int -> backStack.push(AccuracyKey(s)) })
                                 if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
+                                if (deps.scores != null) add("Scores" to { s: Int -> backStack.push(ScoresKey(s)) })
                                 add("Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) })
                                 if (deps.league != null) add("ESPN league" to { _: Int -> backStack.push(LeagueKey) })
                                 if (deps.rosters != null) add("Rosters" to { _: Int -> backStack.push(RostersKey) })
@@ -203,6 +207,23 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             key.season, currentSeason(), deps.teams, deps.live, onBack = back,
                             onPlayer = { backStack.push(PlayerKey(it)) }, dataVersion = deps.stats.dataVersion,
                         )
+                    }
+                    entry<ScoresKey> { key ->
+                        deps.scores?.let { scores ->
+                            ScoresRoute(
+                                key.season, scores,
+                                onGame = { week, home, away -> backStack.push(GameKey(key.season, week, home, away)) },
+                                onBack = back, dataVersion = deps.stats.dataVersion,
+                            )
+                        }
+                    }
+                    entry<GameKey> { key ->
+                        deps.scores?.let { scores ->
+                            GameRoute(
+                                key.season, key.week, key.home, key.away, scores, deps.scoring,
+                                onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
+                            )
+                        }
                     }
                     entry<NewsKey> {
                         deps.live?.let { NewsRoute(it, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }

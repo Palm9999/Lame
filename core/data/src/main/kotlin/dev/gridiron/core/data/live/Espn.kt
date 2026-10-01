@@ -34,6 +34,21 @@ internal data class EspnInjury(
     val date: Instant?,
 )
 
+/** One game on ESPN's scoreboard, with teams written as nflverse writes them. Scores are null before kickoff. */
+internal data class EspnGame(
+    val espnId: String,
+    val home: String,
+    val away: String,
+    val kickoff: Instant?,
+    val state: State,
+    /** ESPN's short status: "Final", "Final/OT", "4:14 - 3rd", "Halftime", or the kickoff in Eastern time. */
+    val detail: String?,
+    val homeScore: Int?,
+    val awayScore: Int?,
+) {
+    enum class State { SCHEDULED, LIVE, FINAL }
+}
+
 /** ESPN answered, but not in the shape this app reads. */
 public class LiveFormatException(message: String) : Exception(message)
 
@@ -47,6 +62,60 @@ public class LiveFormatException(message: String) : Exception(message)
 internal object EspnParser {
     const val NEWS_URL: String = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/news?limit=50"
     const val INJURIES_URL: String = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/injuries"
+
+    private val SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+
+    /**
+     * One week's scoreboard. nflverse numbers the playoffs 19 to 22 straight after week 18 (the Pro Bowl is skipped);
+     * ESPN restarts at 1 in its own postseason type, where the Super Bowl is its fifth week.
+     */
+    fun scoreboardUrl(season: Int, week: Int): String {
+        val (type, espnWeek) = when {
+            week <= 18 -> 2 to week
+            week == 22 -> 3 to 5
+            else -> 3 to week - 18
+        }
+        return "$SCOREBOARD?seasontype=$type&week=$espnWeek&dates=$season"
+    }
+
+    /** ESPN's team abbreviations where nflverse writes them differently. */
+    private val TEAM_CODES = mapOf("WSH" to "WAS", "LAR" to "LA")
+
+    fun scoreboard(text: String): List<EspnGame> {
+        val events = root(text, "a scoreboard")["events"] as? JsonArray
+            ?: throw LiveFormatException("ESPN changed its scoreboard format (no events list)")
+        return events.mapNotNull { (it as? JsonObject)?.let(::game) }
+            .also { if (it.isEmpty() && events.isNotEmpty()) throw LiveFormatException("ESPN changed its scoreboard format (no game could be read)") }
+    }
+
+    private fun game(e: JsonObject): EspnGame? {
+        val competition = e.array("competitions")?.firstOrNull() as? JsonObject ?: return null
+        val sides = competition.array("competitors").orEmpty().mapNotNull { it as? JsonObject }
+        fun team(side: String): JsonObject? = sides.firstOrNull { it.string("homeAway") == side }
+        fun code(c: JsonObject?): String? =
+            c?.obj("team")?.string("abbreviation")?.let { TEAM_CODES[it] ?: it }
+        val home = team("home")
+        val away = team("away")
+        val homeCode = code(home) ?: return null
+        val awayCode = code(away) ?: return null
+        val type = e.obj("status")?.obj("type") ?: return null
+        val state = when (type.string("state")) {
+            "pre" -> EspnGame.State.SCHEDULED
+            "in" -> EspnGame.State.LIVE
+            "post" -> EspnGame.State.FINAL
+            else -> return null
+        }
+        return EspnGame(
+            espnId = e.string("id") ?: return null,
+            home = homeCode,
+            away = awayCode,
+            kickoff = (competition.string("date") ?: e.string("date"))?.let(::parseEspnTime),
+            state = state,
+            detail = type.string("shortDetail"),
+            homeScore = home?.string("score")?.toIntOrNull().takeIf { state != EspnGame.State.SCHEDULED },
+            awayScore = away?.string("score")?.toIntOrNull().takeIf { state != EspnGame.State.SCHEDULED },
+        )
+    }
 
     private val ATHLETE_ID = Regex("/id/(\\d+)(/|$)")
 
