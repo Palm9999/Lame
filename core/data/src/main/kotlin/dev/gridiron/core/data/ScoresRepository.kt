@@ -2,19 +2,14 @@ package dev.gridiron.core.data
 
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.doubleOrNull
-import dev.gridiron.core.database.textOrNull
 import dev.gridiron.core.data.live.EspnGame
 import dev.gridiron.core.data.live.EspnParser
 import dev.gridiron.core.data.live.HttpGet
 import dev.gridiron.core.data.live.LiveFormatException
 import dev.gridiron.core.model.ScoringProfile
-import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.statquery.Bind
 import dev.gridiron.core.statquery.Components
 import dev.gridiron.core.statquery.SqlQuery
-import dev.gridiron.core.statquery.StatColumn
-import dev.gridiron.core.statquery.StatQueryBuilder
-import dev.gridiron.core.statquery.StatQuerySpec
 import kotlinx.coroutines.CancellationException
 import java.io.IOException
 import java.time.Instant
@@ -158,21 +153,7 @@ public class ScoresRepository(
             ),
         ) { it.text(0) to it.text(1) }.toMap()
         if (teamOf.isEmpty()) return GameDetail(emptyList(), emptyList())
-        val q = StatQueryBuilder.grid(
-            StatQuerySpec(
-                season = season,
-                weeks = WeekRange.single(week),
-                columns = listOf(StatColumn.FANTASY_POINTS),
-                playerIds = teamOf.keys,
-                includeUnqualified = true,
-                limit = StatQuerySpec.MAX_LIMIT,
-                scoring = scoring,
-            ),
-        )
-        val players = executor.query(q.query) {
-            val id = it.text(0)
-            GamePlayer(id, it.text(1), it.textOrNull(2), it.doubleOrNull(q.layout.valueIndex(StatColumn.FANTASY_POINTS)))
-        }
+        val players = executor.weekPoints(season, week, teamOf.keys, scoring)
         fun side(team: String) = players.filter { teamOf[it.playerId] == team }
         return GameDetail(side(home), side(away))
     }

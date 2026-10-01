@@ -4,6 +4,7 @@ import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.ResultRow
 import dev.gridiron.core.model.Roster
+import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.statquery.Bind
 import dev.gridiron.core.statquery.SqlQuery
 import dev.gridiron.core.testing.FakePrefsSource
@@ -73,6 +74,77 @@ class FantasyLeagueTest {
         assertNull(fantasyLeagueFromJson("not json"))
     }
 
+    private fun mEntry(id: Int, name: String?, slot: Int, points: Double?) =
+        """{"playerId":$id,"lineupSlotId":$slot,"playerPoolEntry":{${points?.let { """"appliedStatTotal":$it,""" }.orEmpty()}"player":${if (name == null) "{}" else """{"fullName":"$name"}"""}}}"""
+
+    private fun mSide(teamId: Int, total: Double, vararg entries: String) =
+        """{"teamId":$teamId,"totalPoints":$total,"rosterForCurrentScoringPeriod":{"entries":[${entries.joinToString(",")}]}}"""
+
+    private val matchupBody = """
+        {"seasonId":2026,"scoringPeriodId":4,"schedule":[
+          {"id":1,"matchupPeriodId":3,"home":${mSide(1, 90.0)},"away":${mSide(2, 80.0)}},
+          {"id":2,"matchupPeriodId":4,
+           "home":${mSide(2, 112.4, mEntry(999, "Bench Guy", 20, 3.0), mEntry(-16012, null, 16, 8.0), mEntry(222, "Star WR", 4, 21.3), mEntry(333, "Flex Guy", 23, 11.5), mEntry(111, "Star QB", 0, 25.1), mEntry(7, null, 4, 1.0))},
+           "away":${mSide(1, 98.2, mEntry(444, "Rival RB", 2, 14.0))}},
+          {"id":3,"matchupPeriodId":4,"home":${mSide(3, 60.0)}}
+        ]}
+    """.trimIndent()
+
+    @Test
+    fun `parses two matchups with totals and lineups`() {
+        val matchups = EspnFantasyParser.matchups(matchupBody, 4)
+        assertEquals(2, matchups.size)
+        val first = matchups[0]
+        assertEquals(4, first.week)
+        assertEquals(2, first.home.teamId)
+        assertEquals(112.4, first.home.espnTotal)
+        assertEquals(1, first.away!!.teamId)
+        assertEquals(98.2, first.away.espnTotal)
+        assertEquals("Rival RB", first.away.lineup.single().name)
+        assertEquals(14.0, first.away.lineup.single().espnPoints)
+    }
+
+    @Test
+    fun `a lineup reads starters by position, then the bench`() {
+        val lineup = EspnFantasyParser.matchups(matchupBody, 4)[0].home.lineup
+        assertEquals(listOf("QB", "WR", "FLEX", "D/ST", "BE"), lineup.map { it.slot })
+        assertEquals(listOf(25.1, 21.3, 11.5, 8.0, 3.0), lineup.map { it.espnPoints })
+    }
+
+    @Test
+    fun `a D-ST entry gets its name and an unnamed unknown player is skipped`() {
+        val lineup = EspnFantasyParser.matchups(matchupBody, 4)[0].home.lineup
+        assertEquals("KC D/ST", lineup.single { it.slot == "D/ST" }.name)
+        assertTrue(lineup.none { it.espnId == "7" })
+    }
+
+    @Test
+    fun `a missing away side is a bye`() {
+        val bye = EspnFantasyParser.matchups(matchupBody, 4)[1]
+        assertEquals(3, bye.home.teamId)
+        assertNull(bye.away)
+    }
+
+    @Test
+    fun `only the asked week's matchups are kept`() {
+        assertEquals(listOf(90.0), EspnFantasyParser.matchups(matchupBody, 3).map { it.home.espnTotal })
+        assertEquals(emptyList<LeagueMatchup>(), EspnFantasyParser.matchups(matchupBody, 9))
+    }
+
+    @Test
+    fun `a response without a schedule is a format error`() {
+        assertThrows<LiveFormatException> { EspnFantasyParser.matchups("[]", 4) }
+        assertThrows<LiveFormatException> { EspnFantasyParser.matchups("""{"seasonId":2026}""", 4) }
+        assertThrows<LiveFormatException> { EspnFantasyParser.matchups("""{"schedule":[{"matchupPeriodId":4,"home":{"x":1}}]}""", 4) }
+    }
+
+    @Test
+    fun `the matchups url asks for the matchup views and the week`() {
+        val url = EspnFantasyParser.matchupsUrl("42", 2026, 4)
+        assertTrue("view=mMatchup" in url && "view=mMatchupScore" in url && url.endsWith("scoringPeriodId=4"))
+        assertTrue("/seasons/2026/" in url && "/leagues/42?" in url)
+    }
+
     private val players = PlayerDirectory(
         object : QueryExecutor {
             override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> = emptyList()
@@ -102,6 +174,41 @@ class FantasyLeagueTest {
         val again = repo(prefs) { _, _ -> error("offline") }
         again.load()
         assertEquals(repo.league.value, again.league.value)
+    }
+
+    @Test
+    fun `matchups sends the cookies and the week, and an unmatched player has no app points`() = runTest {
+        val prefs = FakePrefsSource()
+        var seen: Pair<String, Map<String, String>>? = null
+        val repo = repo(prefs) { url, headers -> seen = url to headers; matchupBody }
+        repo.setConfig("42", "S2VALUE", "{ME}")
+        val result = repo.matchups(2026, 4, ScoringPresets.PPR)
+        assertNull(result.error)
+        val (url, sent) = checkNotNull(seen)
+        assertEquals(EspnFantasyParser.matchupsUrl("42", 2026, 4), url)
+        assertEquals("espn_s2=S2VALUE; SWID={ME}", sent["Cookie"])
+        assertEquals(2, result.matchups.size)
+        assertEquals(Instant.parse("2026-10-01T00:00:00Z").toEpochMilli(), result.fetchedAtMillis)
+        // No stats database is wired here and the xref is empty: only the D/ST has an app id, and no app points.
+        val lineup = result.matchups[0].home.lineup
+        assertEquals("DST_KC", lineup.single { it.slot == "D/ST" }.playerId)
+        assertTrue(lineup.all { it.appPoints == null })
+        assertNull(result.matchups[0].home.appTotal)
+    }
+
+    @Test
+    fun `matchups say why they failed and no league is its own message`() = runTest {
+        val prefs = FakePrefsSource()
+        var fail: Exception? = null
+        val repo = repo(prefs) { _, _ -> fail?.let { throw it } ?: matchupBody }
+        assertEquals("no league id set", repo.matchups(2026, 4, ScoringPresets.PPR).error)
+        repo.setConfig("42", null, null)
+        fail = IOException("HTTP 401 from lm-api-reads.fantasy.espn.com")
+        assertTrue(repo.matchups(2026, 4, ScoringPresets.PPR).error!!.contains("private"))
+        fail = LiveFormatException("ESPN changed its matchup format")
+        assertEquals("ESPN changed its matchup format", repo.matchups(2026, 4, ScoringPresets.PPR).error)
+        fail = null
+        assertNull(repo.matchups(2026, 4, ScoringPresets.PPR).error)
     }
 
     @Test

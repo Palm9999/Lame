@@ -73,6 +73,7 @@ Detail (module behavior, data flow, design decisions, schema): `docs/ARCHITECTUR
 - **PRs:** one PR per feature. HANDOFF updates ride in that PR: no docs-only PRs, no check-ins or subscriptions for docs-only changes.
 - **Specs and plans** are deleted once executed; they stay in git history (`git log --diff-filter=D -- docs/superpowers`).
 - **Branch:** work directly on `claude/relaxed-hypatia-73hhub`; never create a new branch.
+- **Execution:** run plans with `executing-plans` in the current session, always, unless the user says otherwise; don't offer subagents.
 - **Start of every session:** `git fetch origin claude/relaxed-hypatia-73hhub` and fast-forward before reading `docs/superpowers/HANDOFF.md`. The user also commits to this branch, so a container checkout goes stale; never plan from an unfetched copy, and never say a file is current without having fetched.
 
 ## Testing Strategy

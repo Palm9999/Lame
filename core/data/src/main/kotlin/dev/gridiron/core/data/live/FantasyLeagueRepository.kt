@@ -1,9 +1,12 @@
 package dev.gridiron.core.data.live
 
 import dev.gridiron.core.data.PlayerDirectory
+import dev.gridiron.core.data.weekPoints
+import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.datastore.EspnLeagueConfig
 import dev.gridiron.core.datastore.PrefsSource
 import dev.gridiron.core.model.Roster
+import dev.gridiron.core.model.ScoringProfile
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -34,6 +37,9 @@ public data class LeagueSync(val error: String?, val rosterUpdated: Boolean = fa
         }
 }
 
+/** A week's league matchups as last read; [error] null means they landed. */
+public data class MatchupsResult(val matchups: List<LeagueMatchup>, val fetchedAtMillis: Long, val error: String?)
+
 /**
  * An ESPN fantasy league: standings and every team's roster, read from ESPN's
  * fantasy API and kept in [file] so it shows offline. The user's own team also
@@ -48,6 +54,8 @@ public class FantasyLeagueRepository(
     private val http: HeaderHttpGet,
     private val players: PlayerDirectory,
     private val file: File,
+    /** `stats.db`, for the app's points in [matchups]; without it they stay null. */
+    private val stats: QueryExecutor? = null,
     private val clock: () -> Instant = Instant::now,
 ) {
     private val syncing = Mutex()
@@ -96,11 +104,7 @@ public class FantasyLeagueRepository(
         val cfg = prefs.prefs.first().espnLeague
             ?: return@withLock LeagueSync("no league id set")
         try {
-            val cookies = listOfNotNull(cfg.espnS2?.let { "espn_s2=$it" }, cfg.swid?.let { "SWID=$it" }).joinToString("; ")
-            val body = http.get(
-                EspnFantasyParser.url(cfg.leagueId, season),
-                if (cookies.isEmpty()) emptyMap() else mapOf("Cookie" to cookies),
-            )
+            val body = http.get(EspnFantasyParser.url(cfg.leagueId, season), headers(cfg))
             val parsed = EspnFantasyParser.parse(body, cfg.leagueId, clock().toEpochMilli())
             val ids = players.playerIds(parsed.teams.flatMap { t -> t.players.map { it.espnId } }.filter { it.toIntOrNull()?.let { n -> n > 0 } == true })
             val league = parsed.copy(
@@ -122,6 +126,45 @@ public class FantasyLeagueRepository(
         } catch (e: Exception) {
             LeagueSync("couldn't read the league")
         }
+    }
+
+    /**
+     * [week]'s matchups from ESPN, each lineup player carrying ESPN's points and the app's under [scoring]. Never
+     * throws: a failure says why in [MatchupsResult.error].
+     */
+    public suspend fun matchups(season: Int, week: Int, scoring: ScoringProfile): MatchupsResult {
+        val cfg = prefs.prefs.first().espnLeague ?: return MatchupsResult(emptyList(), 0, "no league id set")
+        val now = clock().toEpochMilli()
+        return try {
+            val raw = EspnFantasyParser.matchups(http.get(EspnFantasyParser.matchupsUrl(cfg.leagueId, season, week), headers(cfg)), week)
+            MatchupsResult(withAppPoints(raw, season, week, scoring), now, null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: LiveFormatException) {
+            MatchupsResult(emptyList(), now, e.message ?: "ESPN changed its matchup format")
+        } catch (e: IOException) {
+            MatchupsResult(emptyList(), now, friendly(e.message))
+        } catch (e: Exception) {
+            MatchupsResult(emptyList(), now, "couldn't read the matchups")
+        }
+    }
+
+    private suspend fun withAppPoints(raw: List<LeagueMatchup>, season: Int, week: Int, scoring: ScoringProfile): List<LeagueMatchup> {
+        val lineups = raw.flatMap { listOfNotNull(it.home, it.away) }.flatMap { it.lineup }
+        val ids = players.playerIds(lineups.map { it.espnId }.filter { it.toIntOrNull()?.let { n -> n > 0 } == true }.distinct())
+        fun appId(p: MatchupPlayer) = ids[p.espnId] ?: EspnFantasyParser.dstPlayerId(p.espnId)
+        val points = stats?.weekPoints(season, week, lineups.mapNotNull(::appId).toSet(), scoring).orEmpty().associate { it.playerId to it.points }
+        fun side(s: MatchupSide): MatchupSide {
+            val lineup = s.lineup.map { p -> appId(p).let { id -> p.copy(playerId = id, appPoints = id?.let(points::get)) } }
+            val starters = lineup.filter { it.slot != "BE" && it.slot != "IR" }.mapNotNull { it.appPoints }
+            return s.copy(lineup = lineup, appTotal = if (starters.isEmpty()) null else starters.sum())
+        }
+        return raw.map { it.copy(home = side(it.home), away = it.away?.let(::side)) }
+    }
+
+    private fun headers(cfg: EspnLeagueConfig): Map<String, String> {
+        val cookies = listOfNotNull(cfg.espnS2?.let { "espn_s2=$it" }, cfg.swid?.let { "SWID=$it" }).joinToString("; ")
+        return if (cookies.isEmpty()) emptyMap() else mapOf("Cookie" to cookies)
     }
 
     private suspend fun saveRoster(league: FantasyLeague): LeagueSync {

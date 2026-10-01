@@ -42,6 +42,30 @@ public data class FantasyLeague(
 )
 
 /**
+ * One player in a matchup lineup. [espnPoints] is ESPN's own score for the week (the league's scoring); [appPoints] is
+ * the app's, under the active profile, null when the player isn't matched or has no stats that week.
+ */
+public data class MatchupPlayer(
+    val espnId: String,
+    val name: String,
+    val slot: String,
+    val espnPoints: Double?,
+    val playerId: String? = null,
+    val appPoints: Double? = null,
+)
+
+/** One team's side of a matchup. [appTotal] sums the starters' [MatchupPlayer.appPoints], null when none has one. */
+public data class MatchupSide(
+    val teamId: Int,
+    val espnTotal: Double,
+    val lineup: List<MatchupPlayer>,
+    val appTotal: Double? = null,
+)
+
+/** One head-to-head of [week]; [away] is null for a bye. */
+public data class LeagueMatchup(val week: Int, val home: MatchupSide, val away: MatchupSide?)
+
+/**
  * ESPN's fantasy API (unofficial). Like [EspnParser] it walks the JSON tree and
  * skips what it can't read; a response that isn't a league, or whose teams all
  * fail, is a [LiveFormatException].
@@ -50,6 +74,13 @@ internal object EspnFantasyParser {
     fun url(leagueId: String, season: Int): String =
         "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/$season/segments/0/leagues/$leagueId" +
             "?view=mTeam&view=mRoster&view=mStandings&view=mSettings"
+
+    fun matchupsUrl(leagueId: String, season: Int, week: Int): String =
+        "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/$season/segments/0/leagues/$leagueId" +
+            "?view=mMatchup&view=mMatchupScore&scoringPeriodId=$week"
+
+    /** The order a lineup reads in: starters by position, then the bench and injured reserve. */
+    private val SLOT_ORDER = listOf("QB", "RB", "WR", "TE", "RB/WR", "WR/TE", "RB/WR/TE", "FLEX", "OP", "D/ST", "K", "BE", "IR")
 
     private val SLOTS = mapOf(
         0 to "QB", 2 to "RB", 4 to "WR", 6 to "TE", 16 to "D/ST", 17 to "K", 23 to "FLEX",
@@ -91,6 +122,44 @@ internal object EspnFantasyParser {
             teams = ranked,
             fetchedAtMillis = fetchedAtMillis,
         )
+    }
+
+    /**
+     * [week]'s matchups from a `mMatchup` response: the `schedule` items of that matchup period. A matchup whose home
+     * side can't be read is skipped; a missing away side is a bye. No schedule, or none readable, is a format error.
+     */
+    fun matchups(text: String, week: Int): List<LeagueMatchup> {
+        val root = try {
+            Json.parseToJsonElement(text) as? JsonObject
+        } catch (_: SerializationException) {
+            null
+        } ?: throw LiveFormatException("ESPN sent something that isn't league JSON")
+        val schedule = root.array("schedule")?.mapNotNull { it as? JsonObject }
+            ?: throw LiveFormatException("ESPN changed its matchup format (no schedule)")
+        val ofWeek = schedule.filter { it.int("matchupPeriodId") == week }
+        val parsed = ofWeek.mapNotNull { m ->
+            val home = m.obj("home")?.let(::side) ?: return@mapNotNull null
+            LeagueMatchup(week, home, m.obj("away")?.let(::side))
+        }
+        if (parsed.isEmpty() && ofWeek.isNotEmpty()) throw LiveFormatException("ESPN changed its matchup format (no matchup could be read)")
+        return parsed
+    }
+
+    private fun side(s: JsonObject): MatchupSide? {
+        val teamId = s.int("teamId") ?: return null
+        val entries = s.obj("rosterForCurrentScoringPeriod")?.array("entries").orEmpty().mapNotNull { (it as? JsonObject)?.let(::matchupPlayer) }
+        return MatchupSide(
+            teamId = teamId,
+            espnTotal = s.double("totalPoints") ?: s.double("totalPointsLive") ?: 0.0,
+            lineup = entries.sortedBy { SLOT_ORDER.indexOf(it.slot).let { i -> if (i < 0) SLOT_ORDER.size else i } },
+        )
+    }
+
+    private fun matchupPlayer(e: JsonObject): MatchupPlayer? {
+        val espnId = e.string("playerId") ?: return null
+        val entry = e.obj("playerPoolEntry")
+        val name = entry?.obj("player")?.string("fullName") ?: dstPlayerId(espnId)?.let { "${it.removePrefix("DST_")} D/ST" } ?: return null
+        return MatchupPlayer(espnId, name, SLOTS[e.int("lineupSlotId")] ?: "BE", entry?.double("appliedStatTotal"))
     }
 
     private fun team(t: JsonObject, members: Map<String, String>): LeagueTeam? {
