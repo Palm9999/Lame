@@ -177,6 +177,26 @@ class FantasyLeagueTest {
     }
 
     @Test
+    fun `rostered holds every team's matched players and skips unmatched`() {
+        fun p(espn: String, id: String?) = LeaguePlayer(espn, "n$espn", "BE", id)
+        fun t(id: Int, vararg ps: LeaguePlayer) = LeagueTeam(id, "T$id", null, 0, 0, 0, 0.0, 0.0, id, ps.toList())
+        val league = FantasyLeague("42", "L", 2026, 4, listOf(t(1, p("1", "A"), p("2", null)), t(2, p("3", "B"), p("4", "A"))), 77L)
+        assertEquals(LeagueRostered(setOf("A", "B"), 2026, 77L), league.rostered())
+    }
+
+    @Test
+    fun `rostered is null before a sync, then follows the league, and a fresh repository reads the saved one`() = runTest {
+        val prefs = FakePrefsSource()
+        val repo = repo(prefs) { _, _ -> body }
+        assertNull(repo.rostered.first())
+        repo.setConfig("42", null, "{ME}")
+        assertTrue(repo.sync(2026).ok)
+        // Only the D/ST has an app id here: the xref is empty.
+        assertEquals(LeagueRostered(setOf("DST_KC"), 2026, Instant.parse("2026-10-01T00:00:00Z").toEpochMilli()), repo.rostered.first())
+        assertEquals(repo.rostered.first(), repo(prefs) { _, _ -> error("offline") }.rostered.first())
+    }
+
+    @Test
     fun `matchups sends the cookies and the week, and an unmatched player has no app points`() = runTest {
         val prefs = FakePrefsSource()
         var seen: Pair<String, Map<String, String>>? = null

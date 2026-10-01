@@ -583,6 +583,18 @@ class GridScreenTest {
     }
 
     @Test
+    fun theRosterChipOffersFreeAgentsOnlyWhenALeagueIsSynced() {
+        val season = catalog.season(2025)
+        val base = ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING))
+        val events = mutableListOf<GridEvent>()
+        openSheet(base.copy(freeAgents = FreeAgentsOption(1_000L)), onEvent = { events += it })
+        // With no roster of the user's own, the league alone brings the chip.
+        inSheet("chip:roster").performScrollTo().performClick()
+        compose.onNodeWithTag("roster:free-agents").performClick()
+        assertEquals(listOf<GridEvent>(GridEvent.RosterSelected(GridViewModel.FREE_AGENTS_ID)), events.filterIsInstance<GridEvent.RosterSelected>())
+    }
+
+    @Test
     fun theSnapFloorIsHiddenOnTheKickerChip() {
         val season = catalog.season(2025)
         openSheet(ready(GridRequest(season, season.defaultWeeks, StatPack.KICKING, positions = PositionFilter.K)))

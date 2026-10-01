@@ -214,6 +214,21 @@ class StatsRepositoryTest {
     }
 
     @Test
+    fun `excludePlayers lists everyone else, ranked, and count agrees`() = runTest {
+        val season = catalog.season(2025)
+        val base = GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)
+        val all = repo.grid(base, catalog).rows.map { it.playerId }
+        val taken = all.take(3).toSet()
+
+        val rest = repo.grid(base.copy(excludePlayers = taken), catalog)
+        assertEquals(all.filterNot { it in taken }, rest.rows.map { it.playerId })
+        assertEquals(all.size - 3, repo.count(base.copy(excludePlayers = taken)))
+        // Unlike a roster, this keeps the sample bar: the below-bar player a search finds stays out.
+        val below = repo.grid(base.copy(name = "a"), catalog).rows.first { it.playerId !in all }
+        assertTrue(below.playerId !in rest.rows.map { it.playerId })
+    }
+
+    @Test
     fun `search finds players below the qualifying bar, unranked`() = runTest {
         val season = catalog.season(2025)
         val base = GridRequest(season, season.defaultWeeks, StatPack.OPPORTUNITY)

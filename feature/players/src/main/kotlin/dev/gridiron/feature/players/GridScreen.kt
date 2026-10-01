@@ -72,6 +72,7 @@ import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.describeFilter
 import dev.gridiron.core.data.weeksLabel
+import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.datastore.RowDensity
 import dev.gridiron.core.designsystem.HeaderStyle
 import dev.gridiron.core.designsystem.NumberStyle
@@ -93,6 +94,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.text.DateFormat
+import java.util.Date
 
 @Composable
 fun GridRoute(
@@ -109,8 +112,9 @@ fun GridRoute(
     rosters: Flow<List<Roster>> = flowOf(emptyList()),
     presets: GridPresetRepository? = null,
     display: GridDisplayRepository? = null,
+    leagueRostered: Flow<LeagueRostered?> = flowOf(null),
 ) {
-    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges, rosters, presets, display))
+    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges, rosters, presets, display, leagueRostered))
     val state by vm.state.collectAsStateWithLifecycle()
     GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu, recovery)
 }
@@ -296,17 +300,41 @@ private fun GridContent(
 }
 
 @Composable
-internal fun RosterChip(rosters: ImmutableList<Roster>, selected: String?, onSelect: (String?) -> Unit) {
+internal fun RosterChip(
+    rosters: ImmutableList<Roster>,
+    selected: String?,
+    freeAgents: FreeAgentsOption? = null,
+    onSelect: (String?) -> Unit,
+) {
     var open by remember { mutableStateOf(false) }
     Box {
         FilterChip(
             selected = selected != null,
             onClick = { open = true },
-            label = { Text(rosters.firstOrNull { it.id == selected }?.name ?: "All players") },
+            label = {
+                Text(
+                    if (selected == GridViewModel.FREE_AGENTS_ID) "Free agents" else rosters.firstOrNull { it.id == selected }?.name ?: "All players",
+                )
+            },
             modifier = Modifier.testTag("chip:roster"),
         )
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             DropdownMenuItem(text = { Text("All players") }, onClick = { open = false; onSelect(null) })
+            if (freeAgents != null) {
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text("Free agents")
+                            Text(
+                                "League synced ${DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(freeAgents.asOfMillis))}",
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
+                    },
+                    onClick = { open = false; onSelect(GridViewModel.FREE_AGENTS_ID) },
+                    modifier = Modifier.testTag("roster:free-agents"),
+                )
+            }
             for (roster in rosters) {
                 DropdownMenuItem(text = { Text(roster.name) }, onClick = { open = false; onSelect(roster.id) })
             }

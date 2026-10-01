@@ -121,8 +121,8 @@ internal fun FilterSheet(
                 "chip:teams",
                 onClick = onOpenTeams,
             )
-            if (state.rosters.isNotEmpty()) {
-                SheetControl("Roster") { RosterChip(state.rosters, state.rosterId) { onEvent(GridEvent.RosterSelected(it)) } }
+            if (state.rosters.isNotEmpty() || state.freeAgents != null) {
+                SheetControl("Roster") { RosterChip(state.rosters, state.rosterId, state.freeAgents) { onEvent(GridEvent.RosterSelected(it)) } }
             }
             if (r.positions != PositionFilter.K && r.positions != PositionFilter.DST) {
                 SheetControl("Snap floor") { SnapChip(r.minSnapShare) { onEvent(GridEvent.MinSnapShareSelected(it)) } }

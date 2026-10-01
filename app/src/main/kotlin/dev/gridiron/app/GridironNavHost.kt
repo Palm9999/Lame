@@ -176,6 +176,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             rosters = deps.rosters?.rosters ?: flowOf(emptyList<Roster>()),
                             presets = deps.gridPresets,
                             display = deps.gridDisplay,
+                            leagueRostered = deps.league?.rostered ?: flowOf(null),
                             recovery = buildList {
                                 if (refresher != null) add("Refresh stats" to { refresh() })
                                 if (deps.settings != null) add("Settings" to { backStack.push(SettingsKey) })

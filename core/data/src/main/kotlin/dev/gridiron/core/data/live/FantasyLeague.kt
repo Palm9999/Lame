@@ -41,6 +41,13 @@ public data class FantasyLeague(
     val fetchedAtMillis: Long = 0,
 )
 
+/** Everyone on any team of a [season]'s league who is matched to an app player id, as of [fetchedAtMillis]. */
+public data class LeagueRostered(val playerIds: Set<String>, val season: Int, val fetchedAtMillis: Long)
+
+/** The league's rostered players; an ESPN player the app can't match is left out (he has no stats here anyway). */
+public fun FantasyLeague.rostered(): LeagueRostered =
+    LeagueRostered(teams.flatMap { t -> t.players.mapNotNull { it.playerId } }.toSet(), season, fetchedAtMillis)
+
 /**
  * One player in a matchup lineup. [espnPoints] is ESPN's own score for the week (the league's scoring); [appPoints] is
  * the app's, under the active profile, null when the player isn't matched or has no stats that week.

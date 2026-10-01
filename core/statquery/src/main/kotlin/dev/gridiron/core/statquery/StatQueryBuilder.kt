@@ -562,6 +562,9 @@ private class SqlWriter {
         if (spec.playerIds.isNotEmpty()) {
             conditions += "player_id IN (${spec.playerIds.sorted().joinToString(", ") { text(it) }})"
         }
+        if (spec.excludedPlayerIds.isNotEmpty()) {
+            conditions += "player_id NOT IN (${spec.excludedPlayerIds.sorted().joinToString(", ") { text(it) }})"
+        }
         spec.name?.let(::normalizeSearch)?.takeIf { it.isNotEmpty() }?.let { q ->
             conditions += nameMatch(q)
         }

@@ -396,6 +396,21 @@ class StatQueryBuilderTest {
     }
 
     @Nested
+    inner class ExcludedPlayers {
+        @Test
+        fun `excludedPlayerIds drops those players and moves no percentile`() {
+            for ((i, id) in listOf("a", "b", "c", "d").withIndex()) {
+                db.player(id, "Player $id")
+                db.week(id, 1, C.TARGETS to (i + 1) * 3)
+            }
+            val all = db.grid(spec(TARGETS).copy(percentiles = true)).associateBy { it.playerId }
+            val rest = db.grid(spec(TARGETS).copy(percentiles = true, excludedPlayerIds = setOf("b", "d")))
+            assertEquals(listOf("c", "a"), rest.map { it.playerId })
+            for (r in rest) assertEquals(all.getValue(r.playerId).percentile(TARGETS)!!, r.percentile(TARGETS)!!, EPS)
+        }
+    }
+
+    @Nested
     inner class Percentiles {
         private fun seed() {
             listOf("w1" to 10, "w2" to 20, "w3" to 30).forEach { (id, t) ->

@@ -13,8 +13,10 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -66,6 +68,12 @@ public class FantasyLeagueRepository(
     public val league: StateFlow<FantasyLeague?> = _league.asStateFlow()
 
     public val config: Flow<EspnLeagueConfig?> = prefs.prefs.map { it.espnLeague }.distinctUntilChanged()
+
+    /** Who is on a league team, from the saved snapshot (read from disk on first collect); null with no league synced. */
+    public val rostered: Flow<LeagueRostered?> = flow {
+        load()
+        emitAll(league.map { it?.rostered() })
+    }.distinctUntilChanged()
 
     /** Reads the saved league from disk, once. */
     public suspend fun load() {
