@@ -125,7 +125,7 @@ public object CompareMetricSets {
 
     /**
      * Next Gen Stats and FTN charting: published for some seasons and players only, so a missing value is a dash, never a
-     * zero. Compare shows them; the Player page's season line, which shares these sets, leaves them out.
+     * zero. Compare and the Player page's season line show them, the line only when the player has the stat.
      */
     public val CHARTED: Set<StatColumn> = setOf(
         NGS_AGGRESSIVENESS, NGS_CUSHION, NGS_INTENDED_AIR_YARDS, NGS_RUSH_EFFICIENCY, NGS_RYOE, NGS_RYOE_PER_ATT,

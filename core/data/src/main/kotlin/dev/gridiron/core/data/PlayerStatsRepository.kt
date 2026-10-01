@@ -49,13 +49,14 @@ public class PlayerStatsRepository(
 
         val weeks = info.defaultWeeks
         val playedWeeks = weeks.last - weeks.first + 1
-        val lineColumns = CompareMetricSets.groupsFor(position).values.flatten().filter { it !in CompareMetricSets.CHARTED }
+        val lineColumns = CompareMetricSets.groupsFor(position).values.flatten()
         val qualifier = CompareMetricSets.qualifier(position)
         val columns = (lineColumns + qualifier).distinct()
 
         val total = seasonValues(playerId, position, chosen, weeks, columns, qualifier, playedWeeks, perGame = false, scoring)
         val perGame = seasonValues(playerId, position, chosen, weeks, columns, qualifier, playedWeeks, perGame = true, scoring)
-        val line = lineColumns.map { column ->
+        // A charted stat the player has no data for is left out: a dash or a zero there would say nothing true.
+        val line = lineColumns.filter { it !in CompareMetricSets.CHARTED || total?.values?.get(it) != null }.map { column ->
             SeasonLineRow(
                 column = column,
                 label = names[column.metricId]?.name ?: column.metricId,
