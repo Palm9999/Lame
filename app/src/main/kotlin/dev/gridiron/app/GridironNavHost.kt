@@ -244,7 +244,20 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                         deps.rosters?.let { RostersScreen(it, deps.players, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
                     }
                     entry<LeagueKey> {
-                        deps.league?.let { LeagueScreen(it, currentSeason(), onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
+                        deps.league?.let {
+                            LeagueScreen(
+                                it, currentSeason(), onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) },
+                                onMatchups = { backStack.push(MatchupsKey(currentSeason())) },
+                            )
+                        }
+                    }
+                    entry<MatchupsKey> { key ->
+                        deps.league?.let {
+                            MatchupsRoute(
+                                it, deps.scoring, key.season, onPlayer = { id -> backStack.push(PlayerKey(id)) },
+                                onBack = back, dataVersion = deps.stats.dataVersion,
+                            )
+                        }
                     }
                     entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back, props = deps.props?.status) } }
                 },

@@ -45,6 +45,8 @@ fun LeagueScreen(
     season: Int,
     onBack: () -> Unit,
     onPlayer: (String) -> Unit,
+    /** Opens the week's matchups; null hides the button. */
+    onMatchups: (() -> Unit)? = null,
 ) {
     val config by repo.config.collectAsState(initial = null)
     val league by repo.league.collectAsState()
@@ -101,7 +103,7 @@ fun LeagueScreen(
                         }
                     }
                 }
-                league?.let { l -> leagueItems(l, config?.teamId, open, { open = if (open == it) null else it }, { id -> scope.launch { repo.chooseTeam(id) } }, onPlayer) }
+                league?.let { l -> leagueItems(l, config?.teamId, open, { open = if (open == it) null else it }, { id -> scope.launch { repo.chooseTeam(id) } }, onPlayer, onMatchups) }
             }
         }
     }
@@ -114,14 +116,18 @@ private fun LazyListScope.leagueItems(
     toggle: (Int) -> Unit,
     choose: (Int) -> Unit,
     onPlayer: (String) -> Unit,
+    onMatchups: (() -> Unit)?,
 ) {
     item {
-        Text(
-            "${league.name} · ${league.season}, week ${league.week}",
-            Modifier.padding(16.dp, 12.dp, 16.dp, 4.dp),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.Bold,
-        )
+        Row(Modifier.fillMaxWidth().padding(16.dp, 12.dp, 16.dp, 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "${league.name} · ${league.season}, week ${league.week}",
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            if (onMatchups != null) TextButton(onClick = onMatchups, Modifier.testTag("leagueMatchups")) { Text("Matchups") }
+        }
     }
     for (team in league.teams) {
         item(key = "t:${team.id}") {

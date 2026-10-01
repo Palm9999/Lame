@@ -165,7 +165,7 @@ fun ScoresScreen(
 }
 
 @Composable
-private fun WeekPicker(weeks: List<Int>, week: Int, onWeek: (Int) -> Unit) {
+internal fun WeekPicker(weeks: List<Int>, week: Int, onWeek: (Int) -> Unit) {
     val index = weeks.indexOf(week)
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
         TextButton(onClick = { onWeek(weeks[index - 1]) }, enabled = index > 0) { Text("‹") }
