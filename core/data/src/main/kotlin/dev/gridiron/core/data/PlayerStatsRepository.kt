@@ -49,7 +49,7 @@ public class PlayerStatsRepository(
 
         val weeks = info.defaultWeeks
         val playedWeeks = weeks.last - weeks.first + 1
-        val lineColumns = CompareMetricSets.groupsFor(position).values.flatten()
+        val lineColumns = CompareMetricSets.groupsFor(position).values.flatten().filter { it !in CompareMetricSets.CHARTED }
         val qualifier = CompareMetricSets.qualifier(position)
         val columns = (lineColumns + qualifier).distinct()
 
