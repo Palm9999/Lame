@@ -1,9 +1,13 @@
 package dev.gridiron.feature.projections
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import dev.gridiron.core.data.live.LeaguePlayer
+import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.designsystem.GridironTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -58,6 +62,40 @@ class ProjectionListScreenTest {
 
         compose.onNodeWithText("D/ST").performClick()
         compose.onNodeWithText("D/ST · KC").assertIsDisplayed()
+    }
+
+    private val team = MyTeam(
+        "Sunday Squad", 2026,
+        listOf(LeaguePlayer("1", "Wide Out", "WR", "w"), LeaguePlayer("2", "Quarter Back", "QB", "q"), LeaguePlayer("3", "Mystery Man", "BE", null)),
+        mapOf("QB" to 1, "WR" to 1, "K" to 1),
+        slotsAreDefault = false,
+    )
+
+    @Test
+    fun `my lineup lists the starters, the total and who is left out`() {
+        var opened: String? = null
+        compose.setContent { GridironTheme { ProjectionListScreen(loaded, emptyMap(), onPlayer = { opened = it }, onBack = {}, myTeam = team) } }
+
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithTag("lineup:total").assertTextEquals("Projected 37.2 pts")
+        compose.onNodeWithText("Sunday Squad · week 4").assertIsDisplayed()
+        compose.onNodeWithText("No one can fill this slot").assertIsDisplayed()
+        compose.onNodeWithText("Mystery Man · not matched to the app's players").assertIsDisplayed()
+        compose.onNodeWithText("Wide Out").performClick()
+        assertEquals("w", opened)
+    }
+
+    @Test
+    fun `no team, no lineup chip`() {
+        compose.setContent { GridironTheme { ProjectionListScreen(loaded, emptyMap(), onPlayer = {}, onBack = {}) } }
+        compose.onNodeWithTag("chip:lineup").assertDoesNotExist()
+    }
+
+    @Test
+    fun `the usual slots are announced when the league's are unknown`() {
+        compose.setContent { GridironTheme { ProjectionListScreen(loaded, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team.copy(slotsAreDefault = true)) } }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithText("Using the usual slots", substring = true).assertIsDisplayed()
     }
 
     @Test

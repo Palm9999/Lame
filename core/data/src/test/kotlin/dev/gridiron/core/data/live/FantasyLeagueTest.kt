@@ -5,10 +5,14 @@ import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.ResultRow
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringPresets
+import dev.gridiron.core.projections.Lineups
 import dev.gridiron.core.statquery.Bind
 import dev.gridiron.core.statquery.SqlQuery
 import dev.gridiron.core.testing.FakePrefsSource
 import kotlinx.coroutines.flow.first
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
@@ -58,6 +62,28 @@ class FantasyLeagueTest {
         assertEquals("KC D/ST", mine.players[2].name)
         assertEquals("DST_KC", EspnFantasyParser.dstPlayerId("-16012"))
         assertNull(EspnFantasyParser.dstPlayerId("222"))
+    }
+
+    @Test
+    fun `parses the starter slots and drops the bench, IR and unknown ids`() {
+        val withSlots = body.replace(
+            "\"settings\":{\"name\":\"Sunday League\"}",
+            "\"settings\":{\"name\":\"Sunday League\",\"rosterSettings\":{\"lineupSlotCounts\":" +
+                "{\"0\":1,\"2\":2,\"4\":2,\"6\":1,\"23\":1,\"16\":1,\"17\":1,\"20\":6,\"21\":1,\"99\":3,\"7\":0}}}",
+        )
+        assertEquals(
+            mapOf("QB" to 1, "RB" to 2, "WR" to 2, "TE" to 1, "FLEX" to 1, "D/ST" to 1, "K" to 1),
+            EspnFantasyParser.parse(withSlots, "42", 5L).lineupSlots,
+        )
+        assertEquals(emptyMap<String, Int>(), EspnFantasyParser.parse(body, "42", 5L).lineupSlots)
+    }
+
+    @Test
+    fun `the saved snapshot keeps its slots, and one saved before slots existed reads back empty`() {
+        val league = EspnFantasyParser.parse(body, "42", 5L).copy(lineupSlots = mapOf("RB" to 2, "OP" to 1))
+        assertEquals(league, fantasyLeagueFromJson(league.toJson()))
+        val old = Json.parseToJsonElement(league.toJson()).jsonObject.filterKeys { it != "lineupSlots" }
+        assertEquals(emptyMap<String, Int>(), fantasyLeagueFromJson(JsonObject(old).toString())!!.lineupSlots)
     }
 
     @Test
@@ -194,6 +220,29 @@ class FantasyLeagueTest {
         // Only the D/ST has an app id here: the xref is empty.
         assertEquals(LeagueRostered(setOf("DST_KC"), 2026, Instant.parse("2026-10-01T00:00:00Z").toEpochMilli()), repo.rostered.first())
         assertEquals(repo.rostered.first(), repo(prefs) { _, _ -> error("offline") }.rostered.first())
+    }
+
+    @Test
+    fun `myTeam follows the chosen team and the saved snapshot`() = runTest {
+        val prefs = FakePrefsSource()
+        val repo = repo(prefs) { _, _ -> body }
+        assertNull(repo.myTeam.first())
+        repo.setConfig("42", null, null)
+        assertTrue(repo.sync(2026).ok)
+        // No team chosen yet (no SWID to find it by).
+        assertNull(repo.myTeam.first())
+
+        repo.chooseTeam(2)
+        val mine = checkNotNull(repo.myTeam.first())
+        assertEquals("Mine", mine.teamName)
+        assertEquals(2026, mine.season)
+        assertEquals(4, mine.players.size)
+        assertEquals(Lineups.DEFAULT_SLOTS, mine.slots)
+        assertTrue(mine.slotsAreDefault)
+        assertEquals(mine, repo(prefs) { _, _ -> error("offline") }.myTeam.first())
+
+        repo.setConfig("43", null, null)
+        assertNull(repo.myTeam.first())
     }
 
     @Test

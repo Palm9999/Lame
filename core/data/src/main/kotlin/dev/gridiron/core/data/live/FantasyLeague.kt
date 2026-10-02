@@ -1,5 +1,6 @@
 package dev.gridiron.core.data.live
 
+import dev.gridiron.core.projections.Lineups
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -39,7 +40,28 @@ public data class FantasyLeague(
     val week: Int,
     val teams: List<LeagueTeam>,
     val fetchedAtMillis: Long = 0,
+    /** Starting slots by label (`RB` to 2, `FLEX` to 1), bench and IR left out; empty when the snapshot has none. */
+    val lineupSlots: Map<String, Int> = emptyMap(),
 )
+
+/**
+ * The user's own team in a [season]'s league with the starting [slots] to fill: the league's own, or the usual nine
+ * when the snapshot has none ([slotsAreDefault]).
+ */
+public data class MyTeam(
+    val teamName: String,
+    val season: Int,
+    val players: List<LeaguePlayer>,
+    val slots: Map<String, Int>,
+    val slotsAreDefault: Boolean,
+)
+
+/** Team [teamId] as the user's own; null when there is no such team. */
+public fun FantasyLeague.myTeam(teamId: Int?): MyTeam? {
+    val team = teams.firstOrNull { it.id == teamId } ?: return null
+    val own = lineupSlots.isNotEmpty()
+    return MyTeam(team.name, season, team.players, if (own) lineupSlots else Lineups.DEFAULT_SLOTS, !own)
+}
 
 /** Everyone on any team of a [season]'s league who is matched to an app player id, as of [fetchedAtMillis]. */
 public data class LeagueRostered(val playerIds: Set<String>, val season: Int, val fetchedAtMillis: Long)
@@ -128,8 +150,17 @@ internal object EspnFantasyParser {
             week = root.int("scoringPeriodId") ?: 1,
             teams = ranked,
             fetchedAtMillis = fetchedAtMillis,
+            lineupSlots = lineupSlots(root.obj("settings")?.obj("rosterSettings")?.obj("lineupSlotCounts")),
         )
     }
+
+    /** ESPN's `lineupSlotCounts` (slot id to count) as starters by label; the bench, IR and unknown ids are dropped. */
+    private fun lineupSlots(counts: JsonObject?): Map<String, Int> =
+        counts?.entries.orEmpty().mapNotNull { (id, n) ->
+            val label = id.toIntOrNull()?.let { SLOTS[it] }?.takeIf { it != "BE" && it != "IR" } ?: return@mapNotNull null
+            val count = (n as? JsonPrimitive)?.intOrNull?.takeIf { it > 0 } ?: return@mapNotNull null
+            label to count
+        }.toMap()
 
     /**
      * [week]'s matchups from a `mMatchup` response: the `schedule` items of that matchup period. A matchup whose home
@@ -210,6 +241,7 @@ internal fun FantasyLeague.toJson(): String = buildJsonObject {
     put("season", season)
     put("week", week)
     put("fetchedAtMillis", fetchedAtMillis)
+    put("lineupSlots", buildJsonObject { lineupSlots.forEach { (slot, n) -> put(slot, n) } })
     put(
         "teams",
         buildJsonArray {
@@ -257,6 +289,7 @@ internal fun fantasyLeagueFromJson(text: String): FantasyLeague? = try {
         season = o.int("season")!!,
         week = o.int("week")!!,
         fetchedAtMillis = (o["fetchedAtMillis"] as? JsonPrimitive)?.longOrNull ?: 0,
+        lineupSlots = o.obj("lineupSlots")?.entries.orEmpty().mapNotNull { (slot, n) -> (n as? JsonPrimitive)?.intOrNull?.let { slot to it } }.toMap(),
         teams = o.array("teams")!!.map { e ->
             val t = e as JsonObject
             LeagueTeam(

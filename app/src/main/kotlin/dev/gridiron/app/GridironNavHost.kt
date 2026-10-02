@@ -200,6 +200,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                         ProjectionListRoute(
                             key.season, deps.projections, deps.scoring, deps.live?.badges ?: flowOf(emptyMap()),
                             onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
+                            myTeam = deps.league?.myTeam ?: flowOf(null),
                         )
                     }
                     entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, deps.scoring, onBack = back, dataVersion = deps.stats.dataVersion) }
