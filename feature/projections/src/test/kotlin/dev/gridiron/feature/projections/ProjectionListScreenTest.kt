@@ -85,6 +85,36 @@ class ProjectionListScreenTest {
         assertEquals("w", opened)
     }
 
+    private val rival = MyTeam("Rivals", 2026, listOf(LeaguePlayer("9", "Quarter Back", "QB", "q")), team.slots, slotsAreDefault = false)
+
+    @Test
+    fun `my lineup asks for the opponent and shows the margin`() {
+        var asked = 0
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(loaded, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team, opponent = OpponentState.Loaded(rival), onLineupOpened = { asked++ })
+            }
+        }
+        assertEquals(0, asked)
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.waitForIdle()
+        assertEquals(1, asked)
+        // Mine: QB 21.0 + WR 16.2; theirs: QB 21.0 only.
+        compose.onNodeWithTag("lineup:vs").assertTextEquals("vs Rivals: 21.0 pts · You lead by 16.2")
+    }
+
+    @Test
+    fun `an unavailable opponent says why and keeps the lineup`() {
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(loaded, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team, opponent = OpponentState.Unavailable("you have a bye in week 4"))
+            }
+        }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithTag("lineup:vs").assertTextEquals("No comparison: you have a bye in week 4.")
+        compose.onNodeWithTag("lineup:total").assertTextEquals("Projected 37.2 pts")
+    }
+
     @Test
     fun `no team, no lineup chip`() {
         compose.setContent { GridironTheme { ProjectionListScreen(loaded, emptyMap(), onPlayer = {}, onBack = {}) } }

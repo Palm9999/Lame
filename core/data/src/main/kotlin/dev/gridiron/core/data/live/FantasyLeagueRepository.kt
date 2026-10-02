@@ -164,6 +164,35 @@ public class FantasyLeagueRepository(
         }
     }
 
+    /**
+     * The user's opponent in [week], from ESPN's schedule, with the roster from the last sync and the user's slots, so
+     * the same lineup picker can rate both. Never throws: [OpponentResult.message] says why there is no opponent.
+     */
+    public suspend fun opponent(season: Int, week: Int): OpponentResult {
+        load()
+        val cfg = prefs.prefs.first().espnLeague ?: return OpponentResult(null, "no league id set")
+        val league = _league.value?.takeIf { it.leagueId == cfg.leagueId } ?: return OpponentResult(null, "sync your league first")
+        val mine = league.myTeam(cfg.teamId) ?: return OpponentResult(null, "choose your team first")
+        return try {
+            val raw = EspnFantasyParser.matchups(http.get(EspnFantasyParser.matchupsUrl(cfg.leagueId, season, week), headers(cfg)), week)
+            val matchup = raw.firstOrNull { it.home.teamId == cfg.teamId || it.away?.teamId == cfg.teamId }
+                ?: return OpponentResult(null, "ESPN lists no matchup for you in week $week")
+            val opponentId = (if (matchup.home.teamId == cfg.teamId) matchup.away?.teamId else matchup.home.teamId)
+                ?: return OpponentResult(null, "you have a bye in week $week")
+            val team = league.teams.firstOrNull { it.id == opponentId }
+                ?: return OpponentResult(null, "your opponent isn't in the last league sync")
+            OpponentResult(MyTeam(team.name, league.season, team.players, mine.slots, mine.slotsAreDefault), null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: LiveFormatException) {
+            OpponentResult(null, e.message ?: "ESPN changed its matchup format")
+        } catch (e: IOException) {
+            OpponentResult(null, friendly(e.message))
+        } catch (e: Exception) {
+            OpponentResult(null, "couldn't read the matchups")
+        }
+    }
+
     private suspend fun withAppPoints(raw: List<LeagueMatchup>, season: Int, week: Int, scoring: ScoringProfile): List<LeagueMatchup> {
         val lineups = raw.flatMap { listOfNotNull(it.home, it.away) }.flatMap { it.lineup }
         val ids = players.playerIds(lineups.map { it.espnId }.filter { it.toIntOrNull()?.let { n -> n > 0 } == true }.distinct())

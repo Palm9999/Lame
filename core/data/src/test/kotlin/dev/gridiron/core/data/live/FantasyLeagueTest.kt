@@ -266,6 +266,61 @@ class FantasyLeagueTest {
     }
 
     @Test
+    fun `opponent is the other side's roster on my slots`() = runTest {
+        val prefs = FakePrefsSource()
+        var seen: Pair<String, Map<String, String>>? = null
+        val repo = repo(prefs) { url, headers -> if ("view=mMatchup" in url) { seen = url to headers; matchupBody } else body }
+        repo.setConfig("42", "S2VALUE", "{ME}")
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+
+        val result = repo.opponent(2026, 4)
+        assertNull(result.message)
+        val rival = checkNotNull(result.team)
+        assertEquals("Rivals", rival.teamName)
+        assertEquals(listOf("Rival QB"), rival.players.map { it.name })
+        assertEquals(Lineups.DEFAULT_SLOTS, rival.slots)
+        val (url, sent) = checkNotNull(seen)
+        assertEquals(EspnFantasyParser.matchupsUrl("42", 2026, 4), url)
+        assertEquals("espn_s2=S2VALUE; SWID={ME}", sent["Cookie"])
+        // The same matchup read from the other side.
+        repo.chooseTeam(1)
+        assertEquals("Mine", repo.opponent(2026, 4).team!!.teamName)
+    }
+
+    @Test
+    fun `a bye, a missing matchup and a missing sync each say so`() = runTest {
+        val prefs = FakePrefsSource()
+        val repo = repo(prefs) { url, _ -> if ("view=mMatchup" in url) matchupBody else body }
+        assertEquals("no league id set", repo.opponent(2026, 4).message)
+        repo.setConfig("42", null, null)
+        assertEquals("sync your league first", repo.opponent(2026, 4).message)
+        assertTrue(repo.sync(2026).ok)
+        assertEquals("choose your team first", repo.opponent(2026, 4).message)
+
+        repo.chooseTeam(2)
+        assertEquals("ESPN lists no matchup for you in week 9", repo.opponent(2026, 9).message)
+        val byeBody = "{\"schedule\":[{\"matchupPeriodId\":4,\"home\":${mSide(2, 0.0)}}]}"
+        val bye = repo(prefs) { url, _ -> if ("view=mMatchup" in url) byeBody else body }
+        assertEquals("you have a bye in week 4", bye.opponent(2026, 4).message)
+        assertNull(bye.opponent(2026, 4).team)
+    }
+
+    @Test
+    fun `an opponent fetch that fails says why`() = runTest {
+        val prefs = FakePrefsSource()
+        val ok = repo(prefs) { _, _ -> body }
+        ok.setConfig("42", null, null)
+        assertTrue(ok.sync(2026).ok)
+        ok.chooseTeam(2)
+
+        val offline = repo(prefs) { _, _ -> throw IOException("HTTP 403") }
+        assertEquals("ESPN says this league is private; add your espn_s2 and SWID cookies", offline.opponent(2026, 4).message)
+        val changed = repo(prefs) { _, _ -> "{\"nothing\":1}" }
+        assertEquals("ESPN changed its matchup format (no schedule)", changed.opponent(2026, 4).message)
+    }
+
+    @Test
     fun `matchups say why they failed and no league is its own message`() = runTest {
         val prefs = FakePrefsSource()
         var fail: Exception? = null

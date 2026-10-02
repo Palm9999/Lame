@@ -22,6 +22,27 @@ internal data class LineupView(
     val defaultSlots: Boolean,
 )
 
+/** The opponent for "My lineup": not asked for yet, being fetched, found (a roster on the user's slots), or why not. */
+public sealed interface OpponentState {
+    public data object Idle : OpponentState
+
+    public data object Loading : OpponentState
+
+    public data class Loaded(val team: MyTeam) : OpponentState
+
+    public data class Unavailable(val message: String) : OpponentState
+}
+
+/** "You lead by 6.8", "You trail by 2.1" or "Even", from the two lineups' totals. */
+internal fun matchupLine(mine: Double, theirs: Double): String {
+    val margin = mine - theirs
+    return when {
+        kotlin.math.abs(margin) < 0.05 -> "Even"
+        margin > 0 -> "You lead by ${"%.1f".format(java.util.Locale.US, margin)}"
+        else -> "You trail by ${"%.1f".format(java.util.Locale.US, -margin)}"
+    }
+}
+
 /**
  * [team]'s best lineup for [week] from [weekRows] (the week's projections under the active profile). An ESPN Out or IR
  * player scores zero, as in the list; a rostered player with no projection (a bye, a rookie) or no match is listed

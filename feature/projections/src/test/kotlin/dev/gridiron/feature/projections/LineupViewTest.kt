@@ -52,6 +52,13 @@ class LineupViewTest {
     }
 
     @Test
+    fun `the line says who leads and by how much`() {
+        assertEquals("You lead by 6.8", matchupLine(98.0, 91.2))
+        assertEquals("You trail by 2.1", matchupLine(88.0, 90.1))
+        assertEquals("Even", matchupLine(90.0, 90.02))
+    }
+
+    @Test
     fun `the default slots are flagged`() {
         val view = lineupView(team(Lineups.DEFAULT_SLOTS, on("q"), default = true), 4, rows, emptyMap())
         assertTrue(view.defaultSlots)

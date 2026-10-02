@@ -56,6 +56,9 @@ public data class MyTeam(
     val slotsAreDefault: Boolean,
 )
 
+/** The user's opponent for a week as a roster on the user's slots; [team] is null when there is none, and [message] says why. */
+public data class OpponentResult(val team: MyTeam?, val message: String?)
+
 /** Team [teamId] as the user's own; null when there is no such team. */
 public fun FantasyLeague.myTeam(teamId: Int?): MyTeam? {
     val team = teams.firstOrNull { it.id == teamId } ?: return null

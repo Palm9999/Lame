@@ -24,6 +24,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -39,10 +41,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.live.MyTeam
+import dev.gridiron.core.data.live.OpponentResult
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 /** ☰ → Projections: the upcoming week or rest of season, by position, scored with the active profile. */
@@ -58,6 +62,8 @@ public fun ProjectionListRoute(
     dataVersion: Flow<Long> = flowOf(0L),
     /** The user's ESPN team for "My lineup"; null (or another season's) hides the mode. */
     myTeam: Flow<MyTeam?> = flowOf(null),
+    /** Your opponent for the week, fetched each time My lineup opens; the default says there is none. */
+    opponent: suspend (season: Int, week: Int) -> OpponentResult = { _, _ -> OpponentResult(null, "not available") },
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -66,7 +72,21 @@ public fun ProjectionListRoute(
     val version by dataVersion.collectAsStateWithLifecycle(initialValue = 0L)
     LaunchedEffect(season, profile, version) { profile?.let { vm.load(season, it) } }
     val team by myTeam.collectAsStateWithLifecycle(initialValue = null)
-    ProjectionListScreen(state, injuries, onPlayer, onBack, team?.takeIf { it.season == season })
+    var rival by remember { mutableStateOf<OpponentState>(OpponentState.Idle) }
+    val scope = rememberCoroutineScope()
+    ProjectionListScreen(
+        state, injuries, onPlayer, onBack, team?.takeIf { it.season == season }, rival,
+        onLineupOpened = {
+            val week = (state as? ProjectionListState.Loaded)?.week
+            if (week != null && rival != OpponentState.Loading) {
+                rival = OpponentState.Loading
+                scope.launch {
+                    val result = opponent(season, week)
+                    rival = result.team?.let(OpponentState::Loaded) ?: OpponentState.Unavailable(result.message ?: "no opponent found")
+                }
+            }
+        },
+    )
 }
 
 private enum class ListMode { WEEK, ROS, LINEUP }
@@ -78,10 +98,14 @@ public fun ProjectionListScreen(
     onPlayer: (String) -> Unit,
     onBack: () -> Unit,
     myTeam: MyTeam? = null,
+    opponent: OpponentState = OpponentState.Idle,
+    /** My lineup was opened: the route fetches the opponent. */
+    onLineupOpened: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
     val mode = if (chosen == ListMode.LINEUP && myTeam == null) ListMode.WEEK else chosen
+    LaunchedEffect(mode) { if (mode == ListMode.LINEUP) onLineupOpened() }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -113,7 +137,8 @@ public fun ProjectionListScreen(
                         }
                     }
                     if (mode == ListMode.LINEUP && myTeam != null) {
-                        LineupList(lineupView(myTeam, state.week, state.weekRows, badges), badges, onPlayer)
+                        val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, state.weekRows, badges) }
+                        LineupList(lineupView(myTeam, state.week, state.weekRows, badges), rival, opponent, badges, onPlayer)
                     } else {
                         Row(
                             Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()),
@@ -135,7 +160,7 @@ public fun ProjectionListScreen(
 }
 
 @Composable
-private fun LineupList(view: LineupView, badges: Map<String, String>, onPlayer: (String) -> Unit) {
+private fun LineupList(view: LineupView, rival: LineupView?, opponent: OpponentState, badges: Map<String, String>, onPlayer: (String) -> Unit) {
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -146,6 +171,15 @@ private fun LineupList(view: LineupView, badges: Map<String, String>, onPlayer: 
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
+                val versus = when {
+                    rival != null -> "vs ${rival.teamName}: ${points(rival.total)} pts · ${matchupLine(view.total, rival.total)}"
+                    opponent == OpponentState.Loading -> "Checking your opponent…"
+                    opponent is OpponentState.Unavailable -> "No comparison: ${opponent.message}."
+                    else -> null
+                }
+                versus?.let {
+                    Text(it, Modifier.testTag("lineup:vs"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                }
                 if (view.defaultSlots) {
                     Text(
                         "Using the usual slots (QB, 2 RB, 2 WR, TE, FLEX, K, D/ST). Sync your league again to use yours.",

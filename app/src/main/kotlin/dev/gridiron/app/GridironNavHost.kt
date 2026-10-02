@@ -48,6 +48,7 @@ import dev.gridiron.core.data.ScoresRepository
 import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.LiveRepository
+import dev.gridiron.core.data.live.OpponentResult
 import dev.gridiron.core.data.live.PropsRepository
 import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.feature.compare.CompareRoute
@@ -201,6 +202,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             key.season, deps.projections, deps.scoring, deps.live?.badges ?: flowOf(emptyMap()),
                             onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
                             myTeam = deps.league?.myTeam ?: flowOf(null),
+                            opponent = { season, week -> deps.league?.opponent(season, week) ?: OpponentResult(null, "no league") },
                         )
                     }
                     entry<AccuracyKey> { key -> AccuracyRoute(key.season, deps.accuracy, deps.scoring, onBack = back, dataVersion = deps.stats.dataVersion) }
