@@ -116,6 +116,39 @@ class ProjectionListScreenTest {
     }
 
     @Test
+    fun `waiver pickups list the best free agent with his gain`() {
+        var opened: String? = null
+        val withFree = loaded.copy(weekRows = loaded.weekRows + ProjectionRow("w2", "Free Agent WR", "WR", "DEN", 20.0, 12.0, 28.0))
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(withFree, emptyMap(), onPlayer = { opened = it }, onBack = {}, myTeam = team, rostered = setOf("w", "q"))
+            }
+        }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithText("Waiver pickups").assertIsDisplayed()
+        compose.onNodeWithText("Add Free Agent WR").assertIsDisplayed()
+        compose.onNodeWithText("+3.8").assertIsDisplayed()
+        compose.onNodeWithText("Add Free Agent WR").performClick()
+        assertEquals("w2", opened)
+    }
+
+    @Test
+    fun `no pickups when none helps, and no section without the league's rosters`() {
+        compose.setContent {
+            GridironTheme { ProjectionListScreen(loaded, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team, rostered = setOf("w", "q")) }
+        }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithText("No pickup helps this week.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `no waiver section when the league's rosters are unknown`() {
+        compose.setContent { GridironTheme { ProjectionListScreen(loaded, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team) } }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithText("Waiver pickups").assertDoesNotExist()
+    }
+
+    @Test
     fun `no team, no lineup chip`() {
         compose.setContent { GridironTheme { ProjectionListScreen(loaded, emptyMap(), onPlayer = {}, onBack = {}) } }
         compose.onNodeWithTag("chip:lineup").assertDoesNotExist()

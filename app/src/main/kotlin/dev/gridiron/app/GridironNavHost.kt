@@ -202,6 +202,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             key.season, deps.projections, deps.scoring, deps.live?.badges ?: flowOf(emptyMap()),
                             onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
                             myTeam = deps.league?.myTeam ?: flowOf(null),
+                            leagueRostered = deps.league?.rostered ?: flowOf(null),
                             opponent = { season, week -> deps.league?.opponent(season, week) ?: OpponentResult(null, "no league") },
                         )
                     }

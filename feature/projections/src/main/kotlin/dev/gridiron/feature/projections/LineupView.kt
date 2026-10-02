@@ -67,3 +67,21 @@ internal fun lineupView(team: MyTeam, week: Int, weekRows: List<ProjectionRow>, 
         defaultSlots = team.slotsAreDefault,
     )
 }
+
+/** A free agent who would raise [team]'s lineup: see [dev.gridiron.core.projections.Pickup]. */
+internal data class PickupLine(val add: ProjectionRow, val gain: Double, val slot: String, val replaces: ProjectionRow?, val drop: ProjectionRow?)
+
+/**
+ * The best waiver pickups for [team] this week: projected players on no league team ([rostered] is everyone on one),
+ * each rated by how far he lifts the best lineup. An ESPN Out or IR player scores zero, so is never suggested.
+ */
+internal fun waiverPickups(team: MyTeam, weekRows: List<ProjectionRow>, badges: Map<String, String>, rostered: Set<String>): List<PickupLine> {
+    val byId = weekRows.associateBy { it.playerId }
+    val own = team.players.mapNotNull { p -> p.playerId?.let(byId::get) }.map { outAdjusted(it, badges) }
+    val free = weekRows.filter { it.playerId !in rostered }.map { outAdjusted(it, badges) }.filter { it.points > 0 }
+    val rows = (own + free).associateBy { it.playerId }
+    fun candidate(row: ProjectionRow) = LineupCandidate(row.playerId, row.position, row.points)
+    return Lineups.pickups(team.slots, own.map(::candidate), free.map(::candidate)).map {
+        PickupLine(rows.getValue(it.add.playerId), it.gain, it.slot, it.replaces?.let { c -> rows.getValue(c.playerId) }, it.drop?.let { c -> rows.getValue(c.playerId) })
+    }
+}

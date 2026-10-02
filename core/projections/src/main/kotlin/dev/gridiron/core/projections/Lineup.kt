@@ -11,6 +11,19 @@ public data class BestLineup(val spots: List<LineupSpot>, val bench: List<Lineup
     public val total: Double get() = spots.sumOf { it.player?.points ?: 0.0 }
 }
 
+/**
+ * Adding free agent [add] lifts the best lineup by [gain]: he starts at [slot], pushing [replaces] out of the lineup
+ * (null when he fills an empty slot). [drop] is the lowest-projected bench player of the new lineup, the one to cut
+ * for him (null when there is no bench).
+ */
+public data class Pickup(
+    val add: LineupCandidate,
+    val gain: Double,
+    val slot: String,
+    val replaces: LineupCandidate?,
+    val drop: LineupCandidate?,
+)
+
 public object Lineups {
     /** A standard league: QB, 2 RB, 2 WR, TE, FLEX, K and D/ST. */
     public val DEFAULT_SLOTS: Map<String, Int> =
@@ -66,4 +79,29 @@ public object Lineups {
             bench = ranked.filterIndexed { i, _ -> i !in starters },
         )
     }
+
+    /**
+     * The free agents who would raise the best lineup, best first (the gain, then his points, then id), at most
+     * [limit]. Each is added to [roster] alone, so gains are not additive across pickups.
+     */
+    public fun pickups(slots: Map<String, Int>, roster: List<LineupCandidate>, freeAgents: List<LineupCandidate>, limit: Int = 5): List<Pickup> {
+        val base = best(slots, roster)
+        val baseStarters = base.spots.mapNotNull { it.player }.associateBy { it.playerId }
+        return freeAgents.mapNotNull { agent ->
+            val next = best(slots, roster + agent)
+            val gain = next.total - base.total
+            val spot = next.spots.firstOrNull { it.player?.playerId == agent.playerId }
+            if (gain <= MIN_GAIN || spot == null) return@mapNotNull null
+            val staying = next.spots.mapNotNull { it.player?.playerId }.toSet()
+            Pickup(
+                add = agent,
+                gain = gain,
+                slot = spot.slot,
+                replaces = baseStarters.values.firstOrNull { it.playerId !in staying },
+                drop = next.bench.minWithOrNull(compareBy<LineupCandidate> { it.points }.thenBy { it.playerId }),
+            )
+        }.sortedWith(compareByDescending<Pickup> { it.gain }.thenByDescending { it.add.points }.thenBy { it.add.playerId }).take(limit)
+    }
+
+    private const val MIN_GAIN = 0.05
 }

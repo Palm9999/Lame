@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.OpponentResult
 import dev.gridiron.core.model.Position
@@ -64,6 +65,8 @@ public fun ProjectionListRoute(
     myTeam: Flow<MyTeam?> = flowOf(null),
     /** Your opponent for the week, fetched each time My lineup opens; the default says there is none. */
     opponent: suspend (season: Int, week: Int) -> OpponentResult = { _, _ -> OpponentResult(null, "not available") },
+    /** Everyone on a league team, so the rest can be offered as pickups; null hides the pickups. */
+    leagueRostered: Flow<LeagueRostered?> = flowOf(null),
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -72,10 +75,12 @@ public fun ProjectionListRoute(
     val version by dataVersion.collectAsStateWithLifecycle(initialValue = 0L)
     LaunchedEffect(season, profile, version) { profile?.let { vm.load(season, it) } }
     val team by myTeam.collectAsStateWithLifecycle(initialValue = null)
+    val taken by leagueRostered.collectAsStateWithLifecycle(initialValue = null)
     var rival by remember { mutableStateOf<OpponentState>(OpponentState.Idle) }
     val scope = rememberCoroutineScope()
     ProjectionListScreen(
         state, injuries, onPlayer, onBack, team?.takeIf { it.season == season }, rival,
+        rostered = taken?.takeIf { it.season == season }?.playerIds,
         onLineupOpened = {
             val week = (state as? ProjectionListState.Loaded)?.week
             if (week != null && rival != OpponentState.Loading) {
@@ -101,6 +106,8 @@ public fun ProjectionListScreen(
     opponent: OpponentState = OpponentState.Idle,
     /** My lineup was opened: the route fetches the opponent. */
     onLineupOpened: () -> Unit = {},
+    /** Everyone on a league team; null when unknown, which hides the waiver pickups. */
+    rostered: Set<String>? = null,
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
@@ -138,7 +145,8 @@ public fun ProjectionListScreen(
                     }
                     if (mode == ListMode.LINEUP && myTeam != null) {
                         val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, state.weekRows, badges) }
-                        LineupList(lineupView(myTeam, state.week, state.weekRows, badges), rival, opponent, badges, onPlayer)
+                        val pickups = if (rostered == null) null else remember(myTeam, state, badges, rostered) { waiverPickups(myTeam, state.weekRows, badges, rostered) }
+                        LineupList(lineupView(myTeam, state.week, state.weekRows, badges), rival, opponent, pickups, badges, onPlayer)
                     } else {
                         Row(
                             Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()),
@@ -160,7 +168,14 @@ public fun ProjectionListScreen(
 }
 
 @Composable
-private fun LineupList(view: LineupView, rival: LineupView?, opponent: OpponentState, badges: Map<String, String>, onPlayer: (String) -> Unit) {
+private fun LineupList(
+    view: LineupView,
+    rival: LineupView?,
+    opponent: OpponentState,
+    pickups: List<PickupLine>?,
+    badges: Map<String, String>,
+    onPlayer: (String) -> Unit,
+) {
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
@@ -205,6 +220,21 @@ private fun LineupList(view: LineupView, rival: LineupView?, opponent: OpponentS
                 ProjectionListRow("BE", row, badges[row.playerId], onPlayer, LeadWidth)
             }
         }
+        if (pickups != null) {
+            item { SectionLabel("Waiver pickups") }
+            if (pickups.isEmpty()) {
+                item {
+                    Text(
+                        "No pickup helps this week.",
+                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            } else {
+                itemsIndexed(pickups, key = { _, p -> "p:${p.add.playerId}" }) { _, pick -> PickupRow(pick, onPlayer) }
+            }
+        }
         if (view.unlisted.isNotEmpty()) {
             item { SectionLabel("Not projected") }
             itemsIndexed(view.unlisted, key = { i, u -> "u:$i:${u.name}" }) { _, u ->
@@ -216,6 +246,28 @@ private fun LineupList(view: LineupView, rival: LineupView?, opponent: OpponentS
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun PickupRow(pick: PickupLine, onPlayer: (String) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable { onPlayer(pick.add.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp).testTag("pickup:${pick.add.playerId}"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Add ${pick.add.name}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(
+                listOfNotNull(Position.label(pick.add.position), pick.add.team).joinToString(" · ") +
+                    " · ${points(pick.add.points)} pts · starts at ${pick.slot}" + (pick.replaces?.let { ", replacing ${it.name}" } ?: ""),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            pick.drop?.let {
+                Text("Drop ${it.name} (${points(it.points)} pts)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        Text("+${points(pick.gain)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
     }
 }
 

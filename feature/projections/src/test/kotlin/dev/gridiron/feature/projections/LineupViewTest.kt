@@ -59,6 +59,24 @@ class LineupViewTest {
     }
 
     @Test
+    fun `free agents exclude everyone on a league team`() {
+        val mine = team(mapOf("QB" to 1, "RB" to 1), on("q"), on("r2"))
+        val picks = waiverPickups(mine, rows, emptyMap(), rostered = setOf("q", "r2", "x"))
+        // x (30) is on another team; w can't fill a slot; r1 beats r2 at RB by 2.
+        assertEquals(listOf("r1"), picks.map { it.add.playerId })
+        assertEquals(2.0, picks.single().gain, 1e-9)
+        assertEquals("r2", picks.single().replaces?.playerId)
+        assertEquals("r2", picks.single().drop?.playerId)
+        assertEquals("RB", picks.single().slot)
+    }
+
+    @Test
+    fun `an Out free agent is never suggested`() {
+        val mine = team(mapOf("QB" to 1, "RB" to 1), on("q"), on("r2"))
+        assertEquals(emptyList<PickupLine>(), waiverPickups(mine, rows, mapOf("r1" to "O"), rostered = setOf("q", "r2", "x")))
+    }
+
+    @Test
     fun `the default slots are flagged`() {
         val view = lineupView(team(Lineups.DEFAULT_SLOTS, on("q"), default = true), 4, rows, emptyMap())
         assertTrue(view.defaultSlots)
