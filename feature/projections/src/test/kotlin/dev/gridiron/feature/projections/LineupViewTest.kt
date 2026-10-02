@@ -71,6 +71,13 @@ class LineupViewTest {
     }
 
     @Test
+    fun `a pickup whose starter is hurt carries the note`() {
+        val mine = team(mapOf("QB" to 1, "RB" to 1), on("q"), on("r2"))
+        val picks = waiverPickups(mine, rows, emptyMap(), rostered = setOf("q", "r2", "x"), starterOut = mapOf("r1" to "RB1 Star Back is Doubtful"))
+        assertEquals("RB1 Star Back is Doubtful", picks.single().starterOut)
+    }
+
+    @Test
     fun `an Out free agent is never suggested`() {
         val mine = team(mapOf("QB" to 1, "RB" to 1), on("q"), on("r2"))
         assertEquals(emptyList<PickupLine>(), waiverPickups(mine, rows, mapOf("r1" to "O"), rostered = setOf("q", "r2", "x")))

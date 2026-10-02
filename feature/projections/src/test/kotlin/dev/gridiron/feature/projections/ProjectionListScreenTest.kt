@@ -133,6 +133,21 @@ class ProjectionListScreenTest {
     }
 
     @Test
+    fun `a pickup moving up because a starter is hurt says so`() {
+        val withFree = loaded.copy(weekRows = loaded.weekRows + ProjectionRow("w2", "Free Agent WR", "WR", "DEN", 20.0, 12.0, 28.0))
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    withFree, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team, rostered = setOf("w", "q"),
+                    starterOut = mapOf("w2" to "WR1 Star Receiver is Doubtful"),
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithTag("pickup:out:w2", useUnmergedTree = true).assertTextEquals("▲ WR1 Star Receiver is Doubtful")
+    }
+
+    @Test
     fun `no pickups when none helps, and no section without the league's rosters`() {
         compose.setContent {
             GridironTheme { ProjectionListScreen(loaded, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team, rostered = setOf("w", "q")) }

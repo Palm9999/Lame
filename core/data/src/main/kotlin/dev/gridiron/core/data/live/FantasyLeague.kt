@@ -66,12 +66,20 @@ public fun FantasyLeague.myTeam(teamId: Int?): MyTeam? {
     return MyTeam(team.name, season, team.players, if (own) lineupSlots else Lineups.DEFAULT_SLOTS, !own)
 }
 
-/** Everyone on any team of a [season]'s league who is matched to an app player id, as of [fetchedAtMillis]. */
-public data class LeagueRostered(val playerIds: Set<String>, val season: Int, val fetchedAtMillis: Long)
+/**
+ * Everyone on any team of a [season]'s league who is matched to an app player id, as of [fetchedAtMillis]; [owners]
+ * names each one's team.
+ */
+public data class LeagueRostered(val playerIds: Set<String>, val season: Int, val fetchedAtMillis: Long, val owners: Map<String, String> = emptyMap())
 
 /** The league's rostered players; an ESPN player the app can't match is left out (he has no stats here anyway). */
 public fun FantasyLeague.rostered(): LeagueRostered =
-    LeagueRostered(teams.flatMap { t -> t.players.mapNotNull { it.playerId } }.toSet(), season, fetchedAtMillis)
+    LeagueRostered(
+        playerIds = teams.flatMap { t -> t.players.mapNotNull { it.playerId } }.toSet(),
+        season = season,
+        fetchedAtMillis = fetchedAtMillis,
+        owners = teams.flatMap { t -> t.players.mapNotNull { p -> p.playerId?.let { it to t.name } } }.toMap(),
+    )
 
 /**
  * One player in a matchup lineup. [espnPoints] is ESPN's own score for the week (the league's scoring); [appPoints] is

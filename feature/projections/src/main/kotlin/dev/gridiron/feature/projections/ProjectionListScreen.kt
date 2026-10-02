@@ -39,12 +39,14 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.OpportunitiesResult
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.OpponentResult
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -67,6 +69,8 @@ public fun ProjectionListRoute(
     opponent: suspend (season: Int, week: Int) -> OpponentResult = { _, _ -> OpponentResult(null, "not available") },
     /** Everyone on a league team, so the rest can be offered as pickups; null hides the pickups. */
     leagueRostered: Flow<LeagueRostered?> = flowOf(null),
+    /** Who moves up because a starter is hurt this week; asked when My lineup opens, to mark the pickups. */
+    opportunities: suspend (season: Int, profile: ScoringProfile) -> OpportunitiesResult = { _, _ -> OpportunitiesResult(emptyList(), 0, null) },
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -77,11 +81,25 @@ public fun ProjectionListRoute(
     val team by myTeam.collectAsStateWithLifecycle(initialValue = null)
     val taken by leagueRostered.collectAsStateWithLifecycle(initialValue = null)
     var rival by remember { mutableStateOf<OpponentState>(OpponentState.Idle) }
+    var movingUp by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val scope = rememberCoroutineScope()
     ProjectionListScreen(
         state, injuries, onPlayer, onBack, team?.takeIf { it.season == season }, rival,
         rostered = taken?.takeIf { it.season == season }?.playerIds,
+        starterOut = movingUp,
         onLineupOpened = {
+            profile?.let { p ->
+                scope.launch {
+                    val found = try {
+                        opportunities(season, p).rows
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                    movingUp = found.mapNotNull { r -> injuredNote(r)?.let { r.beneficiary.player.playerId to it } }.toMap()
+                }
+            }
             val week = (state as? ProjectionListState.Loaded)?.week
             if (week != null && rival != OpponentState.Loading) {
                 rival = OpponentState.Loading
@@ -108,6 +126,8 @@ public fun ProjectionListScreen(
     onLineupOpened: () -> Unit = {},
     /** Everyone on a league team; null when unknown, which hides the waiver pickups. */
     rostered: Set<String>? = null,
+    /** Pickups moving up because a starter is hurt, by player id: "RB1 Name is Doubtful". */
+    starterOut: Map<String, String> = emptyMap(),
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
@@ -145,7 +165,7 @@ public fun ProjectionListScreen(
                     }
                     if (mode == ListMode.LINEUP && myTeam != null) {
                         val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, state.weekRows, badges) }
-                        val pickups = if (rostered == null) null else remember(myTeam, state, badges, rostered) { waiverPickups(myTeam, state.weekRows, badges, rostered) }
+                        val pickups = if (rostered == null) null else remember(myTeam, state, badges, rostered, starterOut) { waiverPickups(myTeam, state.weekRows, badges, rostered, starterOut) }
                         LineupList(lineupView(myTeam, state.week, state.weekRows, badges), rival, opponent, pickups, badges, onPlayer)
                     } else {
                         Row(
@@ -263,6 +283,9 @@ private fun PickupRow(pick: PickupLine, onPlayer: (String) -> Unit) {
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            pick.starterOut?.let {
+                Text("▲ $it", Modifier.testTag("pickup:out:${pick.add.playerId}"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+            }
             pick.drop?.let {
                 Text("Drop ${it.name} (${points(it.points)} pts)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }

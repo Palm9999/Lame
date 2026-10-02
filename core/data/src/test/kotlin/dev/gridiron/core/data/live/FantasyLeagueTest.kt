@@ -207,7 +207,8 @@ class FantasyLeagueTest {
         fun p(espn: String, id: String?) = LeaguePlayer(espn, "n$espn", "BE", id)
         fun t(id: Int, vararg ps: LeaguePlayer) = LeagueTeam(id, "T$id", null, 0, 0, 0, 0.0, 0.0, id, ps.toList())
         val league = FantasyLeague("42", "L", 2026, 4, listOf(t(1, p("1", "A"), p("2", null)), t(2, p("3", "B"), p("4", "A"))), 77L)
-        assertEquals(LeagueRostered(setOf("A", "B"), 2026, 77L), league.rostered())
+        // "A" is on both teams (a stale sync): the later team names him.
+        assertEquals(LeagueRostered(setOf("A", "B"), 2026, 77L, mapOf("A" to "T2", "B" to "T2")), league.rostered())
     }
 
     @Test
@@ -218,7 +219,10 @@ class FantasyLeagueTest {
         repo.setConfig("42", null, "{ME}")
         assertTrue(repo.sync(2026).ok)
         // Only the D/ST has an app id here: the xref is empty.
-        assertEquals(LeagueRostered(setOf("DST_KC"), 2026, Instant.parse("2026-10-01T00:00:00Z").toEpochMilli()), repo.rostered.first())
+        assertEquals(
+            LeagueRostered(setOf("DST_KC"), 2026, Instant.parse("2026-10-01T00:00:00Z").toEpochMilli(), mapOf("DST_KC" to "Mine")),
+            repo.rostered.first(),
+        )
         assertEquals(repo.rostered.first(), repo(prefs) { _, _ -> error("offline") }.rostered.first())
     }
 
