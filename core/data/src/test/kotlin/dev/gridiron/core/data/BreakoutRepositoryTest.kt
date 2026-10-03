@@ -1,0 +1,58 @@
+package dev.gridiron.core.data
+
+import dev.gridiron.core.database.QueryExecutor
+import dev.gridiron.core.database.ResultRow
+import dev.gridiron.core.statquery.SqlQuery
+import kotlinx.coroutines.test.runTest
+import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertTrue
+import org.junit.jupiter.api.Test
+
+class BreakoutRepositoryTest {
+    private fun row(
+        position: String = "WR",
+        recent: Double = 8.0,
+        base: Double = 5.0,
+        xr: Double? = null,
+        xb: Double? = null,
+        note: String? = null,
+    ) = BreakoutRow("p1", "A Player", position, "KC", 60.0, recent, base, xr, xb, 0.0, note)
+
+    @Test
+    fun `the reason says what is moving, in the position's own words`() {
+        assertEquals("targets 5.0 → 8.0 a game", row().reason)
+        assertEquals("touches 12.0 → 18.0 a game · expected pts 6.1 → 8.0 · Smith, Jones out", row("RB", 18.0, 12.0, 8.0, 6.1, "Smith, Jones").reason)
+        // Expected points that fell, or usage that did, aren't reasons to be listed.
+        assertEquals("role holding steady", row(recent = 4.0, xr = 3.0, xb = 4.0).reason)
+        assertEquals("expected pts 4.0 → 5.0", row(recent = 5.0, xr = 5.0, xb = 4.0).reason)
+    }
+
+    private class Failing : QueryExecutor {
+        override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> = error("no such table: player_week_signal")
+    }
+
+    private class Empty : QueryExecutor {
+        override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> = emptyList()
+    }
+
+    @Test
+    fun `a database without the table, or with no rows, says so instead of failing`() = runTest {
+        val old = BreakoutRepository(Failing()).find(2025)
+        assertTrue(old.rows.isEmpty())
+        assertEquals("Refresh stats to build Rising roles.", old.message)
+        assertEquals("Rising roles aren't built for 2025 yet.", BreakoutRepository(Empty()).find(2025).message)
+    }
+
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named = "GRIDIRON_ACCURACY_GATE", matches = "\\d{4}")
+    fun `a real build lists the best rising roles first, each with a reason`() = runTest {
+        val season = System.getenv("GRIDIRON_ACCURACY_GATE").toInt()
+        dev.gridiron.core.testing.JdbcQueryExecutor(checkNotNull(dev.gridiron.core.testing.StatsDb.path)).use { executor ->
+            val result = BreakoutRepository(executor).find(season)
+            assertTrue(result.rows.size > 50, "${result.rows.size} rows, ${result.message}")
+            assertEquals(result.rows.sortedByDescending { it.score }.map { it.playerId }, result.rows.map { it.playerId })
+            assertTrue(result.rows.all { it.position in setOf("RB", "WR", "TE") && it.score > 0.0 && it.reason.isNotBlank() })
+            assertTrue(result.week in 2..18, "week ${result.week}")
+        }
+    }
+}

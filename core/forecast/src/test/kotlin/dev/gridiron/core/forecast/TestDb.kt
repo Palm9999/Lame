@@ -105,6 +105,11 @@ internal class TestDb(val file: File) : AutoCloseable {
                 player_id TEXT NOT NULL, season INTEGER NOT NULL, as_of_week INTEGER NOT NULL,
                 metric_id TEXT NOT NULL, mean REAL NOT NULL, variance REAL NOT NULL,
                 PRIMARY KEY (player_id, season, as_of_week, metric_id)) WITHOUT ROWID""",
+            """CREATE TABLE player_week_signal (
+                player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
+                score REAL NOT NULL, usage_recent REAL NOT NULL, usage_base REAL NOT NULL,
+                xp_recent REAL, xp_base REAL, vacated REAL NOT NULL, out_note TEXT,
+                PRIMARY KEY (player_id, season, week)) WITHOUT ROWID""",
             """CREATE TABLE game (
                 game_id TEXT PRIMARY KEY, season INTEGER NOT NULL, week INTEGER NOT NULL, game_type TEXT NOT NULL,
                 home_team TEXT NOT NULL, away_team TEXT NOT NULL, home_score INTEGER, away_score INTEGER,

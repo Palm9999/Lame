@@ -24,7 +24,7 @@ public data class ForecastReport(
 /** Seasons whose weekly projections are copied from [previous] instead of recomputed. */
 public data class SeasonCopy(public val previous: File, public val seasons: Set<Int>)
 
-private val PROJECTION_TABLES = listOf("player_week_projection", "player_week_projection_factor", "player_ros_projection")
+private val PROJECTION_TABLES = listOf("player_week_projection", "player_week_projection_factor", "player_ros_projection", "player_week_signal")
 
 public object Forecast {
     /**
@@ -48,6 +48,7 @@ public object Forecast {
             val outcome = Projector(inputs, copy?.seasons.orEmpty(), writer, props, onWeek).run()
             ForecastReport(outcome.status, outcome.upcoming, outcome.weeks, writer.rows, outcome.props)
         }
+        SignalWriter(conn).use { signals -> Breakout.compute(inputs).forEach(signals::write) }
         writeMeta(conn, report.status, report.upcoming, builtAt)
         conn.execSQL("COMMIT")
         return report
