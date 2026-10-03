@@ -115,6 +115,7 @@ public class StatsRepository(
             teams = request.teams,
             playerIds = request.onlyPlayers.orEmpty(),
             excludedPlayerIds = request.excludePlayers,
+            alwaysShow = request.alwaysShow,
             // Unlike the sample qualifier, these are the user's own choices, so a search keeps them.
             filters = listOfNotNull(snap) + request.filters,
             qualifiers = listOfNotNull(threshold?.qualifier),

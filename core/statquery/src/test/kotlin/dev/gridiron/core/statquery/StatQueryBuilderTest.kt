@@ -577,6 +577,28 @@ class StatQueryBuilderTest {
         }
 
         @Test
+        fun `alwaysShow lists a player below the bar, unranked, without moving anyone's percentile`() {
+            seed()
+            val plain = db.grid(spec(TARGETS).copy(qualifiers = qualified, percentiles = true)).associateBy { it.playerId }
+            val rows = db.grid(spec(TARGETS).copy(qualifiers = qualified, alwaysShow = setOf("b1"), percentiles = true)).associateBy { it.playerId }
+
+            assertEquals(plain.keys + "b1", rows.keys)
+            assertNull(rows.getValue("b1").percentile(TARGETS))
+            for ((id, row) in plain) assertEquals(row.percentile(TARGETS), rows.getValue(id).percentile(TARGETS))
+            assertEquals(4, db.count(spec(TARGETS).copy(qualifiers = qualified, alwaysShow = setOf("b1"))))
+        }
+
+        @Test
+        fun `alwaysShow also lets in a player under the games floor, still unranked`() {
+            seed()
+            val base = spec(TARGETS).copy(qualifiers = emptyList(), minGames = 99, percentiles = true)
+            assertEquals(emptyList<String>(), db.grid(base).map { it.playerId })
+            val rows = db.grid(base.copy(alwaysShow = setOf("s1")))
+            assertEquals(listOf("s1"), rows.map { it.playerId })
+            assertNull(rows.single().percentile(TARGETS))
+        }
+
+        @Test
         fun `count respects qualifiers`() {
             seed()
             assertEquals(3, db.count(spec(TARGETS).copy(qualifiers = qualified)))
