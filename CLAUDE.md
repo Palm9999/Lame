@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Gridiron** is a personal-use Android app for NFL fantasy football analytics. It computes ~450+ stats from open nflverse data and displays them in a real mobile stat table with filtering, sorting, and comparison tools. The phone builds its own SQLite stats database from nflverse and ffopportunity when the user taps Refresh, and works offline between refreshes. Injuries and news come live from ESPN.
 
-**Starting a session:** read `docs/superpowers/HANDOFF.md` first. It says where things stand, what is open, the rulings that still bind and what to do next.
+**Starting a session:** run `git pull --ff-only origin claude/relaxed-hypatia-73hhub` first (the container checkout goes stale), then read `docs/superpowers/HANDOFF.md`. It says where things stand, what is open, the rulings that still bind and what to do next.
 
 ## Common Commands
 
