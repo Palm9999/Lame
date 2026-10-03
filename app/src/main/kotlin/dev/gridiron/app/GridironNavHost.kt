@@ -34,6 +34,7 @@ import androidx.navigation3.ui.NavDisplay
 import dev.gridiron.core.data.AccuracyRepository
 import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
+import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.OpportunitiesRepository
 import dev.gridiron.core.data.OpportunitiesResult
 import dev.gridiron.core.data.PlayerDirectory
@@ -56,6 +57,7 @@ import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.feature.compare.CompareRoute
 import dev.gridiron.feature.players.GridRoute
 import dev.gridiron.feature.projections.AccuracyRoute
+import dev.gridiron.feature.projections.BreakoutsRoute
 import dev.gridiron.feature.projections.OpportunitiesRoute
 import dev.gridiron.feature.projections.ProjectionListRoute
 import dev.gridiron.feature.projections.ProjectionsRoute
@@ -94,6 +96,8 @@ data class Deps(
     val scores: ScoresRepository? = null,
     /** Who moves up when a starter is hurt; null where a test doesn't need it. */
     val opportunities: OpportunitiesRepository? = null,
+    /** Rising roles; null where a test doesn't need it. */
+    val breakouts: BreakoutRepository? = null,
 )
 
 /**
@@ -169,6 +173,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             menu = buildList<Pair<String, (Int) -> Unit>> {
                                 add("Projections" to { s: Int -> backStack.push(ProjectionListKey(s)) })
                                 if (deps.opportunities != null) add("Opportunities" to { s: Int -> backStack.push(OpportunitiesKey(s)) })
+                                if (deps.breakouts != null) add("Rising roles" to { s: Int -> backStack.push(BreakoutsKey(s)) })
                                 add("Projection accuracy" to { s: Int -> backStack.push(AccuracyKey(s)) })
                                 if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
                                 if (deps.scores != null) add("Scores" to { s: Int -> backStack.push(ScoresKey(s)) })
@@ -225,6 +230,16 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 league = deps.league?.rostered ?: flowOf(null),
                                 myTeam = deps.league?.myTeam ?: flowOf(null),
                                 injuriesChanged = deps.live?.changes ?: flowOf(0L),
+                            )
+                        }
+                    }
+                    entry<BreakoutsKey> { key ->
+                        deps.breakouts?.let { repository ->
+                            BreakoutsRoute(
+                                key.season, repository,
+                                onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
+                                league = deps.league?.rostered ?: flowOf(null),
+                                myTeam = deps.league?.myTeam ?: flowOf(null),
                             )
                         }
                     }

@@ -6,6 +6,7 @@ import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerStatsRepository
+import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.OpportunitiesRepository
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.GridDisplayRepository
@@ -108,6 +109,7 @@ class GridironApplication : Application() {
             scores = ScoresRepository(executor, UrlConnectionHttpGet()),
             league = FantasyLeagueRepository(prefs, UrlConnectionHttpGet(), players, noBackupFilesDir),
             opportunities = OpportunitiesRepository(executor, projectionsRepo, { live.injuries() }),
+            breakouts = BreakoutRepository(executor),
         )
     }
 }
