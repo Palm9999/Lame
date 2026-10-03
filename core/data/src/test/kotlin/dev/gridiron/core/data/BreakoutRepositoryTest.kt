@@ -55,4 +55,35 @@ class BreakoutRepositoryTest {
             assertTrue(result.week in 2..18, "week ${result.week}")
         }
     }
+
+    private class Recording(private val weeks: Map<Int, Int>) : QueryExecutor {
+        val seen = mutableListOf<List<dev.gridiron.core.statquery.Bind>>()
+
+        override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
+            seen += query.binds
+            if (!query.sql.contains("GROUP BY week")) return emptyList()
+            val season = (query.binds.single() as dev.gridiron.core.statquery.Bind.Integer).value.toInt()
+            val week = weeks[season] ?: return emptyList()
+            return listOf(
+                map(
+                    object : ResultRow {
+                        override fun isNull(index: Int) = false
+                        override fun text(index: Int) = ""
+                        override fun long(index: Int) = week.toLong()
+                        override fun double(index: Int) = 0.0
+                    },
+                ),
+            )
+        }
+    }
+
+    @Test
+    fun `the newest week is the requested season's own, not the table's newest season's`() = runTest {
+        val executor = Recording(mapOf(2025 to 18, 2026 to 5))
+        val old = BreakoutRepository(executor).find(2025)
+        assertEquals(18, old.week)
+        // The rows query for 2025 binds 2025 and its own week 18, never 2026's week 5.
+        assertEquals(listOf<Long>(2025, 18), executor.seen.last().map { (it as dev.gridiron.core.statquery.Bind.Integer).value })
+        assertEquals("Rising roles aren't built for 2024 yet.", BreakoutRepository(executor).find(2024).message)
+    }
 }

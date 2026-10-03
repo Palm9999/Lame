@@ -39,7 +39,7 @@ public data class BreakoutResult(val rows: List<BreakoutRow>, val season: Int, v
 public class BreakoutRepository(private val executor: QueryExecutor) {
     public suspend fun find(season: Int): BreakoutResult {
         val week = try {
-            executor.query(LATEST, { it.long(0).toInt() }).singleOrNull()
+            executor.query(latest(season)) { it.long(0).toInt() }.singleOrNull()
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -63,8 +63,11 @@ public class BreakoutRepository(private val executor: QueryExecutor) {
     }
 
     private companion object {
-        /** The newest week of the newest season: the table's own latest, so an off-season shows the last one. */
-        val LATEST = SqlQuery("SELECT week FROM player_week_signal WHERE season = (SELECT MAX(season) FROM player_week_signal) GROUP BY week ORDER BY week DESC LIMIT 1", emptyList())
+        /** The newest week this season has; no row, not a null, when it has none. */
+        fun latest(season: Int) = SqlQuery(
+            "SELECT week FROM player_week_signal WHERE season = ? GROUP BY week ORDER BY week DESC LIMIT 1",
+            listOf(Bind.Integer(season.toLong())),
+        )
 
         fun rows(season: Int, week: Int) = SqlQuery(
             """SELECT s.player_id, p.full_name, p.position, p.team, s.score, s.usage_recent, s.usage_base,
