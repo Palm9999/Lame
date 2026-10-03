@@ -25,14 +25,12 @@ import dev.gridiron.core.data.Place
 import dev.gridiron.core.designsystem.SlotColors
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
-import kotlin.math.roundToInt
 
 /** "1st of 62" (1st is the best at the position). */
 internal fun placeText(place: Place): String = "${ordinal(place.rank)} of ${place.of}"
 
-/** "Top 22%" for an average percentile of 0.78 (never better than "Top 1%"), or "—" with no ranked value at all. */
-internal fun topText(percentile: Float?): String =
-    percentile?.let { "Top ${((1f - it) * 100).roundToInt().coerceIn(1, 100)}%" } ?: "—"
+/** "Avg 12th", or "—" with no ranked value at all. */
+internal fun avgPlaceText(rank: Int?): String = rank?.let { "Avg ${ordinal(it)}" } ?: "—"
 
 /**
  * Every group as a composite row plus one bar row per stat. Long-press or
@@ -57,7 +55,7 @@ internal fun BarsTab(groups: ImmutableList<CompareGroupUi>, charted: List<Int>, 
             item(key = "composite:${group.group}") {
                 PercentileBarRow(
                     label = "Overall ${group.group.label}",
-                    bars = charted.map { i -> Bar(group.composite[i], topText(group.composite[i]), SlotColors.color(i)) }
+                    bars = charted.map { i -> Bar(group.composite[i], avgPlaceText(group.avgPlace[i]), SlotColors.color(i), group.avgPlace[i]?.let { "average place ${ordinal(it)}" }) }
                         .toImmutableList(),
                 )
             }
@@ -69,7 +67,7 @@ internal fun BarsTab(groups: ImmutableList<CompareGroupUi>, charted: List<Int>, 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun StatBarRow(row: CompareRowUi, charted: List<Int>) {
-    val bars = charted.map { i -> Bar(row.cells[i].percentile, row.cells[i].text, SlotColors.color(i)) }.toImmutableList()
+    val bars = charted.map { i -> Bar(row.cells[i].percentile, row.cells[i].text, SlotColors.color(i), row.cells[i].place?.let(::placeText)) }.toImmutableList()
     val info = row.info
     PercentileBarRow(
         label = row.label,

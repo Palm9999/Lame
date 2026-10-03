@@ -14,6 +14,7 @@ import dev.gridiron.core.statquery.ValueMode
 import kotlinx.collections.immutable.toImmutableList
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** Everything the Compare screen shows, built from one Grid query per group of like slots. */
 public class CompareRepository(
@@ -62,6 +63,9 @@ public class CompareRepository(
                 group,
                 request.slots.indices.map { i ->
                     rows.mapNotNull { it.cells[i].percentile }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
+                }.toImmutableList(),
+                request.slots.indices.map { i ->
+                    rows.mapNotNull { it.cells[i].place?.rank }.takeIf { it.isNotEmpty() }?.average()?.roundToInt()
                 }.toImmutableList(),
                 rows.toImmutableList(),
             )

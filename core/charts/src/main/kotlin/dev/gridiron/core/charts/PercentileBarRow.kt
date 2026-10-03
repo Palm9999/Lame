@@ -27,10 +27,11 @@ import dev.gridiron.core.designsystem.NumberStyle
 import kotlinx.collections.immutable.ImmutableList
 
 @Immutable
-public data class Bar(val fraction: Float?, val text: String, val color: Color)
+/** [fraction] fills the bar (0..1, 1 = best); [spoken] is the place read aloud ("1st of 62"), null when unranked. */
+public data class Bar(val fraction: Float?, val text: String, val color: Color, val spoken: String? = null)
 
 /**
- * One stat across the compared players: a 0–100 percentile bar per player with
+ * One stat across the compared players: a bar per player, longer for better, with
  * its value beside it. A dashed outline with no fill means "not ranked".
  */
 @Composable
@@ -48,7 +49,7 @@ public fun PercentileBarRow(
             .padding(horizontal = 16.dp, vertical = 6.dp)
             .semantics(mergeDescendants = true) {
                 contentDescription = "$label: " + bars.joinToString(", ") { b ->
-                    b.text + (b.fraction?.let { ", ${ordinal((it * 100).toInt())} percentile" } ?: ", not ranked")
+                    b.text + (b.spoken?.let { ", $it" } ?: ", not ranked")
                 }
             },
     ) {

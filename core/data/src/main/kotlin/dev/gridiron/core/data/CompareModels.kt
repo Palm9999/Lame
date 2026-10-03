@@ -39,7 +39,14 @@ public enum class SlotStatus {
 }
 
 /** One group of rows (Opportunity, Efficiency, Scoring, Context), with a composite score per slot. */
-public data class CompareGroupUi(val group: CompareGroup, val composite: ImmutableList<Float?>, val rows: ImmutableList<CompareRowUi>)
+public data class CompareGroupUi(
+    val group: CompareGroup,
+    /** The bar behind "Overall": each slot's average percentile over the rows (drawn, never shown as a number). */
+    val composite: ImmutableList<Float?>,
+    /** Each slot's average place over the rows (1 = best), rounded; null with no ranked row. The number "Overall" shows. */
+    val avgPlace: ImmutableList<Int?>,
+    val rows: ImmutableList<CompareRowUi>,
+)
 
 /** One stat row across every slot. */
 public data class CompareRowUi(
