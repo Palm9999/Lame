@@ -7,6 +7,7 @@ import androidx.compose.ui.test.performClick
 import dev.gridiron.core.data.GameLogRow
 import dev.gridiron.core.data.PlayerHeader
 import dev.gridiron.core.data.PlayerStats
+import dev.gridiron.core.data.Place
 import dev.gridiron.core.data.SeasonLineRow
 import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.core.statquery.StatColumn
@@ -34,8 +35,8 @@ class PlayerStatsSectionTest {
         bar = "min 3 targets per game, 4+ games",
         ranked = ranked,
         line = persistentListOf(
-            SeasonLineRow(StatColumn.TARGETS, "Targets", "120", "8.0", if (ranked) 0.83f else null),
-            SeasonLineRow(StatColumn.TARGET_SHARE, "Target share", "27.5%", "", if (ranked) 0.9f else null),
+            SeasonLineRow(StatColumn.TARGETS, "Targets", "120", "8.0", if (ranked) Place(12, 62) else null),
+            SeasonLineRow(StatColumn.TARGET_SHARE, "Target share", "27.5%", "", if (ranked) Place(1, 62) else null),
         ),
         logHeaders = persistentListOf("FPTS", "TAR"),
         log = persistentListOf(
@@ -70,6 +71,8 @@ class PlayerStatsSectionTest {
         compose.onNodeWithTag("seasonLine:Targets").assertExists()
         compose.onNodeWithText("120").assertExists()
         compose.onNodeWithText("27.5%").assertExists()
+        compose.onNodeWithText("12th").assertExists()
+        compose.onNodeWithText("1st").assertExists()
         compose.onNodeWithTag("gameLog:1").assertExists()
         compose.onNodeWithText("vs BAL W 27–20").assertExists()
         compose.onNodeWithText("@ DAL L 17–24").assertExists()

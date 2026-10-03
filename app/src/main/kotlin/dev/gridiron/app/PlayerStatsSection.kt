@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,15 +22,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.gridiron.core.charts.ordinal
 import dev.gridiron.core.data.GameLogRow
 import dev.gridiron.core.data.PlayerStats
 import dev.gridiron.core.data.SeasonLineRow
 import dev.gridiron.core.designsystem.NumberStyle
-import kotlin.math.roundToInt
 
 /**
  * The Player page's "Season stats": season chips, the season line with each
- * stat's percentile at his position, and a week-by-week game log. Emits its
+ * stat's place at his position (1st = best), and a week-by-week game log. Emits its
  * own list items, so it lays out inside the page's `LazyColumn`.
  */
 internal fun LazyListScope.playerStatsItems(stats: PlayerStats, onSeason: (Int) -> Unit) {
@@ -88,7 +87,7 @@ private fun SeasonLineHeader() {
         Text("Stat", Modifier.weight(1f), style = MaterialTheme.typography.labelSmall)
         HeaderCell("Total", 60)
         HeaderCell("Per game", 60)
-        HeaderCell("Pctl", 56)
+        HeaderCell("Rank", 56)
     }
 }
 
@@ -105,11 +104,10 @@ private fun HeaderCell(text: String, width: Int) {
 
 @Composable
 private fun SeasonLine(row: SeasonLineRow) {
-    val percent = row.percentile?.let { (it * 100).roundToInt() }
     val spoken = buildString {
         append("${row.label}: ${row.total}")
         if (row.perGame.isNotEmpty()) append(", ${row.perGame} per game")
-        append(if (percent != null) ", percentile $percent" else ", not ranked")
+        append(row.place?.let { ", ${ordinal(it.rank)} of ${it.of}" } ?: ", not ranked")
     }
     Row(
         Modifier
@@ -122,10 +120,8 @@ private fun SeasonLine(row: SeasonLineRow) {
         Text(row.label, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Text(row.total, Modifier.width(60.dp), style = NumberStyle, textAlign = TextAlign.End, maxLines = 1)
         Text(row.perGame, Modifier.width(60.dp), style = NumberStyle, textAlign = TextAlign.End, maxLines = 1)
-        Row(Modifier.width(56.dp).padding(start = 8.dp), horizontalArrangement = Arrangement.End) {
-            // Nothing where he isn't ranked; the spoken description says "not ranked".
-            row.percentile?.let { p -> LinearProgressIndicator(progress = { p }, Modifier.fillMaxWidth()) }
-        }
+        // Nothing where he isn't ranked; the spoken description says "not ranked" and gives the field's size.
+        Text(row.place?.let { ordinal(it.rank) }.orEmpty(), Modifier.width(56.dp), style = NumberStyle, textAlign = TextAlign.End, maxLines = 1)
     }
 }
 
