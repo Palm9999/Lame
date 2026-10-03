@@ -1,6 +1,7 @@
 package dev.gridiron.core.data
 
 import dev.gridiron.core.database.QueryExecutor
+import dev.gridiron.core.database.ResultRow
 import dev.gridiron.core.database.doubleOrNull
 import dev.gridiron.core.database.textOrNull
 import dev.gridiron.core.statquery.Bind
@@ -46,20 +47,26 @@ public class BreakoutRepository(private val executor: QueryExecutor) {
             return BreakoutResult(emptyList(), season, 0, "Refresh stats to build Rising roles.")
         } ?: return BreakoutResult(emptyList(), season, 0, "Rising roles aren't built for $season yet.")
         val rows = try {
-            executor.query(rows(season, week)) { r ->
-                BreakoutRow(
-                    playerId = r.text(0), name = r.text(1), position = r.text(2), team = r.textOrNull(3),
-                    score = r.double(4), usageRecent = r.double(5), usageBase = r.double(6),
-                    expectedRecent = r.doubleOrNull(7), expectedBase = r.doubleOrNull(8),
-                    vacated = r.double(9), outNote = r.textOrNull(10),
-                )
-            }
+            executor.query(rows(season, week), ::row)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             return BreakoutResult(emptyList(), season, week, "Couldn't read Rising roles.")
         }
         return BreakoutResult(rows, season, week, if (rows.isEmpty()) "No role is growing right now." else null)
+    }
+
+    /**
+     * One player's signal entering the newest week [season] has, for the Player page; null when he isn't scored (a QB, a
+     * thin role, no games), the table is missing or anything fails: that page never waits on this.
+     */
+    public suspend fun forPlayer(playerId: String, season: Int): BreakoutRow? = try {
+        val week = executor.query(latest(season)) { it.long(0).toInt() }.singleOrNull()
+        if (week == null) null else executor.query(rows(season, week, playerId), ::row).singleOrNull()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
     }
 
     private companion object {
@@ -69,13 +76,21 @@ public class BreakoutRepository(private val executor: QueryExecutor) {
             listOf(Bind.Integer(season.toLong())),
         )
 
-        fun rows(season: Int, week: Int) = SqlQuery(
+        fun row(r: ResultRow) = BreakoutRow(
+            playerId = r.text(0), name = r.text(1), position = r.text(2), team = r.textOrNull(3),
+            score = r.double(4), usageRecent = r.double(5), usageBase = r.double(6),
+            expectedRecent = r.doubleOrNull(7), expectedBase = r.doubleOrNull(8),
+            vacated = r.double(9), outNote = r.textOrNull(10),
+        )
+
+        /** Every player growing a role that week, or just [playerId] (score zero included). */
+        fun rows(season: Int, week: Int, playerId: String? = null) = SqlQuery(
             """SELECT s.player_id, p.full_name, p.position, p.team, s.score, s.usage_recent, s.usage_base,
                       s.xp_recent, s.xp_base, s.vacated, s.out_note
                FROM player_week_signal s JOIN player p ON p.player_id = s.player_id
-               WHERE s.season = ? AND s.week = ? AND s.score > 0
+               WHERE s.season = ? AND s.week = ? AND ${if (playerId == null) "s.score > 0" else "s.player_id = ?"}
                ORDER BY s.score DESC, p.full_name, s.player_id""",
-            listOf(Bind.Integer(season.toLong()), Bind.Integer(week.toLong())),
+            listOf(Bind.Integer(season.toLong()), Bind.Integer(week.toLong())) + listOfNotNull(playerId?.let { Bind.Text(it) }),
         )
     }
 }

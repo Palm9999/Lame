@@ -36,6 +36,17 @@ class BreakoutRepositoryTest {
     }
 
     @Test
+    fun `one player's signal is read for the season's newest week, and any failure reads as none`() = runTest {
+        val executor = Recording(mapOf(2025 to 18, 2026 to 5))
+        // The fake returns no rows for the player query, which reads as no signal rather than an error.
+        assertEquals(null, BreakoutRepository(executor).forPlayer("p1", 2025))
+        assertEquals(listOf<Long>(2025, 18), executor.seen.last().take(2).map { (it as dev.gridiron.core.statquery.Bind.Integer).value })
+        assertEquals(dev.gridiron.core.statquery.Bind.Text("p1"), executor.seen.last().last())
+        assertEquals(null, BreakoutRepository(Failing()).forPlayer("p1", 2025))
+        assertEquals(null, BreakoutRepository(Empty()).forPlayer("p1", 2025))
+    }
+
+    @Test
     fun `a database without the table, or with no rows, says so instead of failing`() = runTest {
         val old = BreakoutRepository(Failing()).find(2025)
         assertTrue(old.rows.isEmpty())
@@ -85,5 +96,21 @@ class BreakoutRepositoryTest {
         // The rows query for 2025 binds 2025 and its own week 18, never 2026's week 5.
         assertEquals(listOf<Long>(2025, 18), executor.seen.last().map { (it as dev.gridiron.core.statquery.Bind.Integer).value })
         assertEquals("Rising roles aren't built for 2024 yet.", BreakoutRepository(executor).find(2024).message)
+    }
+
+    @Test
+    @org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable(named = "GRIDIRON_ACCURACY_GATE", matches = "\\d{4}")
+    fun `a real build gives a listed player his own signal and a quarterback none`() = runTest {
+        val season = System.getenv("GRIDIRON_ACCURACY_GATE").toInt()
+        dev.gridiron.core.testing.JdbcQueryExecutor(checkNotNull(dev.gridiron.core.testing.StatsDb.path)).use { executor ->
+            val repo = BreakoutRepository(executor)
+            val top = repo.find(season).rows.first()
+            val own = repo.forPlayer(top.playerId, season)
+            assertEquals(top, own)
+            val qb = executor.query(
+                SqlQuery("SELECT player_id FROM player WHERE position = 'QB' LIMIT 1", emptyList()),
+            ) { it.text(0) }.single()
+            assertEquals(null, repo.forPlayer(qb, season))
+        }
     }
 }

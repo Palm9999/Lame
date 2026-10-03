@@ -35,6 +35,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.gridiron.core.data.BreakoutRepository
+import dev.gridiron.core.data.BreakoutRow
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerHeader
 import dev.gridiron.core.data.PlayerStats
@@ -67,6 +69,8 @@ data class PlayerPage(
     val news: List<NewsItem>,
     val asOf: Instant?,
     val projection: ProjectionCard? = null,
+    /** His Rising roles signal, when his role is growing; null otherwise. */
+    val risingRole: BreakoutRow? = null,
     /** The Season stats section, or null when there is no repository, profile or load yet. */
     val stats: PlayerStats? = null,
     /** The section failed to load: it says so and the rest of the page stays. */
@@ -89,6 +93,7 @@ fun PlayerRoute(
     rosterRepo: RosterRepository? = null,
     onManageRosters: () -> Unit = {},
     playerStats: PlayerStatsRepository? = null,
+    breakouts: BreakoutRepository? = null,
 ) {
     val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList<Roster>()) }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -112,6 +117,8 @@ fun PlayerRoute(
         } else {
             null
         }
+        // Only while his role is growing, and only for the season the projection card is about.
+        val rising = if (breakouts != null && card != null) breakouts.forPlayer(playerId, card.season)?.takeIf { it.score > 0.0 } else null
         page = PlayerPage(
             header = header,
             status = status,
@@ -119,6 +126,7 @@ fun PlayerRoute(
             news = live?.playerNews(playerId).orEmpty(),
             asOf = live?.fetchedAt(),
             projection = card,
+            risingRole = rising,
         )
     }
     var season by remember(playerId) { mutableStateOf<Int?>(null) }
@@ -194,6 +202,10 @@ fun PlayerScreen(
                 page.projection?.let { card ->
                     item { SectionTitle("This week") }
                     item { ThisWeekCard(card, onOpen = { onProjection(card.season, card.week) }) }
+                }
+                page.risingRole?.let { row ->
+                    item { SectionTitle("Rising role") }
+                    item { RisingRoleLine(row) }
                 }
                 rosters?.let { list ->
                     item { SectionTitle("Rosters") }
@@ -295,4 +307,16 @@ internal fun injuryColor(abbr: String): Color = when (abbr) {
     "O", "IR", "D" -> MaterialTheme.colorScheme.error
     "Q" -> MaterialTheme.colorScheme.tertiary
     else -> MaterialTheme.colorScheme.onSurface
+}
+
+/** "Role growing · 72" over why: the Rising roles signal in one line, tagged for tests. */
+@Composable
+private fun RisingRoleLine(row: BreakoutRow) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp).testTag("risingRole"), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Role growing", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(row.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Text(String.format(java.util.Locale.US, "%.0f", row.score), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+    }
 }

@@ -279,6 +279,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             rosterRepo = deps.rosters,
                             onManageRosters = { backStack.push(RostersKey) },
                             playerStats = deps.playerStats,
+                            breakouts = deps.breakouts,
                         )
                     }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }
