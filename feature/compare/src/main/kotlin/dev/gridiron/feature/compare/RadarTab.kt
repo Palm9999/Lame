@@ -61,7 +61,7 @@ internal fun RadarTab(
             contentDescription = if (shown.size == 2) {
                 radarSummary(radar, names, a, b)
             } else {
-                "Radar: ${names[shown.single()]}, percentile within position"
+                "Radar: ${names[shown.single()]}, against the position"
             },
             modifier = Modifier.fillMaxWidth(),
         )
@@ -75,7 +75,7 @@ internal fun RadarTab(
             }
         }
         Text(
-            "Percentile within position. Outer ring = best at the position.",
+            "Outer ring = best at the position.",
             Modifier.padding(top = 8.dp),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,

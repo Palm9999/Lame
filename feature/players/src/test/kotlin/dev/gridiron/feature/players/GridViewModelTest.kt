@@ -11,6 +11,7 @@ import dev.gridiron.core.data.SeasonInfo
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.weeksLabel
+import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.ResultRow
 import dev.gridiron.core.datastore.GridPreset
@@ -38,6 +39,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
@@ -461,6 +463,47 @@ class GridViewModelTest {
         advanceUntilIdle()
         assertEquals(null, ready(vm).rosterId)
         assertEquals(null, ready(vm).request.onlyPlayers)
+    }
+
+    @Test
+    fun `free agents leave out everyone on a league team, and need a league for the season shown`() = runTest(dispatcher) {
+        val league = MutableStateFlow<LeagueRostered?>(null)
+        val vm = GridViewModel(repo, ScoringRepository(prefs), CompareTrayRepository(prefs), leagueRostered = league)
+        val everyone = ready(vm).page!!.rows.map { it.playerId }
+        val taken = everyone.take(2).toSet()
+        val season = ready(vm).request.season.season
+        assertEquals(null, ready(vm).freeAgents)
+
+        league.value = LeagueRostered(taken, season, 1_000L)
+        advanceUntilIdle()
+        assertEquals(FreeAgentsOption(1_000L), ready(vm).freeAgents)
+
+        vm.onEvent(GridEvent.RosterSelected(GridViewModel.FREE_AGENTS_ID))
+        advanceUntilIdle()
+        assertEquals(GridViewModel.FREE_AGENTS_ID, ready(vm).rosterId)
+        assertEquals(taken, ready(vm).request.excludePlayers)
+        assertEquals(null, ready(vm).request.onlyPlayers)
+        assertEquals(everyone.filterNot { it in taken }, ready(vm).page!!.rows.map { it.playerId })
+
+        // A league for another season can't tell who is free this season: the choice goes.
+        league.value = LeagueRostered(taken, season - 1, 1_000L)
+        advanceUntilIdle()
+        assertEquals(null, ready(vm).freeAgents)
+        assertEquals(null, ready(vm).rosterId)
+        assertEquals(emptySet<String>(), ready(vm).request.excludePlayers)
+    }
+
+    @Test
+    fun `a user roster still narrows to its players beside a league`() = runTest(dispatcher) {
+        val rosters = MutableStateFlow<List<dev.gridiron.core.model.Roster>>(emptyList())
+        val vm = GridViewModel(repo, ScoringRepository(prefs), CompareTrayRepository(prefs), rosters = rosters, leagueRostered = flowOf(LeagueRostered(setOf("x"), 2025, 1L)))
+        val ids = ready(vm).page!!.rows.take(2).map { it.playerId }
+        rosters.value = listOf(dev.gridiron.core.model.Roster("r1", "Home", ids))
+
+        vm.onEvent(GridEvent.RosterSelected("r1"))
+        advanceUntilIdle()
+        assertEquals(ids.toSet(), ready(vm).page!!.rows.map { it.playerId }.toSet())
+        assertEquals(emptySet<String>(), ready(vm).request.excludePlayers)
     }
 
     // --- saved presets ---

@@ -396,6 +396,21 @@ class StatQueryBuilderTest {
     }
 
     @Nested
+    inner class ExcludedPlayers {
+        @Test
+        fun `excludedPlayerIds drops those players and moves no percentile`() {
+            for ((i, id) in listOf("a", "b", "c", "d").withIndex()) {
+                db.player(id, "Player $id")
+                db.week(id, 1, C.TARGETS to (i + 1) * 3)
+            }
+            val all = db.grid(spec(TARGETS).copy(percentiles = true)).associateBy { it.playerId }
+            val rest = db.grid(spec(TARGETS).copy(percentiles = true, excludedPlayerIds = setOf("b", "d")))
+            assertEquals(listOf("c", "a"), rest.map { it.playerId })
+            for (r in rest) assertEquals(all.getValue(r.playerId).percentile(TARGETS)!!, r.percentile(TARGETS)!!, EPS)
+        }
+    }
+
+    @Nested
     inner class Percentiles {
         private fun seed() {
             listOf("w1" to 10, "w2" to 20, "w3" to 30).forEach { (id, t) ->
@@ -418,6 +433,35 @@ class StatQueryBuilderTest {
             assertEquals(0.5, rows.getValue("w2").percentile(TARGETS)!!, EPS)
             assertEquals(1.0, rows.getValue("w3").percentile(TARGETS)!!, EPS)
             assertEquals(1.0, rows.getValue("r2").percentile(TARGETS)!!, EPS)
+        }
+
+        @Test
+        fun `ranks put the best first, share places on ties and count each position`() {
+            seed()
+            db.player("w4", "w4", position = "WR")
+            db.week("w4", 1, C.TARGETS to 30, C.AIR_YARDS to 300) // ties w3 for the most
+            val rows = db.grid(spec(TARGETS).copy(percentiles = true, ranks = true)).associateBy { it.playerId }
+
+            assertEquals(1, rows.getValue("w3").rank(TARGETS))
+            assertEquals(1, rows.getValue("w4").rank(TARGETS))
+            assertEquals(3, rows.getValue("w2").rank(TARGETS))
+            assertEquals(4, rows.getValue("w1").rank(TARGETS))
+            assertEquals(4, rows.getValue("w1").rankedCount(TARGETS))
+            assertEquals(1, rows.getValue("r2").rank(TARGETS))
+            assertEquals(2, rows.getValue("r2").rankedCount(TARGETS))
+        }
+
+        @Test
+        fun `ranks put the lowest value first on lower-is-better columns`() {
+            listOf("q1" to 1, "q2" to 9).forEach { (id, ints) ->
+                db.player(id, id, position = "QB")
+                db.week(id, 1, C.INTERCEPTIONS to ints)
+            }
+
+            val rows = db.grid(spec(INTERCEPTIONS).copy(percentiles = true, ranks = true)).associateBy { it.playerId }
+
+            assertEquals(1, rows.getValue("q1").rank(INTERCEPTIONS))
+            assertEquals(2, rows.getValue("q2").rank(INTERCEPTIONS))
         }
 
         @Test

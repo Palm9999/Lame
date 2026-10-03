@@ -6,6 +6,7 @@ import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerStatsRepository
+import dev.gridiron.core.data.OpportunitiesRepository
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
@@ -57,6 +58,7 @@ class GridironApplication : Application() {
     // One connection to live.db, shared by ESPN's feeds and the props.
     private val liveDb by lazy { LiveDb(File(noBackupFilesDir, "live.db")) }
     private val live by lazy { LiveRepository(liveDb, UrlConnectionHttpGet(), players) }
+    private val projectionsRepo by lazy { ProjectionsRepository(executor) }
     private val propsRepo by lazy { PropsRepository(liveDb, UrlConnectionHttpClient()) }
 
     private val workDir by lazy { File(noBackupFilesDir, "ingest-work") }
@@ -91,7 +93,7 @@ class GridironApplication : Application() {
             CompareRepository(executor),
             ScoringRepository(prefs),
             CompareTrayRepository(prefs),
-            ProjectionsRepository(executor),
+            projectionsRepo,
             AccuracyRepository(executor),
             TeamsRepository(executor),
             players = players,
@@ -104,7 +106,8 @@ class GridironApplication : Application() {
             props = propsRepo,
             playerStats = PlayerStatsRepository(executor),
             scores = ScoresRepository(executor, UrlConnectionHttpGet()),
-            league = FantasyLeagueRepository(prefs, UrlConnectionHttpGet(), players, File(noBackupFilesDir, "league.json")),
+            league = FantasyLeagueRepository(prefs, UrlConnectionHttpGet(), players, noBackupFilesDir),
+            opportunities = OpportunitiesRepository(executor, projectionsRepo, { live.injuries() }),
         )
     }
 }

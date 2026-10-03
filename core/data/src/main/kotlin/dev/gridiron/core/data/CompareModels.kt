@@ -39,7 +39,14 @@ public enum class SlotStatus {
 }
 
 /** One group of rows (Opportunity, Efficiency, Scoring, Context), with a composite score per slot. */
-public data class CompareGroupUi(val group: CompareGroup, val composite: ImmutableList<Float?>, val rows: ImmutableList<CompareRowUi>)
+public data class CompareGroupUi(
+    val group: CompareGroup,
+    /** The bar behind "Overall": each slot's average percentile over the rows (drawn, never shown as a number). */
+    val composite: ImmutableList<Float?>,
+    /** Each slot's average place over the rows (1 = best), rounded; null with no ranked row. The number "Overall" shows. */
+    val avgPlace: ImmutableList<Int?>,
+    val rows: ImmutableList<CompareRowUi>,
+)
 
 /** One stat row across every slot. */
 public data class CompareRowUi(
@@ -52,8 +59,11 @@ public data class CompareRowUi(
     val diff: String?,
 )
 
-/** One slot's value for one row. */
-public data class CompareCellUi(val text: String, val value: Double?, val percentile: Float?)
+/** One slot's value for one row; [place] is where he ranks at his position (1st = best), null if unranked. */
+public data class CompareCellUi(val text: String, val value: Double?, val percentile: Float?, val place: Place? = null)
+
+/** [rank] among [of] ranked players; 1 is the best. */
+public data class Place(val rank: Int, val of: Int)
 
 /** Axis labels and one polygon of values per slot. */
 public data class RadarUi(val axes: ImmutableList<String>, val values: ImmutableList<ImmutableList<Float?>>)

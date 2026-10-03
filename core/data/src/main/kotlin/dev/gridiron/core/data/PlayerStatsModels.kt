@@ -11,8 +11,8 @@ public data class SeasonLineRow(
     val total: String,
     /** Blank for a rate, whose per-game value is its total. */
     val perGame: String,
-    /** 0..1 among the position's qualified players, or null when he is below the ranking bar. */
-    val percentile: Float?,
+    /** His place among the position's qualified players (1st = best), or null when he is below the ranking bar. */
+    val place: Place?,
 )
 
 /** One played week: [opponent] reads "vs DAL", "@ DAL" or a dash; [result] reads "W 27–20", or is null before a score exists. */

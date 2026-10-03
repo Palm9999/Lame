@@ -9,6 +9,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class ScoringEditKey(val profileId: String) : NavKey
 @Serializable data class ProjectionsKey(val playerId: String, val season: Int, val week: Int) : NavKey
 @Serializable data class ProjectionListKey(val season: Int) : NavKey
+@Serializable data class OpportunitiesKey(val season: Int) : NavKey
 @Serializable data class AccuracyKey(val season: Int) : NavKey
 @Serializable data class InjuriesKey(val season: Int) : NavKey
 @Serializable data class DefenseKey(val season: Int) : NavKey

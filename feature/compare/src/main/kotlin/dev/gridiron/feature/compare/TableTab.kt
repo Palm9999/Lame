@@ -101,8 +101,8 @@ internal fun TableTab(page: ComparePage, onlyDifferences: Boolean, modifier: Mod
                             fontWeight = if (row.best == i) FontWeight.Bold else FontWeight.Normal,
                             style = MaterialTheme.typography.bodyMedium,
                         )
-                        if (cell.percentile != null) {
-                            Text(percentileText(cell.percentile), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        cell.place?.let { place ->
+                            Text(placeText(place), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                         }
                     }
                 }

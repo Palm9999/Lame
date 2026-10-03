@@ -49,6 +49,7 @@ dependencies {
     implementation(projects.core.database)
     implementation(projects.core.ingest)
     implementation(projects.core.designsystem)
+    implementation(projects.core.charts)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.kotlinx.coroutines.android)

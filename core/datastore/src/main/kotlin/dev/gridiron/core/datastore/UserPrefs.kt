@@ -16,7 +16,9 @@ import dev.gridiron.core.model.ScoringProfile
  * @property gridPresets Saved Grid views, in the order created; at most [MAX_PRESETS], names unique ignoring case.
  * @property gridDensity The Grid's row height; absent or unknown reads as [RowDensity.COMFORTABLE].
  * @property oddsApiKey The user's key for The Odds API (spec §5); null when none is set. Sent only to api.the-odds-api.com.
- * @property espnLeague The user's ESPN fantasy league to import; null when none is set. Its cookies are sent only to ESPN.
+ * @property espnLeagues The user's ESPN fantasy leagues, in the order added.
+ * @property espnActive The id of the league every screen follows; a missing or unknown id reads as the first league.
+ * @property espnLogin The one pair of ESPN cookies every league shares. They are sent only to ESPN.
  */
 public data class UserPrefs(
     val profiles: List<ScoringProfile>,
@@ -28,8 +30,15 @@ public data class UserPrefs(
     val oddsApiKey: String? = null,
     val gridPresets: List<GridPreset> = emptyList(),
     val gridDensity: RowDensity = RowDensity.COMFORTABLE,
-    val espnLeague: EspnLeagueConfig? = null,
+    val espnLeagues: List<EspnLeagueEntry> = emptyList(),
+    val espnActive: String? = null,
+    val espnLogin: EspnLogin? = null,
 ) {
+    /** The active league with the shared cookies; null when no league is set. */
+    public val espnLeague: EspnLeagueConfig?
+        get() = (espnLeagues.firstOrNull { it.leagueId == espnActive } ?: espnLeagues.firstOrNull())
+            ?.let { EspnLeagueConfig(it.leagueId, espnLogin?.espnS2, espnLogin?.swid, it.teamId) }
+
     /** The active profile, falling back to PPR if its id no longer exists. */
     public val active: ScoringProfile
         get() = ScoringPresets.byId(activeProfileId)
@@ -39,7 +48,7 @@ public data class UserPrefs(
     /** Like the generated one, but the key shows only as set or not: prefs must be safe to log. */
     override fun toString(): String =
         "UserPrefs(profiles=$profiles, activeProfileId=$activeProfileId, tray=$tray, resetNotice=$resetNotice, " +
-            "seasons=$seasons, rosters=$rosters, oddsApiKey=${if (oddsApiKey == null) "null" else "…"}, espnLeague=$espnLeague)"
+            "seasons=$seasons, rosters=$rosters, oddsApiKey=${if (oddsApiKey == null) "null" else "…"}, espnLeagues=$espnLeagues, espnActive=$espnActive, espnLogin=$espnLogin)"
 
     public companion object {
         public val DEFAULT: UserPrefs = UserPrefs(emptyList(), ScoringPresets.PPR.id, emptyList())
@@ -54,8 +63,22 @@ public data class UserPrefs(
  */
 public data class SeasonChoice(val seasons: List<Int>, val chosenIn: Int)
 
+/** One ESPN league the user added: its id, the user's team in it (null to find it from the SWID) and ESPN's name for it once synced. */
+public data class EspnLeagueEntry(val leagueId: String, val teamId: Int? = null, val name: String? = null) {
+    init {
+        require(leagueId.isNotBlank() && leagueId.all { it.isDigit() }) { "an ESPN league id is digits" }
+    }
+}
+
+/** The login cookies a private league needs, shared by every league; null reads a public league. Safe to log. */
+public data class EspnLogin(val espnS2: String? = null, val swid: String? = null) {
+    override fun toString(): String =
+        "EspnLogin(espnS2=${if (espnS2 == null) "null" else "…"}, swid=${if (swid == null) "null" else "…"})"
+}
+
 /**
- * Which ESPN fantasy league to import. [espnS2] and [swid] are the login
+ * One ESPN league to import, with the login cookies it needs: the active league as [UserPrefs.espnLeague] resolves it.
+ * [espnS2] and [swid] are the login
  * cookies a private league needs; both null reads a public league. [teamId] is
  * the user's own team, or null to find it from [swid].
  */

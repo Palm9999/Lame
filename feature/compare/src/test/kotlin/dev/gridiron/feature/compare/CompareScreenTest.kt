@@ -185,7 +185,7 @@ class CompareScreenTest {
         show(ready(CompareSlot(id, 2025, season2025), CompareSlot(id, 2003, WeekRange(1, 17))))
         compose.onNodeWithText("No 2003 data").assertExists()
         // The slot with no data is excluded from the bars: one bar per row, no "—, not ranked" one beside it.
-        val rows = compose.onAllNodes(hasContentDescription("percentile", substring = true)).fetchSemanticsNodes()
+        val rows = compose.onAllNodes(hasContentDescription(" of ", substring = true)).fetchSemanticsNodes()
             .map { it.config[SemanticsProperties.ContentDescription].single() }
         assertTrue(rows.isNotEmpty())
         assertFalse(rows.joinToString("\n"), rows.any { it.contains("—, not ranked") })

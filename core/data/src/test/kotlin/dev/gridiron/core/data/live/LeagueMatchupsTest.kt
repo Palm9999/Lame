@@ -45,9 +45,9 @@ class LeagueMatchupsTest {
     private suspend fun repo(body: String): FantasyLeagueRepository {
         val prefs = FakePrefsSource()
         val repo = FantasyLeagueRepository(
-            prefs, { _, _ -> body }, PlayerDirectory(executor), File(dir, "league.json"), executor,
+            prefs, { _, _ -> body }, PlayerDirectory(executor), dir, executor,
         ) { Instant.parse("2026-10-01T00:00:00Z") }
-        repo.setConfig("42", null, null)
+        repo.addLeague("42")
         return repo
     }
 

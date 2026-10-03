@@ -136,4 +136,8 @@ internal class GridRow(private val cells: List<Any?>, private val layout: GridLa
     fun value(column: StatColumn): Double? = (cells[layout.valueIndex(column)] as Number?)?.toDouble()
 
     fun percentile(column: StatColumn): Double? = (cells[layout.percentileIndex(column)] as Number?)?.toDouble()
+
+    fun rank(column: StatColumn): Int? = (cells[layout.rankIndex(column)] as Number?)?.toInt()
+
+    fun rankedCount(column: StatColumn): Int? = (cells[layout.rankedCountIndex(column)] as Number?)?.toInt()
 }

@@ -71,7 +71,8 @@ class PlayerStatsRepositoryTest {
         val targets = s.line.first { it.column == StatColumn.TARGETS }
         assertTrue(targets.total.toInt() > 0)
         assertTrue('.' in targets.perGame, targets.perGame)
-        assertTrue(targets.percentile!! in 0f..1f)
+        val place = targets.place!!
+        assertTrue(place.rank in 1..place.of)
         val share = s.line.first { it.column == StatColumn.TARGET_SHARE }
         assertEquals("", share.perGame)
         assertTrue(share.total.endsWith("%"), share.total)
@@ -126,7 +127,7 @@ class PlayerStatsRepositoryTest {
         assertFalse(s.ranked)
         val targets = s.line.first { it.column == StatColumn.TARGETS }
         assertNotEquals("–", targets.total)
-        assertNull(targets.percentile)
+        assertNull(targets.place)
     }
 
     @Test

@@ -15,6 +15,7 @@ import dev.gridiron.core.model.WeekRange
  * @property excludedPositions Never these positions. Players with no position are kept.
  * @property teams Team abbreviations. Empty means every team.
  * @property playerIds Only these players. Applied after percentiles, like [filters], so it never moves a percentile.
+ * @property excludedPlayerIds Never these players. Applied after percentiles, like [playerIds].
  * @property filters Narrow the view. Applied to values as displayed, so per-game
  *   in [ValueMode.PER_GAME], and after percentiles, so they never move one.
  * @property qualifiers Define who is ranked: percentiles are computed among
@@ -24,6 +25,8 @@ import dev.gridiron.core.model.WeekRange
  *   no percentile. For name search, which should find anyone.
  * @property minGames Population floor, applied before percentiles are computed.
  * @property percentiles Adds a 0..1 positional percentile beside each column, 1 = best.
+ * @property ranks Adds each column's place among the ranked players (1 = best, ties share one) and how many were
+ *   ranked, after its percentile. Needs [percentiles].
  * @property name Free-text player name filter, matched on name and word prefixes.
  * @property scoring The profile fantasy columns are scored with. Required when
  *   any column, sort, filter or qualifier is a fantasy column.
@@ -40,12 +43,14 @@ public data class StatQuerySpec(
     val excludedPositions: Set<Position> = emptySet(),
     val teams: Set<String> = emptySet(),
     val playerIds: Set<String> = emptySet(),
+    val excludedPlayerIds: Set<String> = emptySet(),
     val filters: List<Filter> = emptyList(),
     val qualifiers: List<Filter> = emptyList(),
     val includeUnqualified: Boolean = false,
     val minGames: Int = 1,
     val mode: ValueMode = ValueMode.TOTAL,
     val percentiles: Boolean = false,
+    val ranks: Boolean = false,
     val name: String? = null,
     val limit: Int = DEFAULT_LIMIT,
     val offset: Int = 0,
@@ -60,6 +65,7 @@ public data class StatQuerySpec(
         require(limit in 1..MAX_LIMIT) { "limit $limit outside 1..$MAX_LIMIT" }
         require(offset >= 0) { "offset must not be negative" }
         require(minGames >= 0) { "minGames must not be negative" }
+        require(!ranks || percentiles) { "ranks need percentiles" }
         val usesFantasy = (columns + sort.map { it.column } + filters.map { it.column } + qualifiers.map { it.column })
             .any { it.isFantasy }
         require(!usesFantasy || scoring != null) { "fantasy columns need a scoring profile" }

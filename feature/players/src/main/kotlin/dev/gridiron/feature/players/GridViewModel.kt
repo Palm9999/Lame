@@ -23,6 +23,7 @@ import dev.gridiron.core.data.describeSlot
 import dev.gridiron.core.datastore.GridPreset
 import dev.gridiron.core.datastore.MAX_PRESETS
 import dev.gridiron.core.datastore.PresetWeeks
+import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.datastore.RowDensity
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.Roster
@@ -50,12 +51,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.stateIn
@@ -88,7 +91,7 @@ sealed interface GridEvent {
     /** The sheet's complete rows changed; counts them without touching the Grid. */
     data class FilterDraftChanged(val filters: List<Filter>) : GridEvent
     data object FilterSheetClosed : GridEvent
-    /** Shows only roster [id]'s players; null shows everyone. */
+    /** Shows only roster [id]'s players; null shows everyone; [GridViewModel.FREE_AGENTS_ID] shows everyone on no league team. */
     data class RosterSelected(val id: String?) : GridEvent
 
     /** Opens the presets sheet. */
@@ -149,6 +152,8 @@ sealed interface GridUiState {
         val rosterId: String? = null,
         /** Everyone on any roster, so the table can mark them. */
         val rostered: ImmutableSet<String> = persistentSetOf(),
+        /** The free-agents choice, or null when it isn't offered (no league synced, or not for this season). */
+        val freeAgents: FreeAgentsOption? = null,
         /** False when no presets repository is wired, so the screen hides the chip. */
         val presetsEnabled: Boolean = false,
         val presets: ImmutableList<PresetRow> = persistentListOf(),
@@ -182,6 +187,9 @@ sealed interface GridUiState {
     }
 }
 
+/** The roster chip's "Free agents" row; [asOfMillis] is when the league was last read from ESPN. */
+data class FreeAgentsOption(val asOfMillis: Long)
+
 /** The filter sheet's live "N players match". */
 sealed interface DraftCount {
     data object Counting : DraftCount
@@ -206,6 +214,8 @@ class GridViewModel(
     private val presets: GridPresetRepository? = null,
     /** Row height; null keeps it comfortable and ignores changes. */
     private val display: GridDisplayRepository? = null,
+    /** Who is on a league team (the last ESPN sync); null turns the free-agents choice off. */
+    leagueRostered: Flow<LeagueRostered?> = flowOf(null),
 ) : ViewModel() {
 
     private sealed interface CatalogLoad {
@@ -232,6 +242,9 @@ class GridViewModel(
     private val rosterId = MutableStateFlow<String?>(null)
     /** The chosen roster's players, kept so a request created later starts narrowed too. */
     private val onlyPlayers = MutableStateFlow<Set<String>?>(null)
+    /** The league's rostered players while free agents is chosen, else empty; kept like [onlyPlayers]. */
+    private val excludePlayers = MutableStateFlow<Set<String>>(emptySet())
+    private val league = leagueRostered.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     private val rosterList = rosters.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     private val presetList = (presets?.presets ?: flowOf(persistentListOf<GridPreset>()))
         .stateIn(viewModelScope, SharingStarted.Eagerly, persistentListOf())
@@ -286,12 +299,13 @@ class GridViewModel(
             } else {
                 base
             }
-        }.combine(combine(rosterList, rosterId, ::Pair)) { base, (list, id) ->
+        }.combine(combine(rosterList, rosterId, league, ::Triple)) { base, (list, id, synced) ->
             if (base is GridUiState.Ready) {
                 base.copy(
                     rosters = list.toImmutableList(),
                     rosterId = id,
                     rostered = list.flatMap { it.playerIds }.toImmutableSet(),
+                    freeAgents = synced?.takeIf { it.season == base.request.season.season }?.let { FreeAgentsOption(it.fetchedAtMillis) },
                 )
             } else {
                 base
@@ -359,6 +373,7 @@ class GridViewModel(
                         StatPack.OPPORTUNITY,
                         scoring = scoring.active.first(),
                         onlyPlayers = onlyPlayers.value,
+                        excludePlayers = excludePlayers.value,
                     )
                 }
             }
@@ -401,14 +416,18 @@ class GridViewModel(
                 .collect()
         }
         viewModelScope.launch {
-            combine(rosterList, rosterId) { list, id ->
-                val roster = id?.let { wanted -> list.firstOrNull { it.id == wanted } }
-                // A deleted roster falls back to everyone.
-                if (id != null && roster == null) rosterId.value = null
-                roster?.playerIds?.toSet()
-            }.collect { ids ->
-                onlyPlayers.value = ids
-                request.update { it?.copy(onlyPlayers = ids) }
+            val season = request.map { it?.season?.season }.distinctUntilChanged()
+            combine(rosterList, rosterId, league, season) { list, id, rostered, seasonNow ->
+                val free = id == FREE_AGENTS_ID
+                val roster = id?.takeUnless { free }?.let { wanted -> list.firstOrNull { it.id == wanted } }
+                val offered = rostered?.takeIf { seasonNow == null || it.season == seasonNow }
+                // A deleted roster, or free agents once the league or its season is gone, falls back to everyone.
+                if (id != null && (if (free) offered == null else roster == null)) rosterId.value = null
+                roster?.playerIds?.toSet() to (if (free) offered?.playerIds.orEmpty() else emptySet())
+            }.collect { (only, except) ->
+                onlyPlayers.value = only
+                excludePlayers.value = except
+                request.update { it?.copy(onlyPlayers = only, excludePlayers = except) }
             }
         }
         viewModelScope.launch {
@@ -626,6 +645,9 @@ class GridViewModel(
     }
 
     companion object {
+        /** The roster chip's choice for everyone on no team in the synced league; no real roster has this id. */
+        const val FREE_AGENTS_ID = "free-agents"
+
         /** Pure state transition, so it can be tested without coroutines. */
         internal fun reduce(r: GridRequest, event: GridEvent, catalog: Catalog): GridRequest = when (event) {
             is GridEvent.SeasonSelected -> {
@@ -703,9 +725,12 @@ class GridViewModel(
             rosters: Flow<List<Roster>> = flowOf(emptyList()),
             presets: GridPresetRepository? = null,
             display: GridDisplayRepository? = null,
+            leagueRostered: Flow<LeagueRostered?> = flowOf(null),
         ): ViewModelProvider.Factory =
             viewModelFactory {
-                initializer { GridViewModel(repository, scoring, tray, badges = badges, rosters = rosters, presets = presets, display = display) }
+                initializer {
+                    GridViewModel(repository, scoring, tray, badges = badges, rosters = rosters, presets = presets, display = display, leagueRostered = leagueRostered)
+                }
             }
     }
 }

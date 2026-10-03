@@ -14,6 +14,7 @@ import dev.gridiron.core.statquery.ValueMode
 import kotlinx.collections.immutable.toImmutableList
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** Everything the Compare screen shows, built from one Grid query per group of like slots. */
 public class CompareRepository(
@@ -27,6 +28,7 @@ public class CompareRepository(
         val games: Long = 0,
         val values: Map<StatColumn, Double?> = emptyMap(),
         val percentiles: Map<StatColumn, Float?> = emptyMap(),
+        val places: Map<StatColumn, Place?> = emptyMap(),
     )
 
     public suspend fun compare(request: CompareRequest, catalog: Catalog): ComparePage {
@@ -61,6 +63,9 @@ public class CompareRepository(
                 group,
                 request.slots.indices.map { i ->
                     rows.mapNotNull { it.cells[i].percentile }.takeIf { it.isNotEmpty() }?.average()?.toFloat()
+                }.toImmutableList(),
+                request.slots.indices.map { i ->
+                    rows.mapNotNull { it.cells[i].place?.rank }.takeIf { it.isNotEmpty() }?.average()?.roundToInt()
                 }.toImmutableList(),
                 rows.toImmutableList(),
             )
@@ -109,6 +114,7 @@ public class CompareRepository(
             minGames = threshold?.minGames ?: 1,
             mode = if (request.perGame) ValueMode.PER_GAME else ValueMode.TOTAL,
             percentiles = true,
+            ranks = true,
             playerIds = ids,
             limit = ids.size,
             scoring = request.scoring,
@@ -121,6 +127,11 @@ public class CompareRepository(
                 games = r.long(GridLayout.GAMES),
                 values = columns.associateWith { column -> r.doubleOrNull(layout.valueIndex(column)) },
                 percentiles = columns.associateWith { column -> r.doubleOrNull(layout.percentileIndex(column))?.toFloat() },
+                places = columns.associateWith { column ->
+                    val rank = r.doubleOrNull(layout.rankIndex(column))?.toInt()
+                    val of = r.doubleOrNull(layout.rankedCountIndex(column))?.toInt()
+                    if (rank != null && of != null) Place(rank, of) else null
+                },
             )
         }.toMap()
     }
@@ -189,7 +200,7 @@ public class CompareRepository(
                 CompareCellUi(NOT_APPLICABLE, null, null)
             } else {
                 val value = f.values[column]
-                CompareCellUi(format.format(column, value, request.perGame), value, f.percentiles[column])
+                CompareCellUi(format.format(column, value, request.perGame), value, f.percentiles[column], f.places[column])
             }
         }
         val percentiles = cells.mapNotNull { it.percentile }

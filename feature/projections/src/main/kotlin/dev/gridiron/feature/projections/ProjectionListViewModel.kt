@@ -63,8 +63,12 @@ private val OUT = setOf("O", "IR")
 /** The rows a tab shows, best first. In [week] mode an Out or IR player scores zero; rest of season keeps his projection. */
 public fun visibleRows(rows: List<ProjectionRow>, tab: PositionTab, badges: Map<String, String>, week: Boolean): List<ProjectionRow> =
     rows.filter { it.position in tab.codes }
-        .map { row -> if (week && badges[row.playerId] in OUT) row.copy(points = 0.0, floor = 0.0, ceiling = 0.0, out = true) else row }
+        .map { row -> if (week) outAdjusted(row, badges) else row }
         .sortedByDescending { it.points }
+
+/** [row] scored as zero this week when ESPN lists him Out or on IR. */
+internal fun outAdjusted(row: ProjectionRow, badges: Map<String, String>): ProjectionRow =
+    if (badges[row.playerId] in OUT) row.copy(points = 0.0, floor = 0.0, ceiling = 0.0, out = true) else row
 
 private val BUILT = DateTimeFormatter.ofPattern("EEE h:mm a", Locale.US)
 

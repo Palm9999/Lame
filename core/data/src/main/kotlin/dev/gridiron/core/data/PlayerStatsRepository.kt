@@ -31,8 +31,8 @@ public class PlayerStatsRepository(
 
     private class Names(val name: String, val abbr: String)
 
-    /** One Grid row for the player: his games, each column's value, and each column's percentile if ranked. */
-    private class Values(val games: Int, val values: Map<StatColumn, Double?>, val percentiles: Map<StatColumn, Float?>)
+    /** One Grid row for the player: his games, each column's value, and each column's place (1st = best) if ranked. */
+    private class Values(val games: Int, val values: Map<StatColumn, Double?>, val ranked: Boolean, val places: Map<StatColumn, Place?>)
 
     /**
      * [playerId]'s stats for [season], or for his latest season when [season] is
@@ -66,7 +66,7 @@ public class PlayerStatsRepository(
                 } else {
                     ""
                 },
-                percentile = perGame?.percentiles?.get(column),
+                place = perGame?.places?.get(column),
             )
         }
 
@@ -92,7 +92,7 @@ public class PlayerStatsRepository(
             seasons = seasons.toImmutableList(),
             games = (perGame ?: total)?.games ?: 0,
             bar = SampleThreshold.forSample(qualifier, playedWeeks, perGame = true)?.description,
-            ranked = perGame?.percentiles?.get(qualifier) != null,
+            ranked = perGame?.places?.get(qualifier) != null,
             line = line.toImmutableList(),
             logHeaders = logColumns.map { names[it.metricId]?.abbr ?: it.metricId }.toImmutableList(),
             log = log.toImmutableList(),
@@ -126,6 +126,7 @@ public class PlayerStatsRepository(
             minGames = if (ranked) threshold?.minGames ?: 1 else 1,
             mode = if (perGame) ValueMode.PER_GAME else ValueMode.TOTAL,
             percentiles = ranked && perGame,
+            ranks = ranked && perGame,
             playerIds = setOf(playerId),
             limit = 1,
             scoring = scoring,
@@ -162,8 +163,13 @@ public class PlayerStatsRepository(
             Values(
                 games = r.long(GridLayout.GAMES).toInt(),
                 values = columns.associateWith { r.doubleOrNull(layout.valueIndex(it)) },
-                percentiles = if (spec.percentiles) {
-                    columns.associateWith { r.doubleOrNull(layout.percentileIndex(it))?.toFloat() }
+                ranked = spec.ranks,
+                places = if (spec.ranks) {
+                    columns.associateWith {
+                        val rank = r.doubleOrNull(layout.rankIndex(it))?.toInt()
+                        val of = r.doubleOrNull(layout.rankedCountIndex(it))?.toInt()
+                        if (rank != null && of != null) Place(rank, of) else null
+                    }
                 } else {
                     emptyMap()
                 },
