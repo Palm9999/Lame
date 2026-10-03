@@ -177,15 +177,21 @@ class FantasyLeagueTest {
         },
     )
 
+    /** Adds a league and sets the shared login: what the screen's "Save and sync" does. */
+    private suspend fun FantasyLeagueRepository.configure(id: String, s2: String?, swid: String?) {
+        setLogin(s2, swid)
+        addLeague(id)
+    }
+
     private fun repo(prefs: FakePrefsSource, http: HeaderHttpGet) =
-        FantasyLeagueRepository(prefs, http, players, File(dir, "league.json")) { Instant.parse("2026-10-01T00:00:00Z") }
+        FantasyLeagueRepository(prefs, http, players, dir) { Instant.parse("2026-10-01T00:00:00Z") }
 
     @Test
     fun `sync sends the cookies, saves the league and the user's team as a roster`() = runTest {
         val prefs = FakePrefsSource()
         var seen: Pair<String, Map<String, String>>? = null
         val repo = repo(prefs) { url, headers -> seen = url to headers; body }
-        repo.setConfig(" 42 ", "S2VALUE", "{ME}")
+        repo.configure(" 42 ", "S2VALUE", "{ME}")
         val result = repo.sync(2026)
         assertTrue(result.ok, result.message)
         val (url, sent) = checkNotNull(seen)
@@ -216,7 +222,7 @@ class FantasyLeagueTest {
         val prefs = FakePrefsSource()
         val repo = repo(prefs) { _, _ -> body }
         assertNull(repo.rostered.first())
-        repo.setConfig("42", null, "{ME}")
+        repo.configure("42", null, "{ME}")
         assertTrue(repo.sync(2026).ok)
         // Only the D/ST has an app id here: the xref is empty.
         assertEquals(
@@ -231,7 +237,7 @@ class FantasyLeagueTest {
         val prefs = FakePrefsSource()
         val repo = repo(prefs) { _, _ -> body }
         assertNull(repo.myTeam.first())
-        repo.setConfig("42", null, null)
+        repo.configure("42", null, null)
         assertTrue(repo.sync(2026).ok)
         // No team chosen yet (no SWID to find it by).
         assertNull(repo.myTeam.first())
@@ -245,7 +251,7 @@ class FantasyLeagueTest {
         assertTrue(mine.slotsAreDefault)
         assertEquals(mine, repo(prefs) { _, _ -> error("offline") }.myTeam.first())
 
-        repo.setConfig("43", null, null)
+        repo.configure("43", null, null)
         assertNull(repo.myTeam.first())
     }
 
@@ -254,7 +260,7 @@ class FantasyLeagueTest {
         val prefs = FakePrefsSource()
         var seen: Pair<String, Map<String, String>>? = null
         val repo = repo(prefs) { url, headers -> seen = url to headers; matchupBody }
-        repo.setConfig("42", "S2VALUE", "{ME}")
+        repo.configure("42", "S2VALUE", "{ME}")
         val result = repo.matchups(2026, 4, ScoringPresets.PPR)
         assertNull(result.error)
         val (url, sent) = checkNotNull(seen)
@@ -274,7 +280,7 @@ class FantasyLeagueTest {
         val prefs = FakePrefsSource()
         var seen: Pair<String, Map<String, String>>? = null
         val repo = repo(prefs) { url, headers -> if ("view=mMatchup" in url) { seen = url to headers; matchupBody } else body }
-        repo.setConfig("42", "S2VALUE", "{ME}")
+        repo.configure("42", "S2VALUE", "{ME}")
         assertTrue(repo.sync(2026).ok)
         repo.chooseTeam(2)
 
@@ -297,7 +303,7 @@ class FantasyLeagueTest {
         val prefs = FakePrefsSource()
         val repo = repo(prefs) { url, _ -> if ("view=mMatchup" in url) matchupBody else body }
         assertEquals("no league id set", repo.opponent(2026, 4).message)
-        repo.setConfig("42", null, null)
+        repo.configure("42", null, null)
         assertEquals("sync your league first", repo.opponent(2026, 4).message)
         assertTrue(repo.sync(2026).ok)
         assertEquals("choose your team first", repo.opponent(2026, 4).message)
@@ -314,7 +320,7 @@ class FantasyLeagueTest {
     fun `an opponent fetch that fails says why`() = runTest {
         val prefs = FakePrefsSource()
         val ok = repo(prefs) { _, _ -> body }
-        ok.setConfig("42", null, null)
+        ok.configure("42", null, null)
         assertTrue(ok.sync(2026).ok)
         ok.chooseTeam(2)
 
@@ -330,7 +336,7 @@ class FantasyLeagueTest {
         var fail: Exception? = null
         val repo = repo(prefs) { _, _ -> fail?.let { throw it } ?: matchupBody }
         assertEquals("no league id set", repo.matchups(2026, 4, ScoringPresets.PPR).error)
-        repo.setConfig("42", null, null)
+        repo.configure("42", null, null)
         fail = IOException("HTTP 401 from lm-api-reads.fantasy.espn.com")
         assertTrue(repo.matchups(2026, 4, ScoringPresets.PPR).error!!.contains("private"))
         fail = LiveFormatException("ESPN changed its matchup format")
@@ -344,7 +350,7 @@ class FantasyLeagueTest {
         val prefs = FakePrefsSource()
         var headers: Map<String, String>? = null
         val repo = repo(prefs) { _, h -> headers = h; body }
-        repo.setConfig("42", null, null)
+        repo.configure("42", null, null)
         assertTrue(repo.sync(2026).ok)
         assertTrue(headers!!.isEmpty())
         assertTrue(prefs.prefs.first().rosters.isEmpty())
@@ -360,7 +366,7 @@ class FantasyLeagueTest {
         var fail: Exception? = null
         val repo = repo(prefs) { _, _ -> fail?.let { throw it } ?: body }
         assertFalse(repo.sync(2026).ok)
-        repo.setConfig("42", null, null)
+        repo.configure("42", null, null)
         assertTrue(repo.sync(2026).ok)
         fail = IOException("HTTP 401 from lm-api-reads.fantasy.espn.com")
         assertTrue(repo.sync(2026).message.contains("private"))
@@ -370,20 +376,80 @@ class FantasyLeagueTest {
     }
 
     @Test
-    fun `switching leagues drops the old league and its roster`() = runTest {
+    fun `leagues keep their own snapshots, teams and rosters, and every screen follows the active one`() = runTest {
+        val prefs = FakePrefsSource()
+        val repo = repo(prefs) { url, _ -> if ("/leagues/43" in url) body.replace("Mine", "Other") else body }
+        repo.configure("42", null, "{ME}")
+        assertTrue(repo.sync(2026).ok)
+        repo.configure("43", null, "{ME}")
+        assertNull(repo.league.value, "a league not yet synced has no snapshot")
+        assertTrue(repo.sync(2026).ok)
+        assertEquals("43", repo.league.value!!.leagueId)
+        assertEquals(listOf("espn-42", "espn-43"), prefs.prefs.first().rosters.map { it.id })
+        assertEquals(listOf("Mine", "Other"), prefs.prefs.first().rosters.map { it.name })
+
+        repo.setActive("42")
+        assertEquals("42", repo.league.value!!.leagueId)
+        assertEquals("Mine", repo.myTeam.first()!!.teamName)
+        assertEquals("42", prefs.prefs.first().espnLeague!!.leagueId)
+        assertEquals(listOf(true, false), repo.leagues.first().map { it.active })
+        assertEquals(listOf("Sunday League", "Sunday League"), repo.leagues.first().map { it.name })
+        // A fresh repository reads the active league's own file.
+        assertEquals("42", repo(prefs) { _, _ -> error("offline") }.also { it.load() }.league.value!!.leagueId)
+        // An id that was never added changes nothing.
+        repo.setActive("99")
+        assertEquals("42", repo.league.value!!.leagueId)
+    }
+
+    @Test
+    fun `removing a league drops its snapshot and roster, and the first left becomes active`() = runTest {
         val prefs = FakePrefsSource()
         val repo = repo(prefs) { _, _ -> body }
-        repo.setConfig("42", null, "{ME}")
+        repo.configure("42", null, "{ME}")
         repo.sync(2026)
-        repo.setConfig("43", null, "{ME}")
+        repo.configure("43", null, "{ME}")
+        repo.sync(2026)
+        repo.removeLeague("43")
+        assertEquals("42", repo.league.value!!.leagueId)
+        assertEquals(listOf("espn-42"), prefs.prefs.first().rosters.map { it.id })
+        assertFalse(File(dir, "league-43.json").exists())
+        repo.removeLeague("42")
         assertNull(repo.league.value)
-        assertTrue(prefs.prefs.first().rosters.isEmpty())
-        repo.setConfig("", null, null)
         assertNull(prefs.prefs.first().espnLeague)
+        assertTrue(prefs.prefs.first().rosters.isEmpty())
+    }
+
+    @Test
+    fun `the chosen team is per league, and the login is shared`() = runTest {
+        val prefs = FakePrefsSource()
+        val seen = mutableListOf<String?>()
+        val repo = repo(prefs) { _, headers -> seen += headers["Cookie"]; body }
+        repo.configure("42", "S2VALUE", "{ME}")
+        repo.sync(2026)
+        repo.chooseTeam(1)
+        repo.addLeague("43")
+        repo.sync(2026)
+        assertEquals(listOf("espn_s2=S2VALUE; SWID={ME}", "espn_s2=S2VALUE; SWID={ME}"), seen)
+        // League 43 found its team from the SWID; league 42 keeps the one chosen by hand.
+        assertEquals(listOf(1, 2), prefs.prefs.first().espnLeagues.map { it.teamId })
+    }
+
+    @Test
+    fun `a single league file from before several leagues becomes that league's file`() = runTest {
+        val prefs = FakePrefsSource()
+        val first = repo(prefs) { _, _ -> body }
+        first.configure("42", null, "{ME}")
+        first.sync(2026)
+        File(dir, "league-42.json").renameTo(File(dir, "league.json"))
+        val again = repo(prefs) { _, _ -> error("offline") }
+        again.load()
+        assertEquals("42", again.league.value!!.leagueId)
+        assertTrue(File(dir, "league-42.json").isFile)
+        assertFalse(File(dir, "league.json").exists())
     }
 
     @Test
     fun `a league id must be digits`() = runTest {
-        assertThrows<IllegalArgumentException> { repo(FakePrefsSource()) { _, _ -> body }.setConfig("abc", null, null) }
+        assertThrows<IllegalArgumentException> { repo(FakePrefsSource()) { _, _ -> body }.addLeague("abc") }
     }
 }

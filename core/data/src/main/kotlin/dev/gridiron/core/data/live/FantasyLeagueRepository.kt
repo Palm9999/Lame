@@ -4,6 +4,8 @@ import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.weekPoints
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.datastore.EspnLeagueConfig
+import dev.gridiron.core.datastore.EspnLeagueEntry
+import dev.gridiron.core.datastore.EspnLogin
 import dev.gridiron.core.datastore.PrefsSource
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringProfile
@@ -41,13 +43,17 @@ public data class LeagueSync(val error: String?, val rosterUpdated: Boolean = fa
 }
 
 /** A week's league matchups as last read; [error] null means they landed. */
+/** One league in the switcher. */
+public data class LeagueChoice(val leagueId: String, val name: String, val active: Boolean)
+
 public data class MatchupsResult(val matchups: List<LeagueMatchup>, val fetchedAtMillis: Long, val error: String?)
 
 /**
- * An ESPN fantasy league: standings and every team's roster, read from ESPN's
- * fantasy API and kept in [file] so it shows offline. The user's own team also
- * becomes a [Roster] (id `espn-<league>`), replaced on each sync, so the Grid's
- * roster chip and stars work on it unchanged.
+ * The user's ESPN fantasy leagues: standings and every team's roster, read from ESPN's
+ * fantasy API and kept in `league-<id>.json` under [dir] so each shows offline. One league
+ * is *active* and every screen follows it; each league's user team also becomes a [Roster]
+ * (id `espn-<league>`), replaced on each sync, so the Grid's roster chip and stars work
+ * on it unchanged. All leagues share one login (the cookies).
  *
  * Nothing here throws to a screen: a sync reports why it failed, and a failed
  * sync keeps the last league.
@@ -56,7 +62,7 @@ public class FantasyLeagueRepository(
     private val prefs: PrefsSource,
     private val http: HeaderHttpGet,
     private val players: PlayerDirectory,
-    private val file: File,
+    private val dir: File,
     /** `stats.db`, for the app's points in [matchups]; without it they stay null. */
     private val stats: QueryExecutor? = null,
     private val clock: () -> Instant = Instant::now,
@@ -65,10 +71,20 @@ public class FantasyLeagueRepository(
     private val _league = MutableStateFlow<FantasyLeague?>(null)
     private var loaded = false
 
-    /** The last synced league; null before the first sync. */
+    /** The active league's last sync; null before the first sync. */
     public val league: StateFlow<FantasyLeague?> = _league.asStateFlow()
 
+    /** The active league with the shared login. */
     public val config: Flow<EspnLeagueConfig?> = prefs.prefs.map { it.espnLeague }.distinctUntilChanged()
+
+    /** Every league the user added, the active one marked. */
+    public val leagues: Flow<List<LeagueChoice>> = prefs.prefs.map { p ->
+        val active = p.espnLeague?.leagueId
+        p.espnLeagues.map { LeagueChoice(it.leagueId, it.name ?: "League ${it.leagueId}", it.leagueId == active) }
+    }.distinctUntilChanged()
+
+    /** The shared login; null when none is set. */
+    public val login: Flow<EspnLogin?> = prefs.prefs.map { it.espnLogin }.distinctUntilChanged()
 
     /** The user's chosen team with the league's starting slots; null with no league, no team chosen or another league's. */
     public val myTeam: Flow<MyTeam?> = flow {
@@ -82,42 +98,89 @@ public class FantasyLeagueRepository(
         emitAll(league.map { it?.rostered() })
     }.distinctUntilChanged()
 
-    /** Reads the saved league from disk, once. */
+    /** Reads the active league's saved snapshot from disk, once. */
     public suspend fun load() {
         if (loaded) return
         loaded = true
         withContext(Dispatchers.IO) {
-            if (_league.value == null && file.isFile) _league.value = fantasyLeagueFromJson(file.readText())
+            val active = prefs.prefs.first().espnLeague?.leagueId
+            migrateLegacyFile(active)
+            if (_league.value == null && active != null) _league.value = read(active)
         }
     }
 
-    /** Saves the league to import; a different league drops the old one. Cookies are trimmed, blank means none. */
-    public suspend fun setConfig(leagueId: String, espnS2: String?, swid: String?) {
-        val id = leagueId.trim()
-        val next = if (id.isEmpty()) null else EspnLeagueConfig(id, espnS2?.trim()?.ifEmpty { null }, swid?.trim()?.ifEmpty { null })
+    /** Adds a league (or finds it again) and makes it active. A blank or non-digit id throws [IllegalArgumentException]. */
+    public suspend fun addLeague(leagueId: String) {
+        val entry = EspnLeagueEntry(leagueId.trim())
         prefs.update { p ->
-            val old = p.espnLeague
             p.copy(
-                espnLeague = next?.copy(teamId = if (old?.leagueId == next.leagueId) old.teamId else null),
-                rosters = if (old != null && old.leagueId != next?.leagueId) p.rosters.filterNot { it.id == rosterId(old.leagueId) } else p.rosters,
+                espnLeagues = if (p.espnLeagues.any { it.leagueId == entry.leagueId }) p.espnLeagues else p.espnLeagues + entry,
+                espnActive = entry.leagueId,
             )
         }
-        if (next == null || _league.value?.leagueId != next.leagueId) {
-            _league.value = null
-            withContext(Dispatchers.IO) { file.delete() }
-        }
+        switchTo(entry.leagueId)
     }
 
-    /** Marks [teamId] as the user's own and saves its roster. */
+    /** Makes a league the active one; an id that isn't added does nothing. */
+    public suspend fun setActive(leagueId: String) {
+        if (prefs.prefs.first().espnLeagues.none { it.leagueId == leagueId }) return
+        prefs.update { it.copy(espnActive = leagueId) }
+        switchTo(leagueId)
+    }
+
+    /** Drops a league: its saved snapshot and its roster go too, and the first remaining league becomes active. */
+    public suspend fun removeLeague(leagueId: String) {
+        prefs.update { p ->
+            val left = p.espnLeagues.filterNot { it.leagueId == leagueId }
+            p.copy(
+                espnLeagues = left,
+                espnActive = if (p.espnLeague?.leagueId == leagueId) left.firstOrNull()?.leagueId else p.espnActive,
+                rosters = p.rosters.filterNot { it.id == rosterId(leagueId) },
+            )
+        }
+        withContext(Dispatchers.IO) { fileOf(leagueId).delete() }
+        switchTo(prefs.prefs.first().espnLeague?.leagueId)
+    }
+
+    /** Saves the login every league shares; blank means none. */
+    public suspend fun setLogin(espnS2: String?, swid: String?) {
+        val s2 = espnS2?.trim()?.ifEmpty { null }
+        val id = swid?.trim()?.ifEmpty { null }
+        prefs.update { it.copy(espnLogin = if (s2 == null && id == null) null else EspnLogin(s2, id)) }
+    }
+
+    /** Marks [teamId] as the user's own in the active league and saves its roster. */
     public suspend fun chooseTeam(teamId: Int) {
-        prefs.update { p -> p.copy(espnLeague = p.espnLeague?.copy(teamId = teamId)) }
+        prefs.update { p ->
+            val active = p.espnLeague?.leagueId
+            p.copy(espnLeagues = p.espnLeagues.map { if (it.leagueId == active) it.copy(teamId = teamId) else it })
+        }
         _league.value?.let { saveRoster(it) }
+    }
+
+    private suspend fun switchTo(leagueId: String?) {
+        loaded = true
+        _league.value = if (leagueId == null) null else withContext(Dispatchers.IO) { read(leagueId) }
+    }
+
+    private fun fileOf(leagueId: String) = File(dir, "league-$leagueId.json")
+
+    private fun read(leagueId: String): FantasyLeague? =
+        fileOf(leagueId).takeIf { it.isFile }?.let { fantasyLeagueFromJson(it.readText()) }?.takeIf { it.leagueId == leagueId }
+
+    /** Before several leagues, one `league.json` held the league; it becomes that league's own file. */
+    private fun migrateLegacyFile(active: String?) {
+        val legacy = File(dir, "league.json")
+        if (!legacy.isFile) return
+        val id = fantasyLeagueFromJson(legacy.readText())?.leagueId ?: active
+        if (id != null && !fileOf(id).exists()) legacy.renameTo(fileOf(id)) else legacy.delete()
     }
 
     /** Reads the league for [season] from ESPN now. */
     public suspend fun sync(season: Int): LeagueSync = syncing.withLock {
         val cfg = prefs.prefs.first().espnLeague
             ?: return@withLock LeagueSync("no league id set")
+        load()
         try {
             val body = http.get(EspnFantasyParser.url(cfg.leagueId, season), headers(cfg))
             val parsed = EspnFantasyParser.parse(body, cfg.leagueId, clock().toEpochMilli())
@@ -129,8 +192,9 @@ public class FantasyLeagueRepository(
                     )
                 },
             )
-            withContext(Dispatchers.IO) { file.writeText(league.toJson()) }
-            _league.value = league
+            withContext(Dispatchers.IO) { fileOf(league.leagueId).writeText(league.toJson()) }
+            prefs.update { p -> p.copy(espnLeagues = p.espnLeagues.map { if (it.leagueId == league.leagueId) it.copy(name = league.name) else it }) }
+            if (prefs.prefs.first().espnLeague?.leagueId == league.leagueId) _league.value = league
             saveRoster(league)
         } catch (e: CancellationException) {
             throw e
@@ -212,9 +276,10 @@ public class FantasyLeagueRepository(
     }
 
     private suspend fun saveRoster(league: FantasyLeague): LeagueSync {
-        val cfg = prefs.prefs.first().espnLeague ?: return LeagueSync(null)
-        val team = league.teams.firstOrNull { it.id == cfg.teamId }
-            ?: cfg.swid?.let { swid -> league.teams.firstOrNull { t -> t.ownerIds.any { it.equals(swid, ignoreCase = true) } } }
+        val now = prefs.prefs.first()
+        val entry = now.espnLeagues.firstOrNull { it.leagueId == league.leagueId } ?: return LeagueSync(null)
+        val team = league.teams.firstOrNull { it.id == entry.teamId }
+            ?: now.espnLogin?.swid?.let { swid -> league.teams.firstOrNull { t -> t.ownerIds.any { it.equals(swid, ignoreCase = true) } } }
             ?: return LeagueSync(null)
         val mapped = team.players.mapNotNull { it.playerId }.distinct()
         val id = rosterId(league.leagueId)
@@ -223,7 +288,7 @@ public class FantasyLeagueRepository(
             val existing = p.rosters.any { it.id == id }
             p.copy(
                 rosters = if (existing) p.rosters.map { if (it.id == id) roster else it } else p.rosters + roster,
-                espnLeague = p.espnLeague?.copy(teamId = team.id),
+                espnLeagues = p.espnLeagues.map { if (it.leagueId == league.leagueId) it.copy(teamId = team.id) else it },
             )
         }
         return LeagueSync(null, rosterUpdated = true, unmatched = team.players.size - mapped.size)

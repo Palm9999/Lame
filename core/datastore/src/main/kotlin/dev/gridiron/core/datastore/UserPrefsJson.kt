@@ -41,8 +41,16 @@ internal data class UserPrefsDto(
     /** Raw, so one malformed entry (a missing field, a wrong type) costs only itself, never the whole file. */
     val gridPresets: List<JsonElement> = emptyList(),
     val gridDensity: String? = null,
+    /** Version 3's single league: read once into [espnLeagues] and never written again. */
     val espnLeague: EspnLeagueDto? = null,
+    val espnLeagues: List<EspnLeagueEntryDto> = emptyList(),
+    val espnActive: String? = null,
+    val espnS2: String? = null,
+    val swid: String? = null,
 )
+
+@Serializable
+internal data class EspnLeagueEntryDto(val leagueId: String, val teamId: Int? = null, val name: String? = null)
 
 @Serializable
 internal data class EspnLeagueDto(
@@ -100,8 +108,9 @@ internal data class PresetWeeksDto(val kind: String = "WHOLE_SEASON", val n: Int
 /**
  * 2: profiles carry points-allowed tiers, and version-1 profiles gain the kicking and team-defense defaults once.
  * 3: profiles carry yards-allowed tiers, and older profiles gain ESPN's once.
+ * 4: several ESPN leagues share one login; a version-3 single league becomes the only one, active.
  */
-internal const val FORMAT_VERSION = 3
+internal const val FORMAT_VERSION = 4
 
 private val json = Json {
     ignoreUnknownKeys = true
@@ -155,6 +164,13 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
         .distinctBy { it.id }
         .distinctBy { it.name.lowercase() }
         .take(MAX_PRESETS)
+    // Version 3 stored one league with its own cookies; it becomes the only league, active, and its cookies the shared login.
+    val old = espnLeague?.let { orNull { EspnLeagueEntry(it.leagueId.trim(), it.teamId) } }
+    val leagues = (espnLeagues.mapNotNull { orNull { EspnLeagueEntry(it.leagueId.trim(), it.teamId, it.name?.takeIf { n -> n.isNotBlank() }) } } +
+        listOfNotNull(old.takeIf { espnLeagues.isEmpty() })).distinctBy { it.leagueId }
+    val s2 = (espnS2 ?: espnLeague?.espnS2)?.takeIf { it.isNotBlank() }
+    val id = (swid ?: espnLeague?.swid)?.takeIf { it.isNotBlank() }
+    val login = if (s2 == null && id == null) null else EspnLogin(s2, id)
     return UserPrefs(
         profiles,
         activeProfileId ?: UserPrefs.DEFAULT.activeProfileId,
@@ -165,18 +181,9 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
         oddsApiKey = oddsApiKey?.takeIf { it.isNotBlank() },
         gridPresets = presets,
         gridDensity = RowDensity.entries.firstOrNull { it.name == gridDensity } ?: RowDensity.COMFORTABLE,
-        espnLeague = espnLeague?.let {
-            try {
-                EspnLeagueConfig(
-                    it.leagueId.trim(),
-                    it.espnS2?.takeIf { c -> c.isNotBlank() },
-                    it.swid?.takeIf { c -> c.isNotBlank() },
-                    it.teamId,
-                )
-            } catch (_: IllegalArgumentException) {
-                null
-            }
-        },
+        espnLeagues = leagues,
+        espnActive = espnActive?.takeIf { id -> leagues.any { it.leagueId == id } } ?: leagues.firstOrNull()?.leagueId,
+        espnLogin = login,
     )
 }
 
@@ -249,7 +256,10 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     oddsApiKey = oddsApiKey,
     gridPresets = gridPresets.map { json.encodeToJsonElement(PresetDto.serializer(), it.toDto()) },
     gridDensity = gridDensity.name,
-    espnLeague = espnLeague?.let { EspnLeagueDto(it.leagueId, it.espnS2, it.swid, it.teamId) },
+    espnLeagues = espnLeagues.map { EspnLeagueEntryDto(it.leagueId, it.teamId, it.name) },
+    espnActive = espnLeague?.leagueId,
+    espnS2 = espnLogin?.espnS2,
+    swid = espnLogin?.swid,
 )
 
 internal object UserPrefsSerializer : Serializer<UserPrefs> {

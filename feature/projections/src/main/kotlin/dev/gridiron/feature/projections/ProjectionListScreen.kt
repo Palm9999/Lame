@@ -41,6 +41,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.OpportunitiesResult
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.live.LeagueChoice
 import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.OpponentResult
@@ -69,6 +70,9 @@ public fun ProjectionListRoute(
     opponent: suspend (season: Int, week: Int) -> OpponentResult = { _, _ -> OpponentResult(null, "not available") },
     /** Everyone on a league team, so the rest can be offered as pickups; null hides the pickups. */
     leagueRostered: Flow<LeagueRostered?> = flowOf(null),
+    /** The ESPN leagues the user added; two or more show a switcher, and [onLeague] makes one active. */
+    leagues: Flow<List<LeagueChoice>> = flowOf(emptyList()),
+    setLeague: suspend (String) -> Unit = {},
     /** Who moves up because a starter is hurt this week; asked when My lineup opens, to mark the pickups. */
     opportunities: suspend (season: Int, profile: ScoringProfile) -> OpportunitiesResult = { _, _ -> OpportunitiesResult(emptyList(), 0, null) },
 ) {
@@ -80,6 +84,7 @@ public fun ProjectionListRoute(
     LaunchedEffect(season, profile, version) { profile?.let { vm.load(season, it) } }
     val team by myTeam.collectAsStateWithLifecycle(initialValue = null)
     val taken by leagueRostered.collectAsStateWithLifecycle(initialValue = null)
+    val choices by leagues.collectAsStateWithLifecycle(initialValue = emptyList())
     var rival by remember { mutableStateOf<OpponentState>(OpponentState.Idle) }
     var movingUp by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val scope = rememberCoroutineScope()
@@ -87,6 +92,8 @@ public fun ProjectionListRoute(
         state, injuries, onPlayer, onBack, team?.takeIf { it.season == season }, rival,
         rostered = taken?.takeIf { it.season == season }?.playerIds,
         starterOut = movingUp,
+        leagues = choices,
+        onLeague = { id -> scope.launch { setLeague(id) } },
         onLineupOpened = {
             profile?.let { p ->
                 scope.launch {
@@ -128,11 +135,14 @@ public fun ProjectionListScreen(
     rostered: Set<String>? = null,
     /** Pickups moving up because a starter is hurt, by player id: "RB1 Name is Doubtful". */
     starterOut: Map<String, String> = emptyMap(),
+    /** The user's ESPN leagues: with two or more, a chip each switches the league My lineup follows. */
+    leagues: List<LeagueChoice> = emptyList(),
+    onLeague: (String) -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
     val mode = if (chosen == ListMode.LINEUP && myTeam == null) ListMode.WEEK else chosen
-    LaunchedEffect(mode) { if (mode == ListMode.LINEUP) onLineupOpened() }
+    LaunchedEffect(mode, myTeam?.teamName) { if (mode == ListMode.LINEUP) onLineupOpened() }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -151,6 +161,13 @@ public fun ProjectionListScreen(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                    if (leagues.size > 1) {
+                        Row(Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (l in leagues) {
+                                FilterChip(selected = l.active, onClick = { onLeague(l.leagueId) }, label = { Text(l.name) }, modifier = Modifier.testTag("league:${l.leagueId}"))
+                            }
+                        }
+                    }
                     Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(selected = mode == ListMode.WEEK, onClick = { chosen = ListMode.WEEK }, label = { Text("Week ${state.week}") })
                         FilterChip(selected = mode == ListMode.ROS, onClick = { chosen = ListMode.ROS }, label = { Text("Rest of season") })

@@ -159,12 +159,33 @@ class UserPrefsStoreTest {
     }
 
     @Test
-    fun `the ESPN league survives a restart, never prints its cookies, and a bad id reads as none`() {
-        val league = EspnLeagueConfig("42", "s2secret", "{SWID-secret}", 3)
-        withStore { it.update { p -> p.copy(espnLeague = league) } }
-        assertEquals(league, withStore { it.prefs.first().espnLeague })
-        assertFalse("s2secret" in UserPrefs.DEFAULT.copy(espnLeague = league).toString())
-        assertFalse("SWID-secret" in league.toString())
+    fun `ESPN leagues and their shared login survive a restart, and the login never prints`() {
+        val prefs = UserPrefs.DEFAULT.copy(
+            espnLeagues = listOf(EspnLeagueEntry("42", 3, "Work"), EspnLeagueEntry("77")),
+            espnActive = "77",
+            espnLogin = EspnLogin("s2secret", "{SWID-secret}"),
+        )
+        withStore { it.update { _ -> prefs } }
+        val reread = withStore { it.prefs.first() }
+        assertEquals(prefs.espnLeagues, reread.espnLeagues)
+        assertEquals(EspnLeagueConfig("77", "s2secret", "{SWID-secret}", null), reread.espnLeague)
+        assertFalse("s2secret" in prefs.toString() || "SWID-secret" in prefs.toString(), prefs.toString())
+    }
+
+    @Test
+    fun `an unknown active league reads as the first, and a bad id is dropped`() {
+        file.writeText("""{"formatVersion": 4, "espnLeagues": [{"leagueId": "abc"}, {"leagueId": "5"}, {"leagueId": "6"}], "espnActive": "9"}""")
+        val read = withStore { it.prefs.first() }
+        assertEquals(listOf("5", "6"), read.espnLeagues.map { it.leagueId })
+        assertEquals("5", read.espnLeague?.leagueId)
+    }
+
+    @Test
+    fun `a version 3 league becomes the only one, active, and its cookies the shared login`() {
+        file.writeText("""{"formatVersion": 3, "espnLeague": {"leagueId": "42", "espnS2": "s2", "swid": "{ME}", "teamId": 3}}""")
+        val read = withStore { it.prefs.first() }
+        assertEquals(listOf(EspnLeagueEntry("42", 3)), read.espnLeagues)
+        assertEquals(EspnLeagueConfig("42", "s2", "{ME}", 3), read.espnLeague)
         file.writeText("""{"formatVersion": 3, "espnLeague": {"leagueId": "abc"}}""")
         assertNull(withStore { it.prefs.first().espnLeague })
     }
@@ -195,7 +216,7 @@ class UserPrefsStoreTest {
         assertEquals(0.0, reread.weight(ScoringRule.FG_MISSED))
         assertEquals(0.0, reread.weight(ScoringRule.DST_SAFETY))
         assertEquals(emptyList<PointsAllowedTier>(), reread.pointsAllowedTiers)
-        assertTrue(file.readText().contains("\"formatVersion\":3"), file.readText())
+        assertTrue(file.readText().contains("\"formatVersion\":4"), file.readText())
     }
 
     @Test
@@ -222,7 +243,7 @@ class UserPrefsStoreTest {
         assertEquals(listOf(ScoringTier(0, 8.0)), migrated.pointsAllowedTiers) // points tiers untouched
 
         withStore { store -> store.update { p -> p.copy(profiles = listOf(migrated.copy(yardsAllowedTiers = emptyList()))) } }
-        assertTrue(file.readText().contains("\"formatVersion\":3"), file.readText())
+        assertTrue(file.readText().contains("\"formatVersion\":4"), file.readText())
         assertEquals(emptyList<ScoringTier>(), withStore { it.prefs.first() }.profiles.single().yardsAllowedTiers)
     }
 
@@ -271,7 +292,7 @@ class UserPrefsStoreTest {
         val all = listOf(wrView, wrView.copy(id = "g2", name = "Season", weeks = PresetWeeks.WholeSeason, filters = emptyList(), teams = emptySet(), minSnapShare = null))
         withStore { store -> store.update { it.copy(gridPresets = all) } }
         assertEquals(all, withStore { it.prefs.first() }.gridPresets)
-        assertTrue(file.readText().contains("\"formatVersion\":3"), file.readText())
+        assertTrue(file.readText().contains("\"formatVersion\":4"), file.readText())
     }
 
     @Test

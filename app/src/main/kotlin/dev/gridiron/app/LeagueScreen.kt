@@ -49,32 +49,66 @@ fun LeagueScreen(
     onMatchups: (() -> Unit)? = null,
 ) {
     val config by repo.config.collectAsState(initial = null)
+    val leagues by repo.leagues.collectAsState(initial = emptyList())
+    val login by repo.login.collectAsState(initial = null)
     val league by repo.league.collectAsState()
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) { repo.load() }
-    var idDraft by remember(config?.leagueId) { mutableStateOf(config?.leagueId.orEmpty()) }
-    var s2Draft by remember(config?.espnS2) { mutableStateOf(config?.espnS2.orEmpty()) }
-    var swidDraft by remember(config?.swid) { mutableStateOf(config?.swid.orEmpty()) }
+    var idDraft by remember { mutableStateOf("") }
+    var s2Draft by remember(login?.espnS2) { mutableStateOf(login?.espnS2.orEmpty()) }
+    var swidDraft by remember(login?.swid) { mutableStateOf(login?.swid.orEmpty()) }
     var status by remember { mutableStateOf<String?>(null) }
     var syncing by remember { mutableStateOf(false) }
     var open by remember { mutableStateOf<Int?>(null) }
+
+    fun sync(before: suspend () -> Unit = {}) {
+        scope.launch {
+            syncing = true
+            status = try {
+                before()
+                repo.setLogin(s2Draft, swidDraft)
+                repo.sync(season).message
+            } catch (_: IllegalArgumentException) {
+                "A league id is digits only."
+            } finally {
+                syncing = false
+            }
+        }
+    }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onBack) { Text("← Back") }
-                Text("ESPN league", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("ESPN leagues", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
             LazyColumn(Modifier.fillMaxSize()) {
                 item {
                     Column(Modifier.padding(horizontal = 16.dp)) {
                         Text(
-                            "The league id is the number in your league's ESPN URL. A private league also needs the espn_s2 and SWID " +
-                                "cookies from a logged-in browser. They are sent only to ESPN.",
+                            "The league id is the number in your league's ESPN URL. Private leagues need the espn_s2 and SWID " +
+                                "cookies from a logged-in browser: one login covers every league. They are sent only to ESPN.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        OutlinedTextField(idDraft, { idDraft = it }, Modifier.fillMaxWidth().testTag("leagueId"), label = { Text("League id") }, singleLine = true)
+                        for (choice in leagues) {
+                            Row(
+                                Modifier.fillMaxWidth().clickable(enabled = !choice.active) { scope.launch { repo.setActive(choice.leagueId) } }
+                                    .testTag("league:${choice.leagueId}"),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    choice.name + if (choice.active) " ✓" else "",
+                                    Modifier.weight(1f).padding(vertical = 8.dp),
+                                    fontWeight = if (choice.active) FontWeight.Bold else FontWeight.Normal,
+                                )
+                                TextButton(onClick = { scope.launch { repo.removeLeague(choice.leagueId) } }, Modifier.testTag("leagueRemove:${choice.leagueId}")) { Text("Remove") }
+                            }
+                        }
+                        OutlinedTextField(
+                            idDraft, { idDraft = it }, Modifier.fillMaxWidth().testTag("leagueId"),
+                            label = { Text(if (leagues.isEmpty()) "League id" else "Add another league id") }, singleLine = true,
+                        )
                         OutlinedTextField(
                             s2Draft, { s2Draft = it }, Modifier.fillMaxWidth().testTag("leagueS2"),
                             label = { Text("espn_s2 (private leagues)") }, singleLine = true,
@@ -84,21 +118,13 @@ fun LeagueScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TextButton(
                                 onClick = {
-                                    scope.launch {
-                                        syncing = true
-                                        status = try {
-                                            repo.setConfig(idDraft, s2Draft, swidDraft)
-                                            if (idDraft.isBlank()) "League removed." else repo.sync(season).message
-                                        } catch (_: IllegalArgumentException) {
-                                            "A league id is digits only."
-                                        } finally {
-                                            syncing = false
-                                        }
-                                    }
+                                    val id = idDraft
+                                    idDraft = ""
+                                    sync(before = { if (id.isNotBlank()) repo.addLeague(id) })
                                 },
-                                enabled = !syncing,
+                                enabled = !syncing && (idDraft.isNotBlank() || config != null),
                                 modifier = Modifier.testTag("leagueSync"),
-                            ) { Text(if (syncing) "Syncing…" else "Save and sync") }
+                            ) { Text(if (syncing) "Syncing…" else if (idDraft.isNotBlank()) "Add and sync" else "Save and sync") }
                             status?.let { Text(it, Modifier.weight(1f), style = MaterialTheme.typography.bodySmall) }
                         }
                     }

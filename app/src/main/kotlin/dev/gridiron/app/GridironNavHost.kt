@@ -173,7 +173,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
                                 if (deps.scores != null) add("Scores" to { s: Int -> backStack.push(ScoresKey(s)) })
                                 add("Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) })
-                                if (deps.league != null) add("ESPN league" to { _: Int -> backStack.push(LeagueKey) })
+                                if (deps.league != null) add("ESPN leagues" to { _: Int -> backStack.push(LeagueKey) })
                                 if (deps.rosters != null) add("Rosters" to { _: Int -> backStack.push(RostersKey) })
                                 add("Team defense" to { s: Int -> backStack.push(DefenseKey(s)) })
                                 if (deps.settings != null) add("Settings" to { _: Int -> backStack.push(SettingsKey) })
@@ -209,6 +209,8 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
                             myTeam = deps.league?.myTeam ?: flowOf(null),
                             leagueRostered = deps.league?.rostered ?: flowOf(null),
+                            leagues = deps.league?.leagues ?: flowOf(emptyList()),
+                            setLeague = { id -> deps.league?.setActive(id) },
                             opponent = { season, week -> deps.league?.opponent(season, week) ?: OpponentResult(null, "no league") },
                             opportunities = { season, profile ->
                                 deps.opportunities?.find(season, profile) ?: OpportunitiesResult(emptyList(), 0, null)

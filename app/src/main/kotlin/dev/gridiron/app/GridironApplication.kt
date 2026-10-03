@@ -106,7 +106,7 @@ class GridironApplication : Application() {
             props = propsRepo,
             playerStats = PlayerStatsRepository(executor),
             scores = ScoresRepository(executor, UrlConnectionHttpGet()),
-            league = FantasyLeagueRepository(prefs, UrlConnectionHttpGet(), players, File(noBackupFilesDir, "league.json")),
+            league = FantasyLeagueRepository(prefs, UrlConnectionHttpGet(), players, noBackupFilesDir),
             opportunities = OpportunitiesRepository(executor, projectionsRepo, { live.injuries() }),
         )
     }

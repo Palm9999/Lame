@@ -48,7 +48,7 @@ class LeagueScreenTest {
                 override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> = emptyList()
             },
         )
-        val repo = FantasyLeagueRepository(prefs, { _, _ -> body }, players, tmp.newFile("league.json"))
+        val repo = FantasyLeagueRepository(prefs, { _, _ -> body }, players, tmp.root)
         compose.setContent { GridironTheme { LeagueScreen(repo, 2026, onBack = {}, onPlayer = {}) } }
 
         compose.onNodeWithTag("leagueId").performTextInput("42")
@@ -64,5 +64,38 @@ class LeagueScreenTest {
         compose.waitForIdle()
         assertEquals(listOf("Mine"), prefs.current.rosters.map { it.name })
         compose.onNodeWithText("1. Mine ★").assertExists()
+    }
+
+    @Test
+    fun addingASecondLeagueSwitchesToItAndTheFirstCanBeChosenAgainOrRemoved() {
+        val prefs = FakePrefsSource()
+        val players = PlayerDirectory(
+            object : QueryExecutor {
+                override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> = emptyList()
+            },
+        )
+        val repo = FantasyLeagueRepository(
+            prefs, { url, _ -> if ("/leagues/43" in url) body.replace("Sunday League", "Work League") else body }, players, tmp.root,
+        )
+        compose.setContent { GridironTheme { LeagueScreen(repo, 2026, onBack = {}, onPlayer = {}) } }
+
+        compose.onNodeWithTag("leagueId").performTextInput("42")
+        compose.onNodeWithTag("leagueSync").performClick()
+        compose.waitUntil(5_000) { repo.league.value?.leagueId == "42" }
+        compose.onNodeWithTag("leagueId").performTextInput("43")
+        compose.onNodeWithTag("leagueSync").performClick()
+        compose.waitUntil(5_000) { repo.league.value?.leagueId == "43" }
+        compose.waitForIdle()
+        compose.onNodeWithText("Work League ✓").assertExists()
+        compose.onNodeWithText("Sunday League").assertExists()
+
+        compose.onNodeWithTag("league:42").performClick()
+        compose.waitUntil(5_000) { repo.league.value?.leagueId == "42" }
+        compose.waitForIdle()
+        compose.onNodeWithText("Sunday League ✓").assertExists()
+
+        compose.onNodeWithTag("leagueRemove:42").performClick()
+        compose.waitUntil(5_000) { repo.league.value?.leagueId == "43" }
+        assertEquals(listOf("43"), prefs.current.espnLeagues.map { it.leagueId })
     }
 }
