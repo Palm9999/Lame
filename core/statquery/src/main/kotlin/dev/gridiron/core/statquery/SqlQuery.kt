@@ -37,8 +37,9 @@ public data class GridQuery(val query: SqlQuery, val layout: GridLayout)
 public class GridLayout internal constructor(
     public val columns: List<StatColumn>,
     public val percentiles: Boolean,
+    public val ranks: Boolean = false,
 ) {
-    private val stride: Int = if (percentiles) 2 else 1
+    private val stride: Int = if (ranks) 4 else if (percentiles) 2 else 1
 
     public val width: Int get() = FIRST_STAT + columns.size * stride
 
@@ -47,6 +48,18 @@ public class GridLayout internal constructor(
     public fun percentileIndex(column: StatColumn): Int {
         check(percentiles) { "percentiles were not requested" }
         return valueIndex(column) + 1
+    }
+
+    /** 1 = best; null when the player isn't ranked on [column]. */
+    public fun rankIndex(column: StatColumn): Int {
+        check(ranks) { "ranks were not requested" }
+        return valueIndex(column) + 2
+    }
+
+    /** How many players are ranked on [column]; null when the player isn't one of them. */
+    public fun rankedCountIndex(column: StatColumn): Int {
+        check(ranks) { "ranks were not requested" }
+        return valueIndex(column) + 3
     }
 
     private fun position(column: StatColumn): Int {
@@ -58,11 +71,11 @@ public class GridLayout internal constructor(
     // Value equality, so a GridQuery can key a result cache. Not a data class:
     // that would expose a public copy() around the internal constructor.
     override fun equals(other: Any?): Boolean =
-        other is GridLayout && other.columns == columns && other.percentiles == percentiles
+        other is GridLayout && other.columns == columns && other.percentiles == percentiles && other.ranks == ranks
 
-    override fun hashCode(): Int = 31 * columns.hashCode() + percentiles.hashCode()
+    override fun hashCode(): Int = 31 * (31 * columns.hashCode() + percentiles.hashCode()) + ranks.hashCode()
 
-    override fun toString(): String = "GridLayout(columns=$columns, percentiles=$percentiles)"
+    override fun toString(): String = "GridLayout(columns=$columns, percentiles=$percentiles, ranks=$ranks)"
 
     public companion object {
         public const val PLAYER_ID: Int = 0

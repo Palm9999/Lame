@@ -52,8 +52,11 @@ public data class CompareRowUi(
     val diff: String?,
 )
 
-/** One slot's value for one row. */
-public data class CompareCellUi(val text: String, val value: Double?, val percentile: Float?)
+/** One slot's value for one row; [place] is where he ranks at his position (1st = best), null if unranked. */
+public data class CompareCellUi(val text: String, val value: Double?, val percentile: Float?, val place: Place? = null)
+
+/** [rank] among [of] ranked players; 1 is the best. */
+public data class Place(val rank: Int, val of: Int)
 
 /** Axis labels and one polygon of values per slot. */
 public data class RadarUi(val axes: ImmutableList<String>, val values: ImmutableList<ImmutableList<Float?>>)

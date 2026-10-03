@@ -21,12 +21,18 @@ import dev.gridiron.core.charts.PercentileBarRow
 import dev.gridiron.core.charts.ordinal
 import dev.gridiron.core.data.CompareGroupUi
 import dev.gridiron.core.data.CompareRowUi
+import dev.gridiron.core.data.Place
 import dev.gridiron.core.designsystem.SlotColors
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import kotlin.math.roundToInt
 
-/** "78th"/"92nd"/"83rd", or "—" for a slot with no ranked value at all. */
-internal fun percentileText(percentile: Float?): String = percentile?.let { ordinal((it * 100).toInt()) } ?: "—"
+/** "1st of 62" (1st is the best at the position). */
+internal fun placeText(place: Place): String = "${ordinal(place.rank)} of ${place.of}"
+
+/** "Top 22%" for an average percentile of 0.78 (never better than "Top 1%"), or "—" with no ranked value at all. */
+internal fun topText(percentile: Float?): String =
+    percentile?.let { "Top ${((1f - it) * 100).roundToInt().coerceIn(1, 100)}%" } ?: "—"
 
 /**
  * Every group as a composite row plus one bar row per stat. Long-press or
@@ -51,7 +57,7 @@ internal fun BarsTab(groups: ImmutableList<CompareGroupUi>, charted: List<Int>, 
             item(key = "composite:${group.group}") {
                 PercentileBarRow(
                     label = "Overall ${group.group.label}",
-                    bars = charted.map { i -> Bar(group.composite[i], percentileText(group.composite[i]), SlotColors.color(i)) }
+                    bars = charted.map { i -> Bar(group.composite[i], topText(group.composite[i]), SlotColors.color(i)) }
                         .toImmutableList(),
                 )
             }

@@ -77,6 +77,20 @@ class CompareRepositoryTest {
     }
 
     @Test
+    fun `the player with the most targets ranks first and the one with fewer ranks lower`() = runTest {
+        val s = catalog.season(2025)
+        val (top, next) = stats.grid(GridRequest(s, s.defaultWeeks, StatPack.RECEIVING, PositionFilter.WR, sort = StatColumn.TARGETS), catalog)
+            .rows.take(2).map { it.playerId }
+        val page = compare.compare(request(CompareSlot(next, 2025, season2025), CompareSlot(top, 2025, season2025)), catalog)
+        val targets = page.groups.flatMap { it.rows }.first { it.column == StatColumn.TARGETS }
+        val nextPlace = targets.cells[0].place!!
+        val topPlace = targets.cells[1].place!!
+        assertEquals(1, topPlace.rank)
+        assertTrue(nextPlace.rank > 1 && nextPlace.rank <= nextPlace.of)
+        assertEquals(topPlace.of, nextPlace.of)
+    }
+
+    @Test
     fun `a player can be compared with himself across seasons`() = runTest {
         val id = topIds(StatPack.RECEIVING, PositionFilter.WR, 1).single()
         val page = compare.compare(

@@ -100,14 +100,20 @@ public object StatQueryBuilder {
         w.line("SELECT player_id, full_name, position, team, games")
         for (column in spec.columns) {
             val i = plan.index(column)
-            w.line(if (spec.percentiles) "     , v$i, p$i" else "     , v$i")
+            w.line(
+                when {
+                    spec.ranks -> "     , v$i, p$i, r$i, n$i"
+                    spec.percentiles -> "     , v$i, p$i"
+                    else -> "     , v$i"
+                },
+            )
         }
         w.line("FROM $source")
         w.where(spec, plan)
         w.orderBy(spec, plan)
         w.line("LIMIT ${w.int(spec.limit)} OFFSET ${w.int(spec.offset)}")
 
-        return GridQuery(w.build(), GridLayout(spec.columns, spec.percentiles))
+        return GridQuery(w.build(), GridLayout(spec.columns, spec.percentiles, spec.ranks))
     }
 
     /**
@@ -529,6 +535,18 @@ private class SqlWriter {
                 "       , CASE WHEN $unranked THEN NULL ELSE PERCENT_RANK() OVER " +
                     "(PARTITION BY position, $unranked ORDER BY v$i $order) END AS p$i",
             )
+            if (spec.ranks) {
+                // Place 1 = best (the percentile's order, reversed); ties share the better place.
+                val best = if (column.higherIsBetter) "DESC" else "ASC"
+                line(
+                    "       , CASE WHEN $unranked THEN NULL ELSE RANK() OVER " +
+                        "(PARTITION BY position, $unranked ORDER BY v$i $best) END AS r$i",
+                )
+                line(
+                    "       , CASE WHEN $unranked THEN NULL ELSE COUNT(*) OVER " +
+                        "(PARTITION BY position, $unranked) END AS n$i",
+                )
+            }
         }
         line("  FROM scored")
         line(")")
