@@ -54,6 +54,19 @@ class StatsRepositoryTest {
     }
 
     @Test
+    fun `the Rising roles pack ranks players by the forecast's signal for the week after the range`() = runTest {
+        val season = catalog.season(2025)
+        val page = repo.grid(GridRequest(season, WeekRange(1, 10), StatPack.RISING, positions = PositionFilter.FLEX), catalog)
+        val scores = page.rows.map { it.cells.first().text.toDoubleOrNull() }
+        assertTrue(page.rows.size > 100, "${page.rows.size} rows")
+        // Sorted best first: the leaders have a score, and every unscored player (a QB, a bench player) trails them.
+        assertTrue((scores.first() ?: 0.0) > 0.0, "first score ${scores.first()}")
+        val firstBlank = scores.indexOfFirst { it == null }
+        assertTrue(firstBlank > 20, "only $firstBlank scored rows before the blanks")
+        assertTrue(scores.drop(firstBlank).all { it == null }, "a score came after a blank")
+    }
+
+    @Test
     fun `the K and D-ST chips list kickers and team defenses with their own packs`() = runTest {
         val season = catalog.season(2025)
         val kickers = repo.grid(GridRequest(season, season.defaultWeeks, StatPack.KICKING, positions = PositionFilter.K), catalog)

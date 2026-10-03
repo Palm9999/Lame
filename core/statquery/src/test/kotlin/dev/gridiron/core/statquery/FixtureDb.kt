@@ -36,6 +36,13 @@ internal class FixtureDb : AutoCloseable {
                      season INTEGER NOT NULL, window TEXT NOT NULL, first_week INTEGER NOT NULL,
                      last_week INTEGER NOT NULL, PRIMARY KEY (season, window)) WITHOUT ROWID""",
             )
+            st.executeUpdate(
+                """CREATE TABLE player_week_signal (
+                     player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
+                     score REAL NOT NULL, usage_recent REAL NOT NULL, usage_base REAL NOT NULL,
+                     xp_recent REAL, xp_base REAL, vacated REAL NOT NULL, out_note TEXT,
+                     PRIMARY KEY (player_id, season, week)) WITHOUT ROWID""",
+            )
             st.executeUpdate("CREATE INDEX idx_pws_metric_season_week ON player_week_stat (metric_id, season, week)")
             st.executeUpdate("CREATE INDEX idx_player_search ON player (search_name)")
         }
@@ -48,6 +55,17 @@ internal class FixtureDb : AutoCloseable {
             it.setString(3, normalizeSearch(name))
             it.setString(4, position)
             it.setString(5, team)
+            it.executeUpdate()
+        }
+    }
+
+    /** The Rising roles signal entering [week]. */
+    fun signal(id: String, week: Int, score: Double, season: Int = 2025) {
+        conn.prepareStatement("INSERT INTO player_week_signal VALUES (?, ?, ?, ?, 0, 0, NULL, NULL, 0, NULL)").use {
+            it.setString(1, id)
+            it.setInt(2, season)
+            it.setInt(3, week)
+            it.setDouble(4, score)
             it.executeUpdate()
         }
     }

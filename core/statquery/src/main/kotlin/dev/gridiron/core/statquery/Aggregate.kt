@@ -80,7 +80,20 @@ public sealed interface Aggregate {
         override val scalesWithGames: Boolean get() = true
         override fun toSql(ref: (Component) -> String): String = ref(output.pseudo)
     }
+
+    /**
+     * The Rising roles score, read from `player_week_signal` for the week after the range's last (or the newest the table
+     * has, if that is earlier). It is one value per player, so a range has no total to take: per-game mode leaves it alone.
+     */
+    public data object RisingRole : Aggregate {
+        override val components: Set<Component> get() = emptySet()
+        override val scalesWithGames: Boolean get() = false
+        override fun toSql(ref: (Component) -> String): String = ref(RISING_PSEUDO)
+    }
 }
+
+/** Stands in for the signal where [Aggregate.toSql] expects a component; `@` never appears in a metric id. */
+internal val RISING_PSEUDO: Component = Component("@rise")
 
 /** The scoring step's outputs, summed per player over the range. */
 public enum class ScoredOutput(internal val alias: String) {
