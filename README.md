@@ -31,15 +31,7 @@ Pipeline: the phone downloads nflverse and ffopportunity data and builds its own
 
 ## Documentation
 
-**[Product & Technical Specification](docs/PRODUCT_SPEC.md)** — start here.
-
-| Document | Contents |
-|---|---|
-| [Data sources](docs/research/research-data-sources.md) | Free NFL data catalog, licensing, ingestion architecture. Endpoints live-tested. |
-| [Stat catalog](docs/research/research-stats-catalog.md) | ~450 metrics by position and category, computability tiers, comparison UX patterns. |
-| [Prediction models](docs/research/research-prediction-models.md) | Projection methodology, distributions, correlation, compute split, explainability. |
-| [Android architecture](docs/research/research-android-architecture.md) | Module structure, the sticky-column table problem, charting, sync, accessibility. |
-| [Competitive analysis](docs/research/research-competitive.md) | Feature gaps worth stealing. Positioning and monetization sections now moot. |
+**[Product & Technical Specification](docs/PRODUCT_SPEC.md)** — start here. Module detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Install on your phone
 

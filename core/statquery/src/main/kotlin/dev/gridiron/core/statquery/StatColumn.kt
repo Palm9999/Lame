@@ -155,8 +155,4 @@ public enum class StatColumn(
 
     /** Has no stored weekly facts: scored on the device or written by the forecast. */
     public val isComputed: Boolean get() = isFantasy || isSignal
-
-    public companion object {
-        public fun fromMetricId(id: String): StatColumn? = entries.firstOrNull { it.metricId == id }
-    }
 }

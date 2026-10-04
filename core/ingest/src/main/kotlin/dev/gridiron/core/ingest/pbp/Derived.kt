@@ -28,10 +28,3 @@ internal fun PlayerWeek.derive() {
     // WOPR's coefficients assume shares in [0, 1]; clamp for this composite only.
     v["wopr"] = 1.5 * (targetShare ?: 0.0).coerceIn(0.0, 1.0) + 0.7 * (airYardsShare ?: 0.0).coerceIn(0.0, 1.0)
 }
-
-/** Play-by-play to weekly player stats with every derived column. */
-internal fun weeklyPlayerStats(plays: Iterable<Play>): List<PlayerWeek> {
-    val aggregator = PlayerWeekAggregator()
-    plays.forEach(aggregator::add)
-    return aggregator.rows().onEach { it.derive() }
-}

@@ -87,3 +87,10 @@ internal fun List<PlayerWeek>.row(pid: String): Map<String, Double?> {
     check(hits.size == 1) { "expected one row for $pid, got ${hits.size}" }
     return hits.single().values
 }
+
+/** Play-by-play to weekly player stats with every derived column. */
+internal fun weeklyPlayerStats(plays: Iterable<Play>): List<PlayerWeek> {
+    val aggregator = PlayerWeekAggregator()
+    plays.forEach(aggregator::add)
+    return aggregator.rows().onEach { it.derive() }
+}
