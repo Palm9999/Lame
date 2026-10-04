@@ -50,6 +50,7 @@ import dev.gridiron.core.data.live.OpponentResult
 import dev.gridiron.core.data.live.PlayoffPictureResult
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
+import dev.gridiron.core.projections.Lineups
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -343,9 +344,27 @@ public fun ProjectionListScreen(
                             for (t in PositionTab.entries) FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
                         }
                         val rows = visibleRows(if (mode == ListMode.WEEK) weekRows else state.rosRows, tab, badges, mode == ListMode.WEEK)
-                        LazyColumn(Modifier.fillMaxSize()) {
-                            itemsIndexed(rows, key = { _, row -> row.playerId }) { i, row ->
-                                ProjectionListRow("${i + 1}", row, badges[row.playerId], onPlayer)
+                        // League size and slots from the synced league, else a standard twelve-team league.
+                        val teams = if (myTeam != null && partners.isNotEmpty()) partners.size + 1 else 12
+                        val slots = myTeam?.slots ?: Lineups.DEFAULT_SLOTS
+                        val valued = remember(rows, tab, teams, slots) { if (tab == PositionTab.VALUE) valueRows(rows, teams, slots) else null }
+                        LazyColumn(Modifier.fillMaxSize().testTag("list")) {
+                            if (valued != null) {
+                                item {
+                                    Text(
+                                        "Points over the best player left at his position once $teams teams fill their starting slots.",
+                                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                itemsIndexed(valued, key = { _, (row, _) -> row.playerId }) { i, (row, value) ->
+                                    ProjectionListRow("${i + 1}", row, badges[row.playerId], onPlayer, note = valueText(value))
+                                }
+                            } else {
+                                itemsIndexed(rows, key = { _, row -> row.playerId }) { i, row ->
+                                    ProjectionListRow("${i + 1}", row, badges[row.playerId], onPlayer)
+                                }
                             }
                         }
                     }
@@ -566,7 +585,7 @@ private fun SectionLabel(text: String) {
 private val LeadWidth = 64.dp
 
 @Composable
-private fun ProjectionListRow(lead: String, row: ProjectionRow, badge: String?, onPlayer: (String) -> Unit, leadWidth: Dp = 32.dp) {
+private fun ProjectionListRow(lead: String, row: ProjectionRow, badge: String?, onPlayer: (String) -> Unit, leadWidth: Dp = 32.dp, note: String? = null) {
     Row(
         Modifier.fillMaxWidth().clickable { onPlayer(row.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -584,7 +603,7 @@ private fun ProjectionListRow(lead: String, row: ProjectionRow, badge: String?, 
                 }
             }
             Text(
-                listOfNotNull(Position.label(row.position), row.team, row.tdChance?.takeIf { !row.out }?.let(::tdText)).joinToString(" · "),
+                listOfNotNull(Position.label(row.position), row.team, row.tdChance?.takeIf { !row.out }?.let(::tdText), note).joinToString(" · "),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

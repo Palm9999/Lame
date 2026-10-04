@@ -10,6 +10,8 @@ import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.ListedProjection
 import dev.gridiron.core.projections.ProjectionComponent
+import dev.gridiron.core.projections.LineupCandidate
+import dev.gridiron.core.projections.ReplacementLevel
 import dev.gridiron.core.projections.anytimeTd
 import dev.gridiron.core.projections.projectedScore
 import dev.gridiron.core.projections.projectPoints
@@ -57,7 +59,24 @@ public enum class PositionTab(public val label: String, public val codes: Set<St
     FLEX("FLEX", setOf("RB", "WR", "TE")),
     K("K", setOf("K")),
     DST("D/ST", setOf("DST")),
+
+    /** Every position together, by points over replacement ([valueRows]). */
+    VALUE("Value", setOf("QB", "RB", "WR", "TE", "K", "DST")),
 }
+
+/**
+ * [rows] by points over their position's replacement level ([ReplacementLevel]) in a league of [teams] teams starting
+ * [slots], best first: one scale across positions, to weigh players against each other in trades.
+ */
+public fun valueRows(rows: List<ProjectionRow>, teams: Int, slots: Map<String, Int>): List<Pair<ProjectionRow, Double>> {
+    val players = rows.map { LineupCandidate(it.playerId, it.position, it.points) }
+    val values = ReplacementLevel.values(players, ReplacementLevel.of(players, teams, slots))
+    return rows.map { it to (values[it.playerId] ?: 0.0) }.sortedByDescending { it.second }
+}
+
+/** "+42.0 over replacement" or "−3.5 under". */
+internal fun valueText(value: Double): String =
+    if (value >= 0) "+${String.format(Locale.US, "%.1f", value)} over replacement" else "−${String.format(Locale.US, "%.1f", -value)} under replacement"
 
 public sealed interface ProjectionListState {
     public data object Loading : ProjectionListState

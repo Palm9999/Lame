@@ -64,6 +64,15 @@ class ProjectionListScreenTest {
     }
 
     @Test
+    fun `the Value tab ranks every position by points over replacement`() {
+        compose.setContent { GridironTheme { ProjectionListScreen(tradeState, emptyMap(), onPlayer = {}, onBack = {}) } }
+        compose.onNodeWithText("Rest of season").performClick()
+        compose.onNodeWithText("Value").performScrollTo().performClick()
+        // Twelve teams on the usual slots: every QB, RB and WR here starts, so each one's replacement is zero.
+        compose.onNodeWithText("QB · KC · +200.0 over replacement").assertExists()
+    }
+
+    @Test
     fun `an Out player reads Out, and a row opens the player`() {
         var opened: String? = null
         compose.setContent { GridironTheme { ProjectionListScreen(loaded, mapOf("w" to "O"), onPlayer = { opened = it }, onBack = {}) } }
