@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 14
+public const val FORECAST_VERSION: Int = 15
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -35,6 +35,11 @@ internal object K {
     // Layer 7: how far a QB, RB, WR or TE's final projection moves toward ESPN's for the same week. Fitted leaving
     // one season out on 2022-2025 (points level): QB 0.55-0.60, RB 0.60-0.70, WR 0.65-0.75, TE 0.45-0.55.
     val ESPN_WEIGHT: Map<String, Double> = mapOf("QB" to 0.55, "RB" to 0.6, "WR" to 0.65, "TE" to 0.5)
+
+    // ESPN's QB passing yards run high by the same share every season: starters' actual over ESPN's was 0.947,
+    // 0.954, 0.951, 0.950 and 0.940 in 2021-2025. Taking it out before the blend: QB PPR MAE -0.020 (±0.012)
+    // pooled on 2022-2025, every season lower.
+    const val ESPN_QB_PASS_YARDS_SCALE = 0.95
 
     // Layer 2c: a starting QB's baseline keeps this share of its distance from the league's typical starter.
     // Fitted leaving one season out on 2022-2025 (built from 2021): 0.60-0.65 in every fold.

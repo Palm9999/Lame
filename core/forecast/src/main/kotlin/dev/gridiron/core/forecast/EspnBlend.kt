@@ -25,7 +25,7 @@ internal fun withEspn(final: Map<String, Double>, espn: Map<String, Double>?, po
     val w = K.ESPN_WEIGHT[position] ?: return final
     if (espn.isNullOrEmpty()) return final
     val blended = final.mapValuesTo(LinkedHashMap()) { (metric, mean) ->
-        if (metric in ESPN_METRICS) (1 - w) * mean + w * (espn[metric] ?: 0.0) else mean
+        if (metric in ESPN_METRICS) (1 - w) * mean + w * espnValue(espn, metric, position) else mean
     }
     for ((long, kind) in LONG_TDS) {
         val before = final[kind] ?: continue
@@ -33,6 +33,12 @@ internal fun withEspn(final: Map<String, Double>, espn: Map<String, Double>?, po
         blended[long] = if (before > 0.0) mean * blended.getValue(kind) / before else 0.0
     }
     return blended
+}
+
+/** ESPN's [metric], with its known lean taken out: a QB's passing yards run high ([K.ESPN_QB_PASS_YARDS_SCALE]). */
+private fun espnValue(espn: Map<String, Double>, metric: String, position: String): Double {
+    val v = espn[metric] ?: 0.0
+    return if (position == "QB" && metric == "passing_yards") v * K.ESPN_QB_PASS_YARDS_SCALE else v
 }
 
 /** "ESPN projects 14.2 pts": ESPN's projection in the reference scoring, for the waterfall. */
