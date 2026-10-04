@@ -32,8 +32,8 @@ class ProjectedPointsTest {
 
     @Test
     fun `each position's range is widened around the points by its calibration factor`() {
-        assertEquals(4.4 to 17.0, calibratedRange(10.0, 6.0, 15.0, Position.QB).let { round(it.first) to round(it.second) })
-        assertEquals(10.0 - 1.52 * 4 to 10.0 + 1.52 * 5, calibratedRange(10.0, 6.0, 15.0, Position.WR))
+        assertEquals(4.92 to 16.35, calibratedRange(10.0, 6.0, 15.0, Position.QB).let { round(it.first) to round(it.second) })
+        assertEquals(10.0 - 1.38 * 4 to 10.0 + 1.38 * 5, calibratedRange(10.0, 6.0, 15.0, Position.WR))
         // No calibration data for other positions: the simulation's own range.
         assertEquals(6.0 to 15.0, calibratedRange(10.0, 6.0, 15.0, null))
         assertEquals(6.0 to 15.0, calibratedRange(10.0, 6.0, 15.0, Position.K))
