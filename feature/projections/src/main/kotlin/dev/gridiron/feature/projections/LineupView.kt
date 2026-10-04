@@ -6,8 +6,11 @@ import dev.gridiron.core.projections.LineupCandidate
 import dev.gridiron.core.projections.Lineups
 import kotlin.math.roundToInt
 
-/** A starting slot of the lineup; [row] is null when no one on the roster can fill it. */
-internal data class LineupLine(val slot: String, val row: ProjectionRow?)
+/** A starting slot of the lineup; [row] is null when no one on the roster can fill it. [locked]: his game has started. */
+internal data class LineupLine(val slot: String, val row: ProjectionRow?, val locked: Boolean = false)
+
+/** Starting slots in the order a lineup reads; a label not listed sorts last. */
+private val SLOT_ORDER = listOf("QB", "RB", "WR", "TE", "RB/WR", "WR/TE", "RB/WR/TE", "FLEX", "OP", "D/ST", "K")
 
 /** A rostered player left out of the lineup: [matched] is false when the app doesn't know him at all. */
 internal data class Unlisted(val name: String, val matched: Boolean)
@@ -79,22 +82,47 @@ internal fun matchupLine(mine: Double, theirs: Double): String {
  * player scores zero, as in the list; a rostered player with no projection (a bye, a rookie) or no match is listed
  * apart, because his position is unknown.
  */
-internal fun lineupView(team: MyTeam, week: Int, weekRows: List<ProjectionRow>, badges: Map<String, String>): LineupView {
+internal fun lineupView(
+    team: MyTeam,
+    week: Int,
+    weekRows: List<ProjectionRow>,
+    badges: Map<String, String>,
+    /** NFL teams whose game this week has kicked off: their players stay where ESPN has them. */
+    started: Set<String> = emptySet(),
+): LineupView {
     val byId = weekRows.associateBy { it.playerId }
     val rows = mutableMapOf<String, ProjectionRow>()
     val unlisted = mutableListOf<Unlisted>()
+    val lockedLines = mutableListOf<LineupLine>()
+    val lockedBench = mutableListOf<ProjectionRow>()
+    val open = team.slots.toMutableMap()
     for (p in team.players) {
-        val row = p.playerId?.let(byId::get)
-        if (row == null) unlisted += Unlisted(p.name, matched = p.playerId != null) else rows[row.playerId] = outAdjusted(row, badges)
+        val row = p.playerId?.let(byId::get)?.let { outAdjusted(it, badges) }
+        when {
+            row == null -> unlisted += Unlisted(p.name, matched = p.playerId != null)
+            row.team != null && row.team in started -> {
+                // His game has started: a starter keeps his slot, anyone else stays on the bench.
+                val left = open[p.slot] ?: 0
+                if (left > 0) {
+                    open[p.slot] = left - 1
+                    lockedLines += LineupLine(p.slot, row, locked = true)
+                } else {
+                    lockedBench += row
+                }
+            }
+            else -> rows[row.playerId] = row
+        }
     }
-    val best = Lineups.best(team.slots, rows.values.map { LineupCandidate(it.playerId, it.position, it.points) })
-    val starters = best.spots.mapNotNull { it.player?.let { c -> rows.getValue(c.playerId) } }
+    val best = Lineups.best(open, rows.values.map { LineupCandidate(it.playerId, it.position, it.points) })
+    val lines = (lockedLines + best.spots.map { LineupLine(it.slot, it.player?.let { c -> rows.getValue(c.playerId) }) })
+        .sortedBy { SLOT_ORDER.indexOf(it.slot).let { i -> if (i < 0) SLOT_ORDER.size else i } }
+    val starters = lines.mapNotNull { it.row }
     return LineupView(
         teamName = team.teamName,
         week = week,
-        total = best.total,
-        starters = best.spots.map { LineupLine(it.slot, it.player?.let { c -> rows.getValue(c.playerId) }) },
-        bench = best.bench.map { rows.getValue(it.playerId) },
+        total = starters.sumOf { it.points },
+        starters = lines,
+        bench = best.bench.map { rows.getValue(it.playerId) } + lockedBench,
         unlisted = unlisted,
         defaultSlots = team.slotsAreDefault,
         spread = kotlin.math.sqrt(starters.sumOf { spread(it).let { sd -> sd * sd } }),
@@ -122,10 +150,12 @@ internal fun waiverPickups(
     badges: Map<String, String>,
     rostered: Set<String>,
     starterOut: Map<String, String> = emptyMap(),
+    /** NFL teams whose game has kicked off: their free agents can't play for you this week. */
+    started: Set<String> = emptySet(),
 ): List<PickupLine> {
     val byId = weekRows.associateBy { it.playerId }
     val own = team.players.mapNotNull { p -> p.playerId?.let(byId::get) }.map { outAdjusted(it, badges) }
-    val free = weekRows.filter { it.playerId !in rostered }.map { outAdjusted(it, badges) }.filter { it.points > 0 }
+    val free = weekRows.filter { it.playerId !in rostered && it.team !in started }.map { outAdjusted(it, badges) }.filter { it.points > 0 }
     val rows = (own + free).associateBy { it.playerId }
     fun candidate(row: ProjectionRow) = LineupCandidate(row.playerId, row.position, row.points)
     return Lineups.pickups(team.slots, own.map(::candidate), free.map(::candidate)).map {

@@ -158,4 +158,23 @@ class ScoresRepositoryTest {
         assertEquals(GameState.FINAL, merged.single { it.home == "GGG" }.state)
         assertNull(merged.single { it.home == "EEE" }.kickoff)
     }
+
+    @Test
+    fun `a week's started teams are those live, final or past their kickoff`() {
+        val now = java.time.Instant.parse("2026-10-04T18:00:00Z")
+        fun g(home: String, away: String, state: GameState, kickoff: String?) =
+            ScoreGame(home, away, null, null, state, kickoff?.let(java.time.Instant::parse), null, null, null)
+        val week = ScoresWeek(
+            2026, 5,
+            listOf(
+                g("KC", "BUF", GameState.FINAL, "2026-10-01T00:15:00Z"),
+                g("DAL", "NYG", GameState.LIVE, null),
+                g("SF", "SEA", GameState.SCHEDULED, "2026-10-04T17:00:00Z"),
+                g("GB", "CHI", GameState.SCHEDULED, "2026-10-04T20:25:00Z"),
+                g("MIA", "NE", GameState.SCHEDULED, null),
+            ),
+            emptyList(), null,
+        )
+        assertEquals(setOf("KC", "BUF", "DAL", "NYG", "SF", "SEA"), week.started(now))
+    }
 }

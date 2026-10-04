@@ -61,6 +61,11 @@ public data class ScoresWeek(
     val liveError: String?,
 )
 
+/** The teams whose game has kicked off by [now]: live or final, or scheduled with a kickoff already past. */
+public fun ScoresWeek.started(now: Instant): Set<String> =
+    games.filter { it.state != GameState.SCHEDULED || it.kickoff?.let { k -> !k.isAfter(now) } == true }
+        .flatMapTo(HashSet()) { listOf(it.home, it.away) }
+
 /** One player's week in a game: his fantasy points under the scoring profile. */
 public data class GamePlayer(val playerId: String, val name: String, val position: String?, val points: Double?)
 

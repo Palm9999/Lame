@@ -80,6 +80,8 @@ public fun ProjectionListRoute(
     /** Re-reads the league from ESPN; My lineup calls it when the snapshot is older than [LEAGUE_STALE_MILLIS]. */
     syncLeague: suspend (season: Int) -> Unit = {},
     now: () -> Long = System::currentTimeMillis,
+    /** NFL teams whose game this week has kicked off, asked when My lineup opens; their players are locked. */
+    startedTeams: suspend (season: Int, week: Int) -> Set<String> = { _, _ -> emptySet() },
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -93,6 +95,7 @@ public fun ProjectionListRoute(
     val others by otherTeams.collectAsStateWithLifecycle(initialValue = emptyList())
     var rival by remember { mutableStateOf<OpponentState>(OpponentState.Idle) }
     var movingUp by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var locked by remember { mutableStateOf<Set<String>>(emptySet()) }
     val scope = rememberCoroutineScope()
     ProjectionListScreen(
         state, injuries, onPlayer, onBack, team?.takeIf { it.season == season }, rival,
@@ -101,7 +104,19 @@ public fun ProjectionListRoute(
         leagues = choices,
         onLeague = { id -> scope.launch { setLeague(id) } },
         partners = others.filter { it.season == season },
+        started = locked,
         onLineupOpened = {
+            (state as? ProjectionListState.Loaded)?.week?.let { week ->
+                scope.launch {
+                    locked = try {
+                        startedTeams(season, week)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        emptySet()
+                    }
+                }
+            }
             val fetched = taken?.fetchedAtMillis
             if (fetched != null && now() - fetched > LEAGUE_STALE_MILLIS) {
                 scope.launch {
@@ -162,6 +177,8 @@ public fun ProjectionListScreen(
     onLeague: (String) -> Unit = {},
     /** The league's other teams: with your team known, a Trade mode weighs trades with them. */
     partners: List<MyTeam> = emptyList(),
+    /** NFL teams whose game this week has started: My lineup keeps their players where ESPN has them. */
+    started: Set<String> = emptySet(),
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
@@ -220,11 +237,11 @@ public fun ProjectionListScreen(
                     if (mode == ListMode.TRADE && myTeam != null) {
                         TradeView(myTeam, partners, state.rosRows)
                     } else if (mode == ListMode.LINEUP && myTeam != null) {
-                        val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, state.weekRows, badges) }
-                        val pickups = if (rostered == null) null else remember(myTeam, state, badges, rostered, starterOut) { waiverPickups(myTeam, state.weekRows, badges, rostered, starterOut) }
+                        val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, state.weekRows, badges, started) }
+                        val pickups = if (rostered == null) null else remember(myTeam, state, badges, rostered, starterOut, started) { waiverPickups(myTeam, state.weekRows, badges, rostered, starterOut, started) }
                         // Rest of season keeps an injured player's projection, as its list does.
                         val stashes = if (rostered == null) null else remember(myTeam, state, rostered) { waiverPickups(myTeam, state.rosRows, emptyMap(), rostered) }
-                        val mine = lineupView(myTeam, state.week, state.weekRows, badges)
+                        val mine = lineupView(myTeam, state.week, state.weekRows, badges, started)
                         LineupList(mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, state.weekRows, badges))
                     } else {
                         Row(
@@ -317,7 +334,7 @@ private fun LineupList(
         }
         itemsIndexed(view.starters, key = { i, line -> "s:$i:${line.slot}" }) { _, line ->
             if (line.row != null) {
-                ProjectionListRow(line.slot, line.row, badges[line.row.playerId], onPlayer, LeadWidth)
+                ProjectionListRow(if (line.locked) "${line.slot} 🔒" else line.slot, line.row, badges[line.row.playerId], onPlayer, LeadWidth)
             } else {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(line.slot, Modifier.width(LeadWidth), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

@@ -106,6 +106,24 @@ class LineupViewTest {
     }
 
     @Test
+    fun `a player whose game has started keeps his ESPN slot, and a benched one stays benched`() {
+        fun at(id: String?, slot: String) = LeaguePlayer("e-$id", "Player $id", slot, id)
+        val teams = rows.map { if (it.playerId == "r2" || it.playerId == "x") it.copy(team = "TNF") else it }
+        // r2 (12) started at RB on Thursday; x (30) sat on the bench on Thursday. r1 (14) can only take the FLEX.
+        val t = team(mapOf("RB" to 1, "FLEX" to 1), at("r2", "RB"), at("x", "BE"), at("r1", "BE"), at("t", "FLEX"))
+        val view = lineupView(t, 4, teams, emptyMap(), started = setOf("TNF"))
+        assertEquals(listOf("r2", "r1"), view.starters.map { it.row?.playerId })
+        assertEquals(listOf(true, false), view.starters.map { it.locked })
+        assertEquals(26.0, view.total, 1e-9)
+        assertTrue(view.bench.any { it.playerId == "x" })
+        // Without locks the Thursday bench player would start.
+        assertEquals(44.0, lineupView(t, 4, teams, emptyMap()).total, 1e-9)
+        val check = lineupCheck(t, view, teams, emptyMap())!!
+        assertEquals(listOf("r1"), check.start.map { it.playerId })
+        assertEquals(listOf("t"), check.sit.map { it.playerId })
+    }
+
+    @Test
     fun `the line says who leads and by how much`() {
         assertEquals("You lead by 6.8", matchupLine(98.0, 91.2))
         assertEquals("You trail by 2.1", matchupLine(88.0, 90.1))

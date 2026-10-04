@@ -48,6 +48,7 @@ import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.ScoresRepository
+import dev.gridiron.core.data.started
 import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.LiveRepository
@@ -222,6 +223,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             },
                             otherTeams = deps.league?.otherTeams ?: flowOf(emptyList()),
                             syncLeague = { s -> deps.league?.sync(s) },
+                            startedTeams = { s, w -> deps.scores?.week(s, w)?.started(java.time.Instant.now()) ?: emptySet() },
                         )
                     }
                     entry<OpportunitiesKey> { key ->
