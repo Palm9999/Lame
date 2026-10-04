@@ -305,6 +305,32 @@ class ProjectionListScreenTest {
     }
 
     @Test
+    fun `a two-for-one lets you pick whom you cut`() {
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    tradeState, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = roster("Mine", "q1", "r1", "r2", "w1"),
+                    partners = listOf(roster("Rivals", "q2", "w2", "w3", "r3")),
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:trade").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("give:w1").performClick()
+        compose.onNodeWithTag("get:w3").performClick()
+        compose.onNodeWithTag("get:r3").performClick()
+        // The lowest goes by default: Their RB (50). Mine 490 plus a tenth of r2 (140) on the bench.
+        compose.onNodeWithText("You cut Their RB to make room.").assertIsDisplayed()
+        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +80.0 (424.0 → 504.0)")
+        compose.onNodeWithTag("cut:w1").assertDoesNotExist()
+        compose.onNodeWithTag("cut:r2").performClick()
+        // Cutting r2 instead leaves Their RB (50) on the bench.
+        compose.onNodeWithText("You cut Mine RB Two to make room.").assertIsDisplayed()
+        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +71.0 (424.0 → 495.0)")
+    }
+
+    @Test
     fun `playoff odds simulate the games left from each roster's weekly projections`() {
         // Mine (3-0) is far stronger than Rivals (0-3); one game left between them, and two teams make it.
         fun team(id: Int, name: String, w: Int, l: Int, vararg ids: String) =

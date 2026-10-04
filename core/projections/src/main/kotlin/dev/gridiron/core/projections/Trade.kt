@@ -2,7 +2,8 @@ package dev.gridiron.core.projections
 
 /**
  * What a trade does to both rosters' rest-of-season value ([Trades.value]), before and after. A side that receives
- * more players than it sends cuts its lowest-valued players to keep its roster size: [myDrops] and [theirDrops].
+ * more players than it sends cuts players to keep its roster size: [myDrops] and [theirDrops] (the user's own choice
+ * first, then the lowest-valued).
  */
 public data class TradeOutcome(
     val mineBefore: Double,
@@ -42,14 +43,18 @@ public object Trades {
         return best.total + BENCH_WEIGHT * (best.bench.maxOfOrNull { it.points } ?: 0.0)
     }
 
-    /** [mine] sends [give] (player ids) to [theirs] for [get]; ids on the wrong roster are ignored. */
+    /**
+     * [mine] sends [give] (player ids) to [theirs] for [get]; ids on the wrong roster are ignored. When the user must
+     * cut players to make room, [myCuts] go first (those still on the roster after the trade), then the lowest-valued.
+     */
     public fun evaluate(
         slots: Map<String, Int>,
         mine: List<LineupCandidate>,
         theirs: List<LineupCandidate>,
         give: Set<String>,
         get: Set<String>,
-    ): TradeOutcome = outcome(slots, mine, theirs, mine.filter { it.playerId in give }, theirs.filter { it.playerId in get }, ::value)
+        myCuts: Set<String> = emptySet(),
+    ): TradeOutcome = outcome(slots, mine, theirs, mine.filter { it.playerId in give }, theirs.filter { it.playerId in get }, ::value, myCuts = myCuts)
 
     private fun outcome(
         slots: Map<String, Int>,
@@ -60,16 +65,18 @@ public object Trades {
         valueOf: (Map<String, Int>, List<LineupCandidate>) -> Double,
         mineBefore: Double = valueOf(slots, mine),
         theirsBefore: Double = valueOf(slots, theirs),
+        myCuts: Set<String> = emptySet(),
     ): TradeOutcome {
-        val (myRoster, myDrops) = keepSize(mine.size, mine.filterNot { it in sent } + received)
+        val (myRoster, myDrops) = keepSize(mine.size, mine.filterNot { it in sent } + received, myCuts)
         val (theirRoster, theirDrops) = keepSize(theirs.size, theirs.filterNot { it in received } + sent)
         return TradeOutcome(mineBefore, valueOf(slots, myRoster), theirsBefore, valueOf(slots, theirRoster), myDrops, theirDrops)
     }
 
-    /** [roster] cut back to [size] players by dropping the lowest rest-of-season totals (ties by id). */
-    private fun keepSize(size: Int, roster: List<LineupCandidate>): Pair<List<LineupCandidate>, List<LineupCandidate>> {
+    /** [roster] cut back to [size] players: [first] (ids) before anyone, then the lowest rest-of-season totals (ties by id). */
+    private fun keepSize(size: Int, roster: List<LineupCandidate>, first: Set<String> = emptySet()): Pair<List<LineupCandidate>, List<LineupCandidate>> {
         if (roster.size <= size) return roster to emptyList()
-        val drops = roster.sortedWith(compareBy<LineupCandidate> { it.points }.thenBy { it.playerId }).take(roster.size - size)
+        val drops = roster.sortedWith(compareBy<LineupCandidate> { it.playerId !in first }.thenBy { it.points }.thenBy { it.playerId })
+            .take(roster.size - size)
         return roster.filterNot { it in drops } to drops
     }
 

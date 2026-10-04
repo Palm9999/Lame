@@ -57,6 +57,20 @@ class TradeTest {
     }
 
     @Test
+    fun `the user can choose whom to cut instead of the lowest`() {
+        // w1 for w3 and r3: four players become five.
+        val lowest = Trades.evaluate(slots, mine, theirs, give = setOf("w1"), get = setOf("w3", "r3"))
+        assertEquals(listOf("r3"), lowest.myDrops.map { it.playerId })
+        assertEquals(490.0 + b * 140.0, lowest.mineAfter, 1e-9)
+        val chosen = Trades.evaluate(slots, mine, theirs, give = setOf("w1"), get = setOf("w3", "r3"), myCuts = setOf("r2"))
+        assertEquals(listOf("r2"), chosen.myDrops.map { it.playerId })
+        assertEquals(490.0 + b * 50.0, chosen.mineAfter, 1e-9)
+        // A chosen cut who leaves in the trade (or a cut with no room to make) changes nothing.
+        assertEquals(lowest, Trades.evaluate(slots, mine, theirs, give = setOf("w1"), get = setOf("w3", "r3"), myCuts = setOf("w1")))
+        assertEquals(emptyList<LineupCandidate>(), Trades.evaluate(slots, mine, theirs, give = setOf("r2"), get = setOf("w3"), myCuts = setOf("r1")).myDrops)
+    }
+
+    @Test
     fun `ideas only list trades that help both sides, the user's gain first`() {
         val ideas = Trades.ideas(slots, mine, listOf("Rivals" to theirs))
         assertTrue(ideas.isNotEmpty())

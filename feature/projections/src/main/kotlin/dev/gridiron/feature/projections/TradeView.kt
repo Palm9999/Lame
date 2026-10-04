@@ -117,6 +117,8 @@ internal fun TradeView(
     val partner = partners.firstOrNull { it.teamName == partnerName } ?: partners.first()
     var give by rememberSaveable { mutableStateOf(listOf<String>()) }
     var get by rememberSaveable { mutableStateOf(listOf<String>()) }
+    // Whom the user would rather cut when the trade brings in more players than it sends; else the lowest go.
+    var cuts by rememberSaveable { mutableStateOf(listOf<String>()) }
     val theirs = others.getValue(partner.teamName)
 
     var searchMillis by remember { mutableStateOf<Long?>(null) }
@@ -127,15 +129,15 @@ internal fun TradeView(
         }
         searchMillis = (System.nanoTime() - started) / 1_000_000
     }
-    val outcome = remember(give, get, partner, mine, theirs) {
-        if (give.isEmpty() && get.isEmpty()) null else Trades.evaluate(myTeam.slots, candidates(mine), candidates(theirs), give.toSet(), get.toSet())
+    val outcome = remember(give, get, cuts, partner, mine, theirs) {
+        if (give.isEmpty() && get.isEmpty()) null else Trades.evaluate(myTeam.slots, candidates(mine), candidates(theirs), give.toSet(), get.toSet(), cuts.toSet())
     }
     // The same trade over the league's playoff weeks alone; null before weekly projections exist.
-    val playoffOutcome = remember(give, get, partner, mine, theirs, rosWeekly) {
+    val playoffOutcome = remember(give, get, cuts, partner, mine, theirs, rosWeekly) {
         if (outcome == null || rosWeekly.isEmpty()) {
             null
         } else {
-            Trades.evaluate(myTeam.slots, onlyWeeks(candidates(mine), playoffs), onlyWeeks(candidates(theirs), playoffs), give.toSet(), get.toSet())
+            Trades.evaluate(myTeam.slots, onlyWeeks(candidates(mine), playoffs), onlyWeeks(candidates(theirs), playoffs), give.toSet(), get.toSet(), cuts.toSet())
         }
     }
     val names = remember(mine, others) { (mine + others.values.flatten()).associate { it.playerId to it.name } }
@@ -153,6 +155,7 @@ internal fun TradeView(
                             if (team.teamName != partner.teamName) {
                                 partnerName = team.teamName
                                 get = emptyList()
+                                cuts = emptyList()
                             }
                         },
                         label = { Text(team.teamName) },
@@ -190,11 +193,29 @@ internal fun TradeView(
                     }
                     if (outcome.myDrops.isNotEmpty()) {
                         Text("You cut ${outcome.myDrops.joinToString { names[it.playerId] ?: it.playerId }} to make room.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // Anyone staying on your roster can be the cut instead: a tap swaps him in for the oldest choice.
+                        val room = outcome.myDrops.size
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()).testTag("trade:cuts"),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text("Cut instead:", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            for (p in mine.filter { it.playerId !in give }.sortedBy { it.points }) {
+                                val cut = outcome.myDrops.any { it.playerId == p.playerId }
+                                FilterChip(
+                                    selected = cut,
+                                    onClick = { if (!cut) cuts = (cuts.filter { it !in give } + p.playerId).takeLast(room) },
+                                    label = { Text(p.name) },
+                                    modifier = Modifier.testTag("cut:${p.playerId}"),
+                                )
+                            }
+                        }
                     }
                     if (outcome.theirDrops.isNotEmpty()) {
                         Text("${partner.teamName} cuts ${outcome.theirDrops.joinToString { names[it.playerId] ?: it.playerId }} to make room.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    TextButton(onClick = { give = emptyList(); get = emptyList() }) { Text("Clear") }
+                    TextButton(onClick = { give = emptyList(); get = emptyList(); cuts = emptyList() }) { Text("Clear") }
                 }
             }
         }
@@ -210,6 +231,7 @@ internal fun TradeView(
                             partnerName = idea.partner
                             give = idea.give.map { it.playerId }
                             get = idea.get.map { it.playerId }
+                            cuts = emptyList()
                         }.padding(horizontal = 16.dp, vertical = 8.dp).testTag("idea:$i"),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
@@ -247,7 +269,7 @@ internal fun TradeView(
                         "A tenth of the best bench player counts as depth; a side that gets more players cuts its lowest."
                 } else {
                     "Rest of season under your scoring, week by week, so byes count. A tenth of each week's best bench " +
-                        "player counts as depth; a side that gets more players cuts its lowest. A player with no " +
+                        "player counts as depth; a side that gets more players cuts its lowest (you can pick yours). A player with no " +
                         "projection (on IR, say) counts as nothing."
                 },
             )
