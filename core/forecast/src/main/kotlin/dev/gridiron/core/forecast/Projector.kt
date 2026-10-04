@@ -126,7 +126,20 @@ internal class Projector(
             )
             leagueImplied = averageImplied(inputs.games, season)
         }
+
+        /** The league's typical starting QB this week: no history of his own, a starter's pass share, the league's team. */
+        val typicalQb: Map<String, Double> by lazy {
+            val qb = rates["QB"] ?: return@lazy emptyMap()
+            model.project(
+                PlayerContext("QB", season, week, emptyList(), regimeBreak = false), qb, leagueTeam,
+                Shares(pass = K.STARTER_PASS_SHARE, target = 0.0, carry = qb.carryShare),
+            )
+        }
     }
+
+    /** Layers 1-2c: the model's baseline for [d] with [shares] of [volume]. */
+    private fun baseline(state: WeekState, d: Draft, volume: TeamVolume, shares: Shares): Map<String, Double> =
+        withQbSpread(withSeasonForm(model.project(d.ctx, d.rates, volume, shares), d.ctx), d.ctx, state.typicalQb)
 
     /** Adds every game before [order] to the league totals. */
     private fun advanceTo(order: Int) {
@@ -183,7 +196,7 @@ internal class Projector(
             healthy.kept.map { d ->
                 val id = d.player.playerId
                 Prepared(
-                    d.player, d.team, withSeasonForm(model.project(d.ctx, d.rates, volume, healthy.shares.getValue(id)), d.ctx), volume.passRate,
+                    d.player, d.team, baseline(state, d, volume, healthy.shares.getValue(id)), volume.passRate,
                     upcoming = projected[id]?.upcoming ?: emptyMap(),
                 )
             }
@@ -250,7 +263,7 @@ internal class Projector(
     }
 
     private fun finish(state: WeekState, d: Draft, shares: Shares, volume: TeamVolume, kind: WeekKind, market: MarketMatch?): Prepared {
-        val prepared = Prepared(d.player, d.team, withSeasonForm(model.project(d.ctx, d.rates, volume, shares), d.ctx), volume.passRate)
+        val prepared = Prepared(d.player, d.team, baseline(state, d, volume, shares), volume.passRate)
         val game = d.game ?: return prepared
         val (afterMatchup, final) = finalFor(state, prepared, game)
         val cv = K.EMPIRICAL_CV.getValue(d.player.position)

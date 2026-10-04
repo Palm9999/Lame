@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 8
+public const val FORECAST_VERSION: Int = 9
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -25,6 +25,10 @@ internal object K {
     // ±0.019); a QB blend gained nothing. 0.25 gained more in 2024 but no more in 2025, and pulls a rising
     // player harder toward his early, smaller games.
     const val SEASON_FORM_WEIGHT = 0.15
+
+    // Layer 2c: a starting QB's baseline keeps this share of its distance from the league's typical starter.
+    // Fitted leaving one season out on 2022-2025 (built from 2021): 0.60-0.65 in every fold.
+    const val QB_SPREAD = 0.65
     // Layer 2 amendment (spec, 2026-09-26): shrink toward the player's own last season; newcomers
     // toward half the position's average share; the starting QB toward a starter's share. Only
     // players who played for their team in one of its last ACTIVE_WINDOW games are projected.

@@ -16,7 +16,6 @@ internal fun teamVolume(games: List<TeamGame>, fallback: TeamVolume): TeamVolume
     )
 }
 
-/** What the model knows about one player for one week. */
 /**
  * Layer 2b: an RB, WR or TE's [projected] stats moved [K.SEASON_FORM_WEIGHT] of the way toward his per-game
  * averages over this season's games so far. A QB, or anyone without a game yet this season, is unchanged.
@@ -29,6 +28,19 @@ internal fun withSeasonForm(projected: Map<String, Double>, ctx: PlayerContext):
     return projected.mapValues { (metric, mean) -> (1 - w) * mean + w * games.sumOf { it[metric] } / games.size }
 }
 
+/**
+ * Layer 2c: a starting QB's [projected] stats keep [K.QB_SPREAD] of their distance from [typical], the league's
+ * typical starter this week. A QB's projections otherwise spread wider than his games do. Anyone else is unchanged.
+ */
+internal fun withQbSpread(projected: Map<String, Double>, ctx: PlayerContext, typical: Map<String, Double>): Map<String, Double> {
+    if (ctx.position != "QB") return projected
+    return projected.mapValues { (metric, mean) ->
+        val reference = typical[metric] ?: return@mapValues mean
+        reference + K.QB_SPREAD * (mean - reference)
+    }
+}
+
+/** What the model knows about one player for one week. */
 internal class PlayerContext(
     val position: String,
     val season: Int,

@@ -149,4 +149,17 @@ class BaselineModelTest {
         val lastSeasonOnly = listOf(game(2024, 17, "targets" to 9.0))
         assertEquals(mapOf("targets" to 3.0), withSeasonForm(mapOf("targets" to 3.0), PlayerContext("TE", 2025, 1, lastSeasonOnly, regimeBreak = false)))
     }
+
+    @Test
+    fun `a starting QB keeps part of his distance from the league's typical starter`() {
+        val typical = mapOf("attempts" to 33.0, "passing_tds" to 1.4)
+        val ctx = PlayerContext("QB", 2025, 3, emptyList(), regimeBreak = false)
+        val out = withQbSpread(mapOf("attempts" to 39.0, "passing_tds" to 2.4, "rushing_2pt" to 0.1), ctx, typical)
+
+        assertEquals(33.0 + K.QB_SPREAD * 6.0, out.getValue("attempts"), 1e-12)
+        assertEquals(1.4 + K.QB_SPREAD * 1.0, out.getValue("passing_tds"), 1e-12)
+        assertEquals(0.1, out.getValue("rushing_2pt"), 1e-12) // no reference: unchanged
+        val wr = mapOf("targets" to 9.0)
+        assertEquals(wr, withQbSpread(wr, PlayerContext("WR", 2025, 3, emptyList(), regimeBreak = false), typical))
+    }
 }

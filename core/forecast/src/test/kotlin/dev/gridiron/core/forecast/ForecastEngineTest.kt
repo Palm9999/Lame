@@ -446,12 +446,13 @@ class ForecastEngineTest {
                     "AND metric_id = '$metric' AND player_id IN ($ids)",
             ).single()[0]!!.toDouble()
 
-            // Layer 2b pulls the RB and WR toward their own 2025 games (the QB keeps his: 3 carries a game), so the
-            // team's sum moves toward its 2025 average.
+            // Layer 2b pulls the RB and WR toward their own 2025 games, so the team's sum moves toward its 2025
+            // average. The QB has no targets; his 3 carries a game also move a little toward the league's typical
+            // starter (layer 2c), so carries match to within that.
             val w = K.SEASON_FORM_WEIGHT
             assertEquals((1 - w) * ewma(targets, 4.0)!! + w * targets.takeLast(2).average(), baseline("targets"), 1e-6)
             val qb = baseline("carries", "'QB_A'")
-            assertEquals(qb + (1 - w) * (ewma(carries, 4.0)!! - qb) + w * (carries.takeLast(2).average() - 3.0), baseline("carries"), 1e-6)
+            assertEquals(qb + (1 - w) * (ewma(carries, 4.0)!! - qb) + w * (carries.takeLast(2).average() - 3.0), baseline("carries"), 0.05)
         }
     }
 
