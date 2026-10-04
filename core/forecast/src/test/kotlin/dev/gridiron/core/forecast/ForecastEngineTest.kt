@@ -175,16 +175,25 @@ class ForecastEngineTest {
     }
 
     @Test
-    fun `a Questionable player is projected as usual`() {
+    fun `a Questionable player keeps his baseline, and his final is scaled by how often such players play`() {
         var base = 0.0
+        var final = 0.0
         league("base.db").use { db ->
             run(db)
             base = baselineTargets(db, "WR_A")
+            final = finalMean(db, "WR_A", 3, "targets")
         }
-        league("q.db").use { db ->
-            db.injury("WR_A", 2025, 3, "Questionable")
-            run(db)
-            assertEquals(base, baselineTargets(db, "WR_A"), 1e-12)
+        val cases = listOf(null to 0.78, "Limited Participation in Practice" to 0.78, "Full Participation in Practice" to 0.87, "Did Not Participate In Practice" to 0.52)
+        for ((i, case) in cases.withIndex()) {
+            val (practice, k) = case
+            league("q$i.db").use { db ->
+                db.injury("WR_A", 2025, 3, "Questionable", practice)
+                run(db)
+                assertEquals(base, baselineTargets(db, "WR_A"), 1e-12)
+                assertEquals(final * k, finalMean(db, "WR_A", 3, "targets"), 1e-9, practice)
+                val factor = db.query("SELECT log_multiplier, note FROM player_week_projection_factor WHERE player_id = 'WR_A' AND week = 3 AND factor = 'questionable'").single()
+                assertEquals(kotlin.math.ln(k), factor[0]!!.toDouble(), 1e-9)
+            }
         }
     }
 

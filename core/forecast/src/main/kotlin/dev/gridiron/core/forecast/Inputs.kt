@@ -89,6 +89,8 @@ internal class ForecastInputs(
     val unitHistory: Map<String, List<PlayerGame>> = emptyMap(),
     /** (player id, season, week) for every QB, RB, WR or TE nflverse listed Out or Doubtful: none of them has ever played that week. */
     val absent: Set<Triple<String, Int, Int>> = emptySet(),
+    /** Friday practice level per (player id, season, week) for every QB, RB, WR or TE nflverse listed Questionable. */
+    val questionable: Map<Triple<String, Int, Int>, Practice> = emptyMap(),
     /** ESPN's projection per (player id, season, week), in our metric ids; empty when the build has none. */
     val espn: Map<Triple<String, Int, Int>, Map<String, Double>> = emptyMap(),
 )
@@ -128,6 +130,7 @@ internal fun loadInputs(conn: SQLiteConnection): ForecastInputs {
         units = readPlayers(conn, UNIT_POSITIONS),
         unitHistory = readHistory(conn, UNIT_POSITIONS, UNIT_METRICS),
         absent = readAbsent(conn),
+        questionable = readQuestionable(conn),
         espn = readEspn(conn),
     )
 }
@@ -152,6 +155,35 @@ private fun readAbsent(conn: SQLiteConnection): Set<Triple<String, Int, Int>> = 
     POSITIONS.forEachIndexed { i, p -> st.bindText(i + 1, p) }
     buildSet {
         while (st.step()) add(Triple(st.getText(0), st.getLong(1).toInt(), st.getLong(2).toInt()))
+    }
+}
+
+/** The last practice of an injury-report week, as nflverse words it. */
+internal enum class Practice(val label: String) {
+    FULL("full practice"),
+    LIMITED("limited practice"),
+    NONE("no practice"),
+    ;
+
+    internal companion object {
+        /** "Did Not Participate In Practice", "Limited Participation…", "Full Participation…"; anything else is limited. */
+        fun of(text: String?): Practice = when {
+            text == null -> LIMITED
+            text.contains("did not", ignoreCase = true) -> NONE
+            text.contains("full", ignoreCase = true) -> FULL
+            else -> LIMITED
+        }
+    }
+}
+
+private fun readQuestionable(conn: SQLiteConnection): Map<Triple<String, Int, Int>, Practice> = conn.prepare(
+    """SELECT i.player_id, i.season, i.week, i.practice FROM injury_report i
+       JOIN player p ON p.player_id = i.player_id
+       WHERE i.status = 'Questionable' AND p.position IN (${POSITIONS.joinToString(",") { "?" }})""",
+).use { st ->
+    POSITIONS.forEachIndexed { i, p -> st.bindText(i + 1, p) }
+    buildMap {
+        while (st.step()) put(Triple(st.getText(0), st.getLong(1).toInt(), st.getLong(2).toInt()), Practice.of(if (st.isNull(3)) null else st.getText(3)))
     }
 }
 

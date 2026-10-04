@@ -54,9 +54,9 @@ internal class TestDb(val file: File) : AutoCloseable {
         if (played) 21 else null, if (played) 17 else null, spread, total, homeQb, awayQb, homeCoach, awayCoach,
     )
 
-    fun injury(id: String, season: Int, week: Int, status: String?) = exec(
-        "INSERT OR REPLACE INTO injury_report (player_id, season, week, status) VALUES (?, ?, ?, ?)",
-        id, season, week, status,
+    fun injury(id: String, season: Int, week: Int, status: String?, practice: String? = null) = exec(
+        "INSERT OR REPLACE INTO injury_report (player_id, season, week, status, practice) VALUES (?, ?, ?, ?, ?)",
+        id, season, week, status, practice,
     )
 
     /** ESPN's projection for one player-week; the table is created on first use, as a build without ESPN has none. */

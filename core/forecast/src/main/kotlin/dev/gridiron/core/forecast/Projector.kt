@@ -1,6 +1,7 @@
 package dev.gridiron.core.forecast
 
 import kotlin.math.ln
+import kotlin.math.roundToInt
 
 internal class ProjectionOutcome(val status: String, val upcoming: Map<Int, Int>, val weeks: Int, val props: PropsOutcome?)
 
@@ -306,19 +307,29 @@ internal class Projector(
         val game = d.game ?: return prepared
         val (afterMatchup, scripted) = finalFor(state, prepared, game)
         val espn = inputs.espn[Triple(d.player.playerId, state.season, state.week)]
-        val final = withEspn(scripted, espn, d.player.position)
+        val ifPlaying = withEspn(scripted, espn, d.player.position)
+        // Questionable: what he scores if he plays, times how often such a player plays (props price only games played).
+        val practice = inputs.questionable[Triple(d.player.playerId, state.season, state.week)]
+        val questionable = practice?.let { K.QUESTIONABLE_PLAYS.getValue(it) } ?: 1.0
+        val final = scaled(ifPlaying, questionable)
         val cv = K.EMPIRICAL_CV.getValue(d.player.position)
         when (kind) {
             WeekKind.PAST -> if (referencePoints(final) >= K.PAST_WEEK_MIN_POINTS) {
                 emit(d.player.playerId, state.season, state.week, "final", final, cv)
             }
             WeekKind.UPCOMING -> {
-                val withProps = market?.quotes(d.player.playerId)?.let { blend(final, it, d.player.position) }
-                val shown = withProps?.components ?: final
+                val withProps = market?.quotes(d.player.playerId)?.let { blend(ifPlaying, it, d.player.position) }
+                val shown = withProps?.let { scaled(it.components, questionable) } ?: final
                 if (referencePoints(shown) >= K.UPCOMING_MIN_POINTS) {
                     emit(d.player.playerId, state.season, state.week, "baseline", prepared.baseline, cv)
                     emit(d.player.playerId, state.season, state.week, "final", shown, cv)
-                    emitFactors(state, prepared, game, afterMatchup, scripted, final, espn, withProps)
+                    emitFactors(state, prepared, game, afterMatchup, scripted, ifPlaying, espn, withProps)
+                    practice?.let {
+                        sink.factor(
+                            d.player.playerId, state.season, state.week, "questionable", ln(questionable),
+                            "Questionable after ${it.label}: such players score about ${(questionable * 100).roundToInt()}% as much",
+                        )
+                    }
                     if (withProps != null) blended++
                 }
                 return Prepared(d.player, d.team, prepared.baseline, prepared.passRate, upcoming = shown)
@@ -433,6 +444,9 @@ internal class Projector(
             if (mean > 0.0) sink.projection(playerId, season, week, metric, stage, mean, varianceFor(mean, cv))
         }
     }
+
+    private fun scaled(components: Map<String, Double>, k: Double): Map<String, Double> =
+        if (k == 1.0) components else components.mapValues { it.value * k }
 
     private fun logRatio(after: Double, before: Double): Double = if (after > 0.0 && before > 0.0) ln(after / before) else 0.0
 }

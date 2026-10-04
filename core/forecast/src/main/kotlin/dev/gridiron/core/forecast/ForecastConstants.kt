@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 16
+public const val FORECAST_VERSION: Int = 17
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -56,6 +56,12 @@ internal object K {
     // plays about 87%; it adds 374 played weeks and teammates' PPR MAE falls 0.008 (±0.003). 5 and 8 add fewer
     // and gain less. Treating a player ESPN stops projecting as out was tested and cost 0.019: not used.
     const val RETURN_MIN_ESPN_POINTS = 3.0
+
+    // A QB, RB, WR or TE nflverse lists Questionable is projected at what he scores if he plays times how often a
+    // Questionable player at his Friday practice level plays and scores, relative to a healthy one: on 2022-2025
+    // (projected 3+ PPR, DNPs counted as zero) actual over projected was 0.943 healthy, 0.824 full practice, 0.733
+    // limited and 0.488 no practice, steady by season (limited 0.70-0.78). Unknown practice counts as limited.
+    val QUESTIONABLE_PLAYS: Map<Practice, Double> = mapOf(Practice.FULL to 0.87, Practice.LIMITED to 0.78, Practice.NONE to 0.52)
 
     // From the upcoming week on, the starting QB is the one ESPN projects most once it projects him for this many
     // points, when nflverse lists no starter yet; on 2022-2025's team-weeks that picks the real starter 97% of the
