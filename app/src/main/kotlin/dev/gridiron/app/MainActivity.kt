@@ -24,6 +24,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             app.settings.injuryAlerts.collect { on ->
                 InjuryAlertWorker.schedule(this@MainActivity, on)
+                // Off forgets what was seen, so turning alerts back on doesn't replay every change since.
+                if (!on) app.injuryAlerts.forget()
                 val granted = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) ==
                     PackageManager.PERMISSION_GRANTED
                 if (on && !granted) askToNotify.launch(Manifest.permission.POST_NOTIFICATIONS)

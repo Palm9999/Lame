@@ -65,13 +65,13 @@ class InjuryAlertsTest {
         db.close()
     }
 
-    /** Max Melton (Q in the recorded list) is the one matched player. */
-    private fun players(): PlayerDirectory {
+    /** Max Melton (Q in the recorded list) is the one matched player; [matched] false leaves the xref empty. */
+    private fun players(matched: Boolean = true): PlayerDirectory {
         val file = File(dir, "stats.db")
         DriverManager.getConnection("jdbc:sqlite:${file.path}").use { conn ->
             conn.createStatement().use { st ->
                 st.executeUpdate("CREATE TABLE player_xref (espn_id TEXT PRIMARY KEY, player_id TEXT NOT NULL, full_name TEXT NOT NULL, position TEXT, team TEXT)")
-                st.executeUpdate("INSERT INTO player_xref VALUES ('4698113', '00-0039900', 'Max Melton', 'CB', 'ARI')")
+                if (matched) st.executeUpdate("INSERT INTO player_xref VALUES ('4698113', '00-0039900', 'Max Melton', 'CB', 'ARI')")
             }
         }
         return PlayerDirectory(JdbcQueryExecutor(file.path))
@@ -101,6 +101,24 @@ class InjuryAlertsTest {
         offline = true
         assertEquals(emptyList<InjuryAlert>(), checker.check())
         assertEquals(stored, state.readText())
+    }
+
+    @Test
+    fun `a list matching no player keeps the old listing instead of clearing everyone`() = runTest {
+        val state = File(dir, "alerts.json").apply { writeText("""{"00-0039900":{"abbr":"O","status":"Out","name":"Max Melton"}}""") }
+        val checker = InjuryAlertChecker(LiveRepository(db, http, players(matched = false)), flowOf(listOf(Roster("r1", "Mine", listOf("00-0039900")))), { emptySet() }, state)
+        val before = state.readText()
+        assertEquals(emptyList<InjuryAlert>(), checker.check())
+        assertEquals(before, state.readText())
+    }
+
+    @Test
+    fun `forgetting the listing makes the next check a first one`() = runTest {
+        val state = File(dir, "alerts.json").apply { writeText("""{"00-0039900":{"abbr":"O","status":"Out","name":"Max Melton"}}""") }
+        val checker = InjuryAlertChecker(LiveRepository(db, http, players()), flowOf(listOf(Roster("r1", "Mine", listOf("00-0039900")))), { emptySet() }, state)
+        checker.forget()
+        assertEquals(emptyList<InjuryAlert>(), checker.check())
+        assertTrue(state.readText().contains("\"Q\""))
     }
 
     @Test

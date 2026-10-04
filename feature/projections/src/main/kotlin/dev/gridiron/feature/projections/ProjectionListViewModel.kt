@@ -112,6 +112,19 @@ public class ProjectionListViewModel(
                 ProjectionListState.Unavailable("Couldn't load projections: ${e.message}.")
             }
             if (request == latest) _state.value = next
+            // Weekly rest of season (Trade, rest-of-season adds) is a few hundred milliseconds more: it follows the
+            // list instead of holding it up, and a failure leaves season totals in use.
+            if (next is ProjectionListState.Loaded && request == latest) {
+                val weekly = try {
+                    val rows = repository.rosWeeks(season)
+                    withContext(compute) { rows.associate { it.playerId to it.points(profile) } }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyMap()
+                }
+                if (request == latest && weekly.isNotEmpty()) _state.value = next.copy(rosWeekly = weekly)
+            }
         }
     }
 
@@ -125,12 +138,8 @@ public class ProjectionListViewModel(
             else -> {
                 val weekListed = repository.weekAll(season, week)
                 val rosListed = repository.rosAll(season)
-                val rosWeeks = repository.rosWeeks(season)
                 withContext(compute) {
-                    ProjectionListState.Loaded(
-                        week, status.builtAt, toRows(weekListed, profile), toRows(rosListed, profile),
-                        rosWeeks.associate { it.playerId to it.points(profile) },
-                    )
+                    ProjectionListState.Loaded(week, status.builtAt, toRows(weekListed, profile), toRows(rosListed, profile))
                 }
             }
         }

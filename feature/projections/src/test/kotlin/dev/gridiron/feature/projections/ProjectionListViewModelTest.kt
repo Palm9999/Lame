@@ -29,12 +29,14 @@ private class ListExecutor(
     private val meta: List<Pair<String, String>>,
     private val week: List<List<Any?>> = emptyList(),
     private val ros: List<List<Any?>> = emptyList(),
+    private val rosWeeks: List<List<Any?>> = emptyList(),
 ) : QueryExecutor {
     override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
         val rows = when {
             "schema_meta" in query.sql -> meta.map { listOf(it.first, it.second) }
             "FROM player_week_projection" in query.sql -> week
             "FROM player_ros_projection" in query.sql -> ros
+            "FROM player_ros_week" in query.sql -> rosWeeks
             else -> emptyList()
         }
         return rows.map { map(ListRow(it)) }
@@ -71,6 +73,19 @@ class ProjectionListViewModelTest {
         assertEquals(4, loaded.week)
         assertEquals(5.0, loaded.weekRows.single().points, 1e-9)
         assertEquals(60.0, loaded.rosRows.single().points, 1e-9)
+    }
+
+    @Test
+    fun `weekly rest of season follows the list, scored with the profile`() = runTest(dispatcher) {
+        val executor = ListExecutor(
+            meta = listOf("forecast_status" to "ok", "forecast_week:2026" to "4"),
+            ros = listOf(listOf("w", "Wide Out", "WR", "KC", "receptions", 60.0, 50.0, "binomial")),
+            rosWeeks = listOf(listOf("w", "WR", 5L, "receptions", 6.0, 1.0), listOf("w", "WR", 7L, "receptions", 4.0, 1.0)),
+        )
+        val vm = ProjectionListViewModel(ProjectionsRepository(executor), dispatcher)
+        vm.load(2026, ScoringPresets.HALF_PPR)
+        advanceUntilIdle()
+        assertEquals(mapOf("w" to mapOf(5 to 3.0, 7 to 2.0)), (vm.state.value as ProjectionListState.Loaded).rosWeekly)
     }
 
     @Test

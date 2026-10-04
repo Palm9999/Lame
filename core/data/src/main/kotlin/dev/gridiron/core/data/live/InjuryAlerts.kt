@@ -64,7 +64,8 @@ public object InjuryAlerts {
  * Checks ESPN's injury list against what it last saw and returns the alerts for rostered players ([rosters], every
  * one of the user's, ESPN league teams included; [starters] from the active league's lineup). The listing seen is kept
  * in [stateFile] for every player, not only rostered ones, so adding an already-injured player to a roster isn't news.
- * The first check only stores; a failed fetch keeps the old listing and alerts nothing.
+ * The first check only stores; a failed fetch, or a list with no player the app knows (an empty response, no stats
+ * yet), keeps the old listing and alerts nothing rather than reading as everyone recovered.
  */
 public class InjuryAlertChecker(
     private val live: LiveRepository,
@@ -75,11 +76,17 @@ public class InjuryAlertChecker(
     public suspend fun check(): List<InjuryAlert> {
         if (live.refresh().injuriesError != null) return emptyList()
         val now = InjuryAlerts.seen(live.injuries())
+        if (now.isEmpty()) return emptyList()
         val before = read()
         write(now)
         if (before == null) return emptyList()
         val rostered = rosters.first().flatMapTo(HashSet()) { it.playerIds }
         return InjuryAlerts.changes(before, now, rostered, starters())
+    }
+
+    /** Drops the listing seen, so the next check only stores: alerts turned off and on again don't replay the gap. */
+    public suspend fun forget() {
+        withContext(Dispatchers.IO) { stateFile.delete() }
     }
 
     private suspend fun read(): Map<String, SeenStatus>? = withContext(Dispatchers.IO) {
