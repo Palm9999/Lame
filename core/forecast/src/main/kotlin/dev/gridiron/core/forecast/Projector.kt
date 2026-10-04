@@ -205,7 +205,7 @@ internal class Projector(
 
     private fun roster(team: String, onTeam: List<Draft>, state: WeekState, kind: WeekKind, respectAbsent: Boolean): Roster {
         val available = if (respectAbsent) onTeam.filterNot { isAbsent(it, state) } else onTeam
-        val starter = expectedStarter(team, available, state, kind)
+        val starter = expectedStarter(team, available, state, kind, healthy = !respectAbsent)
         val kept = available.filter { d ->
             if (d.player.position == "QB") d.player.playerId == starter else isActive(d, team, state, kind)
         }
@@ -251,28 +251,37 @@ internal class Projector(
     }
 
     /**
-     * The QB who gets [team]'s passing this week. In order: the starter
-     * nflverse lists for the game (from the upcoming week on, unless ESPN
+     * The QB who gets [team]'s passing this week. Past weeks: the starter
+     * nflverse lists for the game; else the most recent listed starter; else
+     * the team's QB with the most attempts in its latest game. From the
+     * upcoming week on, ESPN decides first: the listed starter, unless ESPN
      * projects him under [K.STARTER_DOUBT_ESPN_POINTS] while projecting a
-     * teammate for [K.STARTER_ESPN_POINTS] or more); else, from the upcoming
-     * week on, the QB ESPN projects most, at [K.STARTER_ESPN_POINTS] or more;
-     * else the most recent listed starter who is still with the team; else
-     * the team's QB with the most attempts in its latest game. Null when the
-     * team has no QB candidate.
+     * teammate for [K.STARTER_ESPN_POINTS] or more; with no listing, the QB
+     * ESPN projects most at [K.STARTER_ESPN_POINTS] or more; else as for past
+     * weeks, the recent starter only if he's still with the team. With
+     * [healthy] (the roster rest of season starts from) a usual starter
+     * nflverse lists Out or Doubtful this week stays the starter: ESPN's doubt
+     * is about this week. Null when the team has no QB candidate.
      */
-    private fun expectedStarter(team: String, onTeam: List<Draft>, state: WeekState, kind: WeekKind): String? {
+    private fun expectedStarter(team: String, onTeam: List<Draft>, state: WeekState, kind: WeekKind, healthy: Boolean = false): String? {
         val qbs = onTeam.filter { it.player.position == "QB" }
         if (qbs.isEmpty()) return null
         val ids = qbs.map { it.player.playerId }.toSet()
         val listed = gameOf[Triple(team, state.season, state.week)]?.qbOf(team)?.takeIf { it in ids }
-        if (kind == WeekKind.PAST) listed?.let { return it }
+        val usual = listed ?: recentStarter(team, qbs, ids, state, kind)
+        if (kind == WeekKind.PAST) return usual
+        if (healthy && usual != null && qbs.first { it.player.playerId == usual }.let { isAbsent(it, state) }) return usual
         val espnPick = qbs.map { it to espnPoints(it, state) }.filter { it.second >= K.STARTER_ESPN_POINTS }
             .maxWithOrNull(compareBy<Pair<Draft, Double>> { it.second }.thenBy { it.first.player.playerId })?.first?.player?.playerId
         if (listed != null) {
             val doubted = espnPick != null && espnPick != listed && espnPoints(qbs.first { it.player.playerId == listed }, state) < K.STARTER_DOUBT_ESPN_POINTS
             return if (doubted) espnPick else listed
         }
-        espnPick?.let { return it }
+        return espnPick ?: usual
+    }
+
+    /** The most recent listed starter (from the upcoming week on, only if he's still with the team); else the QB with the most attempts in the team's latest game. */
+    private fun recentStarter(team: String, qbs: List<Draft>, ids: Set<String>, state: WeekState, kind: WeekKind): String? {
         inputs.games
             .filter { it.involves(team) && order(it.season, it.week) < state.order }
             .mapNotNull { it.qbOf(team) }

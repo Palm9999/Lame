@@ -240,6 +240,25 @@ class ForecastEngineTest {
         assertEquals(false to true, starts(espnBackup = null, listed = "QB2_A"))
     }
 
+    @Test
+    fun `a starter out this week keeps his rest of season even though ESPN projects his backup`() {
+        league("qbout.db").use { db ->
+            db.player("QB2_A", "QB", "AAA")
+            db.week("QB2_A", 2025, 2, "AAA", "attempts" to 5.0, "completions" to 3.0, "passing_yards" to 30.0)
+            db.espn("QB2_A", 2025, 3, "passing_yards" to 300.0)
+            db.injury("QB_A", 2025, 3, "Out")
+            run(db)
+            assertEquals(0, weekRows(db, "QB_A", 2025, 3))
+            assertTrue(weekRows(db, "QB2_A", 2025, 3) > 0)
+            // Week 4 (rest of season) goes back to the usual starter.
+            assertTrue(rosMean(db, "QB_A", "passing_yards") > 100.0)
+            assertEquals(
+                listOf(listOf("0")),
+                db.query("SELECT COUNT(*) FROM player_ros_projection WHERE player_id = 'QB2_A' AND metric_id = 'passing_yards'"),
+            )
+        }
+    }
+
     private fun factors(db: TestDb, player: String) = db.query(
         "SELECT factor FROM player_week_projection_factor WHERE player_id = '$player' AND season = 2025 AND week = 3 ORDER BY factor",
     ).map { it[0] }
