@@ -221,6 +221,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 deps.opportunities?.find(season, profile) ?: OpportunitiesResult(emptyList(), 0, null)
                             },
                             otherTeams = deps.league?.otherTeams ?: flowOf(emptyList()),
+                            syncLeague = { s -> deps.league?.sync(s) },
                         )
                     }
                     entry<OpportunitiesKey> { key ->

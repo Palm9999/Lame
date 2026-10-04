@@ -78,6 +78,34 @@ class LineupViewTest {
     }
 
     @Test
+    fun `the lineup check names who to start and sit against the lineup set in ESPN`() {
+        fun at(id: String?, slot: String, name: String = "Player $id") = LeaguePlayer("e-$name", name, slot, id)
+        // ESPN starts r2 at RB and the TE at FLEX; the best lineup starts r1 at RB and r2 at FLEX.
+        val t = team(mapOf("QB" to 1, "RB" to 1, "WR" to 1, "FLEX" to 1), at("q", "QB"), at("r1", "BE"), at("r2", "RB"), at("w", "WR"), at("t", "FLEX"))
+        val best = lineupView(t, 4, rows, emptyMap())
+        val check = lineupCheck(t, best, rows, emptyMap())!!
+        assertEquals(57.0, check.current, 1e-9)
+        assertEquals(62.0, check.best, 1e-9)
+        assertEquals(5.0, check.gain, 1e-9)
+        assertEquals(listOf("r1"), check.start.map { it.playerId })
+        assertEquals(listOf("t"), check.sit.map { it.playerId })
+    }
+
+    @Test
+    fun `the lineup check flags an Out or unprojected starter, and is quiet when nothing is set`() {
+        fun at(id: String?, slot: String, name: String = "Player $id") = LeaguePlayer("e-$name", name, slot, id)
+        val t = team(mapOf("RB" to 1), at("r1", "RB"), at("r2", "BE"))
+        val check = lineupCheck(t, lineupView(t, 4, rows, mapOf("r1" to "O")), rows, mapOf("r1" to "O"))!!
+        assertEquals(0.0, check.current, 1e-9)
+        assertEquals(listOf("r2"), check.start.map { it.playerId })
+        assertEquals(listOf(CheckPlayer("r1", "Player r1", "RB", 0.0)), check.sit)
+        val bye = team(mapOf("RB" to 1), at("gone", "RB", "On Bye"), at("r2", "BE"))
+        assertEquals(listOf(CheckPlayer("gone", "On Bye", "RB", null)), lineupCheck(bye, lineupView(bye, 4, rows, emptyMap()), rows, emptyMap())!!.sit)
+        val benchOnly = team(mapOf("RB" to 1), on("r1"), on("r2"))
+        assertNull(lineupCheck(benchOnly, lineupView(benchOnly, 4, rows, emptyMap()), rows, emptyMap()))
+    }
+
+    @Test
     fun `the line says who leads and by how much`() {
         assertEquals("You lead by 6.8", matchupLine(98.0, 91.2))
         assertEquals("You trail by 2.1", matchupLine(88.0, 90.1))

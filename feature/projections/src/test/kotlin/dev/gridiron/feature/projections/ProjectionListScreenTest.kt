@@ -105,6 +105,7 @@ class ProjectionListScreenTest {
         // Mine: QB 21.0 + WR 16.2; theirs: QB 21.0 only.
         compose.onNodeWithTag("lineup:vs").assertTextEquals("vs Rivals: 21.0 pts · You lead by 16.2 · 94% to win")
         compose.onNodeWithTag("lineup:range").assertExists()
+        compose.onNodeWithTag("lineup:check").assertTextEquals("Your ESPN lineup is already the best (as of your last sync).")
     }
 
     @Test

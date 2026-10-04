@@ -136,3 +136,34 @@ internal fun waiverPickups(
         )
     }
 }
+
+/** One player in the lineup check: [points] is this week's projection (zero when Out), null with none (a bye, unmatched). */
+internal data class CheckPlayer(val playerId: String?, val name: String, val slot: String, val points: Double?)
+
+/**
+ * The lineup set in ESPN (as of the last sync) against [best]: its projected [current] total, who to [start] from the
+ * bench and who to [sit]. Null when no rostered player sits in a starting slot (nothing set, or an old snapshot).
+ */
+internal data class LineupCheck(val current: Double, val best: Double, val start: List<CheckPlayer>, val sit: List<CheckPlayer>) {
+    val gain: Double get() = best - current
+}
+
+private val NOT_STARTING = setOf("BE", "IR")
+
+internal fun lineupCheck(team: MyTeam, best: LineupView, weekRows: List<ProjectionRow>, badges: Map<String, String>): LineupCheck? {
+    val byId = weekRows.associateBy { it.playerId }
+    fun check(p: dev.gridiron.core.data.live.LeaguePlayer): CheckPlayer {
+        val row = p.playerId?.let(byId::get)?.let { outAdjusted(it, badges) }
+        return CheckPlayer(p.playerId, row?.name ?: p.name, p.slot, row?.points)
+    }
+    val set = team.players.filter { it.slot !in NOT_STARTING }.map(::check)
+    if (set.isEmpty()) return null
+    val bestIds = best.starters.mapNotNull { it.row?.playerId }.toSet()
+    val setIds = set.mapNotNull { it.playerId }.toSet()
+    return LineupCheck(
+        current = set.sumOf { it.points ?: 0.0 },
+        best = best.total,
+        start = team.players.filter { it.playerId in bestIds && it.playerId !in setIds }.map(::check).sortedByDescending { it.points ?: 0.0 },
+        sit = set.filter { it.playerId == null || it.playerId !in bestIds }.sortedBy { it.points ?: -1.0 },
+    )
+}

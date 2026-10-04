@@ -77,6 +77,9 @@ public fun ProjectionListRoute(
     opportunities: suspend (season: Int, profile: ScoringProfile) -> OpportunitiesResult = { _, _ -> OpportunitiesResult(emptyList(), 0, null) },
     /** The league's other teams, for Trade; empty hides the mode. */
     otherTeams: Flow<List<MyTeam>> = flowOf(emptyList()),
+    /** Re-reads the league from ESPN; My lineup calls it when the snapshot is older than [LEAGUE_STALE_MILLIS]. */
+    syncLeague: suspend (season: Int) -> Unit = {},
+    now: () -> Long = System::currentTimeMillis,
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -99,6 +102,18 @@ public fun ProjectionListRoute(
         onLeague = { id -> scope.launch { setLeague(id) } },
         partners = others.filter { it.season == season },
         onLineupOpened = {
+            val fetched = taken?.fetchedAtMillis
+            if (fetched != null && now() - fetched > LEAGUE_STALE_MILLIS) {
+                scope.launch {
+                    try {
+                        syncLeague(season)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // The saved snapshot stays; ESPN leagues shows sync errors.
+                    }
+                }
+            }
             profile?.let { p ->
                 scope.launch {
                     val found = try {
@@ -124,6 +139,9 @@ public fun ProjectionListRoute(
 }
 
 private enum class ListMode { WEEK, ROS, LINEUP, TRADE }
+
+/** My lineup re-syncs the league when its snapshot is older than this: lineups, waivers and trades move during the week. */
+internal const val LEAGUE_STALE_MILLIS: Long = 30 * 60 * 1000L
 
 @Composable
 public fun ProjectionListScreen(
@@ -206,7 +224,8 @@ public fun ProjectionListScreen(
                         val pickups = if (rostered == null) null else remember(myTeam, state, badges, rostered, starterOut) { waiverPickups(myTeam, state.weekRows, badges, rostered, starterOut) }
                         // Rest of season keeps an injured player's projection, as its list does.
                         val stashes = if (rostered == null) null else remember(myTeam, state, rostered) { waiverPickups(myTeam, state.rosRows, emptyMap(), rostered) }
-                        LineupList(lineupView(myTeam, state.week, state.weekRows, badges), rival, opponent, pickups, badges, onPlayer, stashes)
+                        val mine = lineupView(myTeam, state.week, state.weekRows, badges)
+                        LineupList(mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, state.weekRows, badges))
                     } else {
                         Row(
                             Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()),
@@ -237,6 +256,8 @@ private fun LineupList(
     onPlayer: (String) -> Unit,
     /** Free agents ranked by how far each lifts the lineup over the rest of the season; null hides them. */
     stashes: List<PickupLine>? = null,
+    /** The lineup set in ESPN against the best one; null when the snapshot has none set. */
+    check: LineupCheck? = null,
 ) {
     LazyColumn(Modifier.fillMaxSize().testTag("lineup:list")) {
         item {
@@ -266,6 +287,24 @@ private fun LineupList(
                 }
                 versus?.let {
                     Text(it, Modifier.testTag("lineup:vs"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                }
+                check?.let { c ->
+                    val text = if (c.gain < 0.05) {
+                        "Your ESPN lineup is already the best (as of your last sync)."
+                    } else {
+                        buildString {
+                            append("Your ESPN lineup: ${points(c.current)} pts. Best: +${points(c.gain)}.")
+                            if (c.start.isNotEmpty()) append(" Start ${c.start.joinToString { it.name }}.")
+                            if (c.sit.isNotEmpty()) append(" Sit ${c.sit.joinToString { it.name + if (it.points == null) " (no projection)" else "" }}.")
+                        }
+                    }
+                    Text(
+                        text,
+                        Modifier.testTag("lineup:check"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (c.gain < 0.05) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.tertiary,
+                        fontWeight = if (c.gain < 0.05) FontWeight.Normal else FontWeight.SemiBold,
+                    )
                 }
                 if (view.defaultSlots) {
                     Text(
