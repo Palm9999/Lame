@@ -52,6 +52,32 @@ class LineupViewTest {
     }
 
     @Test
+    fun `the lineup's spread combines its starters' and an Out player adds none`() {
+        // Each row's range is 10 points wide, so each starter's SD is 10 / 2.5632.
+        val view = lineupView(team(mapOf("QB" to 1, "RB" to 1), on("q"), on("r1")), 4, rows, emptyMap())
+        val sd = 10 / (2 * 1.2816)
+        assertEquals(kotlin.math.sqrt(2.0) * sd, view.spread, 1e-9)
+        assertEquals(34.0 - 1.2816 * view.spread, view.low, 1e-9)
+        assertEquals(34.0 + 1.2816 * view.spread, view.high, 1e-9)
+        val hurt = lineupView(team(mapOf("RB" to 1), on("r1")), 4, rows, badges = mapOf("r1" to "O"))
+        assertEquals(0.0, hurt.spread, 1e-12)
+        assertEquals(0.0, hurt.low, 1e-12)
+    }
+
+    @Test
+    fun `the chance to win follows the margin and both spreads`() {
+        val mine = lineupView(team(mapOf("QB" to 1, "RB" to 1), on("q"), on("r1")), 4, rows, emptyMap())
+        assertEquals(0.5, winChance(mine, mine), 1e-9)
+        val theirs = lineupView(team(mapOf("QB" to 1, "RB" to 1), on("q"), on("r2")), 4, rows, emptyMap())
+        val chance = winChance(mine, theirs)
+        assertEquals(dev.gridiron.core.model.normalCdf(2.0 / kotlin.math.sqrt(2 * mine.spread * mine.spread)), chance, 1e-9)
+        assertEquals(1 - chance, winChance(theirs, mine), 1e-9)
+        assertEquals("1% to win", winLine(0.0001))
+        assertEquals("99% to win", winLine(0.9999))
+        assertEquals("57% to win", winLine(0.566))
+    }
+
+    @Test
     fun `the line says who leads and by how much`() {
         assertEquals("You lead by 6.8", matchupLine(98.0, 91.2))
         assertEquals("You trail by 2.1", matchupLine(88.0, 90.1))

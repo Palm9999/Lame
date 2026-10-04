@@ -223,8 +223,18 @@ private fun LineupList(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
+                if (view.spread > 0.0) {
+                    Text(
+                        "Likely ${points(view.low)}–${points(view.high)}",
+                        Modifier.testTag("lineup:range"),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 val versus = when {
-                    rival != null -> "vs ${rival.teamName}: ${points(rival.total)} pts · ${matchupLine(view.total, rival.total)}"
+                    rival != null ->
+                        "vs ${rival.teamName}: ${points(rival.total)} pts · ${matchupLine(view.total, rival.total)} · " +
+                            winLine(winChance(view, rival))
                     opponent == OpponentState.Loading -> "Checking your opponent…"
                     opponent is OpponentState.Unavailable -> "No comparison: ${opponent.message}."
                     else -> null
