@@ -92,7 +92,7 @@ internal fun StartSitView(weekRows: List<ProjectionRow>, badges: Map<String, Str
                     Text("Start ${chosen[pick].name}", Modifier.testTag("startsit:pick"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                     chosen.forEachIndexed { i, row ->
                         Text(
-                            "${row.name}: ${pct(chances[i])} to score most · ${if (row.out) "Out" else "${pts(row.points)} (${pts(row.floor)}–${pts(row.ceiling)})"}",
+                            "${row.name}: ${pct(chances[i])} to score most · ${if (row.out) "Out" else "${pts(row.points)} (${pts(row.floor)}–${pts(row.ceiling)})" + (row.tdChance?.let { " · " + tdText(it) } ?: "")}",
                             Modifier.testTag("startsit:line:${row.playerId}"),
                             style = MaterialTheme.typography.bodyMedium,
                         )

@@ -466,7 +466,7 @@ private fun ProjectionListRow(lead: String, row: ProjectionRow, badge: String?, 
                 }
             }
             Text(
-                listOfNotNull(Position.label(row.position), row.team).joinToString(" · "),
+                listOfNotNull(Position.label(row.position), row.team, row.tdChance?.takeIf { !row.out }?.let(::tdText)).joinToString(" · "),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

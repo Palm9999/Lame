@@ -50,6 +50,13 @@ class ProjectionListScreenTest {
     }
 
     @Test
+    fun `a week row shows the TD chance`() {
+        val withTd = loaded.copy(weekRows = listOf(loaded.weekRows.first().copy(tdChance = 0.34)))
+        compose.setContent { GridironTheme { ProjectionListScreen(withTd, emptyMap(), onPlayer = {}, onBack = {}) } }
+        compose.onNodeWithText("WR · KC · TD 34%").assertIsDisplayed()
+    }
+
+    @Test
     fun `an Out player reads Out, and a row opens the player`() {
         var opened: String? = null
         compose.setContent { GridironTheme { ProjectionListScreen(loaded, mapOf("w" to "O"), onPlayer = { opened = it }, onBack = {}) } }

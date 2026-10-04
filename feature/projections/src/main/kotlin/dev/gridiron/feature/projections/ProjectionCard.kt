@@ -18,6 +18,7 @@ import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.GameLine
 import dev.gridiron.core.projections.ProjectionsRequest
 import dev.gridiron.core.projections.RosProjectionsRequest
+import dev.gridiron.core.projections.anytimeTd
 import dev.gridiron.core.projections.projectPoints
 import dev.gridiron.core.projections.projectedScore
 import kotlinx.coroutines.CoroutineDispatcher
@@ -51,6 +52,8 @@ public data class ProjectionCard(
     /** His points in [playoffWeeks] (the fantasy playoffs); null without weekly projections or with no game in them. */
     val playoffPoints: Double? = null,
     val playoffWeeks: List<Int> = DEFAULT_PLAYOFF_WEEKS,
+    /** His chance of a rushing or receiving TD this week; null for a kicker, a D/ST or without a game. */
+    val tdChance: Double? = null,
 )
 
 private val OUT_ABBRS = setOf("O", "IR")
@@ -127,6 +130,7 @@ public suspend fun loadProjectionCard(
         rosOf = of,
         playoffPoints = playoffPoints,
         playoffWeeks = playoffWeeks,
+        tdChance = if (out || position == Position.K || position == Position.DST) null else anytimeTd(final),
     )
 }
 
@@ -168,7 +172,11 @@ public fun ThisWeekCard(card: ProjectionCard, onOpen: () -> Unit, modifier: Modi
             Text("Out this week", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
         } else {
             Text("${onePlace(card.points)} pts", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-            Text("Floor ${onePlace(card.floor)} · Ceiling ${onePlace(card.ceiling)}", style = MaterialTheme.typography.bodySmall)
+            Text(
+                listOfNotNull("Floor ${onePlace(card.floor)} · Ceiling ${onePlace(card.ceiling)}", card.tdChance?.let(::tdText)).joinToString(" · "),
+                Modifier.testTag("card:range"),
+                style = MaterialTheme.typography.bodySmall,
+            )
         }
         card.rosPoints?.let { ros ->
             val perGame = card.rosPerGame?.let { " (${onePlace(it)} per game)" }.orEmpty()

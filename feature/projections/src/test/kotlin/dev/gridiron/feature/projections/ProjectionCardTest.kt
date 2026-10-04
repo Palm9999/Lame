@@ -94,6 +94,8 @@ class ProjectionCardTest {
         // W2's 110 beat his 88; W3's 10 and the RB don't count against a WR.
         assertEquals(2, card.rosPlace)
         assertEquals(3, card.rosOf)
+        // No TDs projected: no chance of one.
+        assertEquals(0.0, card.tdChance!!, 1e-12)
     }
 
     @Test

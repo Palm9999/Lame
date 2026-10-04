@@ -80,4 +80,15 @@ class ProjectedPointsTest {
         val week = listOf(ProjectionComponent("points_allowed", 17.6, 100.0, "normal"), ProjectionComponent("g", 1.0, 0.0))
         assertEquals(ScoringPresets.PPR.expectedPointsAllowedPoints(17.6, 10.0), projectPoints(week, ScoringPresets.PPR, Position.DST).points, 1e-9)
     }
+
+    @Test
+    fun `the anytime TD chance treats rushing plus receiving TDs as Poisson and ignores passing TDs`() {
+        val c = listOf(
+            ProjectionComponent("rushing_tds", 0.3, 0.3),
+            ProjectionComponent("receiving_tds", 0.2, 0.2),
+            ProjectionComponent("passing_tds", 2.0, 2.0),
+        )
+        assertEquals(1 - kotlin.math.exp(-0.5), anytimeTd(c), 1e-12)
+        assertEquals(0.0, anytimeTd(emptyList()), 1e-12)
+    }
 }

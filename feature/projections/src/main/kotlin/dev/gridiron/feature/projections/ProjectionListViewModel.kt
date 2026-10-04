@@ -9,6 +9,7 @@ import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.ListedProjection
+import dev.gridiron.core.projections.anytimeTd
 import dev.gridiron.core.projections.projectPoints
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -22,6 +23,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.roundToInt
 
 public data class ProjectionRow(
     val playerId: String,
@@ -33,6 +35,8 @@ public data class ProjectionRow(
     val ceiling: Double,
     /** ESPN lists him Out or on IR: this week's points show as zero. */
     val out: Boolean = false,
+    /** His chance of a rushing or receiving TD this week ([anytimeTd]); null for rest of season, kickers and D/STs. */
+    val tdChance: Double? = null,
 )
 
 public enum class PositionTab(public val label: String, public val codes: Set<String>) {
@@ -70,7 +74,7 @@ public fun visibleRows(rows: List<ProjectionRow>, tab: PositionTab, badges: Map<
 
 /** [row] scored as zero this week when ESPN lists him Out or on IR. */
 internal fun outAdjusted(row: ProjectionRow, badges: Map<String, String>): ProjectionRow =
-    if (badges[row.playerId] in OUT) row.copy(points = 0.0, floor = 0.0, ceiling = 0.0, out = true) else row
+    if (badges[row.playerId] in OUT) row.copy(points = 0.0, floor = 0.0, ceiling = 0.0, out = true, tdChance = 0.0) else row
 
 private val BUILT = DateTimeFormatter.ofPattern("EEE h:mm a", Locale.US)
 
@@ -83,11 +87,18 @@ public fun statusLine(week: Int, builtAt: Instant?, zone: ZoneId = ZoneId.system
 /** A list scores hundreds of players, so it simulates each with fewer draws than the single-player waterfall. */
 private const val LIST_DRAWS = 2_000
 
-internal fun toRows(listed: List<ListedProjection>, profile: ScoringProfile): List<ProjectionRow> = listed.mapNotNull { p ->
+/** Scored rows; [week] rows (one game) also carry each skill player's TD chance. */
+internal fun toRows(listed: List<ListedProjection>, profile: ScoringProfile, week: Boolean = false): List<ProjectionRow> = listed.mapNotNull { p ->
     val position = p.position ?: return@mapNotNull null
     val points = projectPoints(p.components, profile, Position.fromCode(position), draws = LIST_DRAWS)
-    ProjectionRow(p.playerId, p.name, position, p.team, points.points, points.floor, points.ceiling)
+    val td = if (week && position in TD_POSITIONS) anytimeTd(p.components) else null
+    ProjectionRow(p.playerId, p.name, position, p.team, points.points, points.floor, points.ceiling, tdChance = td)
 }
+
+private val TD_POSITIONS = setOf("QB", "RB", "WR", "TE")
+
+/** "TD 34%". */
+internal fun tdText(chance: Double): String = "TD ${(chance * 100).roundToInt()}%"
 
 /** Loads the upcoming week's and rest of season's projections and scores them with the active profile. */
 public class ProjectionListViewModel(
@@ -139,7 +150,7 @@ public class ProjectionListViewModel(
                 val weekListed = repository.weekAll(season, week)
                 val rosListed = repository.rosAll(season)
                 withContext(compute) {
-                    ProjectionListState.Loaded(week, status.builtAt, toRows(weekListed, profile), toRows(rosListed, profile))
+                    ProjectionListState.Loaded(week, status.builtAt, toRows(weekListed, profile, week = true), toRows(rosListed, profile))
                 }
             }
         }
