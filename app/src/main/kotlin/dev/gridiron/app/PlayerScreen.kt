@@ -44,6 +44,8 @@ import dev.gridiron.core.data.PlayerStatsRepository
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.live.DEFAULT_PLAYOFF_WEEKS
+import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.InjuryNote
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.LiveStatus
@@ -57,6 +59,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -94,6 +97,8 @@ fun PlayerRoute(
     onManageRosters: () -> Unit = {},
     playerStats: PlayerStatsRepository? = null,
     breakouts: BreakoutRepository? = null,
+    /** The active ESPN league, for its playoff weeks; null uses 15-17. */
+    league: FantasyLeagueRepository? = null,
 ) {
     val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList<Roster>()) }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -108,7 +113,18 @@ fun PlayerRoute(
         val active = profile
         val card = if (projections != null && active != null) {
             try {
-                loadProjectionCard(projections, playerId, header?.team, active, header?.position?.let(Position::fromCode), status?.abbr)
+                // The league is only for its playoff weeks: failing to read it never costs the card.
+                val playoffWeeks = try {
+                    league?.myTeam?.first()?.playoffWeeks
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                } ?: DEFAULT_PLAYOFF_WEEKS
+                loadProjectionCard(
+                    projections, playerId, header?.team, active, header?.position?.let(Position::fromCode), status?.abbr,
+                    playoffWeeks = playoffWeeks,
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {

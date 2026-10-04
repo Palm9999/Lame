@@ -4,9 +4,10 @@ package dev.gridiron.core.ingest.db
  * Written into `schema_meta`: the Python ETL's schema 5, plus `player_xref`
  * (6), plus `game`, minus the Python ETL's projection bookkeeping tables (7),
  * plus `team_week_defense`'s safeties and kickoff-return TDs (8), plus the
- * pre-aggregated `player_window_stat` and `window_def` (9), plus `player_week_signal` (10).
+ * pre-aggregated `player_window_stat` and `window_def` (9), plus `player_week_signal` (10),
+ * plus `espn_projection` (11), plus `player_ros_week` (12).
  */
-public const val SCHEMA_VERSION: Int = 11
+public const val SCHEMA_VERSION: Int = 12
 
 /**
  * Bump whenever a transform, the schema or an input's meaning changes: a build
@@ -47,6 +48,11 @@ internal val SCHEMA: List<String> = listOf(
         player_id TEXT NOT NULL, season INTEGER NOT NULL, as_of_week INTEGER NOT NULL,
         metric_id TEXT NOT NULL, mean REAL NOT NULL, variance REAL NOT NULL,
         PRIMARY KEY (player_id, season, as_of_week, metric_id)) WITHOUT ROWID""",
+    // Rest of season week by week (the same rows `player_ros_projection` sums), for byes and fantasy playoff weeks.
+    """CREATE TABLE player_ros_week (
+        player_id TEXT NOT NULL, season INTEGER NOT NULL, as_of_week INTEGER NOT NULL, week INTEGER NOT NULL,
+        metric_id TEXT NOT NULL, mean REAL NOT NULL, variance REAL NOT NULL,
+        PRIMARY KEY (player_id, season, as_of_week, week, metric_id)) WITHOUT ROWID""",
     // The Rising roles signal, entering `week` (from games before it), written by the forecast for RB, WR and TE.
     """CREATE TABLE player_week_signal (
         player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,

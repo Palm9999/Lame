@@ -4,6 +4,7 @@ import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.model.normalCdf
 import dev.gridiron.core.projections.LineupCandidate
 import dev.gridiron.core.projections.Lineups
+import dev.gridiron.core.projections.Trades
 import kotlin.math.roundToInt
 
 /** A starting slot of the lineup; [row] is null when no one on the roster can fill it. [locked]: his game has started. */
@@ -138,7 +139,51 @@ internal data class PickupLine(
     val drop: ProjectionRow?,
     /** Why he is moving up, when a starter ahead of him is hurt: "RB1 Name is Doubtful". */
     val starterOut: String? = null,
+    /** A suggested FAAB bid ([faabBid]); null when the league doesn't bid or what is left isn't known. */
+    val bid: Int? = null,
+    /** His points in the league's playoff weeks; null without weekly projections. */
+    val playoffPoints: Double? = null,
 )
+
+/**
+ * A FAAB bid for a pickup that lifts the roster [gain] rest-of-season points, with [left] dollars left: [left] times
+ * the gain over [FAAB_FULL_GAIN], at most [FAAB_MAX_SHARE] of it and at least a dollar. A judgment, not a fit: there
+ * are no historical bids to fit it on.
+ */
+internal fun faabBid(gain: Double, left: Int): Int {
+    if (left <= 0 || gain <= 0.0) return 0
+    val share = minOf(FAAB_MAX_SHARE, gain / FAAB_FULL_GAIN)
+    return (left * share).roundToInt().coerceIn(1, left)
+}
+
+/** What the rest-of-season adds say about FAAB; null when the league doesn't bid. */
+internal fun faabText(team: MyTeam): String? {
+    val budget = team.faabBudget ?: return null
+    return team.faabLeft?.let { "$$it of $$budget FAAB left. Bids scale with each add's rest-of-season gain, at most half of what's left." }
+        ?: "This league bids FAAB ($$budget), but ESPN didn't say what you've spent, so there are no bids."
+}
+
+/** A rest-of-season gain of about 4.5 points a week over 13 weeks: a league-changing add. */
+internal const val FAAB_FULL_GAIN: Double = 60.0
+
+/** Never more than half of what is left on one player. */
+internal const val FAAB_MAX_SHARE: Double = 0.5
+
+/**
+ * The rest-of-season adds for [team] ([waiverPickups] on [rosRows], valued week by week when [weekly] has rows), each
+ * with a FAAB bid when the league bids and his points in the league's playoff weeks.
+ */
+internal fun rosAdds(
+    team: MyTeam,
+    rosRows: List<ProjectionRow>,
+    rostered: Set<String>,
+    weekly: Map<String, Map<Int, Double>>,
+): List<PickupLine> = waiverPickups(team, rosRows, emptyMap(), rostered, weekly = weekly).map { pick ->
+    pick.copy(
+        bid = team.faabLeft?.let { faabBid(pick.gain, it) },
+        playoffPoints = weekly[pick.add.playerId]?.let { w -> team.playoffWeeks.sumOf { w[it] ?: 0.0 } },
+    )
+}
 
 /**
  * The best waiver pickups for [team] this week: projected players on no league team ([rostered] is everyone on one),
@@ -152,13 +197,16 @@ internal fun waiverPickups(
     starterOut: Map<String, String> = emptyMap(),
     /** NFL teams whose game has kicked off: their free agents can't play for you this week. */
     started: Set<String> = emptySet(),
+    /** Rest of season week by week: when given, each add is valued by [Trades.value] with his drop cut, so byes count. */
+    weekly: Map<String, Map<Int, Double>>? = null,
 ): List<PickupLine> {
     val byId = weekRows.associateBy { it.playerId }
     val own = team.players.mapNotNull { p -> p.playerId?.let(byId::get) }.map { outAdjusted(it, badges) }
     val free = weekRows.filter { it.playerId !in rostered && it.team !in started }.map { outAdjusted(it, badges) }.filter { it.points > 0 }
     val rows = (own + free).associateBy { it.playerId }
-    fun candidate(row: ProjectionRow) = LineupCandidate(row.playerId, row.position, row.points)
-    return Lineups.pickups(team.slots, own.map(::candidate), free.map(::candidate)).map {
+    fun candidate(row: ProjectionRow) = LineupCandidate(row.playerId, row.position, row.points, weekly?.get(row.playerId).orEmpty())
+    val value = weekly?.takeIf { it.isNotEmpty() }?.let { { roster: List<LineupCandidate> -> Trades.value(team.slots, roster) } }
+    return Lineups.pickups(team.slots, own.map(::candidate), free.map(::candidate), value = value).map {
         PickupLine(
             rows.getValue(it.add.playerId), it.gain, it.slot,
             it.replaces?.let { c -> rows.getValue(c.playerId) }, it.drop?.let { c -> rows.getValue(c.playerId) },

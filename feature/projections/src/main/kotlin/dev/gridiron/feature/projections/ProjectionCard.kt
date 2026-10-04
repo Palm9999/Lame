@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.live.DEFAULT_PLAYOFF_WEEKS
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.GameLine
@@ -47,6 +48,9 @@ public data class ProjectionCard(
     /** His rest-of-season place among his position's projected players (1 = most points), and how many there are. */
     val rosPlace: Int? = null,
     val rosOf: Int? = null,
+    /** His points in [playoffWeeks] (the fantasy playoffs); null without weekly projections or with no game in them. */
+    val playoffPoints: Double? = null,
+    val playoffWeeks: List<Int> = DEFAULT_PLAYOFF_WEEKS,
 )
 
 private val OUT_ABBRS = setOf("O", "IR")
@@ -66,6 +70,8 @@ public suspend fun loadProjectionCard(
     injuryAbbr: String?,
     /** Where the scoring and the simulation run: never the main thread. */
     compute: CoroutineDispatcher = Dispatchers.Default,
+    /** The fantasy playoffs' weeks: the active league's, or 15-17. */
+    playoffWeeks: List<Int> = DEFAULT_PLAYOFF_WEEKS,
 ): ProjectionCard? {
     val status = repository.status()
     if (status.status != "ok") return null
@@ -76,6 +82,10 @@ public suspend fun loadProjectionCard(
     val rosPoints = ros?.let { r -> withContext(compute) { projectedScore(r.components, profile, position) } }
     val gamesLeft = team?.let { repository.remainingGames(season, week, it) } ?: 0
     val rosPerGame = rosPoints?.takeIf { gamesLeft > 0 }?.let { it / gamesLeft }
+    // Empty on a database built before weekly rest of season, or when he has no game in those weeks.
+    val playoffPoints = repository.rosWeeks(season, playerId).firstOrNull()?.let { r ->
+        withContext(compute) { r.points(profile).filterKeys { it in playoffWeeks }.values.takeIf { it.isNotEmpty() }?.sum() }
+    }
     // The place is extra: failing to read it never costs the card.
     val (place, of) = if (rosPoints != null && position != null) {
         try {
@@ -97,6 +107,7 @@ public suspend fun loadProjectionCard(
         return ProjectionCard(
             season, week, game?.let(::matchupText), game?.let(::lineText), 0.0, 0.0, 0.0, rosPoints, rosPerGame,
             out = false, bye = game == null, notThisWeek = game != null, rosPlace = place, rosOf = of,
+            playoffPoints = playoffPoints, playoffWeeks = playoffWeeks,
         )
     }
     val out = injuryAbbr in OUT_ABBRS
@@ -114,6 +125,8 @@ public suspend fun loadProjectionCard(
         out = out,
         rosPlace = place,
         rosOf = of,
+        playoffPoints = playoffPoints,
+        playoffWeeks = playoffWeeks,
     )
 }
 
@@ -165,6 +178,14 @@ public fun ThisWeekCard(card: ProjectionCard, onOpen: () -> Unit, modifier: Modi
             Text(
                 "${placeText(card.rosPlace)} of ${card.rosOf} rest of season",
                 Modifier.testTag("card:rosPlace"),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        card.playoffPoints?.let {
+            Text(
+                "Playoffs (${weeksText(card.playoffWeeks)}): ${onePlace(it)} pts",
+                Modifier.testTag("card:playoffs"),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

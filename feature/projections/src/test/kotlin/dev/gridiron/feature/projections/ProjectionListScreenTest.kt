@@ -154,6 +154,24 @@ class ProjectionListScreenTest {
     }
 
     @Test
+    fun `rest-of-season adds suggest a FAAB bid from the gain and what is left`() {
+        val withStash = loaded.copy(rosRows = loaded.rosRows + ProjectionRow("w3", "Stash WR", "WR", "SEA", 240.0, 200.0, 280.0))
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    withStash, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = team.copy(faabLeft = 50, faabBudget = 100), rostered = setOf("w", "q"),
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithTag("lineup:list").performScrollToNode(hasTestTag("ros:pickup:w3"))
+        // A 60-point lift is a full-size add: half of the $50 left.
+        compose.onNodeWithTag("ros:bid:w3", useUnmergedTree = true).assertTextEquals("Bid $25")
+        compose.onNodeWithTag("faab").assertTextEquals("$50 of $100 FAAB left. Bids scale with each add's rest-of-season gain, at most half of what's left.")
+    }
+
+    @Test
     fun `a pickup moving up because a starter is hurt says so`() {
         val withFree = loaded.copy(weekRows = loaded.weekRows + ProjectionRow("w2", "Free Agent WR", "WR", "DEN", 20.0, 12.0, 28.0))
         compose.setContent {
@@ -240,11 +258,36 @@ class ProjectionListScreenTest {
         compose.onNodeWithTag("give:r2").performClick()
         compose.onNodeWithTag("get:w3").performClick()
         compose.onNodeWithTag("trade:verdict").assertTextEquals("Good for both teams")
-        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +80.0 (410.0 → 490.0)")
-        compose.onNodeWithTag("trade:theirs").assertTextEquals("Rivals +90.0 (390.0 → 480.0)")
+        // Each lineup plus a tenth of its best bench player: mine 410 + 14 → 490 + 6, theirs 390 + 14 → 480 + 5.
+        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +72.0 (424.0 → 496.0)")
+        compose.onNodeWithTag("trade:theirs").assertTextEquals("Rivals +81.0 (404.0 → 485.0)")
+        // No weekly projections: no playoff line.
+        compose.onNodeWithTag("trade:playoffs").assertDoesNotExist()
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("idea:0").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("idea:0").performClick()
-        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +90.0 (410.0 → 500.0)")
+        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +82.0 (424.0 → 506.0)")
+    }
+
+    @Test
+    fun `with weekly projections a trade also reads over the playoff weeks, and a two-for-one names the cut`() {
+        // Every point falls in weeks 15 and 16, so the playoffs carry the whole trade.
+        val weekly = tradeState.copy(rosWeekly = tradeState.rosRows.associate { it.playerId to mapOf(15 to it.points / 2, 16 to it.points / 2) })
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    weekly, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = roster("Mine", "q1", "r1", "r2", "w1"),
+                    partners = listOf(roster("Rivals", "q2", "w2", "w3", "r3")),
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:trade").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("give:r2").performClick()
+        compose.onNodeWithTag("give:w1").performClick()
+        compose.onNodeWithTag("get:w3").performClick()
+        compose.onNodeWithTag("trade:playoffs").assertTextEquals("Playoffs (weeks 15–17): you +66.0, them +82.0")
+        compose.onNodeWithText("Rivals cuts Their RB to make room.").assertIsDisplayed()
     }
 
     @Test

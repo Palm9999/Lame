@@ -78,6 +78,42 @@ class FantasyLeagueTest {
         assertEquals(emptyMap<String, Int>(), EspnFantasyParser.parse(body, "42", 5L).lineupSlots)
     }
 
+    private fun withSettings(settings: String, mineExtra: String = "") = body
+        .replace("\"settings\":{\"name\":\"Sunday League\"}", "\"settings\":{\"name\":\"Sunday League\",$settings}")
+        .replace("\"name\":\"Mine\",", "\"name\":\"Mine\",$mineExtra")
+
+    @Test
+    fun `playoff weeks follow the schedule settings, ESPN's defaults giving 15 to 17`() {
+        // ESPN's leaguedefaults/3 (2026): 14 matchups of a week, 4 playoff teams, rounds of 1 and 2 weeks.
+        val defaults = "\"scheduleSettings\":{\"matchupPeriodCount\":14,\"matchupPeriodLength\":1,\"playoffTeamCount\":4," +
+            "\"playoffMatchupPeriodLength\":0,\"playoffMatchupPeriodLengthByRound\":{\"1\":1,\"2\":2}}"
+        assertEquals(listOf(15, 16, 17), EspnFantasyParser.parse(withSettings(defaults), "42", 5L).playoffWeeks)
+        // Six teams take three one-week rounds after a 13-week season.
+        val six = "\"scheduleSettings\":{\"matchupPeriodCount\":13,\"matchupPeriodLength\":1,\"playoffTeamCount\":6,\"playoffMatchupPeriodLength\":1}"
+        assertEquals(listOf(14, 15, 16), EspnFantasyParser.parse(withSettings(six), "42", 5L).playoffWeeks)
+        // Missing settings, or a schedule past week 18, say nothing; the team then uses 15-17.
+        val league = EspnFantasyParser.parse(body, "42", 5L)
+        assertEquals(emptyList<Int>(), league.playoffWeeks)
+        assertEquals(listOf(15, 16, 17), league.myTeam(2)!!.playoffWeeks)
+        val long = "\"scheduleSettings\":{\"matchupPeriodCount\":17,\"playoffTeamCount\":8}"
+        assertEquals(emptyList<Int>(), EspnFantasyParser.parse(withSettings(long), "42", 5L).playoffWeeks)
+    }
+
+    @Test
+    fun `FAAB is read when the league bids, and what is left follows the team's spending`() {
+        val bids = "\"acquisitionSettings\":{\"acquisitionBudget\":100,\"isUsingAcquisitionBudget\":true}"
+        val league = EspnFantasyParser.parse(withSettings(bids, "\"transactionCounter\":{\"acquisitionBudgetSpent\":37},"), "42", 5L)
+        assertEquals(100, league.faabBudget)
+        assertEquals(63, league.myTeam(2)!!.faabLeft)
+        // Saved and read back the same.
+        assertEquals(league, fantasyLeagueFromJson(league.toJson()))
+        // Spending unknown: the budget, but nothing said about what is left.
+        assertNull(EspnFantasyParser.parse(withSettings(bids), "42", 5L).myTeam(2)!!.faabLeft)
+        // A league on waiver order (ESPN's default) has no budget.
+        val order = "\"acquisitionSettings\":{\"acquisitionBudget\":100,\"isUsingAcquisitionBudget\":false}"
+        assertNull(EspnFantasyParser.parse(withSettings(order), "42", 5L).faabBudget)
+    }
+
     @Test
     fun `the saved snapshot keeps its slots, and one saved before slots existed reads back empty`() {
         val league = EspnFantasyParser.parse(body, "42", 5L).copy(lineupSlots = mapOf("RB" to 2, "OP" to 1))

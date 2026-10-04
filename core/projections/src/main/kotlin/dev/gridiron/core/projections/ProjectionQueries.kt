@@ -97,6 +97,20 @@ public object ProjectionQueries {
         listOf(Bind.Integer(season.toLong()), Bind.Integer(season.toLong())),
     )
 
+    /**
+     * Rest of season week by week, as of the latest week it was built for (`player_ros_week`): every player's, or only
+     * [playerId]'s.
+     */
+    public fun rosWeeks(season: Int, playerId: String? = null): SqlQuery = SqlQuery(
+        """
+        SELECT r.player_id, pl.position, r.week, r.metric_id, r.mean, r.variance
+        FROM player_ros_week r
+        JOIN player pl ON pl.player_id = r.player_id
+        WHERE r.season = ? AND r.as_of_week = (SELECT MAX(as_of_week) FROM player_ros_week WHERE season = ?)
+        """.trimIndent() + if (playerId == null) "" else " AND r.player_id = ?",
+        listOf(Bind.Integer(season.toLong()), Bind.Integer(season.toLong())) + listOfNotNull(playerId?.let { Bind.Text(it) }),
+    )
+
     /** The forecast's `schema_meta` keys: status, build time, upcoming week per season. */
     public fun status(): SqlQuery = SqlQuery("SELECT key, value FROM schema_meta WHERE key LIKE 'forecast%'", emptyList())
 

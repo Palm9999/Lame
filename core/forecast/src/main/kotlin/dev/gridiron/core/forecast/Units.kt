@@ -50,7 +50,7 @@ internal class UnitProjector(
     private var upcoming: Pair<UnitWeek, List<TeamUnit>>? = null
 
     /** Projects one week's units; for the upcoming week, also starts rest of season. */
-    fun week(season: Int, week: Int, kind: WeekKind, ros: MutableMap<Pair<String, String>, DoubleArray>) {
+    fun week(season: Int, week: Int, kind: WeekKind, ros: RosSums) {
         val state = UnitWeek(season, week)
         val units = prepare(state, kind)
         for (u in units) {
@@ -75,7 +75,7 @@ internal class UnitProjector(
     }
 
     /** Adds a week after the upcoming one to rest of season, from what was known as of the upcoming week. */
-    fun rest(season: Int, week: Int, ros: MutableMap<Pair<String, String>, DoubleArray>) {
+    fun rest(season: Int, week: Int, ros: RosSums) {
         val (state, units) = upcoming ?: return
         for (u in units) addRest(state, u, season, week, ros)
     }
@@ -225,16 +225,14 @@ internal class UnitProjector(
         }
     }
 
-    private fun addRest(state: UnitWeek, u: TeamUnit, season: Int, week: Int, ros: MutableMap<Pair<String, String>, DoubleArray>) {
+    private fun addRest(state: UnitWeek, u: TeamUnit, season: Int, week: Int, ros: RosSums) {
         val game = gameOf[Triple(u.team, season, week)] ?: return // a bye
         val stages = stages(state, u, game)
         if (!worthKeeping(u, stages, K.UPCOMING_MIN_POINTS)) return
         val cv = K.EMPIRICAL_CV.getValue(u.player.position)
         for ((metric, mean) in withGame(stages.final)) {
             if (mean <= 0.0) continue
-            val sum = ros.getOrPut(u.player.playerId to metric) { DoubleArray(2) }
-            sum[0] += mean
-            sum[1] += variance(metric, mean, cv, stages.sd)
+            ros.add(u.player.playerId, week, metric, mean, variance(metric, mean, cv, stages.sd))
         }
     }
 

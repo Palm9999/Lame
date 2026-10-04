@@ -243,14 +243,14 @@ public fun ProjectionListScreen(
                     if (mode == ListMode.START_SIT) {
                         StartSitView(state.weekRows, badges)
                     } else if (mode == ListMode.TRADE && myTeam != null) {
-                        TradeView(myTeam, partners, state.rosRows)
+                        TradeView(myTeam, partners, state.rosRows, state.rosWeekly)
                     } else if (mode == ListMode.LINEUP && myTeam != null) {
                         val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, state.weekRows, badges, started) }
                         val pickups = if (rostered == null) null else remember(myTeam, state, badges, rostered, starterOut, started) { waiverPickups(myTeam, state.weekRows, badges, rostered, starterOut, started) }
                         // Rest of season keeps an injured player's projection, as its list does.
-                        val stashes = if (rostered == null) null else remember(myTeam, state, rostered) { waiverPickups(myTeam, state.rosRows, emptyMap(), rostered) }
+                        val stashes = if (rostered == null) null else remember(myTeam, state, rostered) { rosAdds(myTeam, state.rosRows, rostered, state.rosWeekly) }
                         val mine = lineupView(myTeam, state.week, state.weekRows, badges, started)
-                        LineupList(mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, state.weekRows, badges))
+                        LineupList(mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, state.weekRows, badges), faabText(myTeam))
                     } else {
                         Row(
                             Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()),
@@ -283,6 +283,8 @@ private fun LineupList(
     stashes: List<PickupLine>? = null,
     /** The lineup set in ESPN against the best one; null when the snapshot has none set. */
     check: LineupCheck? = null,
+    /** "$63 of $100 FAAB left…" under the rest-of-season adds; null when the league doesn't bid. */
+    faab: String? = null,
 ) {
     LazyColumn(Modifier.fillMaxSize().testTag("lineup:list")) {
         item {
@@ -373,6 +375,16 @@ private fun LineupList(
         }
         if (!stashes.isNullOrEmpty()) {
             item { SectionLabel("Rest-of-season adds") }
+            faab?.let { text ->
+                item {
+                    Text(
+                        text,
+                        Modifier.padding(horizontal = 16.dp, vertical = 2.dp).testTag("faab"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             itemsIndexed(stashes, key = { _, p -> "r:${p.add.playerId}" }) { _, pick -> PickupRow(pick, onPlayer, "ros:") }
         }
         if (view.unlisted.isNotEmpty()) {
@@ -410,8 +422,16 @@ private fun PickupRow(pick: PickupLine, onPlayer: (String) -> Unit, tagPrefix: S
             pick.drop?.let {
                 Text("Drop ${it.name} (${points(it.points)} pts)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            pick.playoffPoints?.let {
+                Text("Playoff weeks: ${points(it)} pts", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        Text("+${points(pick.gain)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+        Column(horizontalAlignment = Alignment.End) {
+            Text("+${points(pick.gain)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+            pick.bid?.let {
+                Text("Bid $$it", Modifier.testTag("${tagPrefix}bid:${pick.add.playerId}"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+            }
+        }
     }
 }
 

@@ -40,20 +40,44 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
 
-/** One rostered player in the trade view: his rest-of-season row, or a bare name when he has no projection. */
-internal data class TradePlayer(val playerId: String, val name: String, val position: String?, val team: String?, val points: Double)
+/**
+ * One rostered player in the trade view: his rest-of-season row, or a bare name when he has no projection. [weekly]
+ * is his rest of season week by week (empty on an older database).
+ */
+internal data class TradePlayer(
+    val playerId: String,
+    val name: String,
+    val position: String?,
+    val team: String?,
+    val points: Double,
+    val weekly: Map<Int, Double> = emptyMap(),
+)
 
 /** [team]'s matched players with their rest-of-season points from [rosRows] (zero without a projection), best first. */
-internal fun tradePlayers(team: MyTeam, rosRows: Map<String, ProjectionRow>): List<TradePlayer> =
+internal fun tradePlayers(team: MyTeam, rosRows: Map<String, ProjectionRow>, rosWeekly: Map<String, Map<Int, Double>> = emptyMap()): List<TradePlayer> =
     team.players.mapNotNull { p ->
         val id = p.playerId ?: return@mapNotNull null
         val row = rosRows[id]
-        TradePlayer(id, row?.name ?: p.name, row?.position, row?.team, row?.points ?: 0.0)
+        TradePlayer(id, row?.name ?: p.name, row?.position, row?.team, row?.points ?: 0.0, rosWeekly[id].orEmpty())
     }.sortedWith(compareByDescending<TradePlayer> { it.points }.thenBy { it.name })
 
-/** The players who can fill a lineup slot: a known position and some rest-of-season points. */
+/**
+ * Everyone with a known position, as lineup candidates: a player without a projection scores nothing but still holds a
+ * roster spot, so he is the first cut when a trade brings in more players than it sends.
+ */
 internal fun candidates(players: List<TradePlayer>): List<LineupCandidate> =
-    players.mapNotNull { p -> p.position?.takeIf { p.points > 0.0 }?.let { LineupCandidate(p.playerId, it, p.points) } }
+    players.mapNotNull { p -> p.position?.let { LineupCandidate(p.playerId, it, p.points, p.weekly) } }
+
+/** [candidates] valued over [weeks] alone: each one's points in those weeks. */
+internal fun onlyWeeks(candidates: List<LineupCandidate>, weeks: Collection<Int>): List<LineupCandidate> =
+    candidates.map { c ->
+        val kept = c.weekly.filterKeys { it in weeks }
+        c.copy(points = kept.values.sum(), weekly = kept)
+    }
+
+/** "weeks 15–17", or "week 16" for one. */
+internal fun weeksText(weeks: List<Int>): String =
+    if (weeks.size == 1) "week ${weeks.single()}" else "weeks ${weeks.first()}–${weeks.last()}"
 
 /** "Good for both", "Helps you more", ...: how the trade reads from the user's side. */
 internal fun verdict(outcome: TradeOutcome): String {
@@ -83,10 +107,12 @@ internal fun TradeView(
     myTeam: MyTeam,
     partners: List<MyTeam>,
     rosRows: List<ProjectionRow>,
+    rosWeekly: Map<String, Map<Int, Double>> = emptyMap(),
 ) {
     val byId = remember(rosRows) { rosRows.associateBy { it.playerId } }
-    val mine = remember(myTeam, byId) { tradePlayers(myTeam, byId) }
-    val others = remember(partners, byId) { partners.associate { it.teamName to tradePlayers(it, byId) } }
+    val mine = remember(myTeam, byId, rosWeekly) { tradePlayers(myTeam, byId, rosWeekly) }
+    val others = remember(partners, byId, rosWeekly) { partners.associate { it.teamName to tradePlayers(it, byId, rosWeekly) } }
+    val playoffs = myTeam.playoffWeeks
     var partnerName by rememberSaveable { mutableStateOf(partners.firstOrNull()?.teamName) }
     val partner = partners.firstOrNull { it.teamName == partnerName } ?: partners.first()
     var give by rememberSaveable { mutableStateOf(listOf<String>()) }
@@ -103,6 +129,14 @@ internal fun TradeView(
     }
     val outcome = remember(give, get, partner, mine, theirs) {
         if (give.isEmpty() && get.isEmpty()) null else Trades.evaluate(myTeam.slots, candidates(mine), candidates(theirs), give.toSet(), get.toSet())
+    }
+    // The same trade over the league's playoff weeks alone; null before weekly projections exist.
+    val playoffOutcome = remember(give, get, partner, mine, theirs, rosWeekly) {
+        if (outcome == null || rosWeekly.isEmpty()) {
+            null
+        } else {
+            Trades.evaluate(myTeam.slots, onlyWeeks(candidates(mine), playoffs), onlyWeeks(candidates(theirs), playoffs), give.toSet(), get.toSet())
+        }
     }
     val names = remember(mine, others) { (mine + others.values.flatten()).associate { it.playerId to it.name } }
 
@@ -131,7 +165,7 @@ internal fun TradeView(
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 if (outcome == null) {
                     Text(
-                        "Tick players to send and receive, or tap a suggestion. Each lineup is valued at its starters' rest-of-season points.",
+                        "Tick players to send and receive, or tap a suggestion. Each roster is valued at its best lineup's rest-of-season points.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -147,6 +181,19 @@ internal fun TradeView(
                         Modifier.testTag("trade:theirs"),
                         style = MaterialTheme.typography.bodyMedium,
                     )
+                    playoffOutcome?.let { p ->
+                        Text(
+                            "Playoffs (${weeksText(playoffs)}): you ${gainText(p.myGain)}, them ${gainText(p.theirGain)}",
+                            Modifier.testTag("trade:playoffs"),
+                            style = MaterialTheme.typography.bodyMedium,
+                        )
+                    }
+                    if (outcome.myDrops.isNotEmpty()) {
+                        Text("You cut ${outcome.myDrops.joinToString { names[it.playerId] ?: it.playerId }} to make room.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    if (outcome.theirDrops.isNotEmpty()) {
+                        Text("${partner.teamName} cuts ${outcome.theirDrops.joinToString { names[it.playerId] ?: it.playerId }} to make room.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     TextButton(onClick = { give = emptyList(); get = emptyList() }) { Text("Clear") }
                 }
             }
@@ -187,23 +234,29 @@ internal fun TradeView(
         searchMillis?.let { ms -> item { Note("Searched every team in ${String.format(Locale.US, "%.1f", ms / 1000.0)} s.") } }
         item { Label("You send") }
         itemsIndexed(mine, key = { _, p -> "give:${p.playerId}" }) { _, p ->
-            PickRow(p, p.playerId in give, "give") { on -> give = if (on) give + p.playerId else give - p.playerId }
+            PickRow(p, p.playerId in give, "give", playoffs) { on -> give = if (on) give + p.playerId else give - p.playerId }
         }
         item { Label("You receive from ${partner.teamName}") }
         itemsIndexed(theirs, key = { _, p -> "get:${p.playerId}" }) { _, p ->
-            PickRow(p, p.playerId in get, "get") { on -> get = if (on) get + p.playerId else get - p.playerId }
+            PickRow(p, p.playerId in get, "get", playoffs) { on -> get = if (on) get + p.playerId else get - p.playerId }
         }
         item {
             Note(
-                "Rest of season under your scoring, starters only: bench depth, byes and roster limits aren't counted, " +
-                    "and a player with no projection (on IR, say) counts as nothing.",
+                if (rosWeekly.isEmpty()) {
+                    "Rest of season under your scoring, on season totals: refresh stats to count byes week by week. " +
+                        "A tenth of the best bench player counts as depth; a side that gets more players cuts its lowest."
+                } else {
+                    "Rest of season under your scoring, week by week, so byes count. A tenth of each week's best bench " +
+                        "player counts as depth; a side that gets more players cuts its lowest. A player with no " +
+                        "projection (on IR, say) counts as nothing."
+                },
             )
         }
     }
 }
 
 @Composable
-private fun PickRow(p: TradePlayer, checked: Boolean, side: String, onCheck: (Boolean) -> Unit) {
+private fun PickRow(p: TradePlayer, checked: Boolean, side: String, playoffs: List<Int>, onCheck: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().toggleable(checked, role = Role.Checkbox, onValueChange = onCheck)
             .padding(start = 4.dp, end = 16.dp).testTag("$side:${p.playerId}"),
@@ -213,7 +266,11 @@ private fun PickRow(p: TradePlayer, checked: Boolean, side: String, onCheck: (Bo
         Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
             Text(p.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
             Text(
-                listOfNotNull(p.position?.let(Position::label), p.team).joinToString(" · ").ifEmpty { "No projection" },
+                listOfNotNull(
+                    p.position?.let(Position::label),
+                    p.team,
+                    p.weekly.takeIf { it.isNotEmpty() }?.let { w -> "playoffs ${pts(playoffs.sumOf { w[it] ?: 0.0 })}" },
+                ).joinToString(" · ").ifEmpty { "No projection" },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )

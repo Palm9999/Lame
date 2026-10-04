@@ -63,7 +63,8 @@ Long/narrow design: adding a metric is an `INSERT`, not a migration.
 | `game` | nflverse schedule for the built seasons: opponents, results, spread and total, starting QBs, head coaches; the forecast's matchups and game script |
 | `player_week_projection` | Per (player, week, metric, stage) projected mean/variance, written by `:core:forecast` — `stage` is `baseline` (post volume-cascade) or `final` (fully adjusted) |
 | `player_week_projection_factor` | Per (player, week, factor) log-space attribution multiplier for one projection adjustment stage |
-| `player_ros_projection` | Rest-of-season aggregate: summed weekly mean/variance per (player, metric), no per-week detail |
+| `player_ros_projection` | Rest-of-season aggregate: summed weekly mean/variance per (player, metric) |
+| `player_ros_week` | The same rest of season week by week (schema 12): each remaining game's mean/variance per (player, week, metric), no row on a bye; Trade, rest-of-season adds and the playoff-week points read it, and an older database without it falls back to totals |
 | `team_week_defense` | Per (team, season, week) points/yards allowed, sacks, INTs, fumbles recovered, defensive TDs, safeties, kickoff-return TDs |
 | `injury_report` | Per (player, season, week) nflverse injury report status/injury/practice |
 

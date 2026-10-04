@@ -74,7 +74,7 @@ internal class Projector(
 
         var projected = 0
         var upcoming: Pair<WeekState, List<Prepared>>? = null
-        val ros = HashMap<Pair<String, String>, DoubleArray>()
+        val ros = RosSums()
         for ((season, week) in weeks) {
             val kind = when {
                 upcomingWeek == null || season < latest || week < upcomingWeek -> WeekKind.PAST
@@ -105,7 +105,8 @@ internal class Projector(
             }
         }
         if (upcoming != null && upcomingWeek != null) {
-            for ((key, sum) in ros) sink.ros(key.first, latest, upcomingWeek - 1, key.second, sum[0], sum[1])
+            for ((key, sum) in ros.totals) sink.ros(key.first, latest, upcomingWeek - 1, key.second, sum[0], sum[1])
+            for ((key, sum) in ros.weeks) sink.rosWeek(key.first, latest, upcomingWeek - 1, key.second, key.third, sum[0], sum[1])
         }
         val status = if (projected == 0) "no games to project from yet" else FORECAST_OK
         val upcomingMap = if (upcoming != null && upcomingWeek != null) mapOf(latest to upcomingWeek) else emptyMap()
@@ -397,7 +398,7 @@ internal class Projector(
         }
     }
 
-    private fun addRest(state: WeekState, p: Prepared, season: Int, week: Int, ros: MutableMap<Pair<String, String>, DoubleArray>) {
+    private fun addRest(state: WeekState, p: Prepared, season: Int, week: Int, ros: RosSums) {
         val game = gameOf[Triple(p.team, season, week)] ?: return // a bye
         // The upcoming week itself uses what was stored for it, props included.
         val final = p.upcoming?.takeIf { week == state.week && season == state.season }
@@ -406,9 +407,7 @@ internal class Projector(
         val cv = K.EMPIRICAL_CV.getValue(p.player.position)
         for ((metric, mean) in final) {
             if (mean <= 0.0) continue
-            val sum = ros.getOrPut(p.player.playerId to metric) { DoubleArray(2) }
-            sum[0] += mean
-            sum[1] += varianceFor(mean, cv)
+            ros.add(p.player.playerId, week, metric, mean, varianceFor(mean, cv))
         }
     }
 
@@ -417,16 +416,14 @@ internal class Projector(
      * his team's remaining games once it projects him for [K.RETURN_MIN_ESPN_POINTS] or more, so a stash expected back
      * keeps his value. His teammates' rest of season doesn't make room for him.
      */
-    private fun addStash(d: Draft, season: Int, week: Int, ros: MutableMap<Pair<String, String>, DoubleArray>) {
+    private fun addStash(d: Draft, season: Int, week: Int, ros: RosSums) {
         gameOf[Triple(d.team, season, week)] ?: return
         val espn = inputs.espn[Triple(d.player.playerId, season, week)] ?: return
         if (referencePoints(espn) < K.RETURN_MIN_ESPN_POINTS) return
         val cv = K.EMPIRICAL_CV.getValue(d.player.position)
         for ((metric, mean) in espn) {
             if (mean <= 0.0) continue
-            val sum = ros.getOrPut(d.player.playerId to metric) { DoubleArray(2) }
-            sum[0] += mean
-            sum[1] += varianceFor(mean, cv)
+            ros.add(d.player.playerId, week, metric, mean, varianceFor(mean, cv))
         }
     }
 

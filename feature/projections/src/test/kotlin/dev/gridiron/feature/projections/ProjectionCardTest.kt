@@ -28,11 +28,18 @@ private class CardExecutor(
     private val bye: Boolean = false,
     private val defense: Boolean = false,
     private val stash: Boolean = false,
+    private val weeks: Boolean = false,
 ) : QueryExecutor {
     override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
         val sql = query.sql
         val rows: List<List<Any?>> = when {
             "schema_meta" in sql -> listOf(listOf("forecast_status", status), listOf("forecast_week:2026", "4"))
+            "FROM player_ros_week" in sql && weeks -> listOf(
+                listOf("W1", "WR", 12L, "receptions", 9.0, 1.0),
+                listOf("W1", "WR", 15L, "receptions", 5.0, 1.0),
+                listOf("W1", "WR", 15L, "receiving_yards", 60.0, 1.0),
+                listOf("W1", "WR", 16L, "receptions", 4.0, 1.0),
+            )
             "player_week_projection_factor" in sql -> emptyList()
             "FROM player_week_projection" in sql && defense -> listOf(
                 listOf("DST_KC", "dst_sacks", "final", 3.0, 3.0, "negbinom"),
@@ -87,6 +94,20 @@ class ProjectionCardTest {
         // W2's 110 beat his 88; W3's 10 and the RB don't count against a WR.
         assertEquals(2, card.rosPlace)
         assertEquals(3, card.rosOf)
+    }
+
+    @Test
+    fun `the card adds his points in the playoff weeks when weekly projections exist`() = runTest {
+        val card = loadProjectionCard(ProjectionsRepository(CardExecutor(weeks = true)), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = null)!!
+        // PPR: week 15 is 5 + 6.0, week 16 is 4; week 12 isn't a playoff week.
+        assertEquals(15.0, card.playoffPoints!!, 1e-9)
+        assertEquals(listOf(15, 16, 17), card.playoffWeeks)
+        val shifted = loadProjectionCard(
+            ProjectionsRepository(CardExecutor(weeks = true)), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = null, playoffWeeks = listOf(12),
+        )!!
+        assertEquals(9.0, shifted.playoffPoints!!, 1e-9)
+        // An older database has no weekly rows: no playoff line.
+        assertNull(loadProjectionCard(ProjectionsRepository(CardExecutor()), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = null)!!.playoffPoints)
     }
 
     @Test

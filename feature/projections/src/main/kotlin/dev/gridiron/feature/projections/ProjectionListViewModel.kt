@@ -55,6 +55,8 @@ public sealed interface ProjectionListState {
         val builtAt: Instant?,
         val weekRows: List<ProjectionRow>,
         val rosRows: List<ProjectionRow>,
+        /** Each player's rest of season week by week under the profile; empty on a database built before schema 12. */
+        val rosWeekly: Map<String, Map<Int, Double>> = emptyMap(),
     ) : ProjectionListState
 }
 
@@ -123,8 +125,12 @@ public class ProjectionListViewModel(
             else -> {
                 val weekListed = repository.weekAll(season, week)
                 val rosListed = repository.rosAll(season)
+                val rosWeeks = repository.rosWeeks(season)
                 withContext(compute) {
-                    ProjectionListState.Loaded(week, status.builtAt, toRows(weekListed, profile), toRows(rosListed, profile))
+                    ProjectionListState.Loaded(
+                        week, status.builtAt, toRows(weekListed, profile), toRows(rosListed, profile),
+                        rosWeeks.associate { it.playerId to it.points(profile) },
+                    )
                 }
             }
         }

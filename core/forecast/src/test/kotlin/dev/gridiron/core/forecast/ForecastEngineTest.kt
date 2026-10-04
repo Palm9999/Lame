@@ -342,6 +342,33 @@ class ForecastEngineTest {
     }
 
     @Test
+    fun `rest of season week by week sums to its total, players, kickers and defenses alike, with no bye row`() {
+        league("ros-weeks.db", units = true).use { db ->
+            run(db)
+            val summed = db.query(
+                """
+                SELECT r.player_id, r.metric_id, r.mean, r.variance, SUM(w.mean), SUM(w.variance)
+                FROM player_ros_projection r
+                JOIN player_ros_week w ON w.player_id = r.player_id AND w.season = r.season
+                  AND w.as_of_week = r.as_of_week AND w.metric_id = r.metric_id
+                GROUP BY r.player_id, r.metric_id
+                """.trimIndent(),
+            )
+            assertEquals(db.query("SELECT COUNT(*) FROM player_ros_projection").single()[0]!!.toInt(), summed.size)
+            for (row in summed) {
+                assertEquals(row[2]!!.toDouble(), row[4]!!.toDouble(), 1e-9, "${row[0]} ${row[1]} mean")
+                assertEquals(row[3]!!.toDouble(), row[5]!!.toDouble(), 1e-9, "${row[0]} ${row[1]} variance")
+            }
+            // BBB is on bye in week 4: week 3 only; AAA plays both.
+            assertEquals(listOf(listOf("3")), db.query("SELECT DISTINCT week FROM player_ros_week WHERE player_id = 'WR_B'"))
+            assertEquals(listOf(listOf("3"), listOf("4")), db.query("SELECT DISTINCT week FROM player_ros_week WHERE player_id = 'DST_AAA' ORDER BY week"))
+            assertEquals(finalMean(db, "WR_A", 3, "targets"), db.query(
+                "SELECT mean FROM player_ros_week WHERE player_id = 'WR_A' AND week = 3 AND metric_id = 'targets'",
+            ).single()[0]!!.toDouble(), 1e-9)
+        }
+    }
+
+    @Test
     fun `a team on bye in the upcoming week keeps its rest of season`() {
         league("a.db", playedThrough = 3).use { db ->
             db.game(2025, 5, "BBB", "DDD", played = false, spread = null, total = null, homeCoach = "Coach BBB", awayCoach = "Coach DDD")

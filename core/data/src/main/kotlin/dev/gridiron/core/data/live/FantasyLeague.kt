@@ -7,6 +7,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
@@ -30,6 +31,8 @@ public data class LeagueTeam(
     val players: List<LeaguePlayer>,
     /** ESPN's owner ids (SWIDs), for finding the user's own team. */
     val ownerIds: List<String> = emptyList(),
+    /** FAAB dollars spent this season; null when ESPN didn't say. */
+    val faabSpent: Int? = null,
 )
 
 /** A league as last read from ESPN. */
@@ -42,7 +45,14 @@ public data class FantasyLeague(
     val fetchedAtMillis: Long = 0,
     /** Starting slots by label (`RB` to 2, `FLEX` to 1), bench and IR left out; empty when the snapshot has none. */
     val lineupSlots: Map<String, Int> = emptyMap(),
+    /** The NFL weeks of the league's playoffs, from its schedule settings; empty when the snapshot has none. */
+    val playoffWeeks: List<Int> = emptyList(),
+    /** Each team's FAAB budget for the season; null when the league doesn't bid (or the snapshot predates it). */
+    val faabBudget: Int? = null,
 )
+
+/** NFL weeks 15-17: most leagues' playoffs, used when the league's own aren't known. */
+public val DEFAULT_PLAYOFF_WEEKS: List<Int> = listOf(15, 16, 17)
 
 /**
  * The user's own team in a [season]'s league with the starting [slots] to fill: the league's own, or the usual nine
@@ -54,6 +64,12 @@ public data class MyTeam(
     val players: List<LeaguePlayer>,
     val slots: Map<String, Int>,
     val slotsAreDefault: Boolean,
+    /** The league's playoff weeks, or [DEFAULT_PLAYOFF_WEEKS]. */
+    val playoffWeeks: List<Int> = DEFAULT_PLAYOFF_WEEKS,
+    /** FAAB dollars this team has left; null when the league doesn't bid or ESPN didn't say what it spent. */
+    val faabLeft: Int? = null,
+    /** The league's FAAB budget; null when it doesn't bid. */
+    val faabBudget: Int? = null,
 )
 
 /** Every team but [teamId], each as a [MyTeam] on the league's slots, for trades; empty when [teamId] isn't in it. */
@@ -69,7 +85,12 @@ public data class OpponentResult(val team: MyTeam?, val message: String?)
 public fun FantasyLeague.myTeam(teamId: Int?): MyTeam? {
     val team = teams.firstOrNull { it.id == teamId } ?: return null
     val own = lineupSlots.isNotEmpty()
-    return MyTeam(team.name, season, team.players, if (own) lineupSlots else Lineups.DEFAULT_SLOTS, !own)
+    return MyTeam(
+        team.name, season, team.players, if (own) lineupSlots else Lineups.DEFAULT_SLOTS, !own,
+        playoffWeeks = playoffWeeks.ifEmpty { DEFAULT_PLAYOFF_WEEKS },
+        faabLeft = faabBudget?.let { budget -> team.faabSpent?.let { (budget - it).coerceAtLeast(0) } },
+        faabBudget = faabBudget,
+    )
 }
 
 /**
@@ -168,7 +189,32 @@ internal object EspnFantasyParser {
             teams = ranked,
             fetchedAtMillis = fetchedAtMillis,
             lineupSlots = lineupSlots(root.obj("settings")?.obj("rosterSettings")?.obj("lineupSlotCounts")),
+            playoffWeeks = playoffWeeks(root.obj("settings")?.obj("scheduleSettings")),
+            faabBudget = root.obj("settings")?.obj("acquisitionSettings")
+                ?.takeIf { (it["isUsingAcquisitionBudget"] as? JsonPrimitive)?.booleanOrNull == true }
+                ?.int("acquisitionBudget")?.takeIf { it > 0 },
         )
+    }
+
+    /**
+     * The playoffs' NFL weeks from `scheduleSettings` (checked against ESPN's `leaguedefaults/3?view=mSettings`): the
+     * regular season is `matchupPeriodCount` matchups of `matchupPeriodLength` weeks, then one round per halving of
+     * `playoffTeamCount`, each `playoffMatchupPeriodLengthByRound` weeks long (or `playoffMatchupPeriodLength`, at least
+     * one). Empty when the settings are missing or would run past week 18.
+     */
+    private fun playoffWeeks(s: JsonObject?): List<Int> {
+        s ?: return emptyList()
+        val matchups = s.int("matchupPeriodCount")?.takeIf { it > 0 } ?: return emptyList()
+        val length = s.int("matchupPeriodLength")?.takeIf { it > 0 } ?: 1
+        val teams = s.int("playoffTeamCount")?.takeIf { it > 1 } ?: return emptyList()
+        var rounds = 0
+        while ((1 shl rounds) < teams) rounds++
+        val byRound = s.obj("playoffMatchupPeriodLengthByRound")
+        val fallback = s.int("playoffMatchupPeriodLength")?.takeIf { it > 0 } ?: 1
+        val weeks = (1..rounds).sumOf { r -> byRound?.int(r.toString())?.takeIf { it > 0 } ?: fallback }
+        val first = matchups * length + 1
+        val last = first + weeks - 1
+        return if (last <= 18) (first..last).toList() else emptyList()
     }
 
     /** ESPN's `lineupSlotCounts` (slot id to count) as starters by label; the bench, IR and unknown ids are dropped. */
@@ -237,6 +283,7 @@ internal object EspnFantasyParser {
             rank = 0,
             players = players,
             ownerIds = ownerIds,
+            faabSpent = t.obj("transactionCounter")?.int("acquisitionBudgetSpent"),
         )
     }
 
@@ -259,6 +306,8 @@ internal fun FantasyLeague.toJson(): String = buildJsonObject {
     put("week", week)
     put("fetchedAtMillis", fetchedAtMillis)
     put("lineupSlots", buildJsonObject { lineupSlots.forEach { (slot, n) -> put(slot, n) } })
+    put("playoffWeeks", buildJsonArray { playoffWeeks.forEach { add(JsonPrimitive(it)) } })
+    faabBudget?.let { put("faabBudget", it) }
     put(
         "teams",
         buildJsonArray {
@@ -275,6 +324,7 @@ internal fun FantasyLeague.toJson(): String = buildJsonObject {
                         put("pointsAgainst", t.pointsAgainst)
                         put("rank", t.rank)
                         put("ownerIds", buildJsonArray { t.ownerIds.forEach { add(JsonPrimitive(it)) } })
+                        t.faabSpent?.let { put("faabSpent", it) }
                         put(
                             "players",
                             buildJsonArray {
@@ -307,6 +357,8 @@ internal fun fantasyLeagueFromJson(text: String): FantasyLeague? = try {
         week = o.int("week")!!,
         fetchedAtMillis = (o["fetchedAtMillis"] as? JsonPrimitive)?.longOrNull ?: 0,
         lineupSlots = o.obj("lineupSlots")?.entries.orEmpty().mapNotNull { (slot, n) -> (n as? JsonPrimitive)?.intOrNull?.let { slot to it } }.toMap(),
+        playoffWeeks = o.array("playoffWeeks").orEmpty().mapNotNull { (it as? JsonPrimitive)?.intOrNull },
+        faabBudget = o.int("faabBudget"),
         teams = o.array("teams")!!.map { e ->
             val t = e as JsonObject
             LeagueTeam(
@@ -320,6 +372,7 @@ internal fun fantasyLeagueFromJson(text: String): FantasyLeague? = try {
                 pointsAgainst = t.double("pointsAgainst")!!,
                 rank = t.int("rank")!!,
                 ownerIds = t.array("ownerIds").orEmpty().mapNotNull { (it as? JsonPrimitive)?.content },
+                faabSpent = t.int("faabSpent"),
                 players = t.array("players").orEmpty().map { pe ->
                     val p = pe as JsonObject
                     LeaguePlayer(p.string("espnId")!!, p.string("name")!!, p.string("slot")!!, p.string("playerId"))

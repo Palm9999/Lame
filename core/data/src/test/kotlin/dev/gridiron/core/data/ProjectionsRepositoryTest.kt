@@ -1,5 +1,6 @@
 package dev.gridiron.core.data
 
+import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.projections.ForecastStatus
 import dev.gridiron.core.projections.PlayerProjection
 import dev.gridiron.core.projections.ProjectionsRequest
@@ -19,7 +20,7 @@ class ProjectionsRepositoryTest {
      * then reopened read-only through [JdbcQueryExecutor] -- the same JDBC
      * fixture [StatsRepositoryTest] uses against the real ETL database.
      */
-    private fun jdbcFixtureWithSchema(insertProjectionRows: List<String>): JdbcQueryExecutor {
+    private fun jdbcFixtureWithSchema(insertProjectionRows: List<String>, withRosWeeks: Boolean = true): JdbcQueryExecutor {
         val file = File.createTempFile("projections-fixture", ".db")
         file.deleteOnExit()
         DriverManager.getConnection("jdbc:sqlite:${file.path}").use { conn ->
@@ -42,6 +43,14 @@ class ProjectionsRepositoryTest {
                          metric_id TEXT NOT NULL, mean REAL NOT NULL, variance REAL NOT NULL,
                          PRIMARY KEY (player_id, season, as_of_week, metric_id)) WITHOUT ROWID""",
                 )
+                if (withRosWeeks) {
+                    st.executeUpdate(
+                        """CREATE TABLE player_ros_week (
+                             player_id TEXT NOT NULL, season INTEGER NOT NULL, as_of_week INTEGER NOT NULL, week INTEGER NOT NULL,
+                             metric_id TEXT NOT NULL, mean REAL NOT NULL, variance REAL NOT NULL,
+                             PRIMARY KEY (player_id, season, as_of_week, week, metric_id)) WITHOUT ROWID""",
+                    )
+                }
                 st.executeUpdate("CREATE TABLE metric (id TEXT PRIMARY KEY, dist_family TEXT)")
                 st.executeUpdate("CREATE TABLE player (player_id TEXT PRIMARY KEY, full_name TEXT NOT NULL, position TEXT, team TEXT)")
                 st.executeUpdate("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
@@ -137,6 +146,32 @@ class ProjectionsRepositoryTest {
             assertEquals("WR", week.position)
             assertEquals(listOf(7.0), week.components.map { it.mean })
             assertEquals(listOf(80.0), repo.rosAll(2026).single().components.map { it.mean })
+        }
+    }
+
+    @Test
+    fun `rosWeeks reads the latest build's weeks and scores each one`() = runTest {
+        jdbcFixtureWithSchema(
+            listOf(
+                "INSERT INTO player VALUES ('P1', 'Pat One', 'WR', 'KC')",
+                "INSERT INTO player_ros_week VALUES ('P1', 2026, 2, 3, 'receptions', 9.0, 1.0)",
+                "INSERT INTO player_ros_week VALUES ('P1', 2026, 3, 4, 'receptions', 5.0, 1.0)",
+                "INSERT INTO player_ros_week VALUES ('P1', 2026, 3, 4, 'receiving_yards', 60.0, 1.0)",
+                "INSERT INTO player_ros_week VALUES ('P1', 2026, 3, 6, 'receptions', 4.0, 1.0)",
+            ),
+        ).use { executor ->
+            val weeks = ProjectionsRepository(executor).rosWeeks(2026).single()
+            assertEquals("WR", weeks.position)
+            assertEquals(setOf(4, 6), weeks.weeks.keys)
+            // PPR: a catch is a point, ten yards a point.
+            assertEquals(mapOf(4 to 11.0, 6 to 4.0), weeks.points(ScoringPresets.PPR).mapValues { Math.round(it.value * 10) / 10.0 })
+        }
+    }
+
+    @Test
+    fun `rosWeeks is empty on a database built before the table existed`() = runTest {
+        jdbcFixtureWithSchema(emptyList(), withRosWeeks = false).use { executor ->
+            assertEquals(emptyList<Any>(), ProjectionsRepository(executor).rosWeeks(2026))
         }
     }
 

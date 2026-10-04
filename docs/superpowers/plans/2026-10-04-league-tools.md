@@ -1,0 +1,9 @@
+# League tools plan (2026-10-04)
+
+Order: each task is pushed with its HANDOFF update.
+
+1. **Per-week rest of season.** New table `player_ros_week (player_id, season, as_of_week, week, metric_id, mean, variance)`, schema 12, `FORECAST_VERSION` 16. One accumulator (`RosSums`) fed by `Projector.addRest`, `Projector.addStash` and `Units.addRest`; `ProjectionSink.rosWeek`. Phone: `ProjectionQueries.rosWeeks(ids, season)`, `ProjectionsRepository.rosWeekPoints(ids, season, profile)` → `Map<player, Map<week, points>>` via `projectedScore`, empty when the table is missing. Tests: `ForecastEngineTest` "per-week rest of season sums to the total"; repository test on the real db.
+2. **Playoff schedule.** `FantasyLeague.playoffWeeks` from `scheduleSettings` (`matchupPeriodCount`, `matchupPeriodLength`, `playoffTeamCount`, `playoffMatchupPeriodLengthByRound`), default 15–17. Shown as "Playoffs: N pts" in Trade sides, rest-of-season adds and the Player page card. Schedule rank only if future weeks vary by opponent. Tests: `FantasyLeagueTest` playoff weeks; `PlayoffWeeksTest`.
+3. **Better trades.** `Trades.evaluate`/`ideas` take weekly points (`Map<player, Map<week, Double>>`): value = sum over weeks of the best lineup, the receiving side drops its lowest bench player when over roster size, bench depth at `BENCH_WEIGHT`. 2-for-2 among the top 8; screen on season totals, rescore survivors weekly. Tests: `TradeTest` byes, roster drop, 2-for-2, timing.
+4. **FAAB bids.** `acquisitionSettings.isUsingAcquisitionBudget`/`acquisitionBudget`, team `transactionCounter.acquisitionBudgetSpent` (optional). `Faab.bid(gain, bestGain, remaining)`. Tests: `FaabTest`, parser test with and without the fields.
+5. **Injury alerts.** WorkManager every 2 h: ESPN injuries vs stored statuses for rostered players (`InjuryAlerts.changes(old, new, rostered, starters)`, pure), first run stores silently; Settings toggle; POST_NOTIFICATIONS. Tests: `InjuryAlertsTest`.

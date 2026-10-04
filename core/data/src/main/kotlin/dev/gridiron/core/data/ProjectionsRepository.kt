@@ -13,8 +13,10 @@ import dev.gridiron.core.projections.ProjectionQueries
 import dev.gridiron.core.projections.ProjectionsRequest
 import dev.gridiron.core.projections.RosProjection
 import dev.gridiron.core.projections.RosProjectionsRequest
+import dev.gridiron.core.projections.RosWeeks
 import dev.gridiron.core.statquery.SqlQuery
 import java.time.Instant
+import kotlin.coroutines.cancellation.CancellationException
 
 public class ProjectionsRepository(private val executor: QueryExecutor) {
 
@@ -89,6 +91,25 @@ public class ProjectionsRepository(private val executor: QueryExecutor) {
     public suspend fun weekAll(season: Int, week: Int): List<ListedProjection> = listed(ProjectionQueries.weekAll(season, week))
 
     public suspend fun rosAll(season: Int): List<ListedProjection> = listed(ProjectionQueries.rosAll(season))
+
+    /**
+     * Every player's rest of season week by week (or only [playerId]'s); empty when the database predates `player_ros_week` (built before
+     * schema 12) or anything fails, so callers fall back to season totals.
+     */
+    public suspend fun rosWeeks(season: Int, playerId: String? = null): List<RosWeeks> = try {
+        data class Row(val playerId: String, val position: String?, val week: Int, val component: ProjectionComponent)
+
+        val rows = executor.query(ProjectionQueries.rosWeeks(season, playerId)) {
+            Row(it.text(0), it.textOrNull(1), it.long(2).toInt(), ProjectionComponent(it.text(3), it.double(4), it.double(5)))
+        }
+        rows.groupBy { it.playerId }.map { (playerId, playerRows) ->
+            RosWeeks(playerId, playerRows.first().position, playerRows.groupBy({ it.week }, { it.component }))
+        }
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyList()
+    }
 
     /** [team]'s regular-season game that week, or null on a bye. */
     public suspend fun game(season: Int, week: Int, team: String): GameLine? =

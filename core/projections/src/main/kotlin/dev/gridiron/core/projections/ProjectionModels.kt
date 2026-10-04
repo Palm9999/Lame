@@ -1,5 +1,7 @@
 package dev.gridiron.core.projections
 
+import dev.gridiron.core.model.Position
+import dev.gridiron.core.model.ScoringProfile
 import java.time.Instant
 
 /** One projected stat. [family] is the metric registry's `dist_family`; null simulates as gamma. */
@@ -30,6 +32,15 @@ public data class ListedProjection(
     val team: String?,
     val components: List<ProjectionComponent>,
 )
+
+/** One player's rest of season week by week: each remaining game's projected stats, by week (a bye has none). */
+public data class RosWeeks(val playerId: String, val position: String?, val weeks: Map<Int, List<ProjectionComponent>>) {
+    /** Each week's points under [profile], scored like any projection ([projectedScore]). */
+    public fun points(profile: ScoringProfile): Map<Int, Double> {
+        val pos = position?.let(Position::fromCode)
+        return weeks.mapValues { (_, components) -> projectedScore(components, profile, pos) }
+    }
+}
 
 /** The forecast as the last refresh left it. */
 public data class ForecastStatus(
