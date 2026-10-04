@@ -402,6 +402,30 @@ class RealDatabaseContractTest {
     }
 
     @Test
+    fun `every stored column reads the same from the season window as from weekly facts`() {
+        // Guards the ingest's UNWINDOWED_METRICS: a component dropped from the windows would read blank here.
+        val season = lastCompleteSeason
+        val window = conn.prepareStatement("SELECT first_week, last_week FROM window_def WHERE season = ? AND window = 'S'").use { ps ->
+            ps.setInt(1, season)
+            ps.executeQuery().use { rs -> rs.next(); RollupWindow("S", WeekRange(rs.getInt(1), rs.getInt(2))) }
+        }
+        for (columns in StatColumn.entries.filterNot { it.isComputed }.chunked(12)) {
+            val weekly = StatQuerySpec(season, window.weeks, columns, minGames = 1, limit = StatQuerySpec.MAX_LIMIT)
+            val fast = StatQueryBuilder.grid(weekly.copy(rollups = listOf(window))).query
+            assertTrue("player_window_stat" in fast.sql && "player_week_stat" !in fast.sql)
+            val a = run(fast).associateBy { it[0] }
+            val b = run(StatQueryBuilder.grid(weekly).query).associateBy { it[0] }
+            assertEquals(b.keys, a.keys, columns.toString())
+            for ((player, row) in b) {
+                row.zip(a.getValue(player)).forEachIndexed { i, (x, y) ->
+                    if (x is Number && y is Number) assertEquals(x.toDouble(), y.toDouble(), 1e-9 * maxOf(1.0, kotlin.math.abs(x.toDouble())), "$player $i $columns")
+                    else assertEquals(x, y, "$player $i $columns")
+                }
+            }
+        }
+    }
+
+    @Test
     fun `a rollup scores every window as the weekly path does, and its speed is printed`() {
         val season = lastCompleteSeason
         val windows = conn.prepareStatement("SELECT window, first_week, last_week FROM window_def WHERE season = ?").use { ps ->

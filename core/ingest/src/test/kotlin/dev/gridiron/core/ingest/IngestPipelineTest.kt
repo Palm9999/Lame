@@ -173,15 +173,14 @@ class IngestPipelineTest {
             ))),
             snapsVersion,
         )
-        fetcher.serve(
-            Sources.url(Input.INJURIES, season),
-            Fixtures.gzip(Fixtures.csv(injuryHeader, listOf(mapOf(
-                "gsis_id" to "WR2", "season" to season, "week" to 1, "team" to "AAA", "full_name" to "Receiver Two",
-                "position" to "WR", "report_status" to "Questionable", "report_primary_injury" to "Hamstring",
-                "practice_status" to "Limited Participation in Practice",
-            )))),
-            version,
-        )
+        val injuries = Fixtures.csv(injuryHeader, listOf(mapOf(
+            "gsis_id" to "WR2", "season" to season, "week" to 1, "team" to "AAA", "full_name" to "Receiver Two",
+            "position" to "WR", "report_status" to "Questionable", "report_primary_injury" to "Hamstring",
+            "practice_status" to "Limited Participation in Practice",
+        )))
+        // Seasons before 2023 are published uncompressed.
+        val injuriesUrl = Sources.url(Input.INJURIES, season)
+        fetcher.serve(injuriesUrl, if (injuriesUrl.endsWith(".gz")) Fixtures.gzip(injuries) else injuries.toByteArray(), version)
         if (expected) {
             val rows = listOf(
                 ep(season, "WR1", "receptions" to wr1Receptions, "rec_yards_gained" to 15, "receptions_exp" to 0.8,

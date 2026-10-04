@@ -10,6 +10,9 @@ class SourcesTest {
         assertEquals("https://github.com/nflverse/nflverse-data/releases/download/pbp/play_by_play_2025.csv.gz", Sources.url(Input.PBP, 2025))
         assertEquals("https://github.com/nflverse/nflverse-data/releases/download/snap_counts/snap_counts_2025.csv.gz", Sources.url(Input.SNAP_COUNTS, 2025))
         assertEquals("https://github.com/nflverse/nflverse-data/releases/download/injuries/injuries_2025.csv.gz", Sources.url(Input.INJURIES, 2025))
+        // nflverse publishes 2021 and 2022 injuries uncompressed only.
+        assertEquals("https://github.com/nflverse/nflverse-data/releases/download/injuries/injuries_2022.csv", Sources.url(Input.INJURIES, 2022))
+        assertEquals("https://github.com/nflverse/nflverse-data/releases/download/injuries/injuries_2023.csv.gz", Sources.url(Input.INJURIES, 2023))
         assertEquals("https://github.com/ffverse/ffopportunity/releases/download/latest-data/ep_weekly_2025.csv", Sources.url(Input.EXPECTED, 2025))
         assertEquals("https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_passing.csv.gz", Sources.url(Input.NGS_PASSING))
         assertEquals("https://github.com/nflverse/nflverse-data/releases/download/nextgen_stats/ngs_rushing.csv.gz", Sources.url(Input.NGS_RUSHING))

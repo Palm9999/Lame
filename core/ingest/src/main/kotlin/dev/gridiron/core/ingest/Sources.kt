@@ -24,7 +24,8 @@ public object Sources {
         return when (input) {
             Input.PBP -> "$NFLVERSE/pbp/play_by_play_$season.csv.gz"
             Input.SNAP_COUNTS -> "$NFLVERSE/snap_counts/snap_counts_$season.csv.gz"
-            Input.INJURIES -> "$NFLVERSE/injuries/injuries_$season.csv.gz"
+            // nflverse publishes 2021 and 2022 uncompressed only.
+            Input.INJURIES -> "$NFLVERSE/injuries/injuries_$season.csv" + if (season!! >= 2023) ".gz" else ""
             // ffopportunity publishes no gzip variant of this file.
             Input.EXPECTED -> "$FFOPPORTUNITY/ep_weekly_$season.csv"
             // FTN publishes 2022 onward, one uncompressed csv per season.

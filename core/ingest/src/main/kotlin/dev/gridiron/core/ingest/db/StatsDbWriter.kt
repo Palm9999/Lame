@@ -221,7 +221,7 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
      * Fills `window_def` and `player_window_stat` from `player_week_stat` for every season: `S` is weeks 1 through
      * the last regular-season week played (the Grid's default range), `L<N>` the N weeks ending there, clipped at
      * week 1. The last week played is the newest `g` row, as the Grid's season list reads it. Playoff weeks are
-     * outside every window.
+     * outside every window, and so are [UNWINDOWED_METRICS].
      */
     fun writeWindows() {
         val lastPlayed = connection.prepare("SELECT season, MAX(week) FROM player_week_stat WHERE metric_id = 'g' GROUP BY season").use { st ->
@@ -236,8 +236,10 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
                     execute(
                         """INSERT INTO player_window_stat (player_id, season, window, metric_id, value)
                            SELECT player_id, season, ?, metric_id, SUM(value) FROM player_week_stat
-                           WHERE season = ? AND week BETWEEN ? AND ? GROUP BY player_id, metric_id""",
-                        window, season, first, last,
+                           WHERE season = ? AND week BETWEEN ? AND ?
+                             AND metric_id NOT IN (${UNWINDOWED_METRICS.joinToString { "?" }})
+                           GROUP BY player_id, metric_id""",
+                        window, season, first, last, *UNWINDOWED_METRICS.toTypedArray(),
                     )
                 }
             }

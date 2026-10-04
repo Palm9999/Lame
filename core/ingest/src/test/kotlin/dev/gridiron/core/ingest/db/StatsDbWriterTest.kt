@@ -96,6 +96,20 @@ class StatsDbWriterTest {
     }
 
     @Test
+    fun `weekly rates stay out of the windows`() {
+        val file = File(dir, "stats.db")
+        StatsDbWriter.create(file).use { w ->
+            w.writeMetrics(METRICS)
+            w.writeFacts(weekly(2025, 1, 2) + listOf(Fact("WR1", 2025, 1, "AAA", "target_share", 0.25), Fact("WR1", 2025, 2, "AAA", "target_share", 0.5)))
+            w.writePlayers(listOf(wr1))
+            w.finish(listOf(2025), emptyMap(), Instant.parse("2026-09-25T12:00:00Z"))
+        }
+        assertEquals("3.0", sums(file, 2025, "S", "targets"))
+        assertNull(sums(file, 2025, "S", "target_share"))
+        assertEquals(listOf(listOf("2")), query(file, "SELECT COUNT(*) FROM player_week_stat WHERE metric_id = 'target_share'"))
+    }
+
+    @Test
     fun `the rollup is keyed metric first, so it needs no second index`() {
         val file = File(dir, "stats.db")
         buildWeeks(file, 2025, 1, 2, 3)

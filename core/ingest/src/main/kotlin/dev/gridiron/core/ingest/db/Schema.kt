@@ -91,6 +91,21 @@ internal const val WINDOW_SEASON: String = "S"
 /** The "last N weeks" windows: the Weeks sheet's "Last 4" quick pick, plus the 3, 5 and 8 the product spec names. */
 internal val WINDOWS_LAST: List<Int> = listOf(3, 4, 5, 8)
 
+/**
+ * Stored weekly but never summed into a window: weekly rates (a range recomputes them from their components)
+ * and components no range query reads. A metric left off this list is rolled up, so a new one is never lost.
+ * `etl/gridiron_etl/schema.py` holds the same list.
+ */
+internal val UNWINDOWED_METRICS: List<String> = listOf(
+    "adot", "air_yards_share", "carry_share", "catch_rate", "cpoe", "epa_per_dropback", "racr",
+    "rush_epa_per_carry", "rush_success_rate", "snap_share", "target_share", "wopr",
+    "ftn_blitz_rate", "ftn_catchable_rate", "ftn_contested_rate", "ftn_drop_rate", "ftn_int_worthy_rate",
+    "ftn_out_of_pocket_rate", "ftn_play_action_rate", "ftn_throwaway_rate",
+    "ngs_aggressiveness", "ngs_cushion", "ngs_intended_air_yards", "ngs_rush_efficiency", "ngs_ryoe_per_att",
+    "ngs_separation", "ngs_stacked_box_pct", "ngs_time_to_throw", "ngs_yac_over_expected",
+    "fg_att_0_39", "fg_att_40_49", "fg_att_50", "rec_epa",
+)
+
 /** The NFL moved from 17 to 18 regular-season weeks in 2021; `WeekRange.lastRegularSeasonWeek` is the query-side twin. */
 internal fun lastRegularSeasonWeek(season: Int): Int = if (season >= 2021) 18 else 17
 
