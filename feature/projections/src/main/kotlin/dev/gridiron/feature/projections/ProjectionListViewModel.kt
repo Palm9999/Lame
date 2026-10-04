@@ -9,7 +9,9 @@ import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.ListedProjection
+import dev.gridiron.core.projections.ProjectionComponent
 import dev.gridiron.core.projections.anytimeTd
+import dev.gridiron.core.projections.projectedScore
 import dev.gridiron.core.projections.projectPoints
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -37,9 +39,12 @@ public data class ProjectionRow(
     val out: Boolean = false,
     /** His chance of a rushing or receiving TD this week ([anytimeTd]); null for rest of season, kickers and D/STs. */
     val tdChance: Double? = null,
-    /** Projected carries plus targets this week, for RBs (the handcuff finder); null otherwise. */
-    val touches: Double? = null,
+    /** This week's projected usage, for QBs, RBs, WRs and TEs (the handcuff finder); null otherwise. */
+    val usage: Usage? = null,
 )
+
+/** One week's projected carries and targets, and the points (under the active profile) from rushing and from receiving. */
+public data class Usage(val carries: Double, val targets: Double, val rushingPoints: Double, val receivingPoints: Double)
 
 public enum class PositionTab(public val label: String, public val codes: Set<String>) {
     QB("QB", setOf("QB")),
@@ -94,8 +99,17 @@ internal fun toRows(listed: List<ListedProjection>, profile: ScoringProfile, wee
     val position = p.position ?: return@mapNotNull null
     val points = projectPoints(p.components, profile, Position.fromCode(position), draws = LIST_DRAWS)
     val td = if (week && position in TD_POSITIONS) anytimeTd(p.components) else null
-    val touches = if (week && position == "RB") p.components.filter { it.metricId == "carries" || it.metricId == "targets" }.sumOf { it.mean } else null
-    ProjectionRow(p.playerId, p.name, position, p.team, points.points, points.floor, points.ceiling, tdChance = td, touches = touches)
+    val usage = if (week && position in TD_POSITIONS) usage(p.components, profile, Position.fromCode(position)) else null
+    ProjectionRow(p.playerId, p.name, position, p.team, points.points, points.floor, points.ceiling, tdChance = td, usage = usage)
+}
+
+private fun usage(components: List<ProjectionComponent>, profile: ScoringProfile, position: Position?): Usage {
+    fun mean(id: String) = components.filter { it.metricId == id }.sumOf { it.mean }
+    fun points(of: (String) -> Boolean) = projectedScore(components.filter { of(it.metricId) }, profile, position)
+    return Usage(
+        mean("carries"), mean("targets"),
+        points { it.startsWith("rushing_") }, points { it.startsWith("receiving_") || it == "receptions" },
+    )
 }
 
 private val TD_POSITIONS = setOf("QB", "RB", "WR", "TE")

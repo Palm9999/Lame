@@ -247,28 +247,36 @@ internal fun lineupCheck(team: MyTeam, best: LineupView, weekRows: List<Projecti
 }
 
 /**
- * A starting RB's handcuff: [backup], his teammate with the most projected touches after him, who would score about
+ * A starting RB's handcuff: [backup], his RB teammate with the most projected carries plus targets, who would score about
  * [ifOut] this week if [starter] sat; [owner] is the league team that has him, "you", or null for a free agent.
  */
 internal data class HandcuffLine(val starter: ProjectionRow, val backup: ProjectionRow, val ifOut: Double, val owner: String?)
 
 /**
- * Handcuffs for [team]'s RBs projected [HANDCUFF_MIN_POINTS]+ this week, best first, at most [limit]. If the starter
- * sits, his carries and targets go to the room's other RBs in proportion to their own (as the forecast moves an Out
- * player's share), so the backup's projection grows by all the room's touches over the room's touches without him.
+ * Handcuffs for [team]'s RBs projected [HANDCUFF_MIN_POINTS]+ this week, best first, at most [limit]. The backup is
+ * the RB teammate with the most projected carries plus targets. If the starter sits, his carries and targets go to
+ * the rest of the team in proportion to their own (the forecast's rule for an Out player): carries across every
+ * player's carries, QBs included, targets across every player's targets. So the backup's rushing points grow by the
+ * team's carries over its carries without the starter, his receiving points likewise by targets. On 2022-2025's 152
+ * starters who sat a week after a healthy one, this missed the backup's score by 6.9 points against 9.3 for moving
+ * the RB room's touches alone (which over-projected him by 7).
  */
 internal fun handcuffs(team: MyTeam, weekRows: List<ProjectionRow>, owners: Map<String, String>, limit: Int = 3): List<HandcuffLine> {
     val mine = team.players.mapNotNull { it.playerId }.toSet()
-    val byTeam = weekRows.filter { it.position == "RB" && it.team != null }.groupBy { it.team!! }
+    val byTeam = weekRows.filter { it.team != null && it.usage != null }.groupBy { it.team!! }
     return weekRows.filter { it.playerId in mine && it.position == "RB" && it.points >= HANDCUFF_MIN_POINTS }
         .sortedByDescending { it.points }
         .take(limit)
         .mapNotNull { starter ->
-            val room = byTeam[starter.team].orEmpty()
-            val backup = room.filter { it.playerId != starter.playerId }.maxByOrNull { it.touches ?: 0.0 } ?: return@mapNotNull null
-            val all = room.sumOf { it.touches ?: 0.0 }
-            val without = all - (starter.touches ?: 0.0)
-            val ifOut = if (without > 0.0) backup.points * all / without else backup.points
+            val onTeam = byTeam[starter.team].orEmpty()
+            val backup = onTeam.filter { it.position == "RB" && it.playerId != starter.playerId }
+                .maxByOrNull { it.usage!!.carries + it.usage.targets } ?: return@mapNotNull null
+            val gone = starter.usage ?: return@mapNotNull null
+            fun grows(total: Double, his: Double) = if (total - his > 0.0) total / (total - his) else 1.0
+            val carries = grows(onTeam.sumOf { it.usage!!.carries }, gone.carries)
+            val targets = grows(onTeam.sumOf { it.usage!!.targets }, gone.targets)
+            val u = backup.usage!!
+            val ifOut = backup.points + u.rushingPoints * (carries - 1) + u.receivingPoints * (targets - 1)
             HandcuffLine(starter, backup, ifOut, if (backup.playerId in mine) "you" else owners[backup.playerId])
         }
 }

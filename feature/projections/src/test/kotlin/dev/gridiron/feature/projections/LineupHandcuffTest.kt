@@ -6,25 +6,36 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class LineupHandcuffTest {
-    private fun rb(id: String, team: String, points: Double, touches: Double) = ProjectionRow(id, "RB $id", "RB", team, points, 0.0, 0.0, touches = touches)
+    private fun row(id: String, position: String, team: String, points: Double, usage: Usage) =
+        ProjectionRow(id, "$position $id", position, team, points, 0.0, 0.0, usage = usage)
+
+    private fun rb(id: String, team: String, points: Double, carries: Double, targets: Double, rushing: Double = 0.0, receiving: Double = 0.0) =
+        row(id, "RB", team, points, Usage(carries, targets, rushing, receiving))
 
     private val rows = listOf(
-        rb("a1", "KC", 16.0, 20.0), rb("a2", "KC", 5.0, 8.0), rb("a3", "KC", 2.0, 2.0),
-        rb("b1", "BUF", 7.0, 10.0), rb("b2", "BUF", 6.0, 9.0),
+        rb("a1", "KC", 16.0, 16.0, 4.0), rb("a2", "KC", 5.0, 6.0, 2.0, rushing = 3.5, receiving = 1.5), rb("a3", "KC", 2.0, 2.0, 0.0),
+        row("q", "QB", "KC", 20.0, Usage(4.0, 0.0, 2.0, 0.0)), row("w", "WR", "KC", 14.0, Usage(0.0, 30.0, 0.0, 14.0)),
+        rb("b1", "BUF", 7.0, 8.0, 2.0), rb("b2", "BUF", 6.0, 7.0, 2.0),
     )
 
     private val team = MyTeam("Mine", 2026, listOf(LeaguePlayer("1", "RB a1", "RB", "a1"), LeaguePlayer("2", "RB b1", "RB", "b1")), emptyMap(), slotsAreDefault = true)
 
     @Test
-    fun `the backup is the teammate with the most touches, scaled up by the starter's share`() {
+    fun `the backup is the RB teammate with the most touches, and the starter's carries and targets spread over the whole team`() {
         val cuffs = handcuffs(team, rows, mapOf("a2" to "Rivals"))
         // b1 projects under 8 points: not a starter worth insuring.
         assertEquals(listOf("a1"), cuffs.map { it.starter.playerId })
         val h = cuffs.single()
         assertEquals("a2", h.backup.playerId)
-        // KC's RBs touch it 30 times; without a1, 10: a2's 5.0 grows threefold.
-        assertEquals(15.0, h.ifOut, 1e-9)
+        // KC's carries: 28 (the QB's 4 included), 12 without a1; targets: 36 (the WR's 30 included), 32 without.
+        // a2's 3.5 rushing points grow by 28/12, his 1.5 receiving points by 36/32.
+        assertEquals(5.0 + 3.5 * (28.0 / 12 - 1) + 1.5 * (36.0 / 32 - 1), h.ifOut, 1e-9)
         assertEquals("Rivals", h.owner)
+    }
+
+    @Test
+    fun `a team with no other RB has no handcuff`() {
+        assertEquals(emptyList<HandcuffLine>(), handcuffs(team, rows.filter { it.playerId !in setOf("a2", "a3") }, emptyMap()))
     }
 
     @Test
