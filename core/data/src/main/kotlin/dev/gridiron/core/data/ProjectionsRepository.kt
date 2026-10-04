@@ -92,6 +92,15 @@ public class ProjectionsRepository(private val executor: QueryExecutor) {
 
     public suspend fun rosAll(season: Int): List<ListedProjection> = listed(ProjectionQueries.rosAll(season))
 
+    /** Each Questionable player's discount that week (what such players score, relative to healthy: 0.52-0.87); empty on failure. */
+    public suspend fun questionable(season: Int, week: Int): Map<String, Double> = try {
+        executor.query(ProjectionQueries.questionable(season, week)) { it.text(0) to kotlin.math.exp(it.double(1)) }.toMap()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyMap()
+    }
+
     /**
      * Every player's rest of season week by week (or only [playerId]'s); empty when the database predates `player_ros_week` (built before
      * schema 12) or anything fails, so callers fall back to season totals.

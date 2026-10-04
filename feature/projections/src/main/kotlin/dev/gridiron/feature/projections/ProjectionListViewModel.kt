@@ -41,6 +41,8 @@ public data class ProjectionRow(
     val tdChance: Double? = null,
     /** This week's projected usage, for QBs, RBs, WRs and TEs (the handcuff finder); null otherwise. */
     val usage: Usage? = null,
+    /** The Questionable discount in [points] (what such players score relative to healthy), when he has one. */
+    val questionable: Double? = null,
 )
 
 /** One week's projected carries and targets, and the points (under the active profile) from rushing and from receiving. */
@@ -79,6 +81,18 @@ public fun visibleRows(rows: List<ProjectionRow>, tab: PositionTab, badges: Map<
         .map { row -> if (week) outAdjusted(row, badges) else row }
         .sortedByDescending { it.points }
 
+/**
+ * [row] without its Questionable discount once he is confirmed active: his team's inactives are posted ([inactivesPosted])
+ * and ESPN doesn't list him Out, Doubtful, on IR or suspended. The discount prices the chance he sits, which is gone.
+ */
+internal fun confirmedActive(row: ProjectionRow, badges: Map<String, String>, inactivesPosted: Set<String>): ProjectionRow {
+    val q = row.questionable ?: return row
+    if (row.team !in inactivesPosted || badges[row.playerId] in SIT || q <= 0.0) return row
+    return row.copy(points = row.points / q, floor = row.floor / q, ceiling = row.ceiling / q, questionable = null)
+}
+
+private val SIT = setOf("O", "IR", "D", "SUSP")
+
 /** [row] scored as zero this week when ESPN lists him Out or on IR. */
 internal fun outAdjusted(row: ProjectionRow, badges: Map<String, String>): ProjectionRow =
     if (badges[row.playerId] in OUT) row.copy(points = 0.0, floor = 0.0, ceiling = 0.0, out = true, tdChance = 0.0) else row
@@ -95,12 +109,17 @@ public fun statusLine(week: Int, builtAt: Instant?, zone: ZoneId = ZoneId.system
 private const val LIST_DRAWS = 2_000
 
 /** Scored rows; [week] rows (one game) also carry each skill player's TD chance. */
-internal fun toRows(listed: List<ListedProjection>, profile: ScoringProfile, week: Boolean = false): List<ProjectionRow> = listed.mapNotNull { p ->
+internal fun toRows(
+    listed: List<ListedProjection>,
+    profile: ScoringProfile,
+    week: Boolean = false,
+    questionable: Map<String, Double> = emptyMap(),
+): List<ProjectionRow> = listed.mapNotNull { p ->
     val position = p.position ?: return@mapNotNull null
     val points = projectPoints(p.components, profile, Position.fromCode(position), draws = LIST_DRAWS)
     val td = if (week && position in TD_POSITIONS) anytimeTd(p.components) else null
     val usage = if (week && position in TD_POSITIONS) usage(p.components, profile, Position.fromCode(position)) else null
-    ProjectionRow(p.playerId, p.name, position, p.team, points.points, points.floor, points.ceiling, tdChance = td, usage = usage)
+    ProjectionRow(p.playerId, p.name, position, p.team, points.points, points.floor, points.ceiling, tdChance = td, usage = usage, questionable = questionable[p.playerId])
 }
 
 private fun usage(components: List<ProjectionComponent>, profile: ScoringProfile, position: Position?): Usage {
@@ -166,8 +185,9 @@ public class ProjectionListViewModel(
             else -> {
                 val weekListed = repository.weekAll(season, week)
                 val rosListed = repository.rosAll(season)
+                val questionable = repository.questionable(season, week)
                 withContext(compute) {
-                    ProjectionListState.Loaded(week, status.builtAt, toRows(weekListed, profile, week = true), toRows(rosListed, profile))
+                    ProjectionListState.Loaded(week, status.builtAt, toRows(weekListed, profile, week = true, questionable), toRows(rosListed, profile))
                 }
             }
         }

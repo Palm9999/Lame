@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.gridiron.core.data.Kickoffs
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.OpportunitiesResult
 import dev.gridiron.core.data.ScoringRepository
@@ -82,8 +83,8 @@ public fun ProjectionListRoute(
     /** Re-reads the league from ESPN; My lineup calls it when the snapshot is older than [LEAGUE_STALE_MILLIS]. */
     syncLeague: suspend (season: Int) -> Unit = {},
     now: () -> Long = System::currentTimeMillis,
-    /** NFL teams whose game this week has kicked off, asked when My lineup opens; their players are locked. */
-    startedTeams: suspend (season: Int, week: Int) -> Set<String> = { _, _ -> emptySet() },
+    /** NFL teams whose game this week has kicked off (their players are locked) or whose inactives are posted, asked when My lineup opens. */
+    kickoffs: suspend (season: Int, week: Int) -> Kickoffs = { _, _ -> Kickoffs(emptySet(), emptySet()) },
     /** The league and its games left, asked when Playoff odds opens. */
     playoffPicture: suspend (season: Int, week: Int) -> PlayoffPictureResult = { _, _ -> PlayoffPictureResult(null, "not available") },
     /** The user's finished weeks against their best lineups, asked when Review opens. */
@@ -101,7 +102,7 @@ public fun ProjectionListRoute(
     val others by otherTeams.collectAsStateWithLifecycle(initialValue = emptyList())
     var rival by remember { mutableStateOf<OpponentState>(OpponentState.Idle) }
     var movingUp by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
-    var locked by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var locked by remember { mutableStateOf(Kickoffs(emptySet(), emptySet())) }
     var playoffs by remember { mutableStateOf<PlayoffState>(PlayoffState.Idle) }
     var review by remember { mutableStateOf<ReviewState>(ReviewState.Idle) }
     val scope = rememberCoroutineScope()
@@ -113,7 +114,8 @@ public fun ProjectionListRoute(
         leagues = choices,
         onLeague = { id -> scope.launch { setLeague(id) } },
         partners = others.filter { it.season == season },
-        started = locked,
+        started = locked.started,
+        inactivesPosted = locked.inactivesPosted,
         playoffs = playoffs,
         review = review,
         onReviewOpened = {
@@ -153,11 +155,11 @@ public fun ProjectionListRoute(
             (state as? ProjectionListState.Loaded)?.week?.let { week ->
                 scope.launch {
                     locked = try {
-                        startedTeams(season, week)
+                        kickoffs(season, week)
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
-                        emptySet()
+                        Kickoffs(emptySet(), emptySet())
                     }
                 }
             }
@@ -225,6 +227,8 @@ public fun ProjectionListScreen(
     partners: List<MyTeam> = emptyList(),
     /** NFL teams whose game this week has started: My lineup keeps their players where ESPN has them. */
     started: Set<String> = emptySet(),
+    /** NFL teams whose inactives are posted: My lineup drops the Questionable discount of their players ESPN doesn't rule out. */
+    inactivesPosted: Set<String> = emptySet(),
     playoffs: PlayoffState = PlayoffState.Idle,
     /** Playoff odds was opened: the route reads the league's schedule. */
     onPlayoffsOpened: () -> Unit = {},
@@ -317,14 +321,16 @@ public fun ProjectionListScreen(
                     } else if (mode == ListMode.TRADE && myTeam != null) {
                         TradeView(myTeam, partners, state.rosRows, state.rosWeekly)
                     } else if (mode == ListMode.LINEUP && myTeam != null) {
-                        val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, state.weekRows, badges, started) }
-                        val pickups = if (rostered == null) null else remember(myTeam, state, badges, rostered, starterOut, started) { waiverPickups(myTeam, state.weekRows, badges, rostered, starterOut, started) }
+                        // Once a team's inactives are posted, its Questionable players still in the lineup are playing.
+                        val weekRows = remember(state, badges, inactivesPosted) { state.weekRows.map { confirmedActive(it, badges, inactivesPosted) } }
+                        val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, weekRows, badges, started) }
+                        val pickups = if (rostered == null) null else remember(myTeam, weekRows, badges, rostered, starterOut, started) { waiverPickups(myTeam, weekRows, badges, rostered, starterOut, started) }
                         // Rest of season keeps an injured player's projection, as its list does.
                         val stashes = if (rostered == null) null else remember(myTeam, state, rostered) { rosAdds(myTeam, state.rosRows, rostered, state.rosWeekly) }
-                        val mine = lineupView(myTeam, state.week, state.weekRows, badges, started)
-                        val cuffs = remember(myTeam, state, owners) { handcuffs(myTeam, state.weekRows, owners.orEmpty()) }
+                        val mine = lineupView(myTeam, state.week, weekRows, badges, started)
+                        val cuffs = remember(myTeam, weekRows, owners) { handcuffs(myTeam, weekRows, owners.orEmpty()) }
                         LineupList(
-                            mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, state.weekRows, badges), faabText(myTeam),
+                            mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, weekRows, badges), faabText(myTeam),
                             cuffs, ownersKnown = owners != null,
                         )
                     } else {

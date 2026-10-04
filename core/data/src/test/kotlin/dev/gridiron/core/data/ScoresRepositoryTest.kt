@@ -176,5 +176,11 @@ class ScoresRepositoryTest {
             emptyList(), null,
         )
         assertEquals(setOf("KC", "BUF", "DAL", "NYG", "SF", "SEA"), week.started(now))
+        // GB-CHI kicks off at 20:25: its inactives post at 18:55.
+        val early = week.kickoffs(now)
+        assertEquals(week.started(now), early.started)
+        assertEquals(week.started(now), early.inactivesPosted)
+        val posted = week.kickoffs(java.time.Instant.parse("2026-10-04T18:55:00Z"))
+        assertEquals(week.started(now) + setOf("GB", "CHI"), posted.inactivesPosted)
     }
 }

@@ -12,6 +12,7 @@ import dev.gridiron.core.statquery.Components
 import dev.gridiron.core.statquery.SqlQuery
 import kotlinx.coroutines.CancellationException
 import java.io.IOException
+import java.time.Duration
 import java.time.Instant
 import kotlin.math.abs
 
@@ -65,6 +66,23 @@ public data class ScoresWeek(
 public fun ScoresWeek.started(now: Instant): Set<String> =
     games.filter { it.state != GameState.SCHEDULED || it.kickoff?.let { k -> !k.isAfter(now) } == true }
         .flatMapTo(HashSet()) { listOf(it.home, it.away) }
+
+/**
+ * Who is locked and whose inactives are known by a moment: [started] teams' games have kicked off; [inactivesPosted]
+ * teams' kick off within [INACTIVES_LEAD] (when the NFL posts inactives) or have started.
+ */
+public data class Kickoffs(val started: Set<String>, val inactivesPosted: Set<String>)
+
+/** The NFL posts each team's inactives 90 minutes before its kickoff. */
+public val INACTIVES_LEAD: Duration = Duration.ofMinutes(90)
+
+/** [started] and the teams whose inactives are posted by [now]. */
+public fun ScoresWeek.kickoffs(now: Instant): Kickoffs {
+    val started = started(now)
+    val posted = games.filter { g -> g.kickoff?.let { !it.minus(INACTIVES_LEAD).isAfter(now) } == true }
+        .flatMapTo(HashSet(started)) { listOf(it.home, it.away) }
+    return Kickoffs(started, posted)
+}
 
 /** One player's week in a game: his fantasy points under the scoring profile. */
 public data class GamePlayer(val playerId: String, val name: String, val position: String?, val points: Double?)

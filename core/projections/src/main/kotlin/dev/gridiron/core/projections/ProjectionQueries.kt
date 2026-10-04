@@ -34,6 +34,12 @@ public object ProjectionQueries {
         )
     }
 
+    /** Every player's Questionable discount that week: player id and its log multiplier. */
+    public fun questionable(season: Int, week: Int): SqlQuery = SqlQuery(
+        "SELECT player_id, log_multiplier FROM player_week_projection_factor WHERE season = ? AND week = ? AND factor = 'questionable'",
+        listOf(Bind.Integer(season.toLong()), Bind.Integer(week.toLong())),
+    )
+
     public fun factors(playerIds: Set<String>, season: Int, week: Int): SqlQuery {
         if (playerIds.isEmpty()) {
             return SqlQuery(

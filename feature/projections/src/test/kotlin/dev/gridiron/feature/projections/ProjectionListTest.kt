@@ -16,6 +16,21 @@ class ProjectionListTest {
     private val rows = listOf(row("q", "QB", 20.0), row("r", "RB", 14.0), row("w", "WR", 16.0), row("t", "TE", 9.0))
 
     @Test
+    fun `a Questionable player's discount lifts once his team's inactives are posted and ESPN hasn't ruled him out`() {
+        val q = row("r", "RB", 7.8).copy(questionable = 0.78)
+        val back = confirmedActive(q, mapOf("r" to "Q"), setOf("KC"))
+        assertEquals(10.0, back.points, 1e-9)
+        assertEquals(2.8 / 0.78, back.floor, 1e-9)
+        assertEquals(null, back.questionable)
+        // Inactives not posted yet, or ruled out: unchanged.
+        assertEquals(q, confirmedActive(q, mapOf("r" to "Q"), setOf("BUF")))
+        assertEquals(q, confirmedActive(q, mapOf("r" to "O"), setOf("KC")))
+        assertEquals(q, confirmedActive(q, mapOf("r" to "D"), setOf("KC")))
+        // No discount: nothing to lift.
+        assertEquals(rows[1], confirmedActive(rows[1], emptyMap(), setOf("KC")))
+    }
+
+    @Test
     fun `a tab shows its positions, best first`() {
         assertEquals(listOf("w", "r", "t"), visibleRows(rows, PositionTab.FLEX, emptyMap(), week = true).map { it.playerId })
         assertEquals(listOf("q"), visibleRows(rows, PositionTab.QB, emptyMap(), week = true).map { it.playerId })
