@@ -245,6 +245,8 @@ public class FantasyLeagueRepository(
         val league = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
             ?: return LineupReviewResult(emptyList(), "sync your league first")
         val mine = league.myTeam(cfg.teamId) ?: return LineupReviewResult(emptyList(), "choose your team first")
+        // ESPN's own current week, when the stats build that gave [throughWeek] is behind it.
+        val through = maxOf(throughWeek, league.week - 1)
         val positions = HashMap<String, String?>()
         suspend fun positionsOf(lineup: List<MatchupPlayer>): Map<String, String?> {
             val ids = players.playerIds(lineup.map { it.espnId }.filter { it.toIntOrNull()?.let { n -> n > 0 } == true })
@@ -257,7 +259,7 @@ public class FantasyLeagueRepository(
             }
         }
         var error: String? = null
-        val reviews = (throughWeek downTo 1).mapNotNull { week ->
+        val reviews = (through downTo 1).mapNotNull { week ->
             try {
                 val raw = EspnFantasyParser.matchups(http.get(EspnFantasyParser.matchupsUrl(cfg.leagueId, season, week), headers(cfg)), week)
                 val side = raw.firstNotNullOfOrNull { m -> listOfNotNull(m.home, m.away).firstOrNull { it.teamId == cfg.teamId } }
@@ -279,12 +281,15 @@ public class FantasyLeagueRepository(
 
     /**
      * What playoff odds need: the active league as last synced, the user's team id, and the regular-season games ESPN
-     * hasn't decided yet (read from the matchups of [week], whose `schedule` lists the whole season). Never throws:
-     * [PlayoffPictureResult.message] says why there is none.
+     * hasn't decided yet (read from the matchups of [week], whose `schedule` lists the whole season). A snapshot older
+     * than [maxAgeMillis] is synced first, so a game decided since the last sync is in the records, not lost between
+     * them and the schedule. Never throws: [PlayoffPictureResult.message] says why there is none.
      */
-    public suspend fun playoffPicture(season: Int, week: Int): PlayoffPictureResult {
+    public suspend fun playoffPicture(season: Int, week: Int, maxAgeMillis: Long = PICTURE_MAX_AGE_MILLIS): PlayoffPictureResult {
         load()
         val cfg = prefs.prefs.first().espnLeague ?: return PlayoffPictureResult(null, "no league id set")
+        val synced = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
+        if (synced != null && clock().toEpochMilli() - synced.fetchedAtMillis > maxAgeMillis) sync(season)
         val league = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
             ?: return PlayoffPictureResult(null, "sync your league first")
         return try {
@@ -378,6 +383,9 @@ public class FantasyLeagueRepository(
     }
 
     public companion object {
+        /** Playoff odds re-sync a snapshot older than this: a week decided since must be in the records. */
+        public const val PICTURE_MAX_AGE_MILLIS: Long = 30 * 60 * 1000L
+
         public fun rosterId(leagueId: String): String = "espn-$leagueId"
     }
 }

@@ -75,10 +75,19 @@ class GridironApplication : Application() {
     private val scores by lazy { ScoresRepository(executor, UrlConnectionHttpGet()) }
     private val league by lazy { FantasyLeagueRepository(prefs, UrlConnectionHttpGet(), players, noBackupFilesDir) }
 
-    /** The latest season's upcoming week and its games (kickoffs from ESPN's scoreboard); null off-season or without stats. */
-    internal suspend fun upcomingWeek(): ScoresWeek? {
-        val (season, week) = projectionsRepo.status().upcoming.maxByOrNull { it.key }?.toPair() ?: return null
-        return scores.week(season, week)
+    /**
+     * The active league's current week (ESPN's, re-synced first when [syncFirst] or the snapshot is over
+     * [WEEK_SYNC_MILLIS] old) and its games, kickoffs from ESPN's scoreboard; null without a league and team.
+     */
+    internal suspend fun upcomingWeek(syncFirst: Boolean = false): ScoresWeek? {
+        // ESPN's current week, not the last stats build's: that one lags until the next refresh.
+        league.myTeam.first() ?: return null
+        var snapshot = league.league.value ?: return null
+        if (syncFirst || System.currentTimeMillis() - snapshot.fetchedAtMillis > WEEK_SYNC_MILLIS) {
+            league.sync(snapshot.season)
+            snapshot = league.league.value ?: return null
+        }
+        return scores.week(snapshot.season, snapshot.week)
     }
 
     /**
@@ -86,17 +95,22 @@ class GridironApplication : Application() {
      * if that fails), this week's projections under the active profile, and ESPN's injury list just fetched.
      */
     internal suspend fun lineupAlerts(window: Instant): List<LineupAlert> {
-        val week = upcomingWeek() ?: return emptyList()
-        league.sync(week.season)
+        val week = upcomingWeek(syncFirst = true) ?: return emptyList()
         val team = league.myTeam.first()?.takeIf { it.season == week.season } ?: return emptyList()
         val profile = scoring.active.first()
         val ids = team.players.mapNotNull { it.playerId }.toSet()
         val projected = projectionsRepo.weekAll(week.season, week.week).filter { it.playerId in ids }.associateBy { it.playerId }
+        // A week past the stats build's upcoming one: its rest-of-season row ranks the bench.
+        val later = if (projected.isEmpty()) {
+            projectionsRepo.rosWeeks(week.season).filter { it.playerId in ids }.associate { it.playerId to it.points(profile)[week.week] }
+        } else {
+            emptyMap()
+        }
         val players = ids.mapNotNull { id ->
-            projected[id]?.let { p ->
-                val pos = p.position ?: return@let null
-                WeekPlayer(id, p.name, pos, p.team, projectedScore(p.components, profile, Position.fromCode(pos)))
-            } ?: this.players.header(id)?.let { h -> h.position?.let { WeekPlayer(id, h.name, it, h.team, 0.0) } }
+            val h = this.players.header(id) ?: return@mapNotNull null
+            val pos = h.position ?: return@mapNotNull null
+            val points = projected[id]?.let { projectedScore(it.components, profile, Position.fromCode(pos)) } ?: later[id] ?: 0.0
+            WeekPlayer(id, h.name, pos, h.team, points)
         }.associateBy { it.playerId }
         if (live.refresh().injuriesError != null) return emptyList()
         val status = live.injuries().mapNotNull { i -> i.playerId?.let { it to i.abbr } }.toMap()
@@ -157,5 +171,10 @@ class GridironApplication : Application() {
             opportunities = OpportunitiesRepository(executor, projectionsRepo, { live.injuries() }),
             breakouts = BreakoutRepository(executor),
         )
+    }
+
+    private companion object {
+        /** The two-hourly job re-reads the league for its current week when the snapshot is older than this. */
+        const val WEEK_SYNC_MILLIS = 6 * 60 * 60 * 1000L
     }
 }

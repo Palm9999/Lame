@@ -400,6 +400,24 @@ class FantasyLeagueTest {
     }
 
     @Test
+    fun `playoff odds re-sync a stale snapshot first, so a week decided since isn't lost`() = runTest {
+        val prefs = FakePrefsSource()
+        var now = Instant.parse("2026-10-01T00:00:00Z")
+        var leagueReads = 0
+        val repo = FantasyLeagueRepository(prefs, { url, _ -> if ("view=mMatchup" in url) matchupBody else body.also { leagueReads++ } }, players, dir) { now }
+        repo.configure("42", null, null)
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+        assertEquals(1, leagueReads)
+        now = now.plusSeconds(10 * 60)
+        assertNotNull(repo.playoffPicture(2026, 4).picture)
+        assertEquals(1, leagueReads)
+        now = now.plusSeconds(60 * 60)
+        assertNotNull(repo.playoffPicture(2026, 4).picture)
+        assertEquals(2, leagueReads)
+    }
+
+    @Test
     fun `a bye, a missing matchup and a missing sync each say so`() = runTest {
         val prefs = FakePrefsSource()
         val repo = repo(prefs) { url, _ -> if ("view=mMatchup" in url) matchupBody else body }
