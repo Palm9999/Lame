@@ -290,3 +290,24 @@ private val HANDCUFF_POSITIONS = listOf("RB", "WR")
 
 /** A starter worth insuring: about an RB2's or WR3's week. */
 internal const val HANDCUFF_MIN_POINTS: Double = 8.0
+
+/** One slot of a matchup preview: your starter and theirs there, by the lineups' slot order; [edge] is yours minus theirs. */
+internal data class SlotEdge(val slot: String, val mine: ProjectionRow?, val theirs: ProjectionRow?) {
+    val edge: Double get() = (mine?.points ?: 0.0) - (theirs?.points ?: 0.0)
+}
+
+/** The matchup slot by slot ([SlotEdge]) and the starters most likely to swing it: the widest floor-to-ceiling ranges. */
+internal data class MatchupPreview(val slots: List<SlotEdge>, val swing: List<ProjectionRow>)
+
+/**
+ * Pairs [mine] and [theirs] slot by slot: the nth starter at a slot label against their nth there (both lineups read
+ * in the same slot order), and picks the [swingCount] starters on either side with the widest range.
+ */
+internal fun matchupPreview(mine: LineupView, theirs: LineupView, swingCount: Int = 3): MatchupPreview {
+    val theirsBySlot = theirs.starters.groupBy { it.slot }.mapValues { (_, ls) -> ls.toMutableList() }
+    val pairs = mine.starters.map { line -> SlotEdge(line.slot, line.row, theirsBySlot[line.slot]?.removeFirstOrNull()?.row) } +
+        theirsBySlot.values.flatten().map { SlotEdge(it.slot, null, it.row) }
+    val swing = (mine.starters + theirs.starters).mapNotNull { it.row }.filter { !it.out }
+        .sortedByDescending { it.ceiling - it.floor }.take(swingCount)
+    return MatchupPreview(pairs, swing)
+}

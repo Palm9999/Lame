@@ -472,6 +472,36 @@ private fun LineupList(
                 ProjectionListRow("BE", row, badges[row.playerId], onPlayer, LeadWidth)
             }
         }
+        if (rival != null) {
+            val preview = matchupPreview(view, rival)
+            item { SectionLabel("Matchup preview vs ${rival.teamName}") }
+            itemsIndexed(preview.slots, key = { i, e -> "edge:$i:${e.slot}" }) { i, e ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("edge:$i"), verticalAlignment = Alignment.CenterVertically) {
+                    Text(e.slot, Modifier.width(LeadWidth), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        "${e.mine?.name ?: "—"} ${e.mine?.let { points(it.points) } ?: ""} vs ${e.theirs?.name ?: "—"} ${e.theirs?.let { points(it.points) } ?: ""}",
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    Text(
+                        (if (e.edge >= 0) "+" else "−") + points(kotlin.math.abs(e.edge)),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (e.edge >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            if (preview.swing.isNotEmpty()) {
+                item {
+                    Text(
+                        "Swing players (widest ranges): " + preview.swing.joinToString { "${it.name} ${points(it.floor)}–${points(it.ceiling)}" },
+                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("lineup:swing"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
         if (pickups != null) {
             item { SectionLabel("Waiver pickups") }
             if (pickups.isEmpty()) {
