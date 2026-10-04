@@ -120,6 +120,14 @@ public class ProjectionsRepository(private val executor: QueryExecutor) {
         emptyList()
     }
 
+    /** Each NFL team's bye weeks in [season]: the regular-season weeks it has no game. */
+    public suspend fun byeWeeks(season: Int): Map<String, Set<Int>> {
+        val games = executor.query(ProjectionQueries.regularGames(season)) { Triple(it.long(0).toInt(), it.text(1), it.text(2)) }
+        val weeks = games.map { it.first }.toSortedSet()
+        val playing = games.flatMap { (w, h, a) -> listOf(h to w, a to w) }.groupBy({ it.first }, { it.second })
+        return playing.mapValues { (_, played) -> weeks - played.toSet() }
+    }
+
     /** [team]'s regular-season game that week, or null on a bye. */
     public suspend fun game(season: Int, week: Int, team: String): GameLine? =
         executor.query(ProjectionQueries.game(season, week, team)) { row ->

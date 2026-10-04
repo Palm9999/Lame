@@ -192,6 +192,8 @@ class ProjectionsRepositoryTest {
             assertEquals(47.5, line.total)
             assertEquals(null, repo.game(2026, 6, "KC"))
             assertEquals(2, repo.remainingGames(2026, 4, "KC"))
+            // KC plays weeks 4 and 5 of the regular season; BUF and DEN miss one each.
+            assertEquals(mapOf("BUF" to setOf(5), "KC" to emptySet<Int>(), "DEN" to setOf(4)), repo.byeWeeks(2026))
         }
     }
 }

@@ -202,7 +202,7 @@ public fun ProjectionListRoute(
     )
 }
 
-private enum class ListMode { WEEK, ROS, LINEUP, TRADE, START_SIT, PLAYOFFS, REVIEW }
+private enum class ListMode { WEEK, ROS, LINEUP, TRADE, START_SIT, PLAYOFFS, REVIEW, PLANNER }
 
 /** My lineup re-syncs the league when its snapshot is older than this: lineups, waivers and trades move during the week. */
 internal const val LEAGUE_STALE_MILLIS: Long = 30 * 60 * 1000L
@@ -243,7 +243,7 @@ public fun ProjectionListScreen(
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
     val canTrade = myTeam != null && partners.isNotEmpty()
     val mode = when {
-        (chosen == ListMode.LINEUP || chosen == ListMode.REVIEW) && myTeam == null -> ListMode.WEEK
+        (chosen == ListMode.LINEUP || chosen == ListMode.REVIEW || chosen == ListMode.PLANNER) && myTeam == null -> ListMode.WEEK
         (chosen == ListMode.TRADE || chosen == ListMode.PLAYOFFS) && !canTrade -> ListMode.WEEK
         else -> chosen
     }
@@ -288,6 +288,12 @@ public fun ProjectionListScreen(
                                 modifier = Modifier.testTag("chip:lineup"),
                             )
                             FilterChip(
+                                selected = mode == ListMode.PLANNER,
+                                onClick = { chosen = ListMode.PLANNER },
+                                label = { Text("Planner") },
+                                modifier = Modifier.testTag("chip:planner"),
+                            )
+                            FilterChip(
                                 selected = mode == ListMode.REVIEW,
                                 onClick = { chosen = ListMode.REVIEW },
                                 label = { Text("Review") },
@@ -319,6 +325,8 @@ public fun ProjectionListScreen(
                     val weekRows = remember(state, badges, inactivesPosted) { state.weekRows.map { confirmedActive(it, badges, inactivesPosted) } }
                     if (mode == ListMode.START_SIT) {
                         StartSitView(weekRows, badges)
+                    } else if (mode == ListMode.PLANNER && myTeam != null) {
+                        PlannerView(myTeam, state, rostered, onPlayer)
                     } else if (mode == ListMode.REVIEW) {
                         ReviewView(review)
                     } else if (mode == ListMode.PLAYOFFS) {

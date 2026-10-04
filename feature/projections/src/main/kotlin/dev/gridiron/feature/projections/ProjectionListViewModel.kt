@@ -90,6 +90,8 @@ public sealed interface ProjectionListState {
         val rosRows: List<ProjectionRow>,
         /** Each player's rest of season week by week under the profile; empty on a database built before schema 12. */
         val rosWeekly: Map<String, Map<Int, Double>> = emptyMap(),
+        /** Each NFL team's bye weeks this season, for the planner; empty until loaded. */
+        val byes: Map<String, Set<Int>> = emptyMap(),
     ) : ProjectionListState
 }
 
@@ -199,7 +201,14 @@ public class ProjectionListViewModel(
                 } catch (e: Exception) {
                     emptyMap()
                 }
-                if (request == latest && weekly.isNotEmpty()) _state.value = next.copy(rosWeekly = weekly)
+                val byes = try {
+                    repository.byeWeeks(season)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyMap()
+                }
+                if (request == latest && (weekly.isNotEmpty() || byes.isNotEmpty())) _state.value = next.copy(rosWeekly = weekly, byes = byes)
             }
         }
     }
