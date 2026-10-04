@@ -8,6 +8,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import dev.gridiron.core.data.live.LeaguePlayer
 import dev.gridiron.core.data.live.MyTeam
@@ -234,7 +235,7 @@ class ProjectionListScreenTest {
                 )
             }
         }
-        compose.onNodeWithTag("chip:trade").performClick()
+        compose.onNodeWithTag("chip:trade").performScrollTo().performClick()
         compose.waitForIdle()
         compose.onNodeWithTag("give:r2").performClick()
         compose.onNodeWithTag("get:w3").performClick()
@@ -252,5 +253,15 @@ class ProjectionListScreenTest {
             GridironTheme { ProjectionListScreen(tradeState, emptyMap(), onPlayer = {}, onBack = {}, myTeam = roster("Mine", "q1")) }
         }
         compose.onNodeWithTag("chip:trade").assertDoesNotExist()
+    }
+
+    @Test
+    fun `start-sit names the pick between two ticked players`() {
+        compose.setContent { GridironTheme { ProjectionListScreen(loaded, emptyMap(), onPlayer = {}, onBack = {}) } }
+        compose.onNodeWithTag("chip:startsit").performClick()
+        compose.onNodeWithTag("ss:w").performClick()
+        compose.onNodeWithTag("sstab:QB").performScrollTo().performClick()
+        compose.onNodeWithTag("ss:q").performClick()
+        compose.onNodeWithTag("startsit:pick").assertTextEquals("Start Quarter Back")
     }
 }

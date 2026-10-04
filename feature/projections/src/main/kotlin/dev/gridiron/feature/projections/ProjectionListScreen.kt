@@ -153,7 +153,7 @@ public fun ProjectionListRoute(
     )
 }
 
-private enum class ListMode { WEEK, ROS, LINEUP, TRADE }
+private enum class ListMode { WEEK, ROS, LINEUP, TRADE, START_SIT }
 
 /** My lineup re-syncs the league when its snapshot is older than this: lineups, waivers and trades move during the week. */
 internal const val LEAGUE_STALE_MILLIS: Long = 30 * 60 * 1000L
@@ -225,6 +225,12 @@ public fun ProjectionListScreen(
                                 modifier = Modifier.testTag("chip:lineup"),
                             )
                         }
+                        FilterChip(
+                            selected = mode == ListMode.START_SIT,
+                            onClick = { chosen = ListMode.START_SIT },
+                            label = { Text("Start/sit") },
+                            modifier = Modifier.testTag("chip:startsit"),
+                        )
                         if (canTrade) {
                             FilterChip(
                                 selected = mode == ListMode.TRADE,
@@ -234,7 +240,9 @@ public fun ProjectionListScreen(
                             )
                         }
                     }
-                    if (mode == ListMode.TRADE && myTeam != null) {
+                    if (mode == ListMode.START_SIT) {
+                        StartSitView(state.weekRows, badges)
+                    } else if (mode == ListMode.TRADE && myTeam != null) {
                         TradeView(myTeam, partners, state.rosRows)
                     } else if (mode == ListMode.LINEUP && myTeam != null) {
                         val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, state.weekRows, badges, started) }
