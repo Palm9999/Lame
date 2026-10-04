@@ -52,6 +52,10 @@ internal class Projector(
         inputs.games.groupBy { it.season }.mapValues { (_, games) -> games.flatMap { listOf(it.home, it.away) }.toSet() }
     private val chronological: List<PlayerGame> = inputs.history.values.flatten().sortedBy { it.order }
     private val totals = LeagueTotals()
+
+    /** The upcoming week's drafted players, and those of them left off every roster (out for now): see [addStash]. */
+    private var upcomingDrafts: List<Draft> = emptyList()
+    private var stashed: List<Draft> = emptyList()
     private var added = 0
     private var blended = 0
 
@@ -81,6 +85,7 @@ internal class Projector(
                 val (state, prepared) = upcoming ?: continue
                 onWeek(season, week)
                 for (p in prepared) addRest(state, p, season, week, ros)
+                for (d in stashed) addStash(d, season, week, ros)
                 units.rest(season, week, ros)
                 continue
             }
@@ -94,6 +99,9 @@ internal class Projector(
             if (kind == WeekKind.UPCOMING) {
                 upcoming = state to prepared
                 for (p in prepared) addRest(state, p, season, week, ros)
+                val kept = prepared.mapTo(HashSet()) { it.player.playerId }
+                stashed = upcomingDrafts.filter { it.player.playerId !in kept }
+                for (d in stashed) addStash(d, season, week, ros)
             }
         }
         if (upcoming != null && upcomingWeek != null) {
@@ -174,6 +182,7 @@ internal class Projector(
      */
     private fun prepareWeek(state: WeekState, kind: WeekKind): List<Prepared> {
         val drafts = candidates(state.order).mapNotNull { draft(state, it, kind) }
+        if (kind == WeekKind.UPCOMING) upcomingDrafts = drafts
         val market = if (kind == WeekKind.UPCOMING && props != null) {
             MarketMatch(
                 props,
@@ -398,6 +407,24 @@ internal class Projector(
         for ((metric, mean) in final) {
             if (mean <= 0.0) continue
             val sum = ros.getOrPut(p.player.playerId to metric) { DoubleArray(2) }
+            sum[0] += mean
+            sum[1] += varianceFor(mean, cv)
+        }
+    }
+
+    /**
+     * Rest of season for a player out for now (on no roster as of the upcoming week): ESPN's projection for each of
+     * his team's remaining games once it projects him for [K.RETURN_MIN_ESPN_POINTS] or more, so a stash expected back
+     * keeps his value. His teammates' rest of season doesn't make room for him.
+     */
+    private fun addStash(d: Draft, season: Int, week: Int, ros: MutableMap<Pair<String, String>, DoubleArray>) {
+        gameOf[Triple(d.team, season, week)] ?: return
+        val espn = inputs.espn[Triple(d.player.playerId, season, week)] ?: return
+        if (referencePoints(espn) < K.RETURN_MIN_ESPN_POINTS) return
+        val cv = K.EMPIRICAL_CV.getValue(d.player.position)
+        for ((metric, mean) in espn) {
+            if (mean <= 0.0) continue
+            val sum = ros.getOrPut(d.player.playerId to metric) { DoubleArray(2) }
             sum[0] += mean
             sum[1] += varianceFor(mean, cv)
         }

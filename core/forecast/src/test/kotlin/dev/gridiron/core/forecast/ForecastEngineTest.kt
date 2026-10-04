@@ -252,10 +252,8 @@ class ForecastEngineTest {
             assertTrue(weekRows(db, "QB2_A", 2025, 3) > 0)
             // Week 4 (rest of season) goes back to the usual starter.
             assertTrue(rosMean(db, "QB_A", "passing_yards") > 100.0)
-            assertEquals(
-                listOf(listOf("0")),
-                db.query("SELECT COUNT(*) FROM player_ros_projection WHERE player_id = 'QB2_A' AND metric_id = 'passing_yards'"),
-            )
+            // The backup's rest of season is the week he starts, as ESPN projects it.
+            assertEquals(300.0, rosMean(db, "QB2_A", "passing_yards"), 1e-9)
         }
     }
 
@@ -526,6 +524,27 @@ class ForecastEngineTest {
         assertTrue(projected(K.RETURN_MIN_ESPN_POINTS * 10) > 0)
         assertEquals(0, projected(K.RETURN_MIN_ESPN_POINTS * 10 - 1))
         assertEquals(0, projected(null))
+    }
+
+    @Test
+    fun `a player out for now keeps rest of season from ESPN's projections for the games it expects him back`() {
+        league("stash.db").use { db ->
+            db.player("WR_X", "WR", "AAA")
+            for (week in 1..3) db.week("WR_X", 2024, week, "AAA", "targets" to 6.0, "receptions" to 4.0, "receiving_yards" to 50.0)
+            // Not back for the upcoming week 3 (under the bar); back for week 4.
+            db.espn("WR_X", 2025, 3, "receiving_yards" to 10.0)
+            db.espn("WR_X", 2025, 4, "receptions" to 5.0, "receiving_yards" to 80.0)
+            run(db)
+            assertEquals(0, weekRows(db, "WR_X", 2025, 3))
+            assertEquals(80.0, rosMean(db, "WR_X", "receiving_yards"), 1e-9)
+            assertEquals(5.0, rosMean(db, "WR_X", "receptions"), 1e-9)
+        }
+        league("nostash.db").use { db ->
+            db.player("WR_X", "WR", "AAA")
+            for (week in 1..3) db.week("WR_X", 2024, week, "AAA", "targets" to 6.0, "receptions" to 4.0, "receiving_yards" to 50.0)
+            run(db)
+            assertEquals(listOf(listOf("0")), db.query("SELECT COUNT(*) FROM player_ros_projection WHERE player_id = 'WR_X'"))
+        }
     }
 
     @Test
