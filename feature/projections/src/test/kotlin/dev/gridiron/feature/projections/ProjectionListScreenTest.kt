@@ -6,7 +6,9 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import dev.gridiron.core.data.live.LeaguePlayer
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.designsystem.GridironTheme
@@ -132,6 +134,21 @@ class ProjectionListScreenTest {
         compose.onNodeWithText("+3.8").assertIsDisplayed()
         compose.onNodeWithText("Add Free Agent WR").performClick()
         assertEquals("w2", opened)
+    }
+
+    @Test
+    fun `rest-of-season adds rank free agents by their rest-of-season lift`() {
+        // The team's lineup holds one WR and one QB; w (180) is rostered, so a free WR at 240 lifts it by 60.
+        val withStash = loaded.copy(rosRows = loaded.rosRows + ProjectionRow("w3", "Stash WR", "WR", "SEA", 240.0, 200.0, 280.0))
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(withStash, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team, rostered = setOf("w", "q"))
+            }
+        }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithTag("lineup:list").performScrollToNode(hasTestTag("ros:pickup:w3"))
+        compose.onNodeWithText("Rest-of-season adds").assertIsDisplayed()
+        compose.onNodeWithTag("ros:pickup:w3").assertIsDisplayed()
     }
 
     @Test

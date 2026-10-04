@@ -204,7 +204,9 @@ public fun ProjectionListScreen(
                     } else if (mode == ListMode.LINEUP && myTeam != null) {
                         val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, state.weekRows, badges) }
                         val pickups = if (rostered == null) null else remember(myTeam, state, badges, rostered, starterOut) { waiverPickups(myTeam, state.weekRows, badges, rostered, starterOut) }
-                        LineupList(lineupView(myTeam, state.week, state.weekRows, badges), rival, opponent, pickups, badges, onPlayer)
+                        // Rest of season keeps an injured player's projection, as its list does.
+                        val stashes = if (rostered == null) null else remember(myTeam, state, rostered) { waiverPickups(myTeam, state.rosRows, emptyMap(), rostered) }
+                        LineupList(lineupView(myTeam, state.week, state.weekRows, badges), rival, opponent, pickups, badges, onPlayer, stashes)
                     } else {
                         Row(
                             Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()),
@@ -233,8 +235,10 @@ private fun LineupList(
     pickups: List<PickupLine>?,
     badges: Map<String, String>,
     onPlayer: (String) -> Unit,
+    /** Free agents ranked by how far each lifts the lineup over the rest of the season; null hides them. */
+    stashes: List<PickupLine>? = null,
 ) {
-    LazyColumn(Modifier.fillMaxSize()) {
+    LazyColumn(Modifier.fillMaxSize().testTag("lineup:list")) {
         item {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                 Text("${view.teamName} · week ${view.week}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -303,6 +307,10 @@ private fun LineupList(
                 itemsIndexed(pickups, key = { _, p -> "p:${p.add.playerId}" }) { _, pick -> PickupRow(pick, onPlayer) }
             }
         }
+        if (!stashes.isNullOrEmpty()) {
+            item { SectionLabel("Rest-of-season adds") }
+            itemsIndexed(stashes, key = { _, p -> "r:${p.add.playerId}" }) { _, pick -> PickupRow(pick, onPlayer, "ros:") }
+        }
         if (view.unlisted.isNotEmpty()) {
             item { SectionLabel("Not projected") }
             itemsIndexed(view.unlisted, key = { i, u -> "u:$i:${u.name}" }) { _, u ->
@@ -318,9 +326,10 @@ private fun LineupList(
 }
 
 @Composable
-private fun PickupRow(pick: PickupLine, onPlayer: (String) -> Unit) {
+private fun PickupRow(pick: PickupLine, onPlayer: (String) -> Unit, tagPrefix: String = "") {
     Row(
-        Modifier.fillMaxWidth().clickable { onPlayer(pick.add.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp).testTag("pickup:${pick.add.playerId}"),
+        Modifier.fillMaxWidth().clickable { onPlayer(pick.add.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp)
+            .testTag("${tagPrefix}pickup:${pick.add.playerId}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
