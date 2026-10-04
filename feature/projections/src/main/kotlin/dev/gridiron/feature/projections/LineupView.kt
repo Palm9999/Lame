@@ -245,3 +245,33 @@ internal fun lineupCheck(team: MyTeam, best: LineupView, weekRows: List<Projecti
         sit = set.filter { it.playerId == null || it.playerId !in bestIds }.sortedBy { it.points ?: -1.0 },
     )
 }
+
+/**
+ * A starting RB's handcuff: [backup], his teammate with the most projected touches after him, who would score about
+ * [ifOut] this week if [starter] sat; [owner] is the league team that has him, "you", or null for a free agent.
+ */
+internal data class HandcuffLine(val starter: ProjectionRow, val backup: ProjectionRow, val ifOut: Double, val owner: String?)
+
+/**
+ * Handcuffs for [team]'s RBs projected [HANDCUFF_MIN_POINTS]+ this week, best first, at most [limit]. If the starter
+ * sits, his carries and targets go to the room's other RBs in proportion to their own (as the forecast moves an Out
+ * player's share), so the backup's projection grows by all the room's touches over the room's touches without him.
+ */
+internal fun handcuffs(team: MyTeam, weekRows: List<ProjectionRow>, owners: Map<String, String>, limit: Int = 3): List<HandcuffLine> {
+    val mine = team.players.mapNotNull { it.playerId }.toSet()
+    val byTeam = weekRows.filter { it.position == "RB" && it.team != null }.groupBy { it.team!! }
+    return weekRows.filter { it.playerId in mine && it.position == "RB" && it.points >= HANDCUFF_MIN_POINTS }
+        .sortedByDescending { it.points }
+        .take(limit)
+        .mapNotNull { starter ->
+            val room = byTeam[starter.team].orEmpty()
+            val backup = room.filter { it.playerId != starter.playerId }.maxByOrNull { it.touches ?: 0.0 } ?: return@mapNotNull null
+            val all = room.sumOf { it.touches ?: 0.0 }
+            val without = all - (starter.touches ?: 0.0)
+            val ifOut = if (without > 0.0) backup.points * all / without else backup.points
+            HandcuffLine(starter, backup, ifOut, if (backup.playerId in mine) "you" else owners[backup.playerId])
+        }
+}
+
+/** A starter worth insuring: about an RB2's week. */
+internal const val HANDCUFF_MIN_POINTS: Double = 8.0

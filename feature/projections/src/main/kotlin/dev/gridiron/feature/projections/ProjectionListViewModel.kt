@@ -37,6 +37,8 @@ public data class ProjectionRow(
     val out: Boolean = false,
     /** His chance of a rushing or receiving TD this week ([anytimeTd]); null for rest of season, kickers and D/STs. */
     val tdChance: Double? = null,
+    /** Projected carries plus targets this week, for RBs (the handcuff finder); null otherwise. */
+    val touches: Double? = null,
 )
 
 public enum class PositionTab(public val label: String, public val codes: Set<String>) {
@@ -92,7 +94,8 @@ internal fun toRows(listed: List<ListedProjection>, profile: ScoringProfile, wee
     val position = p.position ?: return@mapNotNull null
     val points = projectPoints(p.components, profile, Position.fromCode(position), draws = LIST_DRAWS)
     val td = if (week && position in TD_POSITIONS) anytimeTd(p.components) else null
-    ProjectionRow(p.playerId, p.name, position, p.team, points.points, points.floor, points.ceiling, tdChance = td)
+    val touches = if (week && position == "RB") p.components.filter { it.metricId == "carries" || it.metricId == "targets" }.sumOf { it.mean } else null
+    ProjectionRow(p.playerId, p.name, position, p.team, points.points, points.floor, points.ceiling, tdChance = td, touches = touches)
 }
 
 private val TD_POSITIONS = setOf("QB", "RB", "WR", "TE")

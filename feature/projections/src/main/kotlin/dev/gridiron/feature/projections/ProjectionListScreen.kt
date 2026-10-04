@@ -104,6 +104,7 @@ public fun ProjectionListRoute(
     ProjectionListScreen(
         state, injuries, onPlayer, onBack, team?.takeIf { it.season == season }, rival,
         rostered = taken?.takeIf { it.season == season }?.playerIds,
+        owners = taken?.takeIf { it.season == season }?.owners,
         starterOut = movingUp,
         leagues = choices,
         onLeague = { id -> scope.launch { setLeague(id) } },
@@ -191,6 +192,8 @@ public fun ProjectionListScreen(
     onLineupOpened: () -> Unit = {},
     /** Everyone on a league team; null when unknown, which hides the waiver pickups. */
     rostered: Set<String>? = null,
+    /** Which league team has each rostered player, for the handcuffs; null when unknown. */
+    owners: Map<String, String>? = null,
     /** Pickups moving up because a starter is hurt, by player id: "RB1 Name is Doubtful". */
     starterOut: Map<String, String> = emptyMap(),
     /** The user's ESPN leagues: with two or more, a chip each switches the league My lineup follows. */
@@ -285,7 +288,11 @@ public fun ProjectionListScreen(
                         // Rest of season keeps an injured player's projection, as its list does.
                         val stashes = if (rostered == null) null else remember(myTeam, state, rostered) { rosAdds(myTeam, state.rosRows, rostered, state.rosWeekly) }
                         val mine = lineupView(myTeam, state.week, state.weekRows, badges, started)
-                        LineupList(mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, state.weekRows, badges), faabText(myTeam))
+                        val cuffs = remember(myTeam, state, owners) { handcuffs(myTeam, state.weekRows, owners.orEmpty()) }
+                        LineupList(
+                            mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, state.weekRows, badges), faabText(myTeam),
+                            cuffs, ownersKnown = owners != null,
+                        )
                     } else {
                         Row(
                             Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()),
@@ -320,6 +327,9 @@ private fun LineupList(
     check: LineupCheck? = null,
     /** "$63 of $100 FAAB left…" under the rest-of-season adds; null when the league doesn't bid. */
     faab: String? = null,
+    handcuffs: List<HandcuffLine> = emptyList(),
+    /** Whether a handcuff's owner is known (the league is synced): otherwise it isn't said. */
+    ownersKnown: Boolean = false,
 ) {
     LazyColumn(Modifier.fillMaxSize().testTag("lineup:list")) {
         item {
@@ -421,6 +431,37 @@ private fun LineupList(
                 }
             }
             itemsIndexed(stashes, key = { _, p -> "r:${p.add.playerId}" }) { _, pick -> PickupRow(pick, onPlayer, "ros:") }
+        }
+        if (handcuffs.isNotEmpty()) {
+            item { SectionLabel("Handcuffs") }
+            itemsIndexed(handcuffs, key = { _, h -> "h:${h.starter.playerId}" }) { _, h ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onPlayer(h.backup.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp)
+                        .testTag("handcuff:${h.starter.playerId}"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${h.backup.name} backs up ${h.starter.name}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            listOfNotNull(
+                                "${points(h.backup.points)} pts now",
+                                when {
+                                    !ownersKnown -> null
+                                    h.owner == null -> "free agent"
+                                    h.owner == "you" -> "yours"
+                                    else -> "on ${h.owner}"
+                                },
+                            ).joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(points(h.ifOut), Modifier.testTag("handcuff:if:${h.starter.playerId}"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text("if he sits", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
         }
         if (view.unlisted.isNotEmpty()) {
             item { SectionLabel("Not projected") }
