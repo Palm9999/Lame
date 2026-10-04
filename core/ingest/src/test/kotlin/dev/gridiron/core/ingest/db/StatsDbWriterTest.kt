@@ -44,7 +44,7 @@ class StatsDbWriterTest {
         build(file, listOf(2025))
 
         val meta = readMeta(file)!!
-        assertEquals("10", meta["schema_version"])
+        assertEquals("11", meta["schema_version"])
         assertEquals("8", meta["ingest_version"])
         assertEquals("2025", meta["seasons"])
         assertEquals("3", meta["expected_through_week:2025"])

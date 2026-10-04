@@ -6,7 +6,7 @@ package dev.gridiron.core.ingest.db
  * plus `team_week_defense`'s safeties and kickoff-return TDs (8), plus the
  * pre-aggregated `player_window_stat` and `window_def` (9), plus `player_week_signal` (10).
  */
-public const val SCHEMA_VERSION: Int = 10
+public const val SCHEMA_VERSION: Int = 11
 
 /**
  * Bump whenever a transform, the schema or an input's meaning changes: a build
@@ -68,6 +68,11 @@ internal val SCHEMA: List<String> = listOf(
     """CREATE TABLE player_xref (
         espn_id TEXT PRIMARY KEY, player_id TEXT NOT NULL, full_name TEXT NOT NULL,
         position TEXT, team TEXT) WITHOUT ROWID""",
+    // ESPN's weekly projections in our metric ids, blended into the forecast's (the forecast reads it; the app doesn't).
+    """CREATE TABLE espn_projection (
+        player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
+        metric_id TEXT NOT NULL, value REAL NOT NULL,
+        PRIMARY KEY (player_id, season, week, metric_id)) WITHOUT ROWID""",
     // nflverse's schedule for the built seasons: opponents, results, pre-game lines, starting QBs and coaches.
     """CREATE TABLE game (
         game_id TEXT PRIMARY KEY, season INTEGER NOT NULL, week INTEGER NOT NULL, game_type TEXT NOT NULL,

@@ -265,7 +265,9 @@ internal class Projector(
     private fun finish(state: WeekState, d: Draft, shares: Shares, volume: TeamVolume, kind: WeekKind, market: MarketMatch?): Prepared {
         val prepared = Prepared(d.player, d.team, baseline(state, d, volume, shares), volume.passRate)
         val game = d.game ?: return prepared
-        val (afterMatchup, final) = finalFor(state, prepared, game)
+        val (afterMatchup, scripted) = finalFor(state, prepared, game)
+        val espn = inputs.espn[Triple(d.player.playerId, state.season, state.week)]
+        val final = withEspn(scripted, espn, d.player.position)
         val cv = K.EMPIRICAL_CV.getValue(d.player.position)
         when (kind) {
             WeekKind.PAST -> if (referencePoints(final) >= K.PAST_WEEK_MIN_POINTS) {
@@ -277,7 +279,7 @@ internal class Projector(
                 if (referencePoints(shown) >= K.UPCOMING_MIN_POINTS) {
                     emit(d.player.playerId, state.season, state.week, "baseline", prepared.baseline, cv)
                     emit(d.player.playerId, state.season, state.week, "final", shown, cv)
-                    emitFactors(state, prepared, game, afterMatchup, final, withProps)
+                    emitFactors(state, prepared, game, afterMatchup, scripted, final, espn, withProps)
                     if (withProps != null) blended++
                 }
                 return Prepared(d.player, d.team, prepared.baseline, prepared.passRate, upcoming = shown)
@@ -334,7 +336,9 @@ internal class Projector(
         p: Prepared,
         game: Game,
         afterMatchup: Map<String, Double>,
+        scripted: Map<String, Double>,
         final: Map<String, Double>,
+        espn: Map<String, Double>?,
         withProps: Blended?,
     ) {
         val baselinePoints = referencePoints(p.baseline)
@@ -345,7 +349,10 @@ internal class Projector(
             state.matchup.note(p.player.position, game.opponentOf(p.team)),
         )
         gameScript(game, p.team, state.leagueImplied, p.passRate)?.let { script ->
-            sink.factor(id, state.season, state.week, "game_script", logRatio(referencePoints(final), matchupPoints), script.note)
+            sink.factor(id, state.season, state.week, "game_script", logRatio(referencePoints(scripted), matchupPoints), script.note)
+        }
+        if (final !== scripted && espn != null) {
+            sink.factor(id, state.season, state.week, "espn", logRatio(referencePoints(final), referencePoints(scripted)), espnNote(espn))
         }
         withProps?.let {
             sink.factor(id, state.season, state.week, "market", logRatio(referencePoints(it.components), referencePoints(final)), it.note)
@@ -355,7 +362,8 @@ internal class Projector(
     private fun addRest(state: WeekState, p: Prepared, season: Int, week: Int, ros: MutableMap<Pair<String, String>, DoubleArray>) {
         val game = gameOf[Triple(p.team, season, week)] ?: return // a bye
         // The upcoming week itself uses what was stored for it, props included.
-        val final = p.upcoming?.takeIf { week == state.week && season == state.season } ?: finalFor(state, p, game).second
+        val final = p.upcoming?.takeIf { week == state.week && season == state.season }
+            ?: withEspn(finalFor(state, p, game).second, inputs.espn[Triple(p.player.playerId, season, week)], p.player.position)
         if (referencePoints(final) < K.UPCOMING_MIN_POINTS) return
         val cv = K.EMPIRICAL_CV.getValue(p.player.position)
         for ((metric, mean) in final) {

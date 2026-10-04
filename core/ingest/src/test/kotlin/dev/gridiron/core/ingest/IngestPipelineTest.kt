@@ -210,7 +210,7 @@ class IngestPipelineTest {
         assertEquals(listOf(2024, 2025), report.built)
         assertEquals(emptyList<Int>(), report.reused)
         val meta = readMeta(out)!!
-        assertEquals("10", meta["schema_version"])
+        assertEquals("11", meta["schema_version"])
         assertEquals("8", meta["ingest_version"])
         assertEquals("2024,2025", meta["seasons"])
         assertEquals("1", meta["expected_through_week:2025"])
@@ -240,7 +240,10 @@ class IngestPipelineTest {
         assertEquals(listOf(2024, 2025), report.reused)
         assertEquals(emptyList<Int>(), report.built)
         assertEquals(facts(first), facts(second))
-        assertTrue(fetcher.calls.all { (_, previous) -> previous != null }, "${fetcher.calls}")
+        // ESPN's projections are downloaded in full: every week for the newest season, and for any season the last
+        // build has none of (none here).
+        val conditional = fetcher.calls.filter { (url, _) -> url !in listOf(2024, 2025).map { Sources.url(Input.ESPN_PROJECTIONS, it) } }
+        assertTrue(conditional.all { (_, previous) -> previous != null }, "${fetcher.calls}")
     }
 
     @Test
@@ -912,5 +915,63 @@ class IngestPipelineTest {
         val third = File(dir, "third.db")
         assertEquals(listOf(2025), pipeline.build(listOf(2025), second, third).built)
         assertEquals(1.0, ftnFact(third, "WR2", 2025, "ftn_drops"))
+    }
+
+    /** ESPN's response with one weekly projection: [espnId] catching [receptions] passes in [week] of [season]. */
+    private fun espnJson(season: Int, espnId: Int, week: Int, receptions: Double): ByteArray = """
+        {"players": [{"id": $espnId, "player": {"id": $espnId, "fullName": "x", "stats": [
+          {"seasonId": $season, "scoringPeriodId": $week, "statSourceId": 1, "statSplitTypeId": 1, "stats": {"53": $receptions, "42": 70.0}},
+          {"seasonId": $season, "scoringPeriodId": $week, "statSourceId": 0, "statSplitTypeId": 1, "stats": {"53": 9.0}}
+        ]}}]}
+    """.trimIndent().toByteArray()
+
+    private fun espnRows(file: File) =
+        query(file, "SELECT player_id, season, week, metric_id, value FROM espn_projection WHERE metric_id = 'receptions' ORDER BY 2")
+
+    @Test
+    fun `ESPN's projections are stored under our player ids, asked for with ESPN's filter`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        fetcher.serve(Sources.url(Input.ESPN_PROJECTIONS, 2025), espnJson(2025, espnId = 102, week = 1, receptions = 6.5), "e1")
+        val out = File(dir, "stats.db")
+
+        val report = pipeline.build(listOf(2025), previous = null, out = out)
+
+        assertEquals(listOf(listOf("WR1", "2025", "1", "receptions", "6.5")), espnRows(out))
+        assertTrue("X-Fantasy-Filter" in fetcher.headers.getValue(Sources.url(Input.ESPN_PROJECTIONS, 2025)))
+        assertEquals(emptyList<String>(), report.warnings.filter { "ESPN" in it })
+    }
+
+    @Test
+    fun `without ESPN's projections, or with a format ESPN changed, the build warns and goes on`() = runTest {
+        servePlayers()
+        serveSeason(2025)
+        val out = File(dir, "stats.db")
+        val missing = pipeline.build(listOf(2025), previous = null, out = out)
+        assertTrue(missing.warnings.contains("2025: ESPN projections aren't available; the model projects alone"), "${missing.warnings}")
+
+        fetcher.serve(Sources.url(Input.ESPN_PROJECTIONS, 2025), "<html>".toByteArray(), "e1")
+        val changed = pipeline.build(listOf(2025), previous = null, out = File(dir, "again.db"))
+        assertTrue(changed.warnings.any { it.startsWith("2025: ESPN changed its projections format") }, "${changed.warnings}")
+        assertEquals(emptyList<List<String?>>(), espnRows(File(dir, "again.db")))
+    }
+
+    @Test
+    fun `a finished season's ESPN projections are copied from the last build, the newest season's downloaded again`() = runTest {
+        servePlayers()
+        serveSeason(2024)
+        serveSeason(2025)
+        fetcher.serve(Sources.url(Input.ESPN_PROJECTIONS, 2024), espnJson(2024, espnId = 102, week = 1, receptions = 5.0), "e1")
+        fetcher.serve(Sources.url(Input.ESPN_PROJECTIONS, 2025), espnJson(2025, espnId = 102, week = 1, receptions = 6.0), "e1")
+        val first = File(dir, "first.db")
+        pipeline.build(listOf(2024, 2025), null, first)
+        fetcher.serve(Sources.url(Input.ESPN_PROJECTIONS, 2025), espnJson(2025, espnId = 102, week = 1, receptions = 7.0), "e2")
+        fetcher.calls.clear()
+
+        val second = File(dir, "second.db")
+        pipeline.build(listOf(2024, 2025), first, second)
+
+        assertEquals(listOf(Sources.url(Input.ESPN_PROJECTIONS, 2025)), fetcher.calls.map { it.first }.filter { "espn" in it || "fantasy" in it })
+        assertEquals(listOf(listOf("WR1", "2024", "1", "receptions", "5.0"), listOf("WR1", "2025", "1", "receptions", "7.0")), espnRows(second))
     }
 }

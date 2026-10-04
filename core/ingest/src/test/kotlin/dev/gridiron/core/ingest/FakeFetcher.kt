@@ -6,6 +6,7 @@ import java.io.File
 internal class FakeFetcher : Fetcher {
     private val files = mutableMapOf<String, Pair<ByteArray, Validators>>()
     val calls = mutableListOf<Pair<String, Validators?>>()
+    val headers = mutableMapOf<String, Map<String, String>>()
     var onFetch: suspend (url: String) -> Unit = {}
 
     fun serve(url: String, bytes: ByteArray, version: String) {
@@ -20,9 +21,11 @@ internal class FakeFetcher : Fetcher {
         url: String,
         dest: File,
         previous: Validators?,
+        headers: Map<String, String>,
         onBytes: (read: Long, total: Long) -> Unit,
     ): FetchResult {
         calls += url to previous
+        this.headers[url] = headers
         onFetch(url)
         val (bytes, validators) = files[url] ?: return FetchResult.NotPublished
         if (previous == validators) return FetchResult.NotModified

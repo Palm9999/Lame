@@ -68,6 +68,44 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
         st.bindDouble(6, f.value)
     }
 
+    /** ESPN's projections, keyed by our player id: (player, season, week, metric) to value. */
+    fun writeEspnProjections(rows: List<Fact>) = insert(
+        "INSERT OR REPLACE INTO espn_projection (player_id, season, week, metric_id, value) VALUES (?, ?, ?, ?, ?)",
+        rows.sortedWith(compareBy({ it.playerId }, { it.season }, { it.week }, { it.metricId })),
+    ) { st, f ->
+        st.bindText(1, f.playerId)
+        st.bindLong(2, f.season.toLong())
+        st.bindLong(3, f.week.toLong())
+        st.bindText(4, f.metricId)
+        st.bindDouble(5, f.value)
+    }
+
+    /**
+     * Copies [season]'s ESPN projections out of [previous], and whether it had any. A previous database
+     * without the table (an older build) has none, and so does a damaged one: the caller downloads them.
+     */
+    fun copyEspnProjectionsFrom(previous: File, season: Int): Boolean = try {
+        connection.prepare("ATTACH DATABASE ? AS prev").use {
+            it.bindText(1, previous.path)
+            it.step()
+        }
+        try {
+            connection.prepare("INSERT OR REPLACE INTO espn_projection SELECT * FROM prev.espn_projection WHERE season = ?").use {
+                it.bindLong(1, season.toLong())
+                it.step()
+            }
+            connection.prepare("SELECT COUNT(*) FROM espn_projection WHERE season = ?").use {
+                it.bindLong(1, season.toLong())
+                it.step()
+                it.getLong(0) > 0
+            }
+        } finally {
+            connection.execSQL("DETACH DATABASE prev")
+        }
+    } catch (e: Exception) {
+        false
+    }
+
     fun writeTeamDefense(rows: List<TeamDefenseRow>) = insert(
         """INSERT OR REPLACE INTO team_week_defense (team, season, week, points_allowed, yards_allowed,
            sacks, interceptions, fumbles_recovered, defensive_tds, safeties, kick_return_tds)

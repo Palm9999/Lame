@@ -41,4 +41,16 @@ class SourcesTest {
         assertEquals(Validators("\"e\"", null), Validators.decode(Validators("\"e\"", null).encode()))
         assertNull(Validators.decode("\n"))
     }
+
+    @Test
+    fun `ESPN projections send ESPN's filter and save under a file name of their own`() {
+        assertEquals(
+            "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/2026/segments/0/leaguedefaults/3?view=kona_player_info",
+            Sources.url(Input.ESPN_PROJECTIONS, 2026),
+        )
+        assertEquals("espn_projections_2026.json", Sources.fileName(Input.ESPN_PROJECTIONS, 2026))
+        val filter = Sources.headers(Input.ESPN_PROJECTIONS).getValue("X-Fantasy-Filter")
+        assert("\"limit\":700" in filter && "\"filterStatsForSourceIds\":{\"value\":[1]}" in filter) { filter }
+        assertEquals(emptyMap<String, String>(), Sources.headers(Input.PBP))
+    }
 }

@@ -89,6 +89,8 @@ internal class ForecastInputs(
     val unitHistory: Map<String, List<PlayerGame>> = emptyMap(),
     /** (player id, season, week) for every QB, RB, WR or TE nflverse listed Out or Doubtful: none of them has ever played that week. */
     val absent: Set<Triple<String, Int, Int>> = emptySet(),
+    /** ESPN's projection per (player id, season, week), in our metric ids; empty when the build has none. */
+    val espn: Map<Triple<String, Int, Int>, Map<String, Double>> = emptyMap(),
 )
 
 private val READ_METRICS = listOf(
@@ -126,7 +128,20 @@ internal fun loadInputs(conn: SQLiteConnection): ForecastInputs {
         units = readPlayers(conn, UNIT_POSITIONS),
         unitHistory = readHistory(conn, UNIT_POSITIONS, UNIT_METRICS),
         absent = readAbsent(conn),
+        espn = readEspn(conn),
     )
+}
+
+private fun readEspn(conn: SQLiteConnection): Map<Triple<String, Int, Int>, Map<String, Double>> {
+    val exists = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'espn_projection'").use { it.step() }
+    if (!exists) return emptyMap()
+    val out = HashMap<Triple<String, Int, Int>, MutableMap<String, Double>>()
+    conn.prepare("SELECT player_id, season, week, metric_id, value FROM espn_projection").use { st ->
+        while (st.step()) {
+            out.getOrPut(Triple(st.getText(0), st.getLong(1).toInt(), st.getLong(2).toInt())) { HashMap() }[st.getText(3)] = st.getDouble(4)
+        }
+    }
+    return out
 }
 
 private fun readAbsent(conn: SQLiteConnection): Set<Triple<String, Int, Int>> = conn.prepare(

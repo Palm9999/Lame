@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 10
+public const val FORECAST_VERSION: Int = 11
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -31,6 +31,10 @@ internal object K {
     // 2024-2025 separately: 0.20-0.30 for targets and carries in both.
     const val SNAP_SHARE_WEIGHT = 0.25
     const val SNAP_GAMES = 3
+
+    // Layer 7: how far a QB, RB, WR or TE's final projection moves toward ESPN's for the same week. Fitted leaving
+    // one season out on 2022-2025 (points level): QB 0.55-0.60, RB 0.60-0.70, WR 0.65-0.75, TE 0.45-0.55.
+    val ESPN_WEIGHT: Map<String, Double> = mapOf("QB" to 0.55, "RB" to 0.6, "WR" to 0.65, "TE" to 0.5)
 
     // Layer 2c: a starting QB's baseline keeps this share of its distance from the league's typical starter.
     // Fitted leaving one season out on 2022-2025 (built from 2021): 0.60-0.65 in every fold.
