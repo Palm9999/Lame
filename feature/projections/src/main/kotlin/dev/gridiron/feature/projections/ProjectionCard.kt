@@ -8,6 +8,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.ProjectionsRepository
@@ -41,6 +42,11 @@ public data class ProjectionCard(
     val out: Boolean,
     /** His team has no game this week; only rest of season counts. */
     val bye: Boolean = false,
+    /** No projection this week though his team plays (out for now: IR, say); only rest of season counts. */
+    val notThisWeek: Boolean = false,
+    /** His rest-of-season place among his position's projected players (1 = most points), and how many there are. */
+    val rosPlace: Int? = null,
+    val rosOf: Int? = null,
 )
 
 private val OUT_ABBRS = setOf("O", "IR")
@@ -70,9 +76,28 @@ public suspend fun loadProjectionCard(
     val rosPoints = ros?.let { r -> withContext(compute) { projectedScore(r.components, profile, position) } }
     val gamesLeft = team?.let { repository.remainingGames(season, week, it) } ?: 0
     val rosPerGame = rosPoints?.takeIf { gamesLeft > 0 }?.let { it / gamesLeft }
+    // The place is extra: failing to read it never costs the card.
+    val (place, of) = if (rosPoints != null && position != null) {
+        try {
+            val peers = repository.rosAll(season).filter { it.position == position.code }
+            withContext(compute) {
+                val others = peers.filter { it.playerId != playerId }.map { projectedScore(it.components, profile, position) }
+                (others.count { it > rosPoints } + 1) to (others.size + 1)
+            }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null to null
+        }
+    } else {
+        null to null
+    }
     if (final.isEmpty()) {
-        if (team == null || game != null || rosPoints == null) return null
-        return ProjectionCard(season, week, null, null, 0.0, 0.0, 0.0, rosPoints, rosPerGame, out = false, bye = true)
+        if (team == null || rosPoints == null) return null
+        return ProjectionCard(
+            season, week, game?.let(::matchupText), game?.let(::lineText), 0.0, 0.0, 0.0, rosPoints, rosPerGame,
+            out = false, bye = game == null, notThisWeek = game != null, rosPlace = place, rosOf = of,
+        )
     }
     val out = injuryAbbr in OUT_ABBRS
     val points = withContext(compute) { projectPoints(final, profile, position) }
@@ -87,7 +112,15 @@ public suspend fun loadProjectionCard(
         rosPoints = rosPoints,
         rosPerGame = rosPerGame,
         out = out,
+        rosPlace = place,
+        rosOf = of,
     )
+}
+
+/** "1st", "2nd", "13th". */
+internal fun placeText(n: Int): String {
+    val suffix = if (n % 100 in 11..13) "th" else when (n % 10) { 1 -> "st"; 2 -> "nd"; 3 -> "rd"; else -> "th" }
+    return "$n$suffix"
 }
 
 public fun matchupText(line: GameLine): String = if (line.home) "vs ${line.opponent}" else "@ ${line.opponent}"
@@ -108,7 +141,7 @@ private fun onePlace(value: Double): String = String.format(Locale.US, "%.1f", v
 /** The Player page's projection card; tapping it opens the waterfall. */
 @Composable
 public fun ThisWeekCard(card: ProjectionCard, onOpen: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().clickable(enabled = !card.bye, onClick = onOpen).padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(modifier.fillMaxWidth().clickable(enabled = !card.bye && !card.notThisWeek, onClick = onOpen).padding(horizontal = 16.dp, vertical = 8.dp)) {
         Text(
             listOfNotNull("Week ${card.week}", card.matchup, card.line).joinToString(" · "),
             style = MaterialTheme.typography.labelSmall,
@@ -116,6 +149,8 @@ public fun ThisWeekCard(card: ProjectionCard, onOpen: () -> Unit, modifier: Modi
         )
         if (card.bye) {
             Text("Bye this week", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+        } else if (card.notThisWeek) {
+            Text("Not projected this week", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
         } else if (card.out) {
             Text("Out this week", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
         } else {
@@ -126,6 +161,14 @@ public fun ThisWeekCard(card: ProjectionCard, onOpen: () -> Unit, modifier: Modi
             val perGame = card.rosPerGame?.let { " (${onePlace(it)} per game)" }.orEmpty()
             Text("Rest of season ${onePlace(ros)} pts$perGame", style = MaterialTheme.typography.bodySmall)
         }
-        if (!card.bye) Text("See why →", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+        if (card.rosPlace != null && card.rosOf != null) {
+            Text(
+                "${placeText(card.rosPlace)} of ${card.rosOf} rest of season",
+                Modifier.testTag("card:rosPlace"),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (!card.bye && !card.notThisWeek) Text("See why →", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
     }
 }

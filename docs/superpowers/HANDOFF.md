@@ -47,7 +47,11 @@ Built and merged or pushed to the branch: the projection engine (K and D/ST incl
 
 **Start/sit** (2026-10-04): Projections → Start/sit: tick two to four of this week's players (any position tab) and it names the one to start, with each one's chance to score the most (`chanceToLead`: 20,000 normal draws from each projection and its floor-ceiling spread, floored at zero, fixed seed). Not backtested; players are drawn independently.
 
-**Next:** routes and target quality are the model's biggest missing input; check whether nflverse's participation data (routes run) is published for recent seasons, and if so add a routes-based share signal and backtest it. Later leads: debias ESPN's QB passing yards before the blend (it runs 7% high; a per-stat weight didn't help MAE), `MARKET_VARIANCE_RATIO` against the blend.
+**Routes tested, not shipped** (2026-10-04): nflverse publishes `pbp_participation_{season}.csv` for 2022-2025 (about 49 MB a season, no gzip; parquet exists), with every play's offensive players. Route participation (share of team dropbacks on the field, last three games) against the 2024-2025 final projections: residual correlation -0.02 (WR), 0.07 (TE), -0.04 (RB); moving projected targets 10-30% toward route-implied targets raised target MAE at WR and TE and left RB flat. Not worth the download.
+
+**Player page rest of season** (2026-10-04): the This week card adds "12th of 85 rest of season" (his rest-of-season points against every projected player at his position, under the active profile), and a player out for now with rest-of-season points (a stash) gets the card with "Not projected this week" instead of none.
+
+**Next:** robustness pass on the refresh: run a full Kotlin build of 2024-2026 against the live sources and time each stage, then look for the slowest step a phone would feel (the forecast now does more per week). Later leads: debias ESPN's QB passing yards before the blend (it runs 7% high; a per-stat weight didn't help MAE), `MARKET_VARIANCE_RATIO` against the blend.
 
 **Deferred minors (trades):** starters only, so bench depth, byes and roster limits don't count (a 2-for-1 ignores who the receiver drops); a player with no rest-of-season projection (IR, or not active) counts as nothing, so stashes are undervalued; two teams with the same name collide; ideas never offer 2-for-2; the phone's search time isn't measured.
 
@@ -95,6 +99,7 @@ Built and merged or pushed to the branch: the projection engine (K and D/ST incl
 
 ## Open checks on the phone (non-blocking)
 
+- **Player page rest of season:** open a WR1 and a stash on IR: each card should show "Nth of M rest of season", the stash's with "Not projected this week". Report a place that looks wrong.
 - **Start/sit:** ☰ → Projections → Start/sit: tick two WRs with close projections; the chances should be near 50/50, and a clearly better one should be well over. Report a pick that looks backwards.
 - **Trade:** ☰ → Projections → Trade: suggested trades should read sensibly (you send surplus at a deep position for help at a thin one), and ticking players should move both lineup totals. Report how long "Looking for trades…" shows and any suggestion that looks absurd.
 - **ESPN timing:** refresh on a Tuesday and again Saturday or Sunday morning: a player returning from injury, or a QB change, should appear in Projections by the weekend refresh. Report one still missing on Sunday.

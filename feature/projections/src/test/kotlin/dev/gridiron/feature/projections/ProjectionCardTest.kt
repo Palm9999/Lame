@@ -27,6 +27,7 @@ private class CardExecutor(
     private val status: String = "ok",
     private val bye: Boolean = false,
     private val defense: Boolean = false,
+    private val stash: Boolean = false,
 ) : QueryExecutor {
     override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
         val sql = query.sql
@@ -43,7 +44,15 @@ private class CardExecutor(
                 listOf("DST_KC", "points_allowed", 30.0, 0.0, "normal"),
                 listOf("DST_KC", "g", 3.0, 0.0, null),
             )
-            "FROM player_week_projection" in sql && bye -> emptyList()
+            "FROM player_ros_projection" in sql && "JOIN player pl" in sql -> listOf(
+                listOf("W1", "Wide One", "WR", "KC", "receptions", 40.0, 30.0, "binomial"),
+                listOf("W1", "Wide One", "WR", "KC", "receiving_yards", 480.0, 5000.0, "gamma"),
+                listOf("W2", "Wide Two", "WR", "BUF", "receptions", 50.0, 30.0, "binomial"),
+                listOf("W2", "Wide Two", "WR", "BUF", "receiving_yards", 600.0, 5000.0, "gamma"),
+                listOf("W3", "Wide Three", "WR", "MIA", "receptions", 10.0, 30.0, "binomial"),
+                listOf("R1", "Run One", "RB", "MIA", "receptions", 90.0, 30.0, "binomial"),
+            )
+            "FROM player_week_projection" in sql && (bye || stash) -> emptyList()
             "FROM player_week_projection" in sql -> listOf(
                 listOf("W1", "receptions", "final", 5.0, 5.0, "binomial"),
                 listOf("W1", "receiving_yards", "final", 60.0, 900.0, "gamma"),
@@ -75,6 +84,18 @@ class ProjectionCardTest {
         assertEquals(88.0, card.rosPoints!!, 1e-9)
         assertEquals(88.0 / 3, card.rosPerGame!!, 1e-9)
         assertEquals(false, card.out)
+        // W2's 110 beat his 88; W3's 10 and the RB don't count against a WR.
+        assertEquals(2, card.rosPlace)
+        assertEquals(3, card.rosOf)
+    }
+
+    @Test
+    fun `a player out for now with rest of season still gets a card`() = runTest {
+        val card = loadProjectionCard(ProjectionsRepository(CardExecutor(stash = true)), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = "IR")!!
+        assertTrue(card.notThisWeek)
+        assertEquals(false, card.bye)
+        assertEquals(88.0, card.rosPoints!!, 1e-9)
+        assertEquals("@ BUF", card.matchup)
     }
 
     @Test
