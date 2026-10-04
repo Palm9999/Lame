@@ -218,6 +218,10 @@ internal class Projector(
     /** Whether nflverse lists him Out or Doubtful this week. */
     private fun isAbsent(d: Draft, state: WeekState): Boolean = Triple(d.player.playerId, state.season, state.week) in inputs.absent
 
+    /** ESPN's projection for him this week, in reference points; zero without one. */
+    private fun espnPoints(d: Draft, state: WeekState): Double =
+        inputs.espn[Triple(d.player.playerId, state.season, state.week)]?.let(::referencePoints) ?: 0.0
+
     private fun draft(state: WeekState, player: PlayerInfo, kind: WeekKind): Draft? {
         val rates = state.rates[player.position] ?: return null
         val all = inputs.history[player.playerId].orEmpty()
@@ -234,12 +238,16 @@ internal class Projector(
      * Whether a non-QB is on the field for [team] as of this week: he played
      * for it in one of its last [K.ACTIVE_WINDOW] games, or, from the upcoming
      * week on, nflverse lists him on [team] and he hasn't played for it yet (a
-     * signing or trade).
+     * signing or trade), or he's back: his last game was for [team] (or nflverse
+     * lists him there) and ESPN projects him for [K.RETURN_MIN_ESPN_POINTS] or more.
      */
     private fun isActive(d: Draft, team: String, state: WeekState, kind: WeekKind): Boolean {
         val recent = teamHistory[team].orEmpty().filter { it.order < state.order }.takeLast(K.ACTIVE_WINDOW).map { it.order }.toSet()
         if (d.ctx.history.any { it.team == team && it.order in recent }) return true
-        return kind != WeekKind.PAST && d.player.team == team && d.ctx.history.lastOrNull()?.team != team
+        val lastTeam = d.ctx.history.lastOrNull()?.team
+        val listed = kind != WeekKind.PAST && d.player.team == team
+        if (listed && lastTeam != team) return true
+        return (lastTeam == team || listed) && espnPoints(d, state) >= K.RETURN_MIN_ESPN_POINTS
     }
 
     /**

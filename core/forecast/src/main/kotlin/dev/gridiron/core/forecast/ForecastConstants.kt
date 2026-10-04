@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 11
+public const val FORECAST_VERSION: Int = 12
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -45,6 +45,12 @@ internal object K {
     const val NEWCOMER_SHARE_FACTOR = 0.5
     const val STARTER_PASS_SHARE = 0.97
     const val ACTIVE_WINDOW = 2
+
+    // An RB, WR or TE outside the active window (back from injury, or sat the last games of last season) is
+    // projected again once ESPN projects him for this many PPR points. On 2022-2025 (built from 2021) ESPN's 3+
+    // plays about 87%; it adds 374 played weeks and teammates' PPR MAE falls 0.008 (±0.003). 5 and 8 add fewer
+    // and gain less. Treating a player ESPN stops projecting as out was tested and cost 0.019: not used.
+    const val RETURN_MIN_ESPN_POINTS = 3.0
 
     // Layer 3, efficiency (shrinkage.py: half-life 10, catch_rate k = 15 games, int_rate k = 150 attempts).
     const val EFFICIENCY_HALF_LIFE = 10.0

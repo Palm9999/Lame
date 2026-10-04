@@ -472,6 +472,33 @@ class ForecastEngineTest {
     }
 
     @Test
+    fun `a player back from a long absence is projected once ESPN projects him for enough points`() {
+        fun projected(espnYards: Double?): Int = league("back$espnYards.db").use { db ->
+            db.player("WR_X", "WR", "AAA")
+            for (week in 1..3) db.week("WR_X", 2024, week, "AAA", "targets" to 6.0, "receptions" to 4.0, "receiving_yards" to 50.0)
+            db.espn("RB_A", 2025, 3, "carries" to 15.0, "rushing_yards" to 70.0)
+            if (espnYards != null) db.espn("WR_X", 2025, 3, "receiving_yards" to espnYards)
+            run(db)
+            weekRows(db, "WR_X", 2025, 3)
+        }
+        assertTrue(projected(K.RETURN_MIN_ESPN_POINTS * 10) > 0)
+        assertEquals(0, projected(K.RETURN_MIN_ESPN_POINTS * 10 - 1))
+        assertEquals(0, projected(null))
+    }
+
+    @Test
+    fun `a returning player nflverse lists Out stays out whatever ESPN projects`() {
+        league("out.db").use { db ->
+            db.player("WR_X", "WR", "AAA")
+            for (week in 1..3) db.week("WR_X", 2024, week, "AAA", "targets" to 6.0, "receptions" to 4.0, "receiving_yards" to 50.0)
+            db.espn("WR_X", 2025, 3, "receiving_yards" to 80.0)
+            db.injury("WR_X", 2025, 3, "Out")
+            run(db)
+            assertEquals(0, weekRows(db, "WR_X", 2025, 3))
+        }
+    }
+
+    @Test
     fun `props blend into the upcoming week as a market factor, and into rest of season`() {
         league("a.db").use { plain ->
             league("b.db").use { priced ->

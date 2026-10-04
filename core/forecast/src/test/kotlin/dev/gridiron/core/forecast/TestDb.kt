@@ -59,6 +59,19 @@ internal class TestDb(val file: File) : AutoCloseable {
         id, season, week, status,
     )
 
+    /** ESPN's projection for one player-week; the table is created on first use, as a build without ESPN has none. */
+    fun espn(id: String, season: Int, week: Int, vararg values: Pair<String, Double>) {
+        conn.execSQL(
+            """CREATE TABLE IF NOT EXISTS espn_projection (
+                player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
+                metric_id TEXT NOT NULL, value REAL NOT NULL,
+                PRIMARY KEY (player_id, season, week, metric_id)) WITHOUT ROWID""",
+        )
+        for ((metric, value) in values) {
+            exec("INSERT OR REPLACE INTO espn_projection VALUES (?, ?, ?, ?, ?)", id, season, week, metric, value)
+        }
+    }
+
     fun query(sql: String): List<List<String?>> = conn.prepare(sql).use { st ->
         buildList {
             while (st.step()) add((0 until st.getColumnCount()).map { if (st.isNull(it)) null else st.getText(it) })
