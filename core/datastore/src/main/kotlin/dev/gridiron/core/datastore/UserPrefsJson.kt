@@ -47,6 +47,8 @@ internal data class UserPrefsDto(
     val espnActive: String? = null,
     val espnS2: String? = null,
     val swid: String? = null,
+    /** Missing in a file from before alerts existed: on. */
+    val injuryAlerts: Boolean = true,
 )
 
 @Serializable
@@ -184,6 +186,7 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
         espnLeagues = leagues,
         espnActive = espnActive?.takeIf { id -> leagues.any { it.leagueId == id } } ?: leagues.firstOrNull()?.leagueId,
         espnLogin = login,
+        injuryAlerts = injuryAlerts,
     )
 }
 
@@ -260,6 +263,7 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     espnActive = espnLeague?.leagueId,
     espnS2 = espnLogin?.espnS2,
     swid = espnLogin?.swid,
+    injuryAlerts = injuryAlerts,
 )
 
 internal object UserPrefsSerializer : Serializer<UserPrefs> {

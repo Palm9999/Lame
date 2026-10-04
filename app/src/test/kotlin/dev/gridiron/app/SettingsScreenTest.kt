@@ -46,6 +46,17 @@ class SettingsScreenTest {
     }
 
     @Test
+    fun injuryAlertsAreOnAndTheSwitchTurnsThemOff() {
+        val prefs = FakePrefsSource()
+        show(prefs)
+        compose.onNodeWithTag("alerts").assertIsOn()
+        compose.onNodeWithTag("alerts").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("alerts").assertIsOff()
+        assertEquals(false, prefs.current.injuryAlerts)
+    }
+
+    @Test
     fun checkingASeasonSavesIt() {
         val prefs = FakePrefsSource()
         show(prefs)

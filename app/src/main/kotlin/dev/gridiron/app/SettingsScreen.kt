@@ -16,6 +16,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,6 +56,7 @@ fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit, props: Flow
                 TextButton(onClick = onBack) { Text("← Back") }
                 Text("Settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
+            AlertsSection(settings)
             PropsSection(settings, props)
             Text(
                 "Seasons",
@@ -92,6 +94,32 @@ fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit, props: Flow
                 }
             }
         }
+    }
+}
+
+/** The injury alerts switch: on unless turned off. */
+@Composable
+private fun AlertsSection(settings: SettingsRepository) {
+    val on by settings.injuryAlerts.collectAsState(initial = null)
+    val scope = rememberCoroutineScope()
+    val checked = on ?: return
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch) { now -> scope.launch { settings.setInjuryAlerts(now) } }
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .testTag("alerts"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Injury alerts", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(
+                "A notification when a player on your rosters changes ESPN status, checked about every two hours.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 

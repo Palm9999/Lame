@@ -3,6 +3,8 @@
     <!-- Stats are built on the phone from nflverse at "Refresh stats"; ESPN news and injuries and, with the
          user's key, Odds API props are fetched live. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Injury alerts: a rostered player's ESPN status changed (Settings turns them off). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <application
         android:name=".GridironApplication"
         android:allowBackup="false"

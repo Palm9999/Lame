@@ -125,6 +125,14 @@ class UserPrefsStoreTest {
     }
 
     @Test
+    fun `injury alerts are on in an older file, and turning them off survives a reopen`() {
+        file.writeText("""{"formatVersion":4}""")
+        assertEquals(true, withStore { it.prefs.first() }.injuryAlerts)
+        withStore { store -> store.update { it.copy(injuryAlerts = false) } }
+        assertEquals(false, withStore { it.prefs.first() }.injuryAlerts)
+    }
+
+    @Test
     fun `invalid rosters are dropped and duplicate players collapsed`() {
         file.writeText(
             """

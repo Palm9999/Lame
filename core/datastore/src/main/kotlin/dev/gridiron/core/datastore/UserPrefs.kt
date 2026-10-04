@@ -19,6 +19,7 @@ import dev.gridiron.core.model.ScoringProfile
  * @property espnLeagues The user's ESPN fantasy leagues, in the order added.
  * @property espnActive The id of the league every screen follows; a missing or unknown id reads as the first league.
  * @property espnLogin The one pair of ESPN cookies every league shares. They are sent only to ESPN.
+ * @property injuryAlerts Notify when a rostered player's ESPN injury status changes; on unless turned off.
  */
 public data class UserPrefs(
     val profiles: List<ScoringProfile>,
@@ -33,6 +34,7 @@ public data class UserPrefs(
     val espnLeagues: List<EspnLeagueEntry> = emptyList(),
     val espnActive: String? = null,
     val espnLogin: EspnLogin? = null,
+    val injuryAlerts: Boolean = true,
 ) {
     /** The active league with the shared cookies; null when no league is set. */
     public val espnLeague: EspnLeagueConfig?
@@ -48,7 +50,7 @@ public data class UserPrefs(
     /** Like the generated one, but the key shows only as set or not: prefs must be safe to log. */
     override fun toString(): String =
         "UserPrefs(profiles=$profiles, activeProfileId=$activeProfileId, tray=$tray, resetNotice=$resetNotice, " +
-            "seasons=$seasons, rosters=$rosters, oddsApiKey=${if (oddsApiKey == null) "null" else "…"}, espnLeagues=$espnLeagues, espnActive=$espnActive, espnLogin=$espnLogin)"
+            "seasons=$seasons, rosters=$rosters, oddsApiKey=${if (oddsApiKey == null) "null" else "…"}, espnLeagues=$espnLeagues, espnActive=$espnActive, espnLogin=$espnLogin, injuryAlerts=$injuryAlerts)"
 
     public companion object {
         public val DEFAULT: UserPrefs = UserPrefs(emptyList(), ScoringPresets.PPR.id, emptyList())

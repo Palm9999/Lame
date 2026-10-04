@@ -49,6 +49,13 @@ public class SettingsRepository(
         prefs.update { it.copy(oddsApiKey = clean) }
     }
 
+    /** Whether injury alerts are on (they are unless turned off). */
+    public val injuryAlerts: Flow<Boolean> = prefs.prefs.map { it.injuryAlerts }.distinctUntilChanged()
+
+    public suspend fun setInjuryAlerts(on: Boolean) {
+        prefs.update { it.copy(injuryAlerts = on) }
+    }
+
     public companion object {
         /** nflverse's play-by-play goes back further, but ffopportunity's expected points start here. */
         public const val FIRST_SEASON: Int = 2012

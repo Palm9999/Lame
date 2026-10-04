@@ -18,6 +18,8 @@ import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.ScoresRepository
 import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.live.FantasyLeagueRepository
+import dev.gridiron.core.data.live.InjuryAlertChecker
+import dev.gridiron.core.data.live.starterIds
 import dev.gridiron.core.data.live.LiveDb
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.PropsRepository
@@ -54,13 +56,20 @@ class GridironApplication : Application() {
         }
     }
     private val prefs by lazy { UserPrefsStore.create(File(filesDir, "user_prefs.json"), appScope) }
-    private val settings by lazy { SettingsRepository(prefs) { currentSeason() } }
+    internal val settings by lazy { SettingsRepository(prefs) { currentSeason() } }
     private val players by lazy { PlayerDirectory(executor) }
     // One connection to live.db, shared by ESPN's feeds and the props.
     private val liveDb by lazy { LiveDb(File(noBackupFilesDir, "live.db")) }
     private val live by lazy { LiveRepository(liveDb, UrlConnectionHttpGet(), players) }
     private val projectionsRepo by lazy { ProjectionsRepository(executor) }
     private val propsRepo by lazy { PropsRepository(liveDb, UrlConnectionHttpClient()) }
+    private val rosters by lazy { RosterRepository(prefs) }
+    private val league by lazy { FantasyLeagueRepository(prefs, UrlConnectionHttpGet(), players, noBackupFilesDir) }
+
+    /** What [InjuryAlertWorker] checks: rostered players' ESPN status against the last list seen. */
+    internal val injuryAlerts by lazy {
+        InjuryAlertChecker(live, rosters.rosters, { league.myTeam.first()?.starterIds().orEmpty() }, File(noBackupFilesDir, "injury-alerts.json"))
+    }
 
     private val workDir by lazy { File(noBackupFilesDir, "ingest-work") }
 
@@ -101,13 +110,13 @@ class GridironApplication : Application() {
             live = live,
             settings = settings,
             refresher = refresher,
-            rosters = RosterRepository(prefs),
+            rosters = rosters,
             gridPresets = GridPresetRepository(prefs),
             gridDisplay = GridDisplayRepository(prefs),
             props = propsRepo,
             playerStats = PlayerStatsRepository(executor),
             scores = ScoresRepository(executor, UrlConnectionHttpGet()),
-            league = FantasyLeagueRepository(prefs, UrlConnectionHttpGet(), players, noBackupFilesDir),
+            league = league,
             opportunities = OpportunitiesRepository(executor, projectionsRepo, { live.injuries() }),
             breakouts = BreakoutRepository(executor),
         )
