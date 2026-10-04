@@ -25,6 +25,7 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 public data class ProjectionRow(
@@ -84,14 +85,23 @@ public fun visibleRows(rows: List<ProjectionRow>, tab: PositionTab, badges: Map<
 /**
  * [row] without its Questionable discount once he is confirmed active: his team's inactives are posted ([inactivesPosted])
  * and ESPN doesn't list him Out, Doubtful, on IR or suspended. The discount prices the chance he sits, which is gone.
+ * It scaled every stat, so his usage grows back by the same factor and his expected TDs too: 1 - TD chance is
+ * e^-(TDs), so the lifted chance is 1 - (1 - chance)^(1/q).
  */
 internal fun confirmedActive(row: ProjectionRow, badges: Map<String, String>, inactivesPosted: Set<String>): ProjectionRow {
     val q = row.questionable ?: return row
     if (row.team !in inactivesPosted || badges[row.playerId] in SIT || q <= 0.0) return row
-    return row.copy(points = row.points / q, floor = row.floor / q, ceiling = row.ceiling / q, questionable = null)
+    return row.copy(
+        points = row.points / q, floor = row.floor / q, ceiling = row.ceiling / q, questionable = null,
+        tdChance = row.tdChance?.let { liftedTd(it, q) },
+        usage = row.usage?.let { Usage(it.carries / q, it.targets / q, it.rushingPoints / q, it.receivingPoints / q) },
+    )
 }
 
 private val SIT = setOf("O", "IR", "D", "SUSP")
+
+/** A TD [chance] computed from TDs discounted by [q], with the discount taken out: 1 - (1 - chance)^(1/q). */
+internal fun liftedTd(chance: Double, q: Double): Double = 1.0 - (1.0 - chance).pow(1.0 / q)
 
 /** [row] scored as zero this week when ESPN lists him Out or on IR. */
 internal fun outAdjusted(row: ProjectionRow, badges: Map<String, String>): ProjectionRow =

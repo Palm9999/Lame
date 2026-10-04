@@ -75,6 +75,8 @@ public suspend fun loadProjectionCard(
     compute: CoroutineDispatcher = Dispatchers.Default,
     /** The fantasy playoffs' weeks: the active league's, or 15-17. */
     playoffWeeks: List<Int> = DEFAULT_PLAYOFF_WEEKS,
+    /** NFL teams whose inactives are posted in a week; read only for a Questionable player, to lift his discount. */
+    inactivesPosted: suspend (season: Int, week: Int) -> Set<String> = { _, _ -> emptySet() },
 ): ProjectionCard? {
     val status = repository.status()
     if (status.status != "ok") return null
@@ -114,7 +116,19 @@ public suspend fun loadProjectionCard(
         )
     }
     val out = injuryAbbr in OUT_ABBRS
-    val points = withContext(compute) { projectPoints(final, profile, position) }
+    val simulated = withContext(compute) { projectPoints(final, profile, position) }
+    val td = if (out || position == Position.K || position == Position.DST) null else anytimeTd(final)
+    // A Questionable player confirmed active (see confirmedActive) loses his discount, as he does in Projections.
+    val q = repository.questionable(season, week)[playerId]?.takeIf { it > 0.0 && injuryAbbr !in SIT_ABBRS && team != null }
+    val lift = q != null && try {
+        team in inactivesPosted(season, week)
+    } catch (e: kotlinx.coroutines.CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        false
+    }
+    val k = if (lift) 1.0 / q else 1.0
+    val points = simulated.copy(points = simulated.points * k, floor = simulated.floor * k, ceiling = simulated.ceiling * k)
     return ProjectionCard(
         season = season,
         week = week,
@@ -130,9 +144,11 @@ public suspend fun loadProjectionCard(
         rosOf = of,
         playoffPoints = playoffPoints,
         playoffWeeks = playoffWeeks,
-        tdChance = if (out || position == Position.K || position == Position.DST) null else anytimeTd(final),
+        tdChance = if (lift) td?.let { liftedTd(it, q) } else td,
     )
 }
+
+private val SIT_ABBRS = setOf("O", "IR", "D", "SUSP")
 
 /** "1st", "2nd", "13th". */
 internal fun placeText(n: Int): String {

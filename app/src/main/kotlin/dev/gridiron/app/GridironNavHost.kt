@@ -290,6 +290,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             playerStats = deps.playerStats,
                             breakouts = deps.breakouts,
                             league = deps.league,
+                            inactivesPosted = { s, w -> deps.scores?.week(s, w)?.kickoffs(java.time.Instant.now())?.inactivesPosted.orEmpty() },
                         )
                     }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }

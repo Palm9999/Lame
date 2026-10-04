@@ -34,6 +34,21 @@ class LineupHandcuffTest {
     }
 
     @Test
+    fun `a WR's backup is the WR teammate with the most touches, after the RBs, and a TE has none`() {
+        val more = rows + listOf(
+            row("w2", "WR", "KC", 6.0, Usage(0.0, 6.0, 0.0, 6.0)), row("w3", "WR", "KC", 3.0, Usage(0.0, 3.0, 0.0, 3.0)),
+            row("t1", "TE", "KC", 10.0, Usage(0.0, 7.0, 0.0, 10.0)), row("t2", "TE", "KC", 3.0, Usage(0.0, 3.0, 0.0, 3.0)),
+        )
+        val withWr = team.copy(players = team.players + LeaguePlayer("4", "WR w", "WR", "w") + LeaguePlayer("5", "TE t1", "TE", "t1"))
+        val cuffs = handcuffs(withWr, more, emptyMap())
+        assertEquals(listOf("a1", "w"), cuffs.map { it.starter.playerId })
+        val h = cuffs.last()
+        assertEquals("w2", h.backup.playerId)
+        // KC's targets: 4 + 2 + 30 + 6 + 3 + 7 + 3 = 55, 25 without w; w2's 6 receiving points grow by 55/25. No carries move.
+        assertEquals(6.0 + 6.0 * (55.0 / 25 - 1), h.ifOut, 1e-9)
+    }
+
+    @Test
     fun `a team with no other RB has no handcuff`() {
         assertEquals(emptyList<HandcuffLine>(), handcuffs(team, rows.filter { it.playerId !in setOf("a2", "a3") }, emptyMap()))
     }

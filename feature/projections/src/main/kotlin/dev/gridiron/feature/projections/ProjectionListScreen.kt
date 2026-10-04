@@ -106,6 +106,18 @@ public fun ProjectionListRoute(
     var playoffs by remember { mutableStateOf<PlayoffState>(PlayoffState.Idle) }
     var review by remember { mutableStateOf<ReviewState>(ReviewState.Idle) }
     val scope = rememberCoroutineScope()
+    suspend fun readKickoffs(week: Int) {
+        locked = try {
+            kickoffs(season, week)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Kickoffs(emptySet(), emptySet())
+        }
+    }
+    // The week list, Start/sit and My lineup all lift a confirmed-active Questionable player's discount.
+    val loadedWeek = (state as? ProjectionListState.Loaded)?.week
+    LaunchedEffect(season, loadedWeek) { loadedWeek?.let { readKickoffs(it) } }
     ProjectionListScreen(
         state, injuries, onPlayer, onBack, team?.takeIf { it.season == season }, rival,
         rostered = taken?.takeIf { it.season == season }?.playerIds,
@@ -152,17 +164,7 @@ public fun ProjectionListRoute(
             }
         },
         onLineupOpened = {
-            (state as? ProjectionListState.Loaded)?.week?.let { week ->
-                scope.launch {
-                    locked = try {
-                        kickoffs(season, week)
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        Kickoffs(emptySet(), emptySet())
-                    }
-                }
-            }
+            (state as? ProjectionListState.Loaded)?.week?.let { week -> scope.launch { readKickoffs(week) } }
             val fetched = taken?.fetchedAtMillis
             if (fetched != null && now() - fetched > LEAGUE_STALE_MILLIS) {
                 scope.launch {
@@ -227,7 +229,7 @@ public fun ProjectionListScreen(
     partners: List<MyTeam> = emptyList(),
     /** NFL teams whose game this week has started: My lineup keeps their players where ESPN has them. */
     started: Set<String> = emptySet(),
-    /** NFL teams whose inactives are posted: My lineup drops the Questionable discount of their players ESPN doesn't rule out. */
+    /** NFL teams whose inactives are posted: the week's lists drop the Questionable discount of their players ESPN doesn't rule out. */
     inactivesPosted: Set<String> = emptySet(),
     playoffs: PlayoffState = PlayoffState.Idle,
     /** Playoff odds was opened: the route reads the league's schedule. */
@@ -312,8 +314,10 @@ public fun ProjectionListScreen(
                             )
                         }
                     }
+                    // Once a team's inactives are posted, its Questionable players ESPN hasn't ruled out are playing.
+                    val weekRows = remember(state, badges, inactivesPosted) { state.weekRows.map { confirmedActive(it, badges, inactivesPosted) } }
                     if (mode == ListMode.START_SIT) {
-                        StartSitView(state.weekRows, badges)
+                        StartSitView(weekRows, badges)
                     } else if (mode == ListMode.REVIEW) {
                         ReviewView(review)
                     } else if (mode == ListMode.PLAYOFFS) {
@@ -321,8 +325,6 @@ public fun ProjectionListScreen(
                     } else if (mode == ListMode.TRADE && myTeam != null) {
                         TradeView(myTeam, partners, state.rosRows, state.rosWeekly)
                     } else if (mode == ListMode.LINEUP && myTeam != null) {
-                        // Once a team's inactives are posted, its Questionable players still in the lineup are playing.
-                        val weekRows = remember(state, badges, inactivesPosted) { state.weekRows.map { confirmedActive(it, badges, inactivesPosted) } }
                         val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, weekRows, badges, started) }
                         val pickups = if (rostered == null) null else remember(myTeam, weekRows, badges, rostered, starterOut, started) { waiverPickups(myTeam, weekRows, badges, rostered, starterOut, started) }
                         // Rest of season keeps an injured player's projection, as its list does.
@@ -340,7 +342,7 @@ public fun ProjectionListScreen(
                         ) {
                             for (t in PositionTab.entries) FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
                         }
-                        val rows = visibleRows(if (mode == ListMode.WEEK) state.weekRows else state.rosRows, tab, badges, mode == ListMode.WEEK)
+                        val rows = visibleRows(if (mode == ListMode.WEEK) weekRows else state.rosRows, tab, badges, mode == ListMode.WEEK)
                         LazyColumn(Modifier.fillMaxSize()) {
                             itemsIndexed(rows, key = { _, row -> row.playerId }) { i, row ->
                                 ProjectionListRow("${i + 1}", row, badges[row.playerId], onPlayer)

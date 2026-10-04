@@ -29,10 +29,13 @@ private class CardExecutor(
     private val defense: Boolean = false,
     private val stash: Boolean = false,
     private val weeks: Boolean = false,
+    /** W1 carries the forecast's Questionable discount (0.78) this week. */
+    private val questionable: Boolean = false,
 ) : QueryExecutor {
     override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
         val sql = query.sql
         val rows: List<List<Any?>> = when {
+            "factor = 'questionable'" in sql && questionable -> listOf(listOf("W1", kotlin.math.ln(0.78)))
             "schema_meta" in sql -> listOf(listOf("forecast_status", status), listOf("forecast_week:2026", "4"))
             "FROM player_ros_week" in sql && weeks -> listOf(
                 listOf("W1", "WR", 12L, "receptions", 9.0, 1.0),
@@ -78,6 +81,19 @@ private class CardExecutor(
 }
 
 class ProjectionCardTest {
+    @Test
+    fun `a Questionable player's card loses his discount once his team's inactives are posted and ESPN hasn't ruled him out`() = runTest {
+        suspend fun card(abbr: String?, posted: Set<String>) = loadProjectionCard(
+            ProjectionsRepository(CardExecutor(questionable = true)), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = abbr,
+            inactivesPosted = { _, _ -> posted },
+        )!!
+        val lifted = card("Q", setOf("KC"))
+        assertEquals(11.0 / 0.78, lifted.points, 1e-9)
+        // Not posted for his team yet, or ruled Doubtful: the discounted projection stands.
+        assertEquals(11.0, card("Q", setOf("BUF")).points, 1e-9)
+        assertEquals(11.0, card("D", setOf("KC")).points, 1e-9)
+    }
+
     @Test
     fun `the card scores this week and rest of season with the profile`() = runTest {
         val card = loadProjectionCard(ProjectionsRepository(CardExecutor()), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = "Q")!!

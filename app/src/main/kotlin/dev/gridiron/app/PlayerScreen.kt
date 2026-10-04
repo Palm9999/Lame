@@ -99,6 +99,8 @@ fun PlayerRoute(
     breakouts: BreakoutRepository? = null,
     /** The active ESPN league, for its playoff weeks; null uses 15-17. */
     league: FantasyLeagueRepository? = null,
+    /** NFL teams whose inactives are posted in a week (ESPN's scoreboard): a confirmed-active Questionable player's card loses his discount. */
+    inactivesPosted: suspend (season: Int, week: Int) -> Set<String> = { _, _ -> emptySet() },
 ) {
     val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList<Roster>()) }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -123,7 +125,7 @@ fun PlayerRoute(
                 } ?: DEFAULT_PLAYOFF_WEEKS
                 loadProjectionCard(
                     projections, playerId, header?.team, active, header?.position?.let(Position::fromCode), status?.abbr,
-                    playoffWeeks = playoffWeeks,
+                    playoffWeeks = playoffWeeks, inactivesPosted = inactivesPosted,
                 )
             } catch (e: CancellationException) {
                 throw e

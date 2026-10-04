@@ -8,6 +8,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
 import java.time.ZoneOffset
+import kotlin.math.round
 
 class ProjectionListTest {
     private fun row(id: String, position: String, points: Double) =
@@ -22,6 +23,12 @@ class ProjectionListTest {
         assertEquals(10.0, back.points, 1e-9)
         assertEquals(2.8 / 0.78, back.floor, 1e-9)
         assertEquals(null, back.questionable)
+        // His TD chance and usage come back from the same discount: 1 - 0.7^(1/0.78), and 7.8 carries to 10.
+        val withTd = q.copy(tdChance = 0.3, usage = Usage(7.8, 3.9, 3.9, 3.12))
+        val td = confirmedActive(withTd, mapOf("r" to "Q"), setOf("KC"))
+        assertEquals(1 - Math.pow(0.7, 1 / 0.78), td.tdChance!!, 1e-12)
+        assertTrue(td.tdChance > 0.3 && td.tdChance < 1.0)
+        assertEquals(Usage(10.0, 5.0, 5.0, 4.0), td.usage!!.let { u -> Usage(round(u.carries), round(u.targets), round(u.rushingPoints), round(u.receivingPoints)) })
         // Inactives not posted yet, or ruled out: unchanged.
         assertEquals(q, confirmedActive(q, mapOf("r" to "Q"), setOf("BUF")))
         assertEquals(q, confirmedActive(q, mapOf("r" to "O"), setOf("KC")))
