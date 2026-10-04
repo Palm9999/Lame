@@ -1,8 +1,10 @@
 package dev.gridiron.feature.projections
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -366,7 +368,10 @@ class ProjectionListScreenTest {
         assertEquals(1, asked)
         compose.onNodeWithTag("odds:chance:1", useUnmergedTree = true).assertTextEquals("100%")
         compose.onNodeWithTag("odds:chance:2", useUnmergedTree = true).assertTextEquals("0%")
-        compose.onNodeWithText("Mine (you)", useUnmergedTree = true).assertExists()
+        compose.onAllNodesWithText("Mine (you)", useUnmergedTree = true).assertCountEquals(2)
+        // Power rankings: Mine (200 + 150 + 60 over the week) leads Rivals.
+        compose.onNodeWithTag("power:1", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Power rankings: rest-of-season roster strength").assertExists()
     }
 
     @Test

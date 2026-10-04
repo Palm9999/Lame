@@ -18,13 +18,16 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.live.PlayoffPicture
+import dev.gridiron.core.model.Position
 import dev.gridiron.core.projections.LineupCandidate
 import dev.gridiron.core.projections.Lineups
 import dev.gridiron.core.projections.PlayoffOdds
 import dev.gridiron.core.projections.Playoffs
+import dev.gridiron.core.projections.ReplacementLevel
 import dev.gridiron.core.projections.SimGame
 import dev.gridiron.core.projections.SimTeam
 import dev.gridiron.core.projections.TeamWeek
+import dev.gridiron.core.projections.Trades
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
@@ -73,6 +76,41 @@ internal fun playoffOdds(picture: PlayoffPicture, rosRows: List<ProjectionRow>, 
     return Playoffs.simulate(teams, games, weekly, league.playoffTeams ?: DEFAULT_PLAYOFF_TEAMS)
 }
 
+/** One team in the power rankings: its rest-of-season [value] and the positions where it most leads and trails the league. */
+internal data class PowerRow(val teamId: Int, val name: String, val value: Double, val strongest: String?, val weakest: String?)
+
+/**
+ * Every team ranked by its roster's rest-of-season worth ([Trades.value]: each remaining week's best lineup, byes
+ * counted, plus a little bench depth). A team's strongest and weakest positions compare its best lineup's starters
+ * there (points over replacement, [ReplacementLevel] across every projected player) with the league's average team.
+ */
+internal fun powerRankings(picture: PlayoffPicture, rosRows: List<ProjectionRow>, rosWeekly: Map<String, Map<Int, Double>>): List<PowerRow> {
+    val league = picture.league
+    val slots = league.lineupSlots.ifEmpty { Lineups.DEFAULT_SLOTS }
+    val byId = rosRows.associateBy { it.playerId }
+    val everyone = rosRows.map { LineupCandidate(it.playerId, it.position, it.points) }
+    val values = ReplacementLevel.values(everyone, ReplacementLevel.of(everyone, league.teams.size.coerceAtLeast(1), slots))
+    val rosters = league.teams.associate { team ->
+        team.id to team.players.mapNotNull { p ->
+            val row = p.playerId?.let(byId::get) ?: return@mapNotNull null
+            LineupCandidate(row.playerId, row.position, row.points, rosWeekly[row.playerId].orEmpty())
+        }
+    }
+    val byPosition = rosters.mapValues { (_, roster) ->
+        Lineups.best(slots, roster).spots.mapNotNull { it.player }.groupBy { it.position }
+            .mapValues { (_, ps) -> ps.sumOf { values[it.playerId] ?: 0.0 } }
+    }
+    val positions = byPosition.values.flatMap { it.keys }.distinct()
+    val average = positions.associateWith { pos -> byPosition.values.sumOf { it[pos] ?: 0.0 } / byPosition.size.coerceAtLeast(1) }
+    return league.teams.map { team ->
+        val edge = positions.associateWith { pos -> (byPosition[team.id]?.get(pos) ?: 0.0) - average.getValue(pos) }
+        PowerRow(
+            team.id, team.name, Trades.value(slots, rosters[team.id].orEmpty()),
+            edge.maxByOrNull { it.value }?.takeIf { it.value > 0 }?.key, edge.minByOrNull { it.value }?.takeIf { it.value < 0 }?.key,
+        )
+    }.sortedByDescending { it.value }
+}
+
 /** ESPN's default when the snapshot predates the setting. */
 private const val DEFAULT_PLAYOFF_TEAMS = 4
 
@@ -89,6 +127,9 @@ internal fun PlayoffsView(state: PlayoffState, rosRows: List<ProjectionRow>, ros
     val odds by produceState<List<PlayoffOdds>?>(null, picture, rosWeekly) {
         value = picture?.let { withContext(Dispatchers.Default) { playoffOdds(it, rosRows, rosWeekly) } }
     }
+    val power by produceState<List<PowerRow>?>(null, picture, rosWeekly) {
+        value = picture?.let { withContext(Dispatchers.Default) { powerRankings(it, rosRows, rosWeekly) } }
+    }
     LazyColumn(Modifier.fillMaxSize().testTag("playoffs")) {
         when {
             state is PlayoffState.Unavailable -> item { Note("No playoff odds: ${state.message}.") }
@@ -96,6 +137,26 @@ internal fun PlayoffsView(state: PlayoffState, rosRows: List<ProjectionRow>, ros
             rosWeekly.isEmpty() -> item { Note("Refresh stats to get weekly projections; playoff odds need them.") }
             odds == null -> item { Note("Simulating the season…") }
             else -> {
+                power?.let { rows ->
+                    item { Label("Power rankings: rest-of-season roster strength") }
+                    itemsIndexed(rows, key = { _, r -> "power:${r.teamId}" }) { i, r ->
+                        val mine = r.teamId == picture.myTeamId
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("power:${r.teamId}"), verticalAlignment = Alignment.CenterVertically) {
+                            Text("${i + 1}", Modifier.padding(end = 12.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Column(Modifier.weight(1f)) {
+                                Text(r.name + if (mine) " (you)" else "", style = MaterialTheme.typography.bodyMedium, fontWeight = if (mine) FontWeight.Bold else FontWeight.SemiBold)
+                                Text(
+                                    listOfNotNull(r.strongest?.let { "best at ${Position.label(it)}" }, r.weakest?.let { "thin at ${Position.label(it)}" })
+                                        .joinToString(" · ").ifEmpty { "about average everywhere" },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Text(String.format(Locale.US, "%.0f", r.value), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                    item { Label("Playoff odds") }
+                }
                 val cut = picture.league.playoffTeams ?: DEFAULT_PLAYOFF_TEAMS
                 item {
                     Note(
@@ -134,6 +195,16 @@ internal fun PlayoffsView(state: PlayoffState, rosRows: List<ProjectionRow>, ros
 private fun record(wins: Double, losses: Double, ties: Int): String {
     fun n(v: Double) = if (v % 1.0 == 0.0) v.toInt().toString() else String.format(Locale.US, "%.1f", v)
     return "${n(wins)}–${n(losses)}" + if (ties > 0) "–$ties" else ""
+}
+
+@Composable
+private fun Label(text: String) {
+    Text(
+        text,
+        Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }
 
 @Composable
