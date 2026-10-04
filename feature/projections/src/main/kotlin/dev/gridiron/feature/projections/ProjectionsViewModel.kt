@@ -52,7 +52,7 @@ public sealed interface ProjectionsUiState {
  * [load] tags each call with a request key and re-checks it both before and
  * after the CPU-bound [simulate] call, so a stale (superseded) request can
  * never overwrite fresher state -- the same `page == base.page` tag-and-gate
- * pattern `GridViewModel` already uses for sparklines, applied here to
+ * pattern `GridViewModel` uses for page loads, applied here to
  * projection loads (two rapid navigations to different players' projection
  * screens, back to back, must not let the first request's late-arriving
  * result overwrite the second player's numbers).
@@ -70,7 +70,7 @@ public class ProjectionsViewModel(
 
     // The most recent request's identity -- a request whose result arrives after
     // a newer one has already been issued is stale and must not update `_state`,
-    // mirroring GridViewModel's `page == base.page` sparkline guard. Includes
+    // mirroring GridViewModel's `page == base.page` guard. Includes
     // profile and position, not just playerId/season/week: a scoring-format
     // toggle while a projection screen is already open re-issues load() for the
     // same player, and that must count as a new request too, or the guard

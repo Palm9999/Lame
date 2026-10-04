@@ -82,6 +82,26 @@ class LiveScreensTest {
     }
 
     @Test
+    fun aGrowingRoleShowsOnThePlayerPageWithItsReason() {
+        val rising = dev.gridiron.core.data.BreakoutRow("P1", "Saquon Barkley", "RB", "PHI", 72.0, 18.0, 12.0, null, null, 0.0, "Kenneth Gainwell")
+        val page = PlayerPage(PlayerHeader("P1", "Saquon Barkley", "RB", "PHI"), null, emptyList(), emptyList(), null, risingRole = rising)
+        compose.setContent { GridironTheme { PlayerScreen("P1", page, liveAvailable = true, onBack = {}, onOpen = {}) } }
+
+        compose.onNodeWithTag("risingRole").assertExists()
+        compose.onNodeWithText("Role growing").assertExists()
+        compose.onNodeWithText("touches 12.0 → 18.0 a game · Kenneth Gainwell out").assertExists()
+        compose.onNodeWithText("72").assertExists()
+    }
+
+    @Test
+    fun noRisingRoleLeavesThePlayerPageAsItWas() {
+        val page = PlayerPage(PlayerHeader("P1", "Saquon Barkley", "RB", "PHI"), null, emptyList(), emptyList(), null)
+        compose.setContent { GridironTheme { PlayerScreen("P1", page, liveAvailable = true, onBack = {}, onOpen = {}) } }
+
+        compose.onNodeWithTag("risingRole").assertDoesNotExist()
+    }
+
+    @Test
     fun aTeamDefensesPageReadsDst() {
         val page = PlayerPage(PlayerHeader("DST_KC", "Kansas City D/ST", "DST", "KC"), null, emptyList(), emptyList(), null)
         compose.setContent { GridironTheme { PlayerScreen("DST_KC", page, liveAvailable = true, onBack = {}, onOpen = {}) } }

@@ -244,6 +244,8 @@ class GridViewModel(
     private val onlyPlayers = MutableStateFlow<Set<String>?>(null)
     /** The league's rostered players while free agents is chosen, else empty; kept like [onlyPlayers]. */
     private val excludePlayers = MutableStateFlow<Set<String>>(emptySet())
+    /** Everyone on any roster, always listed below the qualifying bar; kept like [onlyPlayers]. */
+    private val alwaysShow = MutableStateFlow<Set<String>>(emptySet())
     private val league = leagueRostered.stateIn(viewModelScope, SharingStarted.Eagerly, null)
     private val rosterList = rosters.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
     private val presetList = (presets?.presets ?: flowOf(persistentListOf<GridPreset>()))
@@ -374,6 +376,7 @@ class GridViewModel(
                         scoring = scoring.active.first(),
                         onlyPlayers = onlyPlayers.value,
                         excludePlayers = excludePlayers.value,
+                        alwaysShow = alwaysShow.value,
                     )
                 }
             }
@@ -423,11 +426,12 @@ class GridViewModel(
                 val offered = rostered?.takeIf { seasonNow == null || it.season == seasonNow }
                 // A deleted roster, or free agents once the league or its season is gone, falls back to everyone.
                 if (id != null && (if (free) offered == null else roster == null)) rosterId.value = null
-                roster?.playerIds?.toSet() to (if (free) offered?.playerIds.orEmpty() else emptySet())
-            }.collect { (only, except) ->
+                Triple(roster?.playerIds?.toSet(), if (free) offered?.playerIds.orEmpty() else emptySet(), list.flatMap { it.playerIds }.toSet())
+            }.collect { (only, except, mine) ->
                 onlyPlayers.value = only
                 excludePlayers.value = except
-                request.update { it?.copy(onlyPlayers = only, excludePlayers = except) }
+                alwaysShow.value = mine
+                request.update { it?.copy(onlyPlayers = only, excludePlayers = except, alwaysShow = mine) }
             }
         }
         viewModelScope.launch {

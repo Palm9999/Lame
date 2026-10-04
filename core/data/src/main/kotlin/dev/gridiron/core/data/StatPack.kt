@@ -57,6 +57,7 @@ import dev.gridiron.core.statquery.StatColumn.RACR
 import dev.gridiron.core.statquery.StatColumn.RECEIVING_TDS
 import dev.gridiron.core.statquery.StatColumn.RECEIVING_YARDS
 import dev.gridiron.core.statquery.StatColumn.RECEPTIONS
+import dev.gridiron.core.statquery.StatColumn.RISING_ROLES
 import dev.gridiron.core.statquery.StatColumn.RUSHING_TDS
 import dev.gridiron.core.statquery.StatColumn.RUSHING_YARDS
 import dev.gridiron.core.statquery.StatColumn.RUSH_EPA_PER_CARRY
@@ -100,6 +101,12 @@ public enum class StatPack(
         listOf(WOPR, TARGET_SHARE, AIR_YARDS_SHARE, TARGETS, ADOT, SNAP_SHARE, RZ_TARGETS, EZ_TARGETS),
         WOPR,
         TARGETS,
+    ),
+    RISING(
+        "Rising roles",
+        listOf(RISING_ROLES, TARGET_SHARE, CARRY_SHARE, WOPR, TARGETS, CARRIES, SNAP_SHARE, WEIGHTED_OPPORTUNITIES),
+        RISING_ROLES,
+        null,
     ),
     RECEIVING(
         "Receiving",

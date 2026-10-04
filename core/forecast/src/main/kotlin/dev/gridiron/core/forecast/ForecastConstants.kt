@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 6
+public const val FORECAST_VERSION: Int = 7
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -98,6 +98,22 @@ internal object K {
     // are in; about 10 points before that.
     const val PA_SD_DEFAULT = 10.0
     const val PA_SD_MIN_GAMES = 100
+
+    // Rising roles (Breakout.kt). Judgments, not fits: the 2024 and 2025 backtest found these three signals each
+    // lift the chance a role keeps growing, but with so few cases the weights are plain choices. A role is
+    // "recent" over the last BREAKOUT_RECENT games and "base" over the BREAKOUT_BASE before them.
+    const val BREAKOUT_RECENT = 4
+    const val BREAKOUT_BASE = 8
+    const val BREAKOUT_MIN_BASE = 4
+    // Usage a game must average (RB: carries + targets; WR, TE: targets) for a player to be scored at all.
+    const val BREAKOUT_MIN_USAGE_RB = 8.0
+    const val BREAKOUT_MIN_USAGE_WR = 3.0
+    const val BREAKOUT_MIN_USAGE_TE = 2.5
+    // A 60% rise in usage, or in expected points, scores a full 1.
+    const val BREAKOUT_FULL_RISE = 0.6
+    const val BREAKOUT_W_USAGE = 0.45
+    const val BREAKOUT_W_EXPECTED = 0.40
+    const val BREAKOUT_W_VACATED = 0.15
 
     // Storage: past weeks keep only players the model gave at least this many reference points.
     const val PAST_WEEK_MIN_POINTS = 1.0

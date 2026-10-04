@@ -4,9 +4,9 @@ package dev.gridiron.core.ingest.db
  * Written into `schema_meta`: the Python ETL's schema 5, plus `player_xref`
  * (6), plus `game`, minus the Python ETL's projection bookkeeping tables (7),
  * plus `team_week_defense`'s safeties and kickoff-return TDs (8), plus the
- * pre-aggregated `player_window_stat` and `window_def` (9).
+ * pre-aggregated `player_window_stat` and `window_def` (9), plus `player_week_signal` (10).
  */
-public const val SCHEMA_VERSION: Int = 9
+public const val SCHEMA_VERSION: Int = 10
 
 /**
  * Bump whenever a transform, the schema or an input's meaning changes: a build
@@ -47,6 +47,12 @@ internal val SCHEMA: List<String> = listOf(
         player_id TEXT NOT NULL, season INTEGER NOT NULL, as_of_week INTEGER NOT NULL,
         metric_id TEXT NOT NULL, mean REAL NOT NULL, variance REAL NOT NULL,
         PRIMARY KEY (player_id, season, as_of_week, metric_id)) WITHOUT ROWID""",
+    // The Rising roles signal, entering `week` (from games before it), written by the forecast for RB, WR and TE.
+    """CREATE TABLE player_week_signal (
+        player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
+        score REAL NOT NULL, usage_recent REAL NOT NULL, usage_base REAL NOT NULL,
+        xp_recent REAL, xp_base REAL, vacated REAL NOT NULL, out_note TEXT,
+        PRIMARY KEY (player_id, season, week)) WITHOUT ROWID""",
     """CREATE TABLE team_week_defense (
         team TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
         points_allowed REAL NOT NULL, yards_allowed REAL NOT NULL, sacks REAL NOT NULL,
@@ -94,4 +100,5 @@ internal val INDEXES: List<String> = listOf(
     "CREATE INDEX idx_player_search ON player (search_name)",
     "CREATE INDEX idx_player_position ON player (position)",
     "CREATE INDEX idx_game_week ON game (season, week)",
+    "CREATE INDEX idx_signal_week ON player_week_signal (season, week, score)",
 )

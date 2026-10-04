@@ -116,7 +116,7 @@ class RealDatabaseContractTest {
             val m = metrics[column.metricId]
             assertTrue(m != null, "${column.metricId} is not in the metric table")
             assertFalse(m!!.internal, "${column.metricId} is a column but flagged internal")
-            assertEquals(column.isFantasy, m.computed, "${column.metricId}: computed flag must match isFantasy")
+            assertEquals(column.isComputed, m.computed, "${column.metricId}: computed flag must match isComputed")
         }
         val displayed = StatColumn.entries.map { it.metricId }.toSet()
         val internalOnly = StatColumn.entries.flatMap { it.aggregate.components }.map { it.id }.toSet() - displayed
@@ -154,7 +154,7 @@ class RealDatabaseContractTest {
         // Fantasy columns are computed from a scoring profile at query time and
         // have no stored weekly facts to compare against; they're covered by
         // the independent-scorer test below instead.
-        val storedColumns = StatColumn.entries.filterNot { it.isFantasy }
+        val storedColumns = StatColumn.entries.filterNot { it.isComputed }
         var checked = 0
         for (season in seasons) {
             val stored = HashMap<String, Double>()

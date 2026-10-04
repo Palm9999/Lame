@@ -181,6 +181,9 @@ private class Plan(columns: List<StatColumn>) {
             .distinct()
             .sortedBy { it.id }
 
+    /** Whether the base joins the Rising roles signal as `sig`. */
+    val signal: Boolean = this.columns.any { it.isSignal }
+
     val games: String = ref(Components.GAMES)
 
     fun index(column: StatColumn): Int {
@@ -190,6 +193,7 @@ private class Plan(columns: List<StatColumn>) {
     }
 
     fun ref(component: Component): String {
+        if (component == RISING_PSEUDO) return "sig.score"
         ScoredOutput.entries.firstOrNull { it.pseudo == component }?.let {
             // Played but scored nothing: zero points, not unknown.
             return "COALESCE(fsum.${it.alias}, 0)"
@@ -269,7 +273,12 @@ private class SqlWriter {
         line("  FROM agg")
         line("  JOIN player p ON p.player_id = agg.player_id")
         if (plan.scored) line("  LEFT JOIN fsum ON fsum.player_id = agg.player_id")
-        line("  WHERE ${plan.games} >= ${int(spec.minGames)}")
+        if (plan.signal) {
+            // The week after the range, or the newest the table has: the table's last week is the upcoming one.
+            line("  LEFT JOIN player_week_signal sig ON sig.player_id = agg.player_id AND sig.season = ${int(spec.season)}")
+            line("    AND sig.week = (SELECT MIN(${int(spec.weeks.last + 1)}, MAX(w.week)) FROM player_week_signal w WHERE w.season = ${int(spec.season)})")
+        }
+        line("  WHERE ${plan.games} >= ${int(spec.minGames)}" + alwaysShowClause(spec, "p.player_id", " OR "))
         line(")")
     }
 
@@ -511,10 +520,12 @@ private class SqlWriter {
 
     /** Flags each player 1 if they meet every qualifier, else 0. */
     fun scored(spec: StatQuerySpec, plan: Plan) {
-        val q = if (spec.qualifiers.isEmpty()) {
-            "1"
-        } else {
-            "CASE WHEN " + spec.qualifiers.joinToString(" AND ") { condition(it, plan) } + " THEN 1 ELSE 0 END"
+        val met = spec.qualifiers.joinToString(" AND ") { condition(it, plan) }
+        // A player let in by alwaysShow below the games floor is never ranked.
+        val floor = if (spec.alwaysShow.isNotEmpty() && spec.minGames > 1) "games >= ${int(spec.minGames)}" else null
+        val q = when {
+            floor == null && met.isEmpty() -> "1"
+            else -> "CASE WHEN " + listOfNotNull(floor, met.ifEmpty { null }).joinToString(" AND ") + " THEN 1 ELSE 0 END"
         }
         line(", scored AS (")
         line("  SELECT base.*, $q AS q")
@@ -563,9 +574,13 @@ private class SqlWriter {
         }
     }
 
+    /** `<joiner>id IN (…)` for [StatQuerySpec.alwaysShow], or nothing. */
+    private fun alwaysShowClause(spec: StatQuerySpec, id: String, joiner: String): String =
+        if (spec.alwaysShow.isEmpty()) "" else "$joiner$id IN (${spec.alwaysShow.sorted().joinToString(", ") { text(it) }})"
+
     fun where(spec: StatQuerySpec, plan: Plan) {
         val conditions = mutableListOf<String>()
-        if (!spec.includeUnqualified) conditions += "q = 1"
+        if (!spec.includeUnqualified) conditions += "(q = 1" + alwaysShowClause(spec, "player_id", " OR ") + ")"
         if (spec.positions.isNotEmpty()) {
             val codes = spec.positions.sortedBy { it.ordinal }
             conditions += "position IN (${codes.joinToString(", ") { text(it.code) }})"

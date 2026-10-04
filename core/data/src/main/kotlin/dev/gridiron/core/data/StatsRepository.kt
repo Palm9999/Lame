@@ -63,7 +63,7 @@ public class StatsRepository(
         val layout = q.layout
 
         // An empty roster lists no one; the query would read an empty id set as everyone.
-        val rows = if (request.onlyPlayers?.isEmpty() == true) emptyList() else executor.query(q.query) { r ->
+        val rows = if (request.onlyPlayers?.isEmpty() == true) emptyList() else queryRows(q.query) { r ->
             val games = r.long(GridLayout.GAMES).toInt()
             val position = r.textOrNull(GridLayout.POSITION)
             val team = r.textOrNull(GridLayout.TEAM)
@@ -95,6 +95,18 @@ public class StatsRepository(
         return GridPage(request, columns.toImmutableList(), rows.toImmutableList(), threshold?.description)
     }
 
+    /** Runs the grid query; a database from before Rising roles says to refresh instead of naming a missing table. */
+    private suspend fun <T> queryRows(query: dev.gridiron.core.statquery.SqlQuery, map: (dev.gridiron.core.database.ResultRow) -> T): List<T> = try {
+        executor.query(query, map)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        if (e.message?.contains("player_week_signal") == true) {
+            throw IllegalStateException("Rising roles needs a fresh build: tap Refresh stats.", e)
+        }
+        throw e
+    }
+
     public suspend fun players(ids: Collection<String>): Map<String, PlayerHeader> = executor.playerHeaders(ids)
 
     private fun spec(request: GridRequest, threshold: SampleThreshold?): StatQuerySpec {
@@ -115,6 +127,7 @@ public class StatsRepository(
             teams = request.teams,
             playerIds = request.onlyPlayers.orEmpty(),
             excludedPlayerIds = request.excludePlayers,
+            alwaysShow = request.alwaysShow,
             // Unlike the sample qualifier, these are the user's own choices, so a search keeps them.
             filters = listOfNotNull(snap) + request.filters,
             qualifiers = listOfNotNull(threshold?.qualifier),

@@ -13,7 +13,6 @@ public enum class Position(public val code: String) {
 
     public companion object {
         public val FLEX: Set<Position> = setOf(RB, WR, TE)
-        public val SUPERFLEX: Set<Position> = setOf(QB, RB, WR, TE)
 
         public fun fromCode(code: String): Position? = entries.firstOrNull { it.code == code }
 

@@ -215,6 +215,12 @@ _M: list[Metric] = [
            decimals=1, computed=True),
     Metric("total_epa", "Total EPA", "EPA", "efficiency",
            "Expected points added across all touches.", decimals=2),
+    Metric("rising_roles", "Rising Roles", "RISE", "usage",
+           "How fast a role is growing, 0 to 100, entering the week after the range: usage and expected points over "
+           "the last four games against the eight before, plus teammates who are out. Written by the forecast; "
+           "it says the role is growing, not that points will follow.",
+           positions=("RB", "WR", "TE"), predicts="Whether the role keeps growing over the next four games",
+           decimals=0, computed=True),
 
     # ---------------- Scoring inputs (internal, sparse) ----------------
     *[

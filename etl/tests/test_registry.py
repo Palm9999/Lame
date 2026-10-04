@@ -83,7 +83,7 @@ def test_kicking_and_defense_metrics_are_sparse_theirs_alone_and_visible_where_t
     assert METRICS["yards_allowed"].dist_family == "normal"
     assert not METRICS["yards_allowed"].higher_is_better
     assert not any(mid.startswith("pa_") for mid in METRICS)
-    assert len(METRICS) == 143
+    assert len(METRICS) == 144
 
 
 NGS_VISIBLE = {

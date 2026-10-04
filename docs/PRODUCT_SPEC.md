@@ -116,7 +116,7 @@ GitHub Actions (public repo → unlimited standard-runner minutes)
 
 ## 4. The metrics engine
 
-~450 metrics catalogued in [`research/research-stats-catalog.md`](research/research-stats-catalog.md). Computability tiers: **A** = free from play-by-play, **B** = free auxiliary feed, **C** = proprietary but rebuildable in-house, **D** = licensed. Tier C ships as labelled in-house models ("xFP — my model"). Tier D is now optional rather than excluded, if you subscribe to something.
+~450 metrics catalogued. Computability tiers: **A** = free from play-by-play, **B** = free auxiliary feed, **C** = proprietary but rebuildable in-house, **D** = licensed. Tier C ships as labelled in-house models ("xFP — my model"). Tier D is now optional rather than excluded, if you subscribe to something.
 
 ### 4.1 Architectural principle: scoring is configuration, not columns
 
@@ -153,8 +153,6 @@ Adding a metric becomes a data change, not a migration — and the metadata tabl
 ---
 
 ## 5. Prediction engine
-
-Full methodology with formulas in [`research/research-prediction-models.md`](research/research-prediction-models.md).
 
 **Stance: opportunity-first, market-anchored, regression-heavy, transparent.**
 
@@ -256,7 +254,6 @@ Behind a `LeagueProvider` adapter.
 
 ## 7. Android architecture
 
-Full document with code sketches, mermaid module diagram and a `libs.versions.toml` excerpt in [`research/research-android-architecture.md`](research/research-android-architecture.md).
 
 ### 7.1 Modules
 
@@ -379,15 +376,7 @@ Not compliance — just the things that will break or annoy someone if ignored.
 ## 11. Known gaps
 
 - Reddit was unreachable during research (WebFetch blocked, `.json` API 403). The user-complaint analysis leaned on review aggregators. **This matters far less now** — for a personal tool, you are the user research.
-- The competitive analysis in [`research/research-competitive.md`](research/research-competitive.md) is retained for its feature-gap findings, but its positioning and monetization sections are now moot.
+- The competitive analysis (feature gaps; positioning and monetization are moot) is in git history.
 - Not captured due to paywalls: RotoViz, Establish The Run, Sharp Football pricing.
 
----
-
-## Appendices
-
-- [Data sources, licensing and ingestion](research/research-data-sources.md) — 516 lines, live-tested endpoints
-- [Stat catalog](research/research-stats-catalog.md) — 887 lines, ~450 metrics, 55+ sources
-- [Prediction methodology](research/research-prediction-models.md) — 1,093 lines, formulas, 50 sources
-- [Android architecture](research/research-android-architecture.md) — 1,213 lines, code sketches, module diagram
-- [Competitive analysis](research/research-competitive.md) — 320 lines; feature gaps still useful, positioning now moot
+The research behind this spec (data sources, stat catalog, prediction models, Android architecture, competitive analysis) is in git history: `git log --diff-filter=D -- docs/research`.

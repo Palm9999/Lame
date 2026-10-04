@@ -133,10 +133,13 @@ jobs:
           GRIDIRON_ACCURACY_GATE: "2025"
         run: |
           ./gradlew :core:ingest:buildStatsDb -Pseasons="2024 2025" -Pout=etl/build/accuracy.db
-          rm -f core/data/build/reports/accuracy-gate.txt
-          ./gradlew :core:data:test --tests "dev.gridiron.core.data.AccuracyGateTest"
+          rm -f core/data/build/reports/accuracy-gate.txt core/data/build/reports/breakout-backtest.txt
+          ./gradlew :core:data:test --tests "dev.gridiron.core.data.AccuracyGateTest" --tests "dev.gridiron.core.data.BreakoutBacktestTest" --tests "dev.gridiron.core.data.BreakoutRepositoryTest"
           # A skipped test passes too: only a written table proves the gate ran.
           test -s core/data/build/reports/accuracy-gate.txt || { echo "The accuracy gate was skipped."; exit 1; }
+          test -s core/data/build/reports/breakout-backtest.txt || { echo "The Rising roles backtest was skipped."; exit 1; }
       - name: Accuracy table
         if: always()
-        run: cat core/data/build/reports/accuracy-gate.txt || echo "No accuracy table was written."
+        run: |
+          cat core/data/build/reports/accuracy-gate.txt || echo "No accuracy table was written."
+          cat core/data/build/reports/breakout-backtest.txt || echo "No Rising roles table was written."

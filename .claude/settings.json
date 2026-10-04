@@ -1,3 +1,14 @@
 {
-  "outputStyle": "Concise"
+  "outputStyle": "Concise",
+  "extraKnownMarketplaces": {
+    "ponytail": {
+      "source": { "source": "github", "repo": "Palm9999/ponytail" }
+    }
+  },
+  "enabledPlugins": {
+    "ponytail@ponytail": true
+  },
+  "permissions": {
+    "allow": ["Edit(.claude/settings.json)", "Bash(git add .claude/settings.json)"]
+  }
 }

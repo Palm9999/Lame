@@ -71,6 +71,8 @@ public data class GridRequest(
     val onlyPlayers: Set<String>? = null,
     /** Never these players (the free-agent view: everyone on a league team). Still ranked, unlike [onlyPlayers]. */
     val excludePlayers: Set<String> = emptySet(),
+    /** Players always listed, even below the qualifying bar and unranked there: everyone on one of the user's rosters. */
+    val alwaysShow: Set<String> = emptySet(),
 ) {
     init {
         require(filters.size <= MAX_FILTERS) { "at most $MAX_FILTERS filters, got ${filters.size}" }

@@ -23,6 +23,8 @@ import dev.gridiron.core.model.WeekRange
  *   flattered by comparison with a backup who saw one target.
  * @property includeUnqualified Also return players who miss a qualifier, with
  *   no percentile. For name search, which should find anyone.
+ * @property alwaysShow These players are returned even when they miss a qualifier or [minGames], unranked, like a search
+ *   hit. They never join the ranked population, so they move no one's percentile.
  * @property minGames Population floor, applied before percentiles are computed.
  * @property percentiles Adds a 0..1 positional percentile beside each column, 1 = best.
  * @property ranks Adds each column's place among the ranked players (1 = best, ties share one) and how many were
@@ -47,6 +49,7 @@ public data class StatQuerySpec(
     val filters: List<Filter> = emptyList(),
     val qualifiers: List<Filter> = emptyList(),
     val includeUnqualified: Boolean = false,
+    val alwaysShow: Set<String> = emptySet(),
     val minGames: Int = 1,
     val mode: ValueMode = ValueMode.TOTAL,
     val percentiles: Boolean = false,

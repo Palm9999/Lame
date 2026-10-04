@@ -39,6 +39,60 @@ class StatQueryBuilderTest {
         StatQuerySpec(season = 2025, weeks = weeks, columns = columns.toList())
 
     @Nested
+    inner class RisingRoles {
+        private fun seed() {
+            for (id in listOf("a", "b", "c")) {
+                db.player(id, "Player $id")
+                db.week(id, 1, C.TARGETS to 5)
+                db.week(id, 2, C.TARGETS to 5)
+            }
+            db.signal("a", 3, 80.0)
+            db.signal("b", 3, 40.0)
+            // c has none entering week 3; a also has week 2 and 4 rows that must not be read for a week-3 view.
+            db.signal("a", 2, 10.0)
+            db.signal("a", 4, 99.0)
+        }
+
+        @Test
+        fun `the score is read for the week after the range, and ranks players like any column`() {
+            seed()
+            val rows = db.grid(spec(StatColumn.RISING_ROLES, weeks = WeekRange(1, 2)).copy(percentiles = true)).associateBy { it.playerId }
+            assertEquals(80.0, rows.getValue("a").value(StatColumn.RISING_ROLES)!!, EPS)
+            assertEquals(40.0, rows.getValue("b").value(StatColumn.RISING_ROLES)!!, EPS)
+            assertNull(rows.getValue("c").value(StatColumn.RISING_ROLES))
+            assertEquals(1.0, rows.getValue("a").percentile(StatColumn.RISING_ROLES)!!, EPS)
+        }
+
+        @Test
+        fun `a range reaching past the table's newest week reads the newest`() {
+            seed()
+            val rows = db.grid(spec(StatColumn.RISING_ROLES, weeks = WeekRange(1, 18))).associateBy { it.playerId }
+            assertEquals(99.0, rows.getValue("a").value(StatColumn.RISING_ROLES)!!, EPS)
+            assertNull(rows.getValue("b").value(StatColumn.RISING_ROLES))
+        }
+
+        @Test
+        fun `it sorts and filters, never scales per game, and mixes with stat columns`() {
+            seed()
+            val spec = spec(TARGETS, StatColumn.RISING_ROLES, weeks = WeekRange(1, 2))
+                .copy(mode = ValueMode.PER_GAME, sort = listOf(Sort(StatColumn.RISING_ROLES)), filters = listOf(Filter(StatColumn.RISING_ROLES, Condition.AtLeast(50.0))))
+            val rows = db.grid(spec)
+            assertEquals(listOf("a"), rows.map { it.playerId })
+            assertEquals(80.0, rows.single().value(StatColumn.RISING_ROLES)!!, EPS)
+            assertEquals(5.0, rows.single().value(TARGETS)!!, EPS)
+            assertEquals(1, db.count(spec))
+        }
+
+        @Test
+        fun `a database without the table still serves every other column`() {
+            db.player("a", "Player a")
+            db.week("a", 1, C.TARGETS to 5)
+            db.conn.createStatement().use { it.executeUpdate("DROP TABLE player_week_signal") }
+            assertEquals(5.0, db.grid(spec(TARGETS)).single().value(TARGETS)!!, EPS)
+        }
+    }
+
+    @Nested
     inner class RangeRecomputation {
         @Test
         fun `target share over a range is summed components, not a mean of weekly shares`() {
@@ -574,6 +628,28 @@ class StatQueryBuilderTest {
             assertEquals(5, rows.size)
             assertNull(rows.getValue("b1").percentile(TARGETS))
             assertEquals(0.0, rows.getValue("s1").percentile(TARGETS)!!, EPS)
+        }
+
+        @Test
+        fun `alwaysShow lists a player below the bar, unranked, without moving anyone's percentile`() {
+            seed()
+            val plain = db.grid(spec(TARGETS).copy(qualifiers = qualified, percentiles = true)).associateBy { it.playerId }
+            val rows = db.grid(spec(TARGETS).copy(qualifiers = qualified, alwaysShow = setOf("b1"), percentiles = true)).associateBy { it.playerId }
+
+            assertEquals(plain.keys + "b1", rows.keys)
+            assertNull(rows.getValue("b1").percentile(TARGETS))
+            for ((id, row) in plain) assertEquals(row.percentile(TARGETS), rows.getValue(id).percentile(TARGETS))
+            assertEquals(4, db.count(spec(TARGETS).copy(qualifiers = qualified, alwaysShow = setOf("b1"))))
+        }
+
+        @Test
+        fun `alwaysShow also lets in a player under the games floor, still unranked`() {
+            seed()
+            val base = spec(TARGETS).copy(qualifiers = emptyList(), minGames = 99, percentiles = true)
+            assertEquals(emptyList<String>(), db.grid(base).map { it.playerId })
+            val rows = db.grid(base.copy(alwaysShow = setOf("s1")))
+            assertEquals(listOf("s1"), rows.map { it.playerId })
+            assertNull(rows.single().percentile(TARGETS))
         }
 
         @Test

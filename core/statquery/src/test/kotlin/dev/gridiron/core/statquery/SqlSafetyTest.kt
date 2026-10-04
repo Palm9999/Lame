@@ -50,6 +50,7 @@ class SqlSafetyTest {
             },
             qualifiers = List(nextInt(0, 3)) { Filter(all.random(this), Condition.AtLeast(nextDouble(0.0, 50.0))) },
             includeUnqualified = nextBoolean(),
+            alwaysShow = if (nextBoolean()) setOf(hostile()) else emptySet(),
             minGames = nextInt(0, 10),
             mode = ValueMode.entries.random(this),
             percentiles = nextBoolean(),
