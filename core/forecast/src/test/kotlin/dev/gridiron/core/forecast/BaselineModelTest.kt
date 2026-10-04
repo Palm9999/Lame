@@ -126,4 +126,27 @@ class BaselineModelTest {
         assertEquals(fallback, teamVolume(emptyList(), fallback))
         assertEquals(32.0 / 57, volume.passRate, 1e-12)
     }
+
+    @Test
+    fun `a pass catcher's projection moves part of the way to his games this season`() {
+        val history = listOf(
+            game(2024, 17, "targets" to 20.0),
+            game(2025, 1, "targets" to 4.0, "receiving_tds" to 1.0),
+            game(2025, 2, "targets" to 8.0),
+        )
+        val out = withSeasonForm(mapOf("targets" to 10.0, "receiving_tds" to 0.2), PlayerContext("WR", 2025, 3, history, regimeBreak = false))
+
+        val w = K.SEASON_FORM_WEIGHT
+        assertEquals((1 - w) * 10.0 + w * 6.0, out.getValue("targets"), 1e-12) // last season's game doesn't count
+        assertEquals((1 - w) * 0.2 + w * 0.5, out.getValue("receiving_tds"), 1e-12)
+    }
+
+    @Test
+    fun `a quarterback, or anyone without a game this season, keeps the model's projection`() {
+        val projected = mapOf("attempts" to 30.0)
+        val qb = listOf(game(2025, 1, "attempts" to 40.0))
+        assertEquals(projected, withSeasonForm(projected, PlayerContext("QB", 2025, 2, qb, regimeBreak = false)))
+        val lastSeasonOnly = listOf(game(2024, 17, "targets" to 9.0))
+        assertEquals(mapOf("targets" to 3.0), withSeasonForm(mapOf("targets" to 3.0), PlayerContext("TE", 2025, 1, lastSeasonOnly, regimeBreak = false)))
+    }
 }

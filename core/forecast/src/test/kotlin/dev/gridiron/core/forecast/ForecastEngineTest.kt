@@ -162,8 +162,9 @@ class ForecastEngineTest {
             run(db)
 
             assertEquals(0, weekRows(db, "WR_A", 2025, 3))
-            // AAA's two target-getters split all its targets; with the WR out, the RB has them all.
-            assertEquals(baseWr + baseRb, baselineTargets(db, "RB_A"), 1e-9)
+            // AAA's two target-getters split all its targets; with the WR out, the RB has them all, except the
+            // WR's own season form (layer 2b), which stays his: 9.45 and 9 targets in 2025's two games.
+            assertEquals(baseWr + baseRb - K.SEASON_FORM_WEIGHT * (9 * 1.05 + 9.0) / 2, baselineTargets(db, "RB_A"), 1e-9)
             assertTrue(targets(db, "RB_A", 3) > baseRbWeek3)
             // Week 4 doesn't know about the injury: the RB's rest of season past this week matches a healthy roster's.
             assertEquals(baseRbRos - baseRbWeek3, rosTargets(db, "RB_A") - targets(db, "RB_A", 3), 1e-9)
@@ -433,20 +434,24 @@ class ForecastEngineTest {
     }
 
     @Test
-    fun `a team's players split exactly its targets and carries`() {
+    fun `a team's players split exactly its targets and carries, then each moves toward his season form`() {
         league("a.db").use { db ->
             run(db)
             // AAA is team index 0, so playWeek's k is 1 + 0.05 x week; its 2025 week 2 WR had 9 targets.
             val weeks = listOf(2024 to 1, 2024 to 2, 2024 to 3, 2025 to 1, 2025 to 2)
             val targets = weeks.map { (s, w) -> 4.0 + if (s == 2025 && w == 2) 9.0 else 9 * (1.0 + 0.05 * w) }
             val carries = weeks.map { (_, w) -> 3.0 + 18 * (1.0 + 0.05 * w) }
-            fun baseline(metric: String) = db.query(
+            fun baseline(metric: String, ids: String = "'QB_A', 'RB_A', 'WR_A'") = db.query(
                 "SELECT SUM(mean) FROM player_week_projection WHERE season = 2025 AND week = 3 AND stage = 'baseline' " +
-                    "AND metric_id = '$metric' AND player_id IN ('QB_A', 'RB_A', 'WR_A')",
+                    "AND metric_id = '$metric' AND player_id IN ($ids)",
             ).single()[0]!!.toDouble()
 
-            assertEquals(ewma(targets, 4.0)!!, baseline("targets"), 1e-6)
-            assertEquals(ewma(carries, 4.0)!!, baseline("carries"), 1e-6)
+            // Layer 2b pulls the RB and WR toward their own 2025 games (the QB keeps his: 3 carries a game), so the
+            // team's sum moves toward its 2025 average.
+            val w = K.SEASON_FORM_WEIGHT
+            assertEquals((1 - w) * ewma(targets, 4.0)!! + w * targets.takeLast(2).average(), baseline("targets"), 1e-6)
+            val qb = baseline("carries", "'QB_A'")
+            assertEquals(qb + (1 - w) * (ewma(carries, 4.0)!! - qb) + w * (carries.takeLast(2).average() - 3.0), baseline("carries"), 1e-6)
         }
     }
 

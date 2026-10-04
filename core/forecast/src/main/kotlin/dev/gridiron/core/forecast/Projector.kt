@@ -183,7 +183,7 @@ internal class Projector(
             healthy.kept.map { d ->
                 val id = d.player.playerId
                 Prepared(
-                    d.player, d.team, model.project(d.ctx, d.rates, volume, healthy.shares.getValue(id)), volume.passRate,
+                    d.player, d.team, withSeasonForm(model.project(d.ctx, d.rates, volume, healthy.shares.getValue(id)), d.ctx), volume.passRate,
                     upcoming = projected[id]?.upcoming ?: emptyMap(),
                 )
             }
@@ -250,7 +250,7 @@ internal class Projector(
     }
 
     private fun finish(state: WeekState, d: Draft, shares: Shares, volume: TeamVolume, kind: WeekKind, market: MarketMatch?): Prepared {
-        val prepared = Prepared(d.player, d.team, model.project(d.ctx, d.rates, volume, shares), volume.passRate)
+        val prepared = Prepared(d.player, d.team, withSeasonForm(model.project(d.ctx, d.rates, volume, shares), d.ctx), volume.passRate)
         val game = d.game ?: return prepared
         val (afterMatchup, final) = finalFor(state, prepared, game)
         val cv = K.EMPIRICAL_CV.getValue(d.player.position)
