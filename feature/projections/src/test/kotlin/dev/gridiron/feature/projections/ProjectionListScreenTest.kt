@@ -2,6 +2,7 @@ package dev.gridiron.feature.projections
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -183,5 +184,55 @@ class ProjectionListScreenTest {
             GridironTheme { ProjectionListScreen(ProjectionListState.Unavailable("No upcoming games in 2026."), emptyMap(), onPlayer = {}, onBack = {}) }
         }
         compose.onNodeWithText("No upcoming games in 2026.").assertIsDisplayed()
+    }
+
+    private val tradeState = ProjectionListState.Loaded(
+        week = 4,
+        builtAt = null,
+        weekRows = emptyList(),
+        rosRows = listOf(
+            ProjectionRow("q1", "Mine QB", "QB", "KC", 200.0, 0.0, 0.0),
+            ProjectionRow("r1", "Mine RB One", "RB", "KC", 150.0, 0.0, 0.0),
+            ProjectionRow("r2", "Mine RB Two", "RB", "KC", 140.0, 0.0, 0.0),
+            ProjectionRow("w1", "Mine WR", "WR", "KC", 60.0, 0.0, 0.0),
+            ProjectionRow("q2", "Their QB", "QB", "BUF", 190.0, 0.0, 0.0),
+            ProjectionRow("w2", "Their WR One", "WR", "BUF", 150.0, 0.0, 0.0),
+            ProjectionRow("w3", "Their WR Two", "WR", "BUF", 140.0, 0.0, 0.0),
+            ProjectionRow("r3", "Their RB", "RB", "BUF", 50.0, 0.0, 0.0),
+        ),
+    )
+
+    private fun roster(name: String, vararg ids: String) =
+        MyTeam(name, 2026, ids.map { LeaguePlayer("e$it", "Player $it", "BE", it) }, mapOf("QB" to 1, "RB" to 1, "WR" to 1), slotsAreDefault = false)
+
+    @Test
+    fun `trade weighs ticked players and suggests a trade that helps both`() {
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    tradeState, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = roster("Mine", "q1", "r1", "r2", "w1"),
+                    partners = listOf(roster("Rivals", "q2", "w2", "w3", "r3")),
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:trade").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("give:r2").performClick()
+        compose.onNodeWithTag("get:w3").performClick()
+        compose.onNodeWithTag("trade:verdict").assertTextEquals("Good for both teams")
+        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +80.0 (410.0 → 490.0)")
+        compose.onNodeWithTag("trade:theirs").assertTextEquals("Rivals +90.0 (390.0 → 480.0)")
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("idea:0").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("idea:0").performClick()
+        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +90.0 (410.0 → 500.0)")
+    }
+
+    @Test
+    fun `trade needs your team and another team`() {
+        compose.setContent {
+            GridironTheme { ProjectionListScreen(tradeState, emptyMap(), onPlayer = {}, onBack = {}, myTeam = roster("Mine", "q1")) }
+        }
+        compose.onNodeWithTag("chip:trade").assertDoesNotExist()
     }
 }

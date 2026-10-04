@@ -56,6 +56,12 @@ public data class MyTeam(
     val slotsAreDefault: Boolean,
 )
 
+/** Every team but [teamId], each as a [MyTeam] on the league's slots, for trades; empty when [teamId] isn't in it. */
+public fun FantasyLeague.otherTeams(teamId: Int?): List<MyTeam> {
+    if (teams.none { it.id == teamId }) return emptyList()
+    return teams.filter { it.id != teamId }.mapNotNull { myTeam(it.id) }
+}
+
 /** The user's opponent for a week as a roster on the user's slots; [team] is null when there is none, and [message] says why. */
 public data class OpponentResult(val team: MyTeam?, val message: String?)
 

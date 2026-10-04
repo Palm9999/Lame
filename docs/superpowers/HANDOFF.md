@@ -37,7 +37,11 @@ Built and merged or pushed to the branch: the projection engine (K and D/ST incl
 
 **Win chance in My lineup** (2026-10-04): the lineup shows "Likely low–high" (the total's 10th-90th percentile) and the opponent line adds "N% to win". Each starter's SD is his calibrated floor-ceiling width over 2.563 (a normal's 10th-90th span); starters are combined as independent and the two totals compared as normals (`winChance` in `LineupView.kt`). Not backtested (no historical lineups); it ignores QB-receiver stacking and in-game locks.
 
+**Trade analyzer** (2026-10-04): Projections → Trade (needs a synced league with your team chosen). Pick a league team, tick players each way; each side's value is its best lineup on the league's slots with every player at his rest-of-season points under the active profile (`Trades.evaluate`). "Suggested trades" (`Trades.ideas`) tries 1-for-1, 2-for-1 and 1-for-2 among each roster's 12 best and keeps those lifting both lineups by 2+ points, your gain first, two per team, eight in all (about 340 ms for a 12-team league on the JVM, run off the main thread). Other teams come from `FantasyLeagueRepository.otherTeams`.
+
 **Next:** where the QB +0.3-0.4 bias comes from (not `QB_SPREAD`; try `ESPN_WEIGHT` or the efficiency layer) and the TE -1.0 bias. Later leads: where the QB +0.4 bias comes from (not `QB_SPREAD`; try `ESPN_WEIGHT` or the efficiency layer), `MARKET_VARIANCE_RATIO` against the blend, routes run if nflverse publishes participation for recent seasons.
+
+**Deferred minors (trades):** starters only, so bench depth, byes and roster limits don't count (a 2-for-1 ignores who the receiver drops); a player with no rest-of-season projection (IR, or not active) counts as nothing, so stashes are undervalued; two teams with the same name collide; ideas never offer 2-for-2; the phone's search time isn't measured.
 
 **Deferred minors (returning players):** a returning QB still waits for nflverse's listed starter (the upcoming week falls back to the latest listed starter, often his backup); a player ESPN doesn't rank among its 700 most-owned can't return this way; ESPN's 3-5 point band plays only about 62-84%, so some returnees are projected for a game they miss.
 
@@ -75,6 +79,7 @@ Built and merged or pushed to the branch: the projection engine (K and D/ST incl
 
 ## Open checks on the phone (non-blocking)
 
+- **Trade:** ☰ → Projections → Trade: suggested trades should read sensibly (you send surplus at a deep position for help at a thin one), and ticking players should move both lineup totals. Report how long "Looking for trades…" shows and any suggestion that looks absurd.
 - **Win chance:** ☰ → Projections → My lineup with a synced league: under the total, "Likely a–b" should span roughly ±20% of it; the opponent line should end in "N% to win", near 50% for a close matchup. Report a number that looks off against ESPN's own win probability.
 - **Returning players:** after the first refresh (forecast v12 re-projects everything), a player back from injury whom ESPN projects should show on Projections and the Grid's projection columns the week he returns, not a week later. Report a returnee missing, or a player shown who is still on IR.
 

@@ -92,6 +92,12 @@ public class FantasyLeagueRepository(
         emitAll(combine(league, config) { l, c -> if (l != null && c != null && c.leagueId == l.leagueId) l.myTeam(c.teamId) else null })
     }.distinctUntilChanged()
 
+    /** The active league's other teams, for trades; empty with no league or no team chosen. */
+    public val otherTeams: Flow<List<MyTeam>> = flow {
+        load()
+        emitAll(combine(league, config) { l, c -> if (l != null && c != null && c.leagueId == l.leagueId) l.otherTeams(c.teamId) else emptyList() })
+    }.distinctUntilChanged()
+
     /** Who is on a league team, from the saved snapshot (read from disk on first collect); null with no league synced. */
     public val rostered: Flow<LeagueRostered?> = flow {
         load()

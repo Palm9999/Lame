@@ -256,6 +256,26 @@ class FantasyLeagueTest {
     }
 
     @Test
+    fun `other teams are every team but mine, on the league's slots`() = runTest {
+        fun t(id: Int) = LeagueTeam(id, "T$id", null, 0, 0, 0, 0.0, 0.0, id, listOf(LeaguePlayer("$id", "n$id", "BE", "P$id")))
+        val league = FantasyLeague("42", "L", 2026, 4, listOf(t(1), t(2), t(3)), 77L, lineupSlots = mapOf("QB" to 1, "RB" to 2))
+        val others = league.otherTeams(2)
+        assertEquals(listOf("T1", "T3"), others.map { it.teamName })
+        assertEquals(mapOf("QB" to 1, "RB" to 2), others.first().slots)
+        assertFalse(others.first().slotsAreDefault)
+        assertEquals(emptyList<MyTeam>(), league.otherTeams(9))
+        assertEquals(emptyList<MyTeam>(), league.otherTeams(null))
+
+        val prefs = FakePrefsSource()
+        val repo = repo(prefs) { _, _ -> body }
+        assertEquals(emptyList<MyTeam>(), repo.otherTeams.first())
+        repo.configure("42", null, null)
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+        assertTrue(repo.otherTeams.first().none { it.teamName == "Mine" })
+    }
+
+    @Test
     fun `matchups sends the cookies and the week, and an unmatched player has no app points`() = runTest {
         val prefs = FakePrefsSource()
         var seen: Pair<String, Map<String, String>>? = null

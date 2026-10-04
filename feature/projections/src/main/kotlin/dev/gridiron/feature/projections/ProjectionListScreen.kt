@@ -75,6 +75,8 @@ public fun ProjectionListRoute(
     setLeague: suspend (String) -> Unit = {},
     /** Who moves up because a starter is hurt this week; asked when My lineup opens, to mark the pickups. */
     opportunities: suspend (season: Int, profile: ScoringProfile) -> OpportunitiesResult = { _, _ -> OpportunitiesResult(emptyList(), 0, null) },
+    /** The league's other teams, for Trade; empty hides the mode. */
+    otherTeams: Flow<List<MyTeam>> = flowOf(emptyList()),
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -85,6 +87,7 @@ public fun ProjectionListRoute(
     val team by myTeam.collectAsStateWithLifecycle(initialValue = null)
     val taken by leagueRostered.collectAsStateWithLifecycle(initialValue = null)
     val choices by leagues.collectAsStateWithLifecycle(initialValue = emptyList())
+    val others by otherTeams.collectAsStateWithLifecycle(initialValue = emptyList())
     var rival by remember { mutableStateOf<OpponentState>(OpponentState.Idle) }
     var movingUp by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     val scope = rememberCoroutineScope()
@@ -94,6 +97,7 @@ public fun ProjectionListRoute(
         starterOut = movingUp,
         leagues = choices,
         onLeague = { id -> scope.launch { setLeague(id) } },
+        partners = others.filter { it.season == season },
         onLineupOpened = {
             profile?.let { p ->
                 scope.launch {
@@ -119,7 +123,7 @@ public fun ProjectionListRoute(
     )
 }
 
-private enum class ListMode { WEEK, ROS, LINEUP }
+private enum class ListMode { WEEK, ROS, LINEUP, TRADE }
 
 @Composable
 public fun ProjectionListScreen(
@@ -138,10 +142,17 @@ public fun ProjectionListScreen(
     /** The user's ESPN leagues: with two or more, a chip each switches the league My lineup follows. */
     leagues: List<LeagueChoice> = emptyList(),
     onLeague: (String) -> Unit = {},
+    /** The league's other teams: with your team known, a Trade mode weighs trades with them. */
+    partners: List<MyTeam> = emptyList(),
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
-    val mode = if (chosen == ListMode.LINEUP && myTeam == null) ListMode.WEEK else chosen
+    val canTrade = myTeam != null && partners.isNotEmpty()
+    val mode = when {
+        chosen == ListMode.LINEUP && myTeam == null -> ListMode.WEEK
+        chosen == ListMode.TRADE && !canTrade -> ListMode.WEEK
+        else -> chosen
+    }
     LaunchedEffect(mode, myTeam?.teamName) { if (mode == ListMode.LINEUP) onLineupOpened() }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -168,7 +179,7 @@ public fun ProjectionListScreen(
                             }
                         }
                     }
-                    Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(selected = mode == ListMode.WEEK, onClick = { chosen = ListMode.WEEK }, label = { Text("Week ${state.week}") })
                         FilterChip(selected = mode == ListMode.ROS, onClick = { chosen = ListMode.ROS }, label = { Text("Rest of season") })
                         if (myTeam != null) {
@@ -179,8 +190,18 @@ public fun ProjectionListScreen(
                                 modifier = Modifier.testTag("chip:lineup"),
                             )
                         }
+                        if (canTrade) {
+                            FilterChip(
+                                selected = mode == ListMode.TRADE,
+                                onClick = { chosen = ListMode.TRADE },
+                                label = { Text("Trade") },
+                                modifier = Modifier.testTag("chip:trade"),
+                            )
+                        }
                     }
-                    if (mode == ListMode.LINEUP && myTeam != null) {
+                    if (mode == ListMode.TRADE && myTeam != null) {
+                        TradeView(myTeam, partners, state.rosRows)
+                    } else if (mode == ListMode.LINEUP && myTeam != null) {
                         val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, state.weekRows, badges) }
                         val pickups = if (rostered == null) null else remember(myTeam, state, badges, rostered, starterOut) { waiverPickups(myTeam, state.weekRows, badges, rostered, starterOut) }
                         LineupList(lineupView(myTeam, state.week, state.weekRows, badges), rival, opponent, pickups, badges, onPlayer)
