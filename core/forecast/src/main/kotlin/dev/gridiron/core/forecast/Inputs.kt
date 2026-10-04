@@ -99,6 +99,7 @@ private val READ_METRICS = listOf(
     "passing_tds_40", "passing_tds_50", "rushing_tds_40", "rushing_tds_50", "receiving_tds_40", "receiving_tds_50",
     "x_passing_tds", "x_rushing_tds", "x_receiving_tds",
     "x_receptions", "x_receiving_yards", "x_rushing_yards",
+    "offense_snaps", "team_offense_snaps",
 )
 
 private val UNIT_METRICS = listOf(

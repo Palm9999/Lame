@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 9
+public const val FORECAST_VERSION: Int = 10
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -25,6 +25,12 @@ internal object K {
     // ±0.019); a QB blend gained nothing. 0.25 gained more in 2024 but no more in 2025, and pulls a rising
     // player harder toward his early, smaller games.
     const val SEASON_FORM_WEIGHT = 0.15
+
+    // Layer 2 amendment: an RB, WR or TE's target and carry shares move this far toward what his snap share over
+    // his last SNAP_GAMES games implies (the position's share per unit of snap share). Fitted on 2022-2023 and on
+    // 2024-2025 separately: 0.20-0.30 for targets and carries in both.
+    const val SNAP_SHARE_WEIGHT = 0.25
+    const val SNAP_GAMES = 3
 
     // Layer 2c: a starting QB's baseline keeps this share of its distance from the league's typical starter.
     // Fitted leaving one season out on 2022-2025 (built from 2021): 0.60-0.65 in every fold.

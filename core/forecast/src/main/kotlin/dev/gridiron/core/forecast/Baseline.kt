@@ -89,7 +89,13 @@ internal class BaselineModel(
         val carry = share(ctx, rates.carryShare * K.NEWCOMER_SHARE_FACTOR, { it["carries"] }, { it.carries })
         if (ctx.position != "QB") {
             val target = share(ctx, rates.targetShare * K.NEWCOMER_SHARE_FACTOR, { it["targets"] }, { it.targets })
-            return Shares(pass = 0.0, target = target, carry = carry)
+            val snaps = recentSnapShare(ctx) ?: return Shares(pass = 0.0, target = target, carry = carry)
+            val w = K.SNAP_SHARE_WEIGHT
+            return Shares(
+                pass = 0.0,
+                target = (1 - w) * target + w * snaps * rates.targetsPerSnapShare,
+                carry = (1 - w) * carry + w * snaps * rates.carriesPerSnapShare,
+            )
         }
         // A starter is shrunk toward a starter's share, never toward his own backup history.
         val pass = if (starter) share(ctx, K.STARTER_PASS_SHARE, { it["attempts"] }, { it.passAttempts }, usePrior = false) else 0.0
@@ -162,6 +168,16 @@ internal class BaselineModel(
         val current = series(ctx.history.filter { it.season == ctx.season })
         val prior = if (!usePrior || ctx.regimeBreak) null else ewma(series(ctx.history.filter { it.season == ctx.season - 1 }), K.SHARE_HALF_LIFE)
         return shrink(ewma(current, K.SHARE_HALF_LIFE), current.size.toDouble(), prior ?: fallback, K.SHARE_K_GAMES)
+    }
+
+    /**
+     * Layer 2 amendment: his share of the team's offensive snaps over his last [K.SNAP_GAMES] games this season,
+     * or null with fewer than two. Snaps lead targets and carries: a player on the field more gets more of both.
+     */
+    private fun recentSnapShare(ctx: PlayerContext): Double? {
+        val games = ctx.history.filter { it.season == ctx.season && it["team_offense_snaps"] > 0.0 }.takeLast(K.SNAP_GAMES)
+        if (games.size < 2) return null
+        return games.sumOf { it["offense_snaps"] } / games.sumOf { it["team_offense_snaps"] }
     }
 
     /** Layer 3: a rate over every earlier game (half-life 10), shrunk toward the position's with k = 15 games. */

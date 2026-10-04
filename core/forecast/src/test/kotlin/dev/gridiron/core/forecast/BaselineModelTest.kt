@@ -162,4 +162,28 @@ class BaselineModelTest {
         val wr = mapOf("targets" to 9.0)
         assertEquals(wr, withQbSpread(wr, PlayerContext("WR", 2025, 3, emptyList(), regimeBreak = false), typical))
     }
+
+    @Test
+    fun `a pass catcher's share moves toward what his recent snap share implies`() {
+        // League: WRs take 10% of targets on 50% of snaps, so a snap share implies a fifth of it in targets.
+        val snapRates = Rates(
+            mapOf(
+                "targets" to 10.0, "team_targets" to 100.0, "carries" to 1.0, "team_carries" to 100.0,
+                "offense_snaps" to 50.0, "team_offense_snaps" to 100.0,
+            ),
+        )
+        val history = listOf(
+            game(2025, 1, "targets" to 3.0, "offense_snaps" to 60.0, "team_offense_snaps" to 60.0),
+            game(2025, 2, "targets" to 3.0, "offense_snaps" to 60.0, "team_offense_snaps" to 60.0),
+        )
+        val ctx = PlayerContext("WR", 2025, 3, history, regimeBreak = false)
+        val m = model()
+        val plain = m.share(ctx, snapRates.targetShare * 0.5, { it["targets"] }, { it.targets })
+        val w = K.SNAP_SHARE_WEIGHT
+
+        assertEquals((1 - w) * plain + w * 1.0 * 0.2, m.shares(ctx, snapRates, starter = false).target, 1e-12)
+        // One game of snaps isn't enough: the share stays as it was.
+        val one = PlayerContext("WR", 2025, 2, history.take(1), regimeBreak = false)
+        assertEquals(m.share(one, snapRates.targetShare * 0.5, { it["targets"] }, { it.targets }), m.shares(one, snapRates, starter = false).target, 1e-12)
+    }
 }
