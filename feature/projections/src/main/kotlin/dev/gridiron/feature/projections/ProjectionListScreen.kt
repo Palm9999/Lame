@@ -45,6 +45,7 @@ import dev.gridiron.core.data.live.LeagueChoice
 import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.OpponentResult
+import dev.gridiron.core.data.live.PlayoffPictureResult
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import kotlinx.coroutines.CancellationException
@@ -82,6 +83,8 @@ public fun ProjectionListRoute(
     now: () -> Long = System::currentTimeMillis,
     /** NFL teams whose game this week has kicked off, asked when My lineup opens; their players are locked. */
     startedTeams: suspend (season: Int, week: Int) -> Set<String> = { _, _ -> emptySet() },
+    /** The league and its games left, asked when Playoff odds opens. */
+    playoffPicture: suspend (season: Int, week: Int) -> PlayoffPictureResult = { _, _ -> PlayoffPictureResult(null, "not available") },
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -96,6 +99,7 @@ public fun ProjectionListRoute(
     var rival by remember { mutableStateOf<OpponentState>(OpponentState.Idle) }
     var movingUp by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var locked by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var playoffs by remember { mutableStateOf<PlayoffState>(PlayoffState.Idle) }
     val scope = rememberCoroutineScope()
     ProjectionListScreen(
         state, injuries, onPlayer, onBack, team?.takeIf { it.season == season }, rival,
@@ -105,6 +109,23 @@ public fun ProjectionListRoute(
         onLeague = { id -> scope.launch { setLeague(id) } },
         partners = others.filter { it.season == season },
         started = locked,
+        playoffs = playoffs,
+        onPlayoffsOpened = {
+            val week = (state as? ProjectionListState.Loaded)?.week
+            if (week != null && playoffs != PlayoffState.Loading) {
+                playoffs = PlayoffState.Loading
+                scope.launch {
+                    val result = try {
+                        playoffPicture(season, week)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        PlayoffPictureResult(null, "couldn't read the schedule")
+                    }
+                    playoffs = result.picture?.let(PlayoffState::Loaded) ?: PlayoffState.Unavailable(result.message ?: "no schedule")
+                }
+            }
+        },
         onLineupOpened = {
             (state as? ProjectionListState.Loaded)?.week?.let { week ->
                 scope.launch {
@@ -153,7 +174,7 @@ public fun ProjectionListRoute(
     )
 }
 
-private enum class ListMode { WEEK, ROS, LINEUP, TRADE, START_SIT }
+private enum class ListMode { WEEK, ROS, LINEUP, TRADE, START_SIT, PLAYOFFS }
 
 /** My lineup re-syncs the league when its snapshot is older than this: lineups, waivers and trades move during the week. */
 internal const val LEAGUE_STALE_MILLIS: Long = 30 * 60 * 1000L
@@ -179,16 +200,22 @@ public fun ProjectionListScreen(
     partners: List<MyTeam> = emptyList(),
     /** NFL teams whose game this week has started: My lineup keeps their players where ESPN has them. */
     started: Set<String> = emptySet(),
+    playoffs: PlayoffState = PlayoffState.Idle,
+    /** Playoff odds was opened: the route reads the league's schedule. */
+    onPlayoffsOpened: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
     val canTrade = myTeam != null && partners.isNotEmpty()
     val mode = when {
         chosen == ListMode.LINEUP && myTeam == null -> ListMode.WEEK
-        chosen == ListMode.TRADE && !canTrade -> ListMode.WEEK
+        (chosen == ListMode.TRADE || chosen == ListMode.PLAYOFFS) && !canTrade -> ListMode.WEEK
         else -> chosen
     }
-    LaunchedEffect(mode, myTeam?.teamName) { if (mode == ListMode.LINEUP) onLineupOpened() }
+    LaunchedEffect(mode, myTeam?.teamName) {
+        if (mode == ListMode.LINEUP) onLineupOpened()
+        if (mode == ListMode.PLAYOFFS) onPlayoffsOpened()
+    }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -238,10 +265,18 @@ public fun ProjectionListScreen(
                                 label = { Text("Trade") },
                                 modifier = Modifier.testTag("chip:trade"),
                             )
+                            FilterChip(
+                                selected = mode == ListMode.PLAYOFFS,
+                                onClick = { chosen = ListMode.PLAYOFFS },
+                                label = { Text("Playoff odds") },
+                                modifier = Modifier.testTag("chip:playoffs"),
+                            )
                         }
                     }
                     if (mode == ListMode.START_SIT) {
                         StartSitView(state.weekRows, badges)
+                    } else if (mode == ListMode.PLAYOFFS) {
+                        PlayoffsView(playoffs, state.rosRows, state.rosWeekly)
                     } else if (mode == ListMode.TRADE && myTeam != null) {
                         TradeView(myTeam, partners, state.rosRows, state.rosWeekly)
                     } else if (mode == ListMode.LINEUP && myTeam != null) {

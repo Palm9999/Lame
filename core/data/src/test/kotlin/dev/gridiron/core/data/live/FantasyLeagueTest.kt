@@ -355,6 +355,33 @@ class FantasyLeagueTest {
     }
 
     @Test
+    fun `the schedule lists every period's games, decided once ESPN names a winner`() {
+        val body = matchupBody.replace("\"id\":1,\"matchupPeriodId\":3,", "\"id\":1,\"matchupPeriodId\":3,\"winner\":\"HOME\",")
+            .replace("\"id\":2,\"matchupPeriodId\":4,", "\"id\":2,\"matchupPeriodId\":4,\"winner\":\"UNDECIDED\",")
+        assertEquals(
+            listOf(ScheduledGame(3, 1, 2, true), ScheduledGame(4, 2, 1, false), ScheduledGame(4, 3, null, false)),
+            EspnFantasyParser.schedule(body),
+        )
+        assertThrows<LiveFormatException> { EspnFantasyParser.schedule("{}") }
+    }
+
+    @Test
+    fun `the playoff picture keeps the undecided regular-season games, and says why when there is none`() = runTest {
+        val prefs = FakePrefsSource()
+        val scheduled = matchupBody.replace("\"id\":1,\"matchupPeriodId\":3,", "\"id\":1,\"matchupPeriodId\":3,\"winner\":\"AWAY\",")
+        val repo = repo(prefs) { url, _ -> if ("view=mMatchup" in url) scheduled else body }
+        assertEquals("no league id set", repo.playoffPicture(2026, 4).message)
+        repo.configure("42", null, null)
+        assertEquals("sync your league first", repo.playoffPicture(2026, 4).message)
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+        val picture = checkNotNull(repo.playoffPicture(2026, 4).picture)
+        assertEquals(2, picture.myTeamId)
+        // Period 3 is decided and period 4's other entry is a bye: one game left.
+        assertEquals(listOf(ScheduledGame(4, 2, 1, false)), picture.remaining)
+    }
+
+    @Test
     fun `a bye, a missing matchup and a missing sync each say so`() = runTest {
         val prefs = FakePrefsSource()
         val repo = repo(prefs) { url, _ -> if ("view=mMatchup" in url) matchupBody else body }

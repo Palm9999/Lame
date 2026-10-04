@@ -235,6 +235,33 @@ public class FantasyLeagueRepository(
     }
 
     /**
+     * What playoff odds need: the active league as last synced, the user's team id, and the regular-season games ESPN
+     * hasn't decided yet (read from the matchups of [week], whose `schedule` lists the whole season). Never throws:
+     * [PlayoffPictureResult.message] says why there is none.
+     */
+    public suspend fun playoffPicture(season: Int, week: Int): PlayoffPictureResult {
+        load()
+        val cfg = prefs.prefs.first().espnLeague ?: return PlayoffPictureResult(null, "no league id set")
+        val league = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
+            ?: return PlayoffPictureResult(null, "sync your league first")
+        return try {
+            val games = EspnFantasyParser.schedule(http.get(EspnFantasyParser.matchupsUrl(cfg.leagueId, season, week), headers(cfg)))
+            // Playoff rounds aren't regular-season games; without the league's playoff weeks every game counts.
+            val lastRegular = league.playoffWeeks.firstOrNull()?.let { (it - 1) / league.periodWeeks }
+            val remaining = games.filter { !it.decided && it.awayId != null && (lastRegular == null || it.period <= lastRegular) }
+            PlayoffPictureResult(PlayoffPicture(league, cfg.teamId, remaining), null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: LiveFormatException) {
+            PlayoffPictureResult(null, e.message ?: "ESPN changed its matchup format")
+        } catch (e: IOException) {
+            PlayoffPictureResult(null, friendly(e.message))
+        } catch (e: Exception) {
+            PlayoffPictureResult(null, "couldn't read the schedule")
+        }
+    }
+
+    /**
      * The user's opponent in [week], from ESPN's schedule, with the roster from the last sync and the user's slots, so
      * the same lineup picker can rate both. Never throws: [OpponentResult.message] says why there is no opponent.
      */

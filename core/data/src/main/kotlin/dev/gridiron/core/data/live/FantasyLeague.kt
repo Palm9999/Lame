@@ -49,7 +49,20 @@ public data class FantasyLeague(
     val playoffWeeks: List<Int> = emptyList(),
     /** Each team's FAAB budget for the season; null when the league doesn't bid (or the snapshot predates it). */
     val faabBudget: Int? = null,
+    /** How many teams make the playoffs; null when the snapshot has no schedule settings. */
+    val playoffTeams: Int? = null,
+    /** NFL weeks per regular-season matchup (ESPN's `matchupPeriodLength`, almost always one). */
+    val periodWeeks: Int = 1,
 )
+
+/** The league, the user's team id (null when none is chosen) and the regular-season games still to play. */
+public data class PlayoffPicture(val league: FantasyLeague, val myTeamId: Int?, val remaining: List<ScheduledGame>)
+
+/** [picture], or null with [message] saying why. */
+public data class PlayoffPictureResult(val picture: PlayoffPicture?, val message: String?)
+
+/** One head-to-head on ESPN's schedule: matchup period [period]; [awayId] null for a bye; [decided] once ESPN names a winner. */
+public data class ScheduledGame(val period: Int, val homeId: Int, val awayId: Int?, val decided: Boolean)
 
 /** NFL weeks 15-17: most leagues' playoffs, used when the league's own aren't known. */
 public val DEFAULT_PLAYOFF_WEEKS: List<Int> = listOf(15, 16, 17)
@@ -190,6 +203,8 @@ internal object EspnFantasyParser {
             fetchedAtMillis = fetchedAtMillis,
             lineupSlots = lineupSlots(root.obj("settings")?.obj("rosterSettings")?.obj("lineupSlotCounts")),
             playoffWeeks = playoffWeeks(root.obj("settings")?.obj("scheduleSettings")),
+            playoffTeams = root.obj("settings")?.obj("scheduleSettings")?.int("playoffTeamCount")?.takeIf { it > 0 },
+            periodWeeks = root.obj("settings")?.obj("scheduleSettings")?.int("matchupPeriodLength")?.takeIf { it > 0 } ?: 1,
             faabBudget = root.obj("settings")?.obj("acquisitionSettings")
                 ?.takeIf { (it["isUsingAcquisitionBudget"] as? JsonPrimitive)?.booleanOrNull == true }
                 ?.int("acquisitionBudget")?.takeIf { it > 0 },
@@ -245,6 +260,27 @@ internal object EspnFantasyParser {
         if (parsed.isEmpty() && ofWeek.isNotEmpty()) throw LiveFormatException("ESPN changed its matchup format (no matchup could be read)")
         return parsed
     }
+
+    /**
+     * Every head-to-head on a `mMatchup` response's `schedule`, whatever its period: a game is [ScheduledGame.decided]
+     * once its `winner` is HOME, AWAY or TIE (ESPN says UNDECIDED until then). No schedule is a format error.
+     */
+    fun schedule(text: String): List<ScheduledGame> {
+        val root = try {
+            Json.parseToJsonElement(text) as? JsonObject
+        } catch (_: SerializationException) {
+            null
+        } ?: throw LiveFormatException("ESPN sent something that isn't league JSON")
+        val items = root.array("schedule")?.mapNotNull { it as? JsonObject }
+            ?: throw LiveFormatException("ESPN changed its matchup format (no schedule)")
+        return items.mapNotNull { m ->
+            val period = m.int("matchupPeriodId") ?: return@mapNotNull null
+            val home = m.obj("home")?.int("teamId") ?: return@mapNotNull null
+            ScheduledGame(period, home, m.obj("away")?.int("teamId"), m.string("winner") in DECIDED)
+        }
+    }
+
+    private val DECIDED = setOf("HOME", "AWAY", "TIE")
 
     private fun side(s: JsonObject): MatchupSide? {
         val teamId = s.int("teamId") ?: return null
@@ -308,6 +344,8 @@ internal fun FantasyLeague.toJson(): String = buildJsonObject {
     put("lineupSlots", buildJsonObject { lineupSlots.forEach { (slot, n) -> put(slot, n) } })
     put("playoffWeeks", buildJsonArray { playoffWeeks.forEach { add(JsonPrimitive(it)) } })
     faabBudget?.let { put("faabBudget", it) }
+    playoffTeams?.let { put("playoffTeams", it) }
+    put("periodWeeks", periodWeeks)
     put(
         "teams",
         buildJsonArray {
@@ -359,6 +397,8 @@ internal fun fantasyLeagueFromJson(text: String): FantasyLeague? = try {
         lineupSlots = o.obj("lineupSlots")?.entries.orEmpty().mapNotNull { (slot, n) -> (n as? JsonPrimitive)?.intOrNull?.let { slot to it } }.toMap(),
         playoffWeeks = o.array("playoffWeeks").orEmpty().mapNotNull { (it as? JsonPrimitive)?.intOrNull },
         faabBudget = o.int("faabBudget"),
+        playoffTeams = o.int("playoffTeams"),
+        periodWeeks = o.int("periodWeeks") ?: 1,
         teams = o.array("teams")!!.map { e ->
             val t = e as JsonObject
             LeagueTeam(

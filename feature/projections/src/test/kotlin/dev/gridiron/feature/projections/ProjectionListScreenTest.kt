@@ -10,8 +10,12 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
+import dev.gridiron.core.data.live.FantasyLeague
 import dev.gridiron.core.data.live.LeaguePlayer
+import dev.gridiron.core.data.live.LeagueTeam
 import dev.gridiron.core.data.live.MyTeam
+import dev.gridiron.core.data.live.PlayoffPicture
+import dev.gridiron.core.data.live.ScheduledGame
 import dev.gridiron.core.designsystem.GridironTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -295,6 +299,36 @@ class ProjectionListScreenTest {
         compose.onNodeWithTag("get:w3").performClick()
         compose.onNodeWithTag("trade:playoffs").assertTextEquals("Playoffs (weeks 15–17): you +66.0, them +82.0")
         compose.onNodeWithText("Rivals cuts Their RB to make room.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `playoff odds simulate the games left from each roster's weekly projections`() {
+        // Mine (3-0) is far stronger than Rivals (0-3); one game left between them, and two teams make it.
+        fun team(id: Int, name: String, w: Int, l: Int, vararg ids: String) =
+            LeagueTeam(id, name, null, w, l, 0, 300.0, 300.0, 0, ids.map { LeaguePlayer("e$it", "Player $it", "BE", it) })
+        val league = FantasyLeague(
+            "42", "Sunday League", 2026, 4,
+            listOf(team(1, "Mine", 3, 0, "q1", "r1", "w1"), team(2, "Rivals", 0, 3, "q2", "r3", "w2")),
+            lineupSlots = mapOf("QB" to 1, "RB" to 1, "WR" to 1), playoffTeams = 1,
+        )
+        val picture = PlayoffPicture(league, 1, listOf(ScheduledGame(5, 1, 2, false)))
+        val weekly = tradeState.copy(rosWeekly = tradeState.rosRows.associate { it.playerId to mapOf(5 to it.points / 10) })
+        var asked = 0
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    weekly, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = roster("Mine", "q1", "r1", "w1"), partners = listOf(roster("Rivals", "q2", "r3", "w2")),
+                    playoffs = PlayoffState.Loaded(picture), onPlayoffsOpened = { asked++ },
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:playoffs").performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("odds:chance:1", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(1, asked)
+        compose.onNodeWithTag("odds:chance:1", useUnmergedTree = true).assertTextEquals("100%")
+        compose.onNodeWithTag("odds:chance:2", useUnmergedTree = true).assertTextEquals("0%")
+        compose.onNodeWithText("Mine (you)", useUnmergedTree = true).assertExists()
     }
 
     @Test
