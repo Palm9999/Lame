@@ -93,10 +93,13 @@ internal fun TradeView(
     var get by rememberSaveable { mutableStateOf(listOf<String>()) }
     val theirs = others.getValue(partner.teamName)
 
+    var searchMillis by remember { mutableStateOf<Long?>(null) }
     val ideas by produceState<List<TradeIdea>?>(null, myTeam, others) {
+        val started = System.nanoTime()
         value = withContext(Dispatchers.Default) {
             Trades.ideas(myTeam.slots, candidates(mine), others.map { (name, players) -> name to candidates(players) })
         }
+        searchMillis = (System.nanoTime() - started) / 1_000_000
     }
     val outcome = remember(give, get, partner, mine, theirs) {
         if (give.isEmpty() && get.isEmpty()) null else Trades.evaluate(myTeam.slots, candidates(mine), candidates(theirs), give.toSet(), get.toSet())
@@ -181,6 +184,7 @@ internal fun TradeView(
                 }
             }
         }
+        searchMillis?.let { ms -> item { Note("Searched every team in ${String.format(Locale.US, "%.1f", ms / 1000.0)} s.") } }
         item { Label("You send") }
         itemsIndexed(mine, key = { _, p -> "give:${p.playerId}" }) { _, p ->
             PickRow(p, p.playerId in give, "give") { on -> give = if (on) give + p.playerId else give - p.playerId }

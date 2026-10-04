@@ -51,7 +51,11 @@ Built and merged or pushed to the branch: the projection engine (K and D/ST incl
 
 **Player page rest of season** (2026-10-04): the This week card adds "12th of 85 rest of season" (his rest-of-season points against every projected player at his position, under the active profile), and a player out for now with rest-of-season points (a stash) gets the card with "Not projected this week" instead of none.
 
-**Next:** robustness pass on the refresh: run a full Kotlin build of 2024-2026 against the live sources and time each stage, then look for the slowest step a phone would feel (the forecast now does more per week). Later leads: debias ESPN's QB passing yards before the blend (it runs 7% high; a per-stat weight didn't help MAE), `MARKET_VARIANCE_RATIO` against the blend.
+**Fresh build check** (2026-10-04): a clean Kotlin build of 2024-2026 from the live sources finished in about 26 s in the container (forecast about 3 s for 54 weeks; 102 MB), warnings only the known ffopportunity and NGS outliers (plus a 2026 week 3 QB whose passing yards differ from ffopportunity's by 80). `etl/build/stats.db` is that build.
+
+**Phone timings shown** (2026-10-04): Trade's suggestions say "Searched every team in N s" and the accuracy page says "Scored with PPR in N s" (the refresh toast already gives its time), so the user can report the phone's speed.
+
+**Next:** with the user's reported phone times in hand, speed up whatever is slow; until then, the next accuracy lead is debiasing ESPN's QB passing yards (7% high) before the blend, measured on the frozen sample. Later leads: debias ESPN's QB passing yards before the blend (it runs 7% high; a per-stat weight didn't help MAE), `MARKET_VARIANCE_RATIO` against the blend.
 
 **Deferred minors (trades):** starters only, so bench depth, byes and roster limits don't count (a 2-for-1 ignores who the receiver drops); a player with no rest-of-season projection (IR, or not active) counts as nothing, so stashes are undervalued; two teams with the same name collide; ideas never offer 2-for-2; the phone's search time isn't measured.
 
@@ -101,7 +105,7 @@ Built and merged or pushed to the branch: the projection engine (K and D/ST incl
 
 - **Player page rest of season:** open a WR1 and a stash on IR: each card should show "Nth of M rest of season", the stash's with "Not projected this week". Report a place that looks wrong.
 - **Start/sit:** ☰ → Projections → Start/sit: tick two WRs with close projections; the chances should be near 50/50, and a clearly better one should be well over. Report a pick that looks backwards.
-- **Trade:** ☰ → Projections → Trade: suggested trades should read sensibly (you send surplus at a deep position for help at a thin one), and ticking players should move both lineup totals. Report how long "Looking for trades…" shows and any suggestion that looks absurd.
+- **Trade:** ☰ → Projections → Trade: suggested trades should read sensibly (you send surplus at a deep position for help at a thin one), and ticking players should move both lineup totals. Report the "Searched every team in N s" time and any suggestion that looks absurd.
 - **ESPN timing:** refresh on a Tuesday and again Saturday or Sunday morning: a player returning from injury, or a QB change, should appear in Projections by the weekend refresh. Report one still missing on Sunday.
 - **Lineup check:** with a starter benched in ESPN who projects higher than one starting, My lineup should say "Start X. Sit Y." and the totals should match; a lineup already optimal should say so. Report a wrong slot reading (a starter treated as bench).
 - **Win chance:** ☰ → Projections → My lineup with a synced league: under the total, "Likely a–b" should span roughly ±20% of it; the opponent line should end in "N% to win", near 50% for a close matchup. Report a number that looks off against ESPN's own win probability.
@@ -129,7 +133,7 @@ Built and merged or pushed to the branch: the projection engine (K and D/ST incl
 - **Odds API shape:** hand-built fixtures, no key in the container. On the first refresh with the user's key (☰ → Settings → Betting props, then Refresh stats), the toast should say "Props moved N projections".
 - **Season stats timing:** open a player with a full season; the section runs up to 20 small queries. Report how long it takes to appear.
 - **Yards allowed:** ☰ → Settings → a profile: the "Yards allowed" tier section edits and saves, and a D/ST's Grid points and Player page log include yards after a refresh (the first refresh rebuilds).
-- **Accuracy page:** ☰ → Projection accuracy, season 2025. Report how long "Scoring every projected week…" shows; the "held" figures should read about 77–84% (K about 87%).
+- **Accuracy page:** ☰ → Projection accuracy, season 2025. Report the "Scored with … in N s" time; the "held" figures should read about 77–84% (K about 87%).
 - **ESPN blend:** the first refresh after this update downloads ESPN's projections for every built season and re-projects all of them (slower once). It should finish with no "ESPN" warning; open a starter's This week card → waterfall: an "espn" step should read "ESPN projects N pts" close to ESPN's own app. Report any ESPN warning and the refresh time.
 
 ## Container notes
