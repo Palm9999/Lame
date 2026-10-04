@@ -9,3 +9,8 @@
     "ponytail@ponytail": true
   }
 }
+{
+  "permissions": {
+    "allow": ["Edit(.claude/settings.json)", "Bash(git add .claude/settings.json)"]
+  }
+}
