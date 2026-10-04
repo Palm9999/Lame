@@ -44,19 +44,29 @@ class LineupAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
         /** How long before kickoff the check runs: after most inactives are known, with time to swap. */
         val LEAD: Duration = Duration.ofMinutes(90)
 
-        /** One check per kickoff window still ahead in [week]; a window already scheduled keeps its check. */
-        fun schedule(context: Context, week: ScoresWeek, now: Instant = Instant.now()) {
+        /**
+         * One check per kickoff window still ahead in [week]. A window already scheduled keeps its check, and one
+         * already checked isn't checked again (the 90 minutes between its check and kickoff); WorkManager keeps
+         * finished work at least a day, which outlasts that.
+         */
+        suspend fun schedule(context: Context, week: ScoresWeek, now: Instant = Instant.now()) {
             val work = WorkManager.getInstance(context)
             for (kickoff in week.games.mapNotNull { it.kickoff }.distinct()) {
-                if (!kickoff.isAfter(now)) continue
+                val known = work.getWorkInfosForUniqueWorkFlow(workName(kickoff)).first().isNotEmpty()
+                if (!needsCheck(kickoff, now, known)) continue
                 val delay = Duration.between(now, kickoff.minus(LEAD)).toMillis().coerceAtLeast(0L)
                 val request = OneTimeWorkRequestBuilder<LineupAlertWorker>()
                     .setInitialDelay(delay, TimeUnit.MILLISECONDS)
                     .setInputData(workDataOf(KICKOFF to kickoff.toEpochMilli()))
                     .build()
-                work.enqueueUniqueWork("lineup-${kickoff.toEpochMilli()}", ExistingWorkPolicy.KEEP, request)
+                work.enqueueUniqueWork(workName(kickoff), ExistingWorkPolicy.KEEP, request)
             }
         }
+
+        private fun workName(kickoff: Instant) = "lineup-${kickoff.toEpochMilli()}"
+
+        /** Whether a window kicking off at [kickoff] needs a check: still ahead, and none scheduled, run or finished ([known]). */
+        internal fun needsCheck(kickoff: Instant, now: Instant, known: Boolean): Boolean = kickoff.isAfter(now) && !known
 
         private fun notify(context: Context, alerts: List<LineupAlert>) {
             if (alerts.isEmpty()) return
