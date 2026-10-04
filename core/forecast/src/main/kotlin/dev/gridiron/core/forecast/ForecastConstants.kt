@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 12
+public const val FORECAST_VERSION: Int = 13
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -51,6 +51,13 @@ internal object K {
     // plays about 87%; it adds 374 played weeks and teammates' PPR MAE falls 0.008 (±0.003). 5 and 8 add fewer
     // and gain less. Treating a player ESPN stops projecting as out was tested and cost 0.019: not used.
     const val RETURN_MIN_ESPN_POINTS = 3.0
+
+    // From the upcoming week on, the starting QB is the one ESPN projects most once it projects him for this many
+    // points, when nflverse lists no starter yet; on 2022-2025's team-weeks that picks the real starter 97% of the
+    // time against 89% for the last listed starter (210 of 231 changes caught). A listed starter ESPN projects under
+    // STARTER_DOUBT_ESPN_POINTS gives way to ESPN's pick. Past weeks always use the listed (actual) starter.
+    const val STARTER_ESPN_POINTS = 8.0
+    const val STARTER_DOUBT_ESPN_POINTS = 3.0
 
     // Layer 3, efficiency (shrinkage.py: half-life 10, catch_rate k = 15 games, int_rate k = 150 attempts).
     const val EFFICIENCY_HALF_LIFE = 10.0

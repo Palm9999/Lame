@@ -252,15 +252,27 @@ internal class Projector(
 
     /**
      * The QB who gets [team]'s passing this week. In order: the starter
-     * nflverse lists for the game; else the most recent listed starter who is
-     * still with the team; else the team's QB with the most attempts in its
-     * latest game. Null when the team has no QB candidate.
+     * nflverse lists for the game (from the upcoming week on, unless ESPN
+     * projects him under [K.STARTER_DOUBT_ESPN_POINTS] while projecting a
+     * teammate for [K.STARTER_ESPN_POINTS] or more); else, from the upcoming
+     * week on, the QB ESPN projects most, at [K.STARTER_ESPN_POINTS] or more;
+     * else the most recent listed starter who is still with the team; else
+     * the team's QB with the most attempts in its latest game. Null when the
+     * team has no QB candidate.
      */
     private fun expectedStarter(team: String, onTeam: List<Draft>, state: WeekState, kind: WeekKind): String? {
         val qbs = onTeam.filter { it.player.position == "QB" }
         if (qbs.isEmpty()) return null
         val ids = qbs.map { it.player.playerId }.toSet()
-        gameOf[Triple(team, state.season, state.week)]?.qbOf(team)?.takeIf { it in ids }?.let { return it }
+        val listed = gameOf[Triple(team, state.season, state.week)]?.qbOf(team)?.takeIf { it in ids }
+        if (kind == WeekKind.PAST) listed?.let { return it }
+        val espnPick = qbs.map { it to espnPoints(it, state) }.filter { it.second >= K.STARTER_ESPN_POINTS }
+            .maxWithOrNull(compareBy<Pair<Draft, Double>> { it.second }.thenBy { it.first.player.playerId })?.first?.player?.playerId
+        if (listed != null) {
+            val doubted = espnPick != null && espnPick != listed && espnPoints(qbs.first { it.player.playerId == listed }, state) < K.STARTER_DOUBT_ESPN_POINTS
+            return if (doubted) espnPick else listed
+        }
+        espnPick?.let { return it }
         inputs.games
             .filter { it.involves(team) && order(it.season, it.week) < state.order }
             .mapNotNull { it.qbOf(team) }

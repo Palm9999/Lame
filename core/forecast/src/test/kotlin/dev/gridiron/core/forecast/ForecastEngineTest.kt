@@ -217,6 +217,29 @@ class ForecastEngineTest {
         }
     }
 
+    @Test
+    fun `from the upcoming week on, the QB ESPN projects most starts, unless nflverse lists one ESPN doesn't doubt`() {
+        fun starts(espnBackup: Double?, listed: String? = null, espnStarter: Double? = null): Pair<Boolean, Boolean> =
+            league("qbe$espnBackup-$listed-$espnStarter.db").use { db ->
+                db.player("QB2_A", "QB", "AAA")
+                db.week("QB2_A", 2025, 2, "AAA", "attempts" to 5.0, "completions" to 3.0, "passing_yards" to 30.0)
+                // Passing yards at 0.04 a yard: 25 per point.
+                espnBackup?.let { db.espn("QB2_A", 2025, 3, "passing_yards" to it * 25) }
+                espnStarter?.let { db.espn("QB_A", 2025, 3, "passing_yards" to it * 25) }
+                listed?.let { db.exec("UPDATE game SET home_qb_id = ? WHERE season = 2025 AND week = 3 AND home_team = 'AAA'", it) }
+                run(db)
+                (weekRows(db, "QB_A", 2025, 3) > 0) to (weekRows(db, "QB2_A", 2025, 3) > 0)
+            }
+        // No listing: the usual starter, unless ESPN projects the other QB for enough points.
+        assertEquals(true to false, starts(espnBackup = null))
+        assertEquals(true to false, starts(espnBackup = K.STARTER_ESPN_POINTS - 1))
+        assertEquals(false to true, starts(espnBackup = K.STARTER_ESPN_POINTS + 4))
+        // Listed: he starts unless ESPN all but rules him out.
+        assertEquals(false to true, starts(espnBackup = 12.0, listed = "QB_A"))
+        assertEquals(true to false, starts(espnBackup = 12.0, listed = "QB_A", espnStarter = K.STARTER_DOUBT_ESPN_POINTS + 1))
+        assertEquals(false to true, starts(espnBackup = null, listed = "QB2_A"))
+    }
+
     private fun factors(db: TestDb, player: String) = db.query(
         "SELECT factor FROM player_week_projection_factor WHERE player_id = '$player' AND season = 2025 AND week = 3 ORDER BY factor",
     ).map { it[0] }
