@@ -51,6 +51,7 @@ import dev.gridiron.core.data.ScoresRepository
 import dev.gridiron.core.data.started
 import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.live.FantasyLeagueRepository
+import dev.gridiron.core.data.live.LineupReviewResult
 import dev.gridiron.core.data.live.PlayoffPictureResult
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.OpponentResult
@@ -226,6 +227,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             syncLeague = { s -> deps.league?.sync(s) },
                             startedTeams = { s, w -> deps.scores?.week(s, w)?.started(java.time.Instant.now()) ?: emptySet() },
                             playoffPicture = { s, w -> deps.league?.playoffPicture(s, w) ?: PlayoffPictureResult(null, "no league") },
+                            lineupReview = { s, w -> deps.league?.lineupReview(s, w) ?: LineupReviewResult(emptyList(), "no league") },
                         )
                     }
                     entry<OpportunitiesKey> { key ->

@@ -58,6 +58,9 @@ public data class FantasyLeague(
 /** The league, the user's team id (null when none is chosen) and the regular-season games still to play. */
 public data class PlayoffPicture(val league: FantasyLeague, val myTeamId: Int?, val remaining: List<ScheduledGame>)
 
+/** The weeks reviewed, newest first; [message] says why there are none. */
+public data class LineupReviewResult(val weeks: List<WeekReview>, val message: String?)
+
 /** [picture], or null with [message] saying why. */
 public data class PlayoffPictureResult(val picture: PlayoffPicture?, val message: String?)
 
@@ -132,6 +135,8 @@ public data class MatchupPlayer(
     val espnPoints: Double?,
     val playerId: String? = null,
     val appPoints: Double? = null,
+    /** ESPN's position for him (`defaultPositionId`) as a `player.position` code; null when unknown. */
+    val position: String? = null,
 )
 
 /** One team's side of a matchup. [appTotal] sums the starters' [MatchupPlayer.appPoints], null when none has one. */
@@ -282,6 +287,9 @@ internal object EspnFantasyParser {
 
     private val DECIDED = setOf("HOME", "AWAY", "TIE")
 
+    /** ESPN's `defaultPositionId`s (from memory, unverified against a live league). */
+    private val POSITIONS = mapOf(1 to "QB", 2 to "RB", 3 to "WR", 4 to "TE", 5 to "K", 16 to "DST")
+
     private fun side(s: JsonObject): MatchupSide? {
         val teamId = s.int("teamId") ?: return null
         val entries = s.obj("rosterForCurrentScoringPeriod")?.array("entries").orEmpty().mapNotNull { (it as? JsonObject)?.let(::matchupPlayer) }
@@ -296,7 +304,8 @@ internal object EspnFantasyParser {
         val espnId = e.string("playerId") ?: return null
         val entry = e.obj("playerPoolEntry")
         val name = entry?.obj("player")?.string("fullName") ?: dstPlayerId(espnId)?.let { "${it.removePrefix("DST_")} D/ST" } ?: return null
-        return MatchupPlayer(espnId, name, SLOTS[e.int("lineupSlotId")] ?: "BE", entry?.double("appliedStatTotal"))
+        val position = if (dstPlayerId(espnId) != null) "DST" else entry?.obj("player")?.int("defaultPositionId")?.let { POSITIONS[it] }
+        return MatchupPlayer(espnId, name, SLOTS[e.int("lineupSlotId")] ?: "BE", entry?.double("appliedStatTotal"), position = position)
     }
 
     private fun team(t: JsonObject, members: Map<String, String>): LeagueTeam? {

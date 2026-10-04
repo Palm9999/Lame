@@ -1,6 +1,7 @@
 package dev.gridiron.core.data.live
 
 import dev.gridiron.core.data.ScoresWeek
+import dev.gridiron.core.projections.LineupCandidate
 import dev.gridiron.core.projections.Lineups
 import java.time.Instant
 
@@ -49,5 +50,46 @@ public object LineupAlerts {
             replacement?.let { used += it.playerId }
             LineupAlert(starter, p.slot, reason, replacement)
         }
+    }
+}
+
+/** A finished week's lineup against the best one ESPN's own points allowed: [left] is what the bench outscored it by. */
+public data class WeekReview(
+    val week: Int,
+    val scored: Double,
+    val best: Double,
+    /** Benched players the best lineup starts, with their points, best first. */
+    val shouldHaveStarted: List<MatchupPlayer>,
+    /** Starters it benches, lowest first. */
+    val shouldHaveSat: List<MatchupPlayer>,
+) {
+    val left: Double get() = (best - scored).coerceAtLeast(0.0)
+}
+
+public object LineupReview {
+    private val NOT_STARTING = setOf("BE", "IR")
+
+    /**
+     * [side]'s week against its best lineup on [slots] from the points ESPN gave each player ([MatchupPlayer.espnPoints];
+     * none counts as zero). IR can't start. A player whose position [positionOf] doesn't know stays where he was: a
+     * starter keeps his slot (and his points), a bench player stays on the bench.
+     */
+    public fun of(week: Int, side: MatchupSide, slots: Map<String, Int>, positionOf: (MatchupPlayer) -> String?): WeekReview {
+        val starters = side.lineup.filter { it.slot !in NOT_STARTING }
+        val scored = starters.sumOf { it.espnPoints ?: 0.0 }
+        val known = side.lineup.filter { it.slot != "IR" }.mapNotNull { p -> positionOf(p)?.let { p to it } }
+        val fixed = starters.filter { s -> known.none { it.first == s } }
+        val open = slots.toMutableMap().apply { for (s in fixed) computeIfPresent(s.slot) { _, n -> (n - 1).takeIf { it > 0 } } }
+        val best = Lineups.best(open, known.map { (p, pos) -> LineupCandidate(p.espnId, pos, p.espnPoints ?: 0.0) })
+        val bestIds = best.spots.mapNotNull { it.player?.playerId }.toSet() + fixed.map { it.espnId }
+        val startedIds = starters.map { it.espnId }.toSet()
+        val start = side.lineup.filter { it.espnId in bestIds && it.espnId !in startedIds }.sortedByDescending { it.espnPoints ?: 0.0 }
+        return WeekReview(
+            week = week,
+            scored = scored,
+            best = maxOf(best.total + fixed.sumOf { it.espnPoints ?: 0.0 }, scored),
+            shouldHaveStarted = start,
+            shouldHaveSat = if (start.isEmpty()) emptyList() else starters.filter { it.espnId !in bestIds }.sortedBy { it.espnPoints ?: 0.0 },
+        )
     }
 }

@@ -382,6 +382,24 @@ class FantasyLeagueTest {
     }
 
     @Test
+    fun `the lineup review reads each finished week from ESPN, newest first`() = runTest {
+        val prefs = FakePrefsSource()
+        val asked = mutableListOf<String>()
+        val repo = repo(prefs) { url, _ -> if ("view=mMatchup" in url) { asked += url; matchupBody } else body }
+        assertEquals("no league id set", repo.lineupReview(2026, 4).message)
+        repo.configure("42", null, null)
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+        val result = repo.lineupReview(2026, 4)
+        assertNull(result.message)
+        // The fixture only has team 2 in week 4 (and week 3 between teams 1 and 2, with no lineups).
+        assertEquals(listOf(4, 3), result.weeks.map { it.week })
+        // Star QB, Star WR, Flex Guy and the D/ST started; the unnamed unknown is skipped by the parser.
+        assertEquals(65.9, result.weeks.first().scored, 1e-9)
+        assertEquals((4 downTo 1).map { EspnFantasyParser.matchupsUrl("42", 2026, it) }, asked)
+    }
+
+    @Test
     fun `a bye, a missing matchup and a missing sync each say so`() = runTest {
         val prefs = FakePrefsSource()
         val repo = repo(prefs) { url, _ -> if ("view=mMatchup" in url) matchupBody else body }

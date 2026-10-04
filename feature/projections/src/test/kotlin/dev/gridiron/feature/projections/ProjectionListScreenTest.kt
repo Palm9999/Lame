@@ -13,9 +13,12 @@ import androidx.compose.ui.test.performScrollToNode
 import dev.gridiron.core.data.live.FantasyLeague
 import dev.gridiron.core.data.live.LeaguePlayer
 import dev.gridiron.core.data.live.LeagueTeam
+import dev.gridiron.core.data.live.LineupReviewResult
+import dev.gridiron.core.data.live.MatchupPlayer
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.PlayoffPicture
 import dev.gridiron.core.data.live.ScheduledGame
+import dev.gridiron.core.data.live.WeekReview
 import dev.gridiron.core.designsystem.GridironTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -329,6 +332,31 @@ class ProjectionListScreenTest {
         compose.onNodeWithTag("odds:chance:1", useUnmergedTree = true).assertTextEquals("100%")
         compose.onNodeWithTag("odds:chance:2", useUnmergedTree = true).assertTextEquals("0%")
         compose.onNodeWithText("Mine (you)", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun `the review totals the points left on the bench and names the swap`() {
+        fun mp(id: String, name: String, slot: String, pts: Double) = MatchupPlayer(id, name, slot, pts)
+        val weeks = listOf(
+            WeekReview(3, 98.2, 112.6, listOf(mp("2", "Sam Bench", "BE", 18.4)), listOf(mp("1", "Pat Start", "WR", 4.0))),
+            WeekReview(2, 120.0, 120.0, emptyList(), emptyList()),
+        )
+        var asked = 0
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    loaded, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team,
+                    review = ReviewState.Loaded(LineupReviewResult(weeks, null)), onReviewOpened = { asked++ },
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:review").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(1, asked)
+        compose.onNodeWithTag("review:total").assertTextEquals("14.4 points left on your bench")
+        compose.onNodeWithText("Week 3: 98.2 of a possible 112.6 (−14.4)").assertExists()
+        compose.onNodeWithText("Should have started Sam Bench (18.4) over Pat Start (4.0)").assertExists()
+        compose.onNodeWithText("Week 2: 120.0 of a possible 120.0 ✓").assertExists()
     }
 
     @Test

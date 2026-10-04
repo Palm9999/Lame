@@ -235,6 +235,49 @@ public class FantasyLeagueRepository(
     }
 
     /**
+     * The user's finished weeks 1 through [throughWeek], each against the best lineup ESPN's own points allowed
+     * ([LineupReview]), newest first; a player's position comes from the app's player list, else ESPN's.
+     * A week ESPN can't serve is skipped; none at all says why.
+     */
+    public suspend fun lineupReview(season: Int, throughWeek: Int): LineupReviewResult {
+        load()
+        val cfg = prefs.prefs.first().espnLeague ?: return LineupReviewResult(emptyList(), "no league id set")
+        val league = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
+            ?: return LineupReviewResult(emptyList(), "sync your league first")
+        val mine = league.myTeam(cfg.teamId) ?: return LineupReviewResult(emptyList(), "choose your team first")
+        val positions = HashMap<String, String?>()
+        suspend fun positionsOf(lineup: List<MatchupPlayer>): Map<String, String?> {
+            val ids = players.playerIds(lineup.map { it.espnId }.filter { it.toIntOrNull()?.let { n -> n > 0 } == true })
+            return lineup.associate { p ->
+                p.espnId to if (EspnFantasyParser.dstPlayerId(p.espnId) != null) {
+                    "DST"
+                } else {
+                    ids[p.espnId]?.let { id -> positions.getOrPut(id) { players.header(id)?.position } }
+                }
+            }
+        }
+        var error: String? = null
+        val reviews = (throughWeek downTo 1).mapNotNull { week ->
+            try {
+                val raw = EspnFantasyParser.matchups(http.get(EspnFantasyParser.matchupsUrl(cfg.leagueId, season, week), headers(cfg)), week)
+                val side = raw.firstNotNullOfOrNull { m -> listOfNotNull(m.home, m.away).firstOrNull { it.teamId == cfg.teamId } }
+                    ?: return@mapNotNull null
+                val known = positionsOf(side.lineup)
+                LineupReview.of(week, side, mine.slots) { known[it.espnId] ?: it.position }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: LiveFormatException) {
+                error = e.message ?: "ESPN changed its matchup format"
+                null
+            } catch (e: IOException) {
+                error = friendly(e.message)
+                null
+            }
+        }
+        return LineupReviewResult(reviews, if (reviews.isEmpty()) error ?: "no finished weeks yet" else null)
+    }
+
+    /**
      * What playoff odds need: the active league as last synced, the user's team id, and the regular-season games ESPN
      * hasn't decided yet (read from the matchups of [week], whose `schedule` lists the whole season). Never throws:
      * [PlayoffPictureResult.message] says why there is none.
