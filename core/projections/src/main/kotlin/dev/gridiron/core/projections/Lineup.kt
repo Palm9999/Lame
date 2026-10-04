@@ -52,6 +52,9 @@ public object Lineups {
         "K" to setOf("K"),
     )
 
+    /** Whether a [position] (`player.position` code) may start at ESPN slot [slot]; false for an unknown slot. */
+    public fun fits(slot: String, position: String): Boolean = ELIGIBLE.any { (label, positions) -> label == slot && position in positions }
+
     /**
      * The lineup that scores most. Candidates are taken best first, each kept if every kept player can still be given a
      * slot (an augmenting path moves earlier picks to other slots), which is optimal because the sets of fillable

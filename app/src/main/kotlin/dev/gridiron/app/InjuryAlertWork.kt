@@ -18,15 +18,27 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import dev.gridiron.core.data.live.InjuryAlert
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
 
-/** Every two hours, with a network: ESPN's injury list against the last one seen, a notification per rostered change. */
+/**
+ * Every two hours, with a network: ESPN's injury list against the last one seen, a notification per rostered change;
+ * then a [LineupAlertWorker] for each of the week's kickoff windows still ahead.
+ */
 class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as GridironApplication
         if (!app.settings.injuryAlerts.first()) return Result.success()
         notify(applicationContext, app.injuryAlerts.check())
+        // The week's kickoff windows each get a lineup check shortly before; a missing scoreboard just skips them.
+        try {
+            app.upcomingWeek()?.let { LineupAlertWorker.schedule(applicationContext, it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Next run tries again.
+        }
         // A failed fetch alerts nothing and waits for the next run; retrying sooner adds nothing.
         return Result.success()
     }
