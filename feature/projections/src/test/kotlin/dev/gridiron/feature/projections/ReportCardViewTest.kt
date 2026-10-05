@@ -62,4 +62,13 @@ class ReportCardViewTest {
         compose.onNodeWithText("Draft and Moves: no draft found.", useUnmergedTree = true).assertExists()
         compose.onNodeWithText("Lineups 1st · Strength 1st · Luck 1st", useUnmergedTree = true).assertExists()
     }
+
+    @Test
+    fun `share opens a preview of the report card`() {
+        show(LineupReviewResult(weeks, null, reportCards = cards, myTeamId = 2))
+        compose.onNodeWithTag("review").performScrollToNode(hasTestTag("share:report"))
+        compose.onNodeWithTag("share:report").performClick()
+        compose.onNodeWithTag("share:send").assertExists()
+        compose.onNodeWithText("1st · Mine (you)", useUnmergedTree = true).assertExists()
+    }
 }

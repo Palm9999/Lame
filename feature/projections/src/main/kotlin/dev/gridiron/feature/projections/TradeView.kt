@@ -144,6 +144,12 @@ internal fun TradeView(
         }
     }
     val names = remember(mine, others) { (mine + others.values.flatten()).associate { it.playerId to it.name } }
+    var sharing by remember { mutableStateOf(false) }
+    if (sharing && outcome != null) {
+        SharePreview("gridiron-trade.png", onDismiss = { sharing = false }) {
+            TradeShareCard(partner.teamName, give.map { names[it] ?: it }, get.map { names[it] ?: it }, outcome)
+        }
+    }
 
     LazyColumn(Modifier.fillMaxSize().testTag("trade")) {
         item {
@@ -165,6 +171,7 @@ internal fun TradeView(
                         modifier = Modifier.testTag("partner:${team.teamName}"),
                     )
                 }
+                if (outcome != null) TextButton(onClick = { sharing = true }, modifier = Modifier.testTag("share:trade")) { Text("Share") }
             }
         }
         item {

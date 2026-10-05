@@ -1,6 +1,7 @@
 package dev.gridiron.feature.projections
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -51,6 +53,15 @@ internal fun swapText(review: WeekReview): String? {
 
 @Composable
 internal fun ReviewView(state: ReviewState) {
+    var sharing by rememberSaveable { mutableStateOf<String?>(null) }
+    (state as? ReviewState.Loaded)?.result?.let { result ->
+        when (sharing) {
+            "recap" -> result.recap?.lastWeek?.let { w ->
+                SharePreview("gridiron-week-${w.week}.png", onDismiss = { sharing = null }) { WeeklyRecapShareCard(w, result.weeks.firstOrNull { it.week == w.week }) }
+            }
+            "report" -> SharePreview("gridiron-report-card.png", onDismiss = { sharing = null }) { ReportShareCard(result.reportCards, result.myTeamId) }
+        }
+    }
     LazyColumn(Modifier.fillMaxSize().testTag("review")) {
         when (state) {
             ReviewState.Idle, ReviewState.Loading -> item { Note("Reading your finished weeks from ESPN…") }
@@ -88,17 +99,17 @@ internal fun ReviewView(state: ReviewState) {
                         }
                     }
                 }
-                state.result.recap?.let { recap -> recapItems(recap) }
-                reportCardItems(state.result)
+                state.result.recap?.let { recap -> recapItems(recap) { sharing = "recap" } }
+                reportCardItems(state.result) { sharing = "report" }
             }
         }
     }
 }
 
 /** The league recap under the review: the latest week around the league, then luck, record against scores. */
-private fun androidx.compose.foundation.lazy.LazyListScope.recapItems(recap: LeagueRecap) {
+private fun androidx.compose.foundation.lazy.LazyListScope.recapItems(recap: LeagueRecap, onShare: () -> Unit) {
     recap.lastWeek?.let { w ->
-        item { Label("League, week ${w.week}") }
+        item { LabelWithShare("League, week ${w.week}", "share:recap", onShare) }
         item {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("recap:week")) {
                 w.highScore?.let { (team, score) -> Line("Top score: $team, ${pts(score)}") }
@@ -134,10 +145,10 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recapItems(recap: Lea
 }
 
 /** Every manager's places, best overall first; a tap shows the numbers behind them. */
-private fun androidx.compose.foundation.lazy.LazyListScope.reportCardItems(result: LineupReviewResult) {
+private fun androidx.compose.foundation.lazy.LazyListScope.reportCardItems(result: LineupReviewResult, onShare: () -> Unit) {
     val cards = result.reportCards
     if (cards.isEmpty()) return
-    item { Label("Report card") }
+    item { LabelWithShare("Report card", "share:report", onShare) }
     item {
         Text(
             "Lineups: points scored of the best lineups allowed. Strength: all-play. Luck: wins over all-play. " +
@@ -183,6 +194,14 @@ private fun ReportCardRow(card: ReportCard, teams: Int, mine: Boolean) {
 @Composable
 private fun Line(text: String) {
     Text(text, style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
+private fun LabelWithShare(text: String, tag: String, onShare: () -> Unit) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+        Box(Modifier.weight(1f)) { Label(text) }
+        TextButton(onClick = onShare, modifier = Modifier.padding(top = 8.dp).testTag(tag)) { Text("Share") }
+    }
 }
 
 @Composable

@@ -59,7 +59,9 @@ import dev.gridiron.core.designsystem.StatusBadge
 import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.Roster
+import dev.gridiron.feature.projections.PlayerShareCard
 import dev.gridiron.feature.projections.ProjectionCard
+import dev.gridiron.feature.projections.SharePreview
 import dev.gridiron.feature.projections.ThisWeekCard
 import dev.gridiron.feature.projections.loadProjectionCard
 import kotlinx.coroutines.CancellationException
@@ -221,6 +223,14 @@ fun PlayerScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 return@Column
             }
+            var sharing by remember { mutableStateOf(false) }
+            val shared = page.projection
+            if (sharing && shared != null) {
+                val name = page.header?.name ?: playerId
+                SharePreview("gridiron-player.png", onDismiss = { sharing = false }) {
+                    PlayerShareCard(name, listOfNotNull(page.header?.position?.let(Position::label), page.header?.team).joinToString(" · "), shared)
+                }
+            }
             LazyColumn(Modifier.testTag("playerPage")) {
                 item {
                     Column(Modifier.padding(horizontal = 16.dp)) {
@@ -237,7 +247,12 @@ fun PlayerScreen(
                     }
                 }
                 page.projection?.let { card ->
-                    item { SectionTitle("This week") }
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) { SectionTitle("This week") }
+                            TextButton(onClick = { sharing = true }, modifier = Modifier.testTag("share:player")) { Text("Share") }
+                        }
+                    }
                     item { ThisWeekCard(card, onOpen = { onProjection(card.season, card.week) }) }
                 }
                 page.risingRole?.let { row ->
