@@ -196,4 +196,26 @@ class ProjectionsRepositoryTest {
             assertEquals(mapOf("BUF" to setOf(5), "KC" to emptySet<Int>(), "DEN" to setOf(4)), repo.byeWeeks(2026))
         }
     }
+
+    @Test
+    fun `ESPN's week reads as listed projections, and an older database without it reads nothing`() = runTest {
+        jdbcFixtureWithSchema(
+            insertProjectionRows = listOf(
+                "CREATE TABLE espn_projection (player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL, metric_id TEXT NOT NULL, value REAL NOT NULL, PRIMARY KEY (player_id, season, week, metric_id))",
+                "INSERT INTO player VALUES ('P1', 'Pat One', 'WR', 'KC')",
+                "INSERT INTO espn_projection VALUES ('P1', 2026, 6, 'receptions', 5.5)",
+                "INSERT INTO espn_projection VALUES ('P1', 2026, 6, 'receiving_yards', 70.0)",
+                "INSERT INTO espn_projection VALUES ('P1', 2026, 5, 'receptions', 9.0)",
+            ),
+        ).use { executor ->
+            val listed = ProjectionsRepository(executor).espnWeek(2026, 6)
+            assertEquals(1, listed.size)
+            assertEquals("Pat One", listed.single().name)
+            assertEquals(mapOf("receptions" to 5.5, "receiving_yards" to 70.0), listed.single().components.associate { it.metricId to it.mean })
+            assertEquals(0.0, listed.single().components.sumOf { it.variance })
+        }
+        jdbcFixtureWithSchema(emptyList()).use { executor ->
+            assertEquals(emptyList<Any>(), ProjectionsRepository(executor).espnWeek(2026, 6))
+        }
+    }
 }

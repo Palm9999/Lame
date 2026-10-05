@@ -91,6 +91,18 @@ public object ProjectionQueries {
         listOf(Bind.Integer(season.toLong()), Bind.Integer(week.toLong())),
     )
 
+    /** ESPN's own projection for [week], in the app's metric ids, shaped like [weekAll] (variance 0). */
+    public fun espnWeek(season: Int, week: Int): SqlQuery = SqlQuery(
+        """
+        SELECT e.player_id, pl.full_name, pl.position, pl.team, e.metric_id, e.value, 0.0, m.dist_family
+        FROM espn_projection e
+        JOIN player pl ON pl.player_id = e.player_id
+        LEFT JOIN metric m ON m.id = e.metric_id
+        WHERE e.season = ? AND e.week = ?
+        """.trimIndent(),
+        listOf(Bind.Integer(season.toLong()), Bind.Integer(week.toLong())),
+    )
+
     /** Every player's rest of season as of the latest week it was built for. */
     public fun rosAll(season: Int): SqlQuery = SqlQuery(
         """

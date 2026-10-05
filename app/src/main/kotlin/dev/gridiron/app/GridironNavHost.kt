@@ -77,6 +77,7 @@ import dev.gridiron.feature.players.GridRoute
 import dev.gridiron.feature.projections.AccuracyRoute
 import dev.gridiron.feature.projections.BreakoutsRoute
 import dev.gridiron.feature.projections.ActivityRoute
+import dev.gridiron.feature.projections.DifferRoute
 import dev.gridiron.feature.projections.DynastyRoute
 import dev.gridiron.feature.projections.HistoryRoute
 import dev.gridiron.feature.projections.OpportunitiesRoute
@@ -195,6 +196,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
     val more = buildList {
         if (deps.opportunities != null) add(MoreItem("Players", "Opportunities", "Who moves up when a starter is hurt") { backStack.push(OpportunitiesKey(season)) })
         if (deps.breakouts != null) add(MoreItem("Players", "Rising roles", "Roles growing over the last four games") { backStack.push(BreakoutsKey(season)) })
+        add(MoreItem("Players", "Where we differ", "The app against ESPN this week") { backStack.push(DifferKey(season)) })
         add(MoreItem("Players", "Injury report", "ESPN's live list and practice") { backStack.push(InjuriesKey(season)) })
         add(MoreItem("Players", "Team defense", "Each defense's season") { backStack.push(DefenseKey(season)) })
         if (deps.league != null) add(MoreItem("League", "ESPN leagues", "Sync, teams and matchups") { backStack.push(LeagueKey) })
@@ -235,6 +237,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 add("Projections" to { s: Int -> backStack.push(ProjectionListKey(s)) })
                                 if (deps.opportunities != null) add("Opportunities" to { s: Int -> backStack.push(OpportunitiesKey(s)) })
                                 if (deps.breakouts != null) add("Rising roles" to { s: Int -> backStack.push(BreakoutsKey(s)) })
+                                add("Where we differ" to { s: Int -> backStack.push(DifferKey(s)) })
                                 add("Projection accuracy" to { s: Int -> backStack.push(AccuracyKey(s)) })
                                 if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
                                 if (deps.scores != null) add("Scores" to { s: Int -> backStack.push(ScoresKey(s)) })
@@ -321,6 +324,14 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 myTeam = deps.league?.myTeam ?: flowOf(null),
                             )
                         }
+                    }
+                    entry<DifferKey> { key ->
+                        DifferRoute(
+                            key.season, deps.projections, deps.scoring,
+                            onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
+                            league = deps.league?.rostered ?: flowOf(null),
+                            myTeam = deps.league?.myTeam ?: flowOf(null),
+                        )
                     }
                     entry<ActivityKey> { key ->
                         deps.league?.let { league ->

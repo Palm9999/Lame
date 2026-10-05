@@ -92,6 +92,15 @@ public class ProjectionsRepository(private val executor: QueryExecutor) {
 
     public suspend fun rosAll(season: Int): List<ListedProjection> = listed(ProjectionQueries.rosAll(season))
 
+    /** ESPN's projection for [week] (QB, RB, WR and TE); empty when the database predates `espn_projection` or has none. */
+    public suspend fun espnWeek(season: Int, week: Int): List<ListedProjection> = try {
+        listed(ProjectionQueries.espnWeek(season, week))
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyList()
+    }
+
     /** Each Questionable player's discount that week (what such players score, relative to healthy: 0.52-0.87); empty on failure. */
     public suspend fun questionable(season: Int, week: Int): Map<String, Double> = try {
         executor.query(ProjectionQueries.questionable(season, week)) { it.text(0) to kotlin.math.exp(it.double(1)) }.toMap()
