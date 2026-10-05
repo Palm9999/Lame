@@ -31,6 +31,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.live.MyTeam
+import dev.gridiron.core.data.live.TradeOffer
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.projections.LineupCandidate
 import dev.gridiron.core.projections.TradeIdea
@@ -108,6 +109,8 @@ internal fun TradeView(
     partners: List<MyTeam>,
     rosRows: List<ProjectionRow>,
     rosWeekly: Map<String, Map<Int, Double>> = emptyMap(),
+    /** Pending trades involving the user's team, from ESPN; graded like any trade. */
+    offers: List<TradeOffer> = emptyList(),
 ) {
     val byId = remember(rosRows) { rosRows.associateBy { it.playerId } }
     val mine = remember(myTeam, byId, rosWeekly) { tradePlayers(myTeam, byId, rosWeekly) }
@@ -216,6 +219,36 @@ internal fun TradeView(
                         Text("${partner.teamName} cuts ${outcome.theirDrops.joinToString { names[it.playerId] ?: it.playerId }} to make room.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     TextButton(onClick = { give = emptyList(); get = emptyList(); cuts = emptyList() }) { Text("Clear") }
+                }
+            }
+        }
+        val graded = offers.mapNotNull { o ->
+            val partnerTeam = partners.firstOrNull { it.teamName == o.partner } ?: return@mapNotNull null
+            val theirRoster = others[partnerTeam.teamName] ?: return@mapNotNull null
+            o to Trades.evaluate(myTeam.slots, candidates(mine), candidates(theirRoster), o.give.toSet(), o.get.toSet())
+        }
+        if (graded.isNotEmpty()) {
+            item { Label("Pending offers (from ESPN)") }
+            itemsIndexed(graded, key = { _, (o, _) -> "offer:${o.id}" }) { _, (o, out) ->
+                Row(
+                    Modifier.fillMaxWidth().clickable {
+                        partnerName = o.partner
+                        give = o.give
+                        get = o.get
+                        cuts = emptyList()
+                    }.padding(horizontal = 16.dp, vertical = 8.dp).testTag("offer:${o.id}"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            "${if (o.fromMe) "You offered ${o.partner}" else "${o.partner} offers"}: " +
+                                "${o.give.joinToString(" + ") { names[it] ?: it }.ifEmpty { "nothing" }} for ${o.get.joinToString(" + ") { names[it] ?: it }.ifEmpty { "nothing" }}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                        Text("${verdict(out)} · them ${gainText(out.theirGain)}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(gainText(out.myGain), Modifier.testTag("offer:gain:${o.id}"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                 }
             }
         }

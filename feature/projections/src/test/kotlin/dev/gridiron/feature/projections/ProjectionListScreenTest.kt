@@ -21,6 +21,7 @@ import dev.gridiron.core.data.live.MatchupPlayer
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.PlayoffPicture
 import dev.gridiron.core.data.live.ScheduledGame
+import dev.gridiron.core.data.live.TradeOffer
 import dev.gridiron.core.data.live.WeekReview
 import dev.gridiron.core.designsystem.GridironTheme
 import org.junit.Assert.assertEquals
@@ -415,6 +416,28 @@ class ProjectionListScreenTest {
         compose.onNodeWithText("Week 3: 98.2 of a possible 112.6 (−14.4)").assertExists()
         compose.onNodeWithText("Should have started Sam Bench (18.4) over Pat Start (4.0)").assertExists()
         compose.onNodeWithText("Week 2: 120.0 of a possible 120.0 ✓").assertExists()
+    }
+
+    @Test
+    fun `a pending ESPN offer is graded like any trade and tapping it loads it`() {
+        var asked = 0
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    tradeState, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = roster("Mine", "q1", "r1", "r2", "w1"),
+                    partners = listOf(roster("Rivals", "q2", "w2", "w3", "r3")),
+                    offers = listOf(TradeOffer("t1", "Rivals", give = listOf("r2"), get = listOf("w3"), fromMe = false)),
+                    onTradeOpened = { asked++ },
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:trade").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(1, asked)
+        compose.onNodeWithTag("offer:gain:t1", useUnmergedTree = true).assertTextEquals("+72.0")
+        compose.onNodeWithTag("offer:t1").performClick()
+        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +72.0 (424.0 → 496.0)")
     }
 
     @Test

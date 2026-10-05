@@ -310,6 +310,40 @@ public class FantasyLeagueRepository(
     }
 
     /**
+     * Pending trades involving the user's team, players mapped to app ids through the last sync's rosters (a player
+     * not on them is left out). Never throws; an unreadable response is no offers.
+     */
+    public suspend fun tradeOffers(season: Int): TradeOffersResult {
+        load()
+        val cfg = prefs.prefs.first().espnLeague ?: return TradeOffersResult(emptyList(), "no league id set")
+        val me = cfg.teamId ?: return TradeOffersResult(emptyList(), "choose your team first")
+        val league = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
+            ?: return TradeOffersResult(emptyList(), "sync your league first")
+        val ids = league.teams.flatMap { t -> t.players.mapNotNull { p -> p.playerId?.let { p.espnId to it } } }.toMap()
+        val names = league.teams.associate { it.id to it.name }
+        return try {
+            val raw = EspnFantasyParser.tradeOffers(http.get(EspnFantasyParser.transactionsUrl(cfg.leagueId, season, league.week), headers(cfg)))
+            val offers = raw.mapNotNull { o ->
+                if (o.moves.none { it.second == me || it.third == me }) return@mapNotNull null
+                val partnerId = o.moves.flatMap { listOf(it.second, it.third) }.firstOrNull { it != me } ?: return@mapNotNull null
+                TradeOffer(
+                    o.id, names[partnerId] ?: "Team $partnerId",
+                    give = o.moves.filter { it.second == me }.mapNotNull { ids[it.first] },
+                    get = o.moves.filter { it.third == me }.mapNotNull { ids[it.first] },
+                    fromMe = o.proposer == me,
+                )
+            }
+            TradeOffersResult(offers, null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            TradeOffersResult(emptyList(), friendly(e.message))
+        } catch (e: Exception) {
+            TradeOffersResult(emptyList(), "couldn't read trade offers")
+        }
+    }
+
+    /**
      * The user's and the opponent's sides of [week]'s matchup as ESPN has them now (lineups with live points, app ids
      * filled in). Never throws: [MyMatchup.message] says why there is none.
      */

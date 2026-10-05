@@ -417,6 +417,35 @@ class FantasyLeagueTest {
         assertEquals(2, leagueReads)
     }
 
+    private val transactions = """
+        {"transactions":[
+          {"id":"t1","type":"TRADE_PROPOSAL","status":"PENDING","teamId":1,
+           "items":[{"playerId":111,"fromTeamId":1,"toTeamId":2,"type":"TRADE"},{"playerId":222,"fromTeamId":2,"toTeamId":1,"type":"TRADE"}]},
+          {"id":"t2","type":"TRADE_PROPOSAL","status":"CANCELED","teamId":1,"items":[{"playerId":111,"fromTeamId":1,"toTeamId":2}]},
+          {"id":"t3","type":"WAIVER","status":"PENDING","items":[{"playerId":5,"fromTeamId":0,"toTeamId":2}]}
+        ]}
+    """.trimIndent()
+
+    @Test
+    fun `pending trade offers are read from my side, others and odd shapes skipped`() = runTest {
+        assertEquals(1, EspnFantasyParser.tradeOffers(transactions).size)
+        assertEquals(emptyList<RawTradeOffer>(), EspnFantasyParser.tradeOffers("not json"))
+        val prefs = FakePrefsSource()
+        val ids = PlayerDirectory(
+            object : QueryExecutor {
+                override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> = emptyList()
+            },
+        )
+        val repo = FantasyLeagueRepository(prefs, { url, _ -> if ("mTransactions2" in url) transactions else body }, ids, dir) { Instant.parse("2026-10-01T00:00:00Z") }
+        repo.configure("42", null, null)
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+        val offer = repo.tradeOffers(2026).offers.single()
+        assertEquals("Rivals", offer.partner)
+        // No xref in this fixture: nobody maps to an app id, so the lists are empty but the offer stands.
+        assertEquals(false, offer.fromMe)
+    }
+
     @Test
     fun `a bye, a missing matchup and a missing sync each say so`() = runTest {
         val prefs = FakePrefsSource()

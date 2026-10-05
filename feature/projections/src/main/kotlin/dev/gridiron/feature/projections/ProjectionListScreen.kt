@@ -54,6 +54,8 @@ import dev.gridiron.core.data.live.MyMatchup
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.OpponentResult
 import dev.gridiron.core.data.live.PlayoffPictureResult
+import dev.gridiron.core.data.live.TradeOffer
+import dev.gridiron.core.data.live.TradeOffersResult
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.Lineups
@@ -103,6 +105,8 @@ public fun ProjectionListRoute(
     myMatchup: suspend (season: Int, week: Int, profile: ScoringProfile) -> MyMatchup = { _, _, _ -> MyMatchup(null, null, "not available") },
     /** Receives My lineup's one-line summary for the home-screen widget. */
     onLineupSummary: (String) -> Unit = {},
+    /** Pending trades involving the user's team, asked when Trade opens. */
+    tradeOffers: suspend (season: Int) -> TradeOffersResult = { TradeOffersResult(emptyList(), null) },
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -119,6 +123,7 @@ public fun ProjectionListRoute(
     var locked by remember { mutableStateOf(Kickoffs(emptySet(), emptySet())) }
     var playoffs by remember { mutableStateOf<PlayoffState>(PlayoffState.Idle) }
     var review by remember { mutableStateOf<ReviewState>(ReviewState.Idle) }
+    var pending by remember { mutableStateOf<List<TradeOffer>>(emptyList()) }
     val scope = rememberCoroutineScope()
     suspend fun readKickoffs(week: Int) {
         locked = try {
@@ -145,6 +150,18 @@ public fun ProjectionListRoute(
         playoffs = playoffs,
         review = review,
         onLineupSummary = onLineupSummary,
+        offers = pending,
+        onTradeOpened = {
+            scope.launch {
+                pending = try {
+                    tradeOffers(season).offers
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
+        },
         liveFetch = live@{
             val loaded = state as? ProjectionListState.Loaded ?: return@live null
             val active = profile ?: return@live null
@@ -271,6 +288,10 @@ public fun ProjectionListScreen(
     liveFetch: suspend () -> LiveWinChance? = { null },
     /** My lineup's one-line summary each time it changes, for the home-screen widget. */
     onLineupSummary: (String) -> Unit = {},
+    /** Pending trades involving the user's team, shown graded in Trade. */
+    offers: List<TradeOffer> = emptyList(),
+    /** Trade was opened: the route reads the pending offers. */
+    onTradeOpened: () -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
@@ -299,6 +320,7 @@ public fun ProjectionListScreen(
         if (mode == ListMode.LINEUP) onLineupOpened()
         if (mode == ListMode.PLAYOFFS) onPlayoffsOpened()
         if (mode == ListMode.REVIEW) onReviewOpened()
+        if (mode == ListMode.TRADE) onTradeOpened()
     }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -380,7 +402,7 @@ public fun ProjectionListScreen(
                     } else if (mode == ListMode.PLAYOFFS) {
                         PlayoffsView(playoffs, state.rosRows, state.rosWeekly)
                     } else if (mode == ListMode.TRADE && myTeam != null) {
-                        TradeView(myTeam, partners, state.rosRows, state.rosWeekly)
+                        TradeView(myTeam, partners, state.rosRows, state.rosWeekly, offers)
                     } else if (mode == ListMode.LINEUP && myTeam != null) {
                         val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, weekRows, badges, started) }
                         val pickups = if (rostered == null) null else remember(myTeam, weekRows, badges, rostered, starterOut, started) { waiverPickups(myTeam, weekRows, badges, rostered, starterOut, started) }

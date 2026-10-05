@@ -58,6 +58,18 @@ public data class FantasyLeague(
 /** The league, the user's team id (null when none is chosen) and the regular-season games still to play. */
 public data class PlayoffPicture(val league: FantasyLeague, val myTeamId: Int?, val remaining: List<ScheduledGame>)
 
+/**
+ * A pending trade involving the user's team: [partner] is the other team's name; [give] and [get] are app player ids
+ * leaving and joining the user's team; [fromMe] when the user proposed it.
+ */
+public data class TradeOffer(val id: String, val partner: String, val give: List<String>, val get: List<String>, val fromMe: Boolean)
+
+/** [offers], or why there are none to show. */
+public data class TradeOffersResult(val offers: List<TradeOffer>, val message: String?)
+
+/** One trade proposal as ESPN lists it: who proposed it and each player's move between team ids (ESPN player ids). */
+public data class RawTradeOffer(val id: String, val proposer: Int?, val moves: List<Triple<String, Int, Int>>)
+
 /** The user's side and the opponent's of a week's matchup; [message] says why one is missing. */
 public data class MyMatchup(val mine: MatchupSide?, val theirs: MatchupSide?, val message: String?)
 
@@ -289,6 +301,37 @@ internal object EspnFantasyParser {
     }
 
     private val DECIDED = setOf("HOME", "AWAY", "TIE")
+
+    fun transactionsUrl(leagueId: String, season: Int, week: Int): String =
+        "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/$season/segments/0/leagues/$leagueId" +
+            "?view=mTransactions2&scoringPeriodId=$week"
+
+    /**
+     * Pending trade proposals from a `mTransactions2` response (shape from memory, unverified): `transactions` whose
+     * `type` is TRADE_PROPOSAL and `status` PENDING or PROPOSED, each `items` entry a player moving `fromTeamId` →
+     * `toTeamId`. Anything missing or unreadable is skipped, never an error: offers are extra.
+     */
+    fun tradeOffers(text: String): List<RawTradeOffer> {
+        val root = try {
+            Json.parseToJsonElement(text) as? JsonObject
+        } catch (_: SerializationException) {
+            null
+        } ?: return emptyList()
+        return root.array("transactions").orEmpty().mapNotNull { e ->
+            val t = e as? JsonObject ?: return@mapNotNull null
+            if (t.string("type") != "TRADE_PROPOSAL" || t.string("status") !in OPEN_TRADE) return@mapNotNull null
+            val moves = t.array("items").orEmpty().mapNotNull { i ->
+                val o = i as? JsonObject ?: return@mapNotNull null
+                val player = o.string("playerId") ?: return@mapNotNull null
+                val from = o.int("fromTeamId") ?: return@mapNotNull null
+                val to = o.int("toTeamId") ?: return@mapNotNull null
+                Triple(player, from, to)
+            }
+            if (moves.isEmpty()) null else RawTradeOffer(t.string("id") ?: moves.toString(), t.int("teamId"), moves)
+        }
+    }
+
+    private val OPEN_TRADE = setOf("PENDING", "PROPOSED")
 
     /** ESPN's `defaultPositionId`s (from memory, unverified against a live league). */
     private val POSITIONS = mapOf(1 to "QB", 2 to "RB", 3 to "WR", 4 to "TE", 5 to "K", 16 to "DST")

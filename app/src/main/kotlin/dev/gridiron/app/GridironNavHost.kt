@@ -57,6 +57,7 @@ import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.MyMatchup
 import dev.gridiron.core.data.live.OpponentResult
 import dev.gridiron.core.data.live.PlayoffPictureResult
+import dev.gridiron.core.data.live.TradeOffersResult
 import dev.gridiron.core.data.live.PropsRepository
 import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.core.model.Roster
@@ -242,6 +243,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             liveWeek = { s, w -> deps.scores?.week(s, w) },
                             myMatchup = { s, w, p -> deps.league?.myMatchup(s, w, p) ?: MyMatchup(null, null, "no league") },
                             onLineupSummary = deps.onLineupSummary,
+                            tradeOffers = { s -> deps.league?.tradeOffers(s) ?: TradeOffersResult(emptyList(), "no league") },
                         )
                     }
                     entry<OpportunitiesKey> { key ->
