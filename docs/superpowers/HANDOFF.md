@@ -9,7 +9,7 @@
 
 ## Where things stand
 
-Everything planned is built and pushed: the projection engine (K and D/ST included) with the ESPN blend, props, the Questionable discount and returning players; the accuracy page; NGS and FTN; the Grid, presets and rollups; the Player page; ESPN leagues with My lineup, Trade, Playoff odds, Review, Planner, Value, Start/sit and Draft; Opportunities; Rising roles; Scores; injury, lineup and news alerts; the home-screen widget; the Player page's injury return outlook; My lineup's game day; a bottom bar. `INGEST_VERSION` 8, schema 12, `FORECAST_VERSION` 17, prefs `formatVersion` 4.
+Everything planned is built and pushed: the projection engine (K and D/ST included) with the ESPN blend, props, the Questionable discount and returning players; the accuracy page; NGS and FTN; the Grid, presets and rollups; the Player page; ESPN leagues with My lineup, Trade, Playoff odds, Review, Planner, Value, Start/sit and Draft; Opportunities; Rising roles; Scores; injury, lineup and news alerts; the home-screen widget; the Player page's injury return outlook; My lineup's game day; a bottom bar; shared UI pieces and small charts (`Components.kt`). `INGEST_VERSION` 8, schema 12, `FORECAST_VERSION` 17, prefs `formatVersion` 4.
 
 **Facts to keep:**
 - **Accuracy method:** test on a build with a prior season (`tune.db`, 2021-2025) against a frozen sample of the current model's counted player-weeks (PPR, paired, 2 SE), never the CI gate's 2024 numbers (a 2024-2025 build makes 2024 a cold start). Count missed games as zero when judging availability changes. Harness: "Container notes".
@@ -64,6 +64,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 **Deferred minors (lineup alerts, Questionable):** before inactives post, a Questionable starter still projects at his discount (ESPN's badge can't tell an active Q from an undecided one), so an early-Sunday My lineup may suggest sitting him; the pre-game lineup alert itself doesn't lift the discount; Projections reads kickoffs when it loads and when My lineup opens, so a week list or Start/sit left open across the cutoff lifts only after reopening; the Player page card reads them each time the page loads; the waterfall and the Grid's projection columns read the stored final, so they keep the discount (a confirmed-active player's card can read above the waterfall it opens). Review's last week is the later of the stats build's and ESPN's.
 
 **Deferred minors (injury returns):** the body part is nflverse's latest named one this season, so an ESPN-only Out with no nflverse listing reads every injury; a suspension isn't covered; positions are pooled; an IR player is assumed to have the 4-game minimum still to serve when he's missed fewer; a game in progress counts as not yet played; the outlook doesn't feed projections; the Injury report screen doesn't show it.
+
+**Deferred minors (look):** the Grid itself wasn't restyled (its heat cells are the visual); the other Projections modes (Trade, Playoff odds, Review, Planner) keep their old rows apart from section headers; charts have direct labels but no tap-for-detail; the Questionable badge uses Material's default tertiary (pink), the theme sets no tertiary.
 
 **Deferred minors (bottom bar):** tab screens keep their own "← Back" (to the Grid); a tab always opens the current season, so a past season's screens are reached from the Grid's ☰; the selected tab is the screen just above the Grid, so a Player page opened from Projections still lights Projections.
 

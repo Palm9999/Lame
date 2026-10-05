@@ -2,6 +2,7 @@ package dev.gridiron.app
 
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -92,7 +93,8 @@ class LiveScreensTest {
         compose.setContent { GridironTheme { PlayerScreen("P1", page, liveAvailable = true, onBack = {}, onOpen = {}) } }
 
         compose.onNodeWithTag("player:return").assertExists()
-        compose.onNodeWithText("Played again by: wk 6 0% · wk 8 28%").assertExists()
+        compose.onNodeWithContentDescription("Played again by: wk 6 0% · wk 8 28%").assertExists()
+        compose.onNodeWithText("28%").assertExists()
         compose.onNodeWithText("From 97 past hamstring absences", substring = true).assertExists()
     }
 

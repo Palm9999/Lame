@@ -54,6 +54,8 @@ import dev.gridiron.core.data.live.InjuryNote
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.LiveStatus
 import dev.gridiron.core.data.live.NewsItem
+import dev.gridiron.core.designsystem.ColumnChart
+import dev.gridiron.core.designsystem.StatusBadge
 import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.Roster
@@ -259,7 +261,10 @@ fun PlayerScreen(
                             !liveAvailable -> Text("Live injuries and news aren't available.", style = MaterialTheme.typography.bodySmall)
                             s == null -> Text("No injury designation.", style = MaterialTheme.typography.bodyMedium)
                             else -> {
-                                Text(s.status, color = injuryColor(s.abbr), fontWeight = FontWeight.Bold)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    StatusBadge(s.abbr)
+                                    Text(s.status, Modifier.padding(start = 8.dp), color = injuryColor(s.abbr), fontWeight = FontWeight.Bold)
+                                }
                                 s.shortComment?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                                 s.longComment?.let {
                                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -340,8 +345,17 @@ internal fun SectionTitle(text: String) {
 /** "Played again by: wk 7 28% · wk 8 53%…" and where the numbers come from. */
 @Composable
 private fun ReturnOutlookLine(outlook: ReturnOutlook) {
-    Column(Modifier.padding(top = 8.dp).testTag("player:return")) {
-        Text("Played again by: ${outlook.chancesText()}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+    Column(Modifier.padding(top = 12.dp).testTag("player:return")) {
+        Text("Chance he has played again by", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+        ColumnChart(
+            labels = outlook.weeks.map { "Wk $it" },
+            values = outlook.chances,
+            valueText = { "${Math.round(it * 100).coerceIn(0, 100)}%" },
+            description = "Played again by: ${outlook.chancesText()}",
+            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+            max = 1.0,
+            height = 56.dp,
+        )
         Text(outlook.basisText(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }

@@ -3,6 +3,8 @@ package dev.gridiron.app
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performClick
 import dev.gridiron.core.data.GameLogRow
 import dev.gridiron.core.data.PlayerHeader
@@ -76,7 +78,9 @@ class PlayerStatsSectionTest {
         compose.onNodeWithTag("gameLog:1").assertExists()
         compose.onNodeWithText("vs BAL W 27–20").assertExists()
         compose.onNodeWithText("@ DAL L 17–24").assertExists()
-        compose.onNodeWithText("18.4").assertExists()
+        // The best week reads in the log and above its bar in the points chart.
+        compose.onAllNodesWithText("18.4").assertCountEquals(2)
+        compose.onNodeWithTag("pointsByWeek").assertExists()
     }
 
     @Test

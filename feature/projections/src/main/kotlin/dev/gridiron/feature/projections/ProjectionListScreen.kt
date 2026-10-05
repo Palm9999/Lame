@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -57,6 +58,13 @@ import dev.gridiron.core.data.live.OpponentResult
 import dev.gridiron.core.data.live.PlayoffPictureResult
 import dev.gridiron.core.data.live.TradeOffer
 import dev.gridiron.core.data.live.TradeOffersResult
+import dev.gridiron.core.designsystem.DivergingBar
+import dev.gridiron.core.designsystem.Meter
+import dev.gridiron.core.designsystem.RangeBar
+import dev.gridiron.core.designsystem.SectionHeader
+import dev.gridiron.core.designsystem.SlotTag
+import dev.gridiron.core.designsystem.StatusBadge
+import dev.gridiron.core.designsystem.SummaryCard
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.Lineups
@@ -448,8 +456,9 @@ public fun ProjectionListScreen(
                                     ProjectionListRow("${i + 1}", row, badges[row.playerId], onPlayer, note = valueText(value))
                                 }
                             } else {
+                                val rangeMax = rows.maxOfOrNull { it.ceiling } ?: 0.0
                                 itemsIndexed(rows, key = { _, row -> row.playerId }) { i, row ->
-                                    ProjectionListRow("${i + 1}", row, badges[row.playerId], onPlayer)
+                                    ProjectionListRow("${i + 1}", row, badges[row.playerId], onPlayer, rangeMax = rangeMax)
                                 }
                             }
                         }
@@ -482,9 +491,11 @@ private fun LineupList(
     /** The week's kickoffs for the lineup and its Questionable starters' late replacements; null hides it. */
     gameDay: GameDay? = null,
 ) {
+    // One scale for every range bar in the lineup, so rows compare at a glance.
+    val rangeMax = (view.starters.mapNotNull { it.row } + view.bench).maxOfOrNull { it.ceiling } ?: 0.0
     LazyColumn(Modifier.fillMaxSize().testTag("lineup:list")) {
         item {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            SummaryCard {
                 Text("${view.teamName} · week ${view.week}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
                     "Projected ${points(view.total)} pts",
@@ -509,7 +520,11 @@ private fun LineupList(
                     else -> null
                 }
                 versus?.let {
-                    Text(it, Modifier.testTag("lineup:vs"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(it, Modifier.padding(top = 6.dp).testTag("lineup:vs"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                }
+                rival?.let { r ->
+                    val chance = winChance(view, r)
+                    Meter(chance, winLine(chance), Modifier.padding(top = 6.dp).testTag("lineup:meter"))
                 }
                 live?.let { l ->
                     Text(
@@ -555,10 +570,10 @@ private fun LineupList(
         }
         itemsIndexed(view.starters, key = { i, line -> "s:$i:${line.slot}" }) { _, line ->
             if (line.row != null) {
-                ProjectionListRow(if (line.locked) "${line.slot} 🔒" else line.slot, line.row, badges[line.row.playerId], onPlayer, LeadWidth)
+                ProjectionListRow(if (line.locked) "${line.slot} 🔒" else line.slot, line.row, badges[line.row.playerId], onPlayer, LeadWidth, rangeMax = rangeMax)
             } else {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(line.slot, Modifier.width(LeadWidth), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SlotTag(line.slot, width = LeadWidth)
                     Text("No one can fill this slot", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -566,7 +581,7 @@ private fun LineupList(
         if (view.bench.isNotEmpty()) {
             item { SectionLabel("Bench") }
             itemsIndexed(view.bench, key = { _, row -> "b:${row.playerId}" }) { _, row ->
-                ProjectionListRow("BE", row, badges[row.playerId], onPlayer, LeadWidth)
+                ProjectionListRow("BE", row, badges[row.playerId], onPlayer, LeadWidth, rangeMax = rangeMax)
             }
         }
         gameDay?.let { day ->
@@ -595,19 +610,22 @@ private fun LineupList(
         if (rival != null) {
             val preview = matchupPreview(view, rival)
             item { SectionLabel("Matchup preview vs ${rival.teamName}") }
+            val widest = preview.slots.maxOfOrNull { kotlin.math.abs(it.edge) } ?: 0.0
             itemsIndexed(preview.slots, key = { i, e -> "edge:$i:${e.slot}" }) { i, e ->
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("edge:$i"), verticalAlignment = Alignment.CenterVertically) {
-                    Text(e.slot, Modifier.width(LeadWidth), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SlotTag(e.slot, width = LeadWidth)
                     Text(
                         "${e.mine?.name ?: "—"} ${e.mine?.let { points(it.points) } ?: ""} vs ${e.theirs?.name ?: "—"} ${e.theirs?.let { points(it.points) } ?: ""}",
                         Modifier.weight(1f),
                         style = MaterialTheme.typography.bodySmall,
                     )
+                    DivergingBar(e.edge, widest, Modifier.width(56.dp).padding(horizontal = 4.dp))
                     Text(
                         (if (e.edge >= 0) "+" else "−") + points(kotlin.math.abs(e.edge)),
+                        Modifier.width(44.dp),
                         style = MaterialTheme.typography.bodySmall,
                         fontWeight = FontWeight.Bold,
-                        color = if (e.edge >= 0) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                        textAlign = TextAlign.End,
                     )
                 }
             }
@@ -731,40 +749,44 @@ private fun PickupRow(pick: PickupLine, onPlayer: (String) -> Unit, tagPrefix: S
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
+private fun SectionLabel(text: String) = SectionHeader(text)
 
-private val LeadWidth = 64.dp
+private val LeadWidth = 60.dp
 
 @Composable
-private fun ProjectionListRow(lead: String, row: ProjectionRow, badge: String?, onPlayer: (String) -> Unit, leadWidth: Dp = 32.dp, note: String? = null) {
+private fun ProjectionListRow(
+    lead: String,
+    row: ProjectionRow,
+    badge: String?,
+    onPlayer: (String) -> Unit,
+    leadWidth: Dp = 32.dp,
+    note: String? = null,
+    /** The scale's top for a range bar under the row; null shows none. */
+    rangeMax: Double? = null,
+) {
     Row(
         Modifier.fillMaxWidth().clickable { onPlayer(row.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(lead, Modifier.width(leadWidth), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // A slot reads as a tag; a rank as a plain number.
+        if (leadWidth > 32.dp) {
+            SlotTag(lead, width = leadWidth)
+        } else {
+            Text(lead, Modifier.width(leadWidth), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                badge?.takeIf { it != "A" }?.let {
-                    Text(
-                        "  $it",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (it in setOf("O", "IR", "D")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
-                    )
-                }
+                badge?.takeIf { it != "A" }?.let { StatusBadge(it, Modifier.padding(start = 6.dp)) }
             }
             Text(
                 listOfNotNull(Position.label(row.position), row.team, row.tdChance?.takeIf { !row.out }?.let(::tdText), note).joinToString(" · "),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (rangeMax != null && !row.out) {
+                RangeBar(row.floor, row.points, row.ceiling, rangeMax, Modifier.padding(top = 4.dp, end = 24.dp))
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(if (row.out) "Out" else points(row.points), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)

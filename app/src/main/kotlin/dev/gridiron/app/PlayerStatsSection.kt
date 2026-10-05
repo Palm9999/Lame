@@ -3,6 +3,7 @@ package dev.gridiron.app
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -26,6 +27,7 @@ import dev.gridiron.core.charts.ordinal
 import dev.gridiron.core.data.GameLogRow
 import dev.gridiron.core.data.PlayerStats
 import dev.gridiron.core.data.SeasonLineRow
+import dev.gridiron.core.designsystem.ColumnChart
 import dev.gridiron.core.designsystem.NumberStyle
 
 /**
@@ -61,6 +63,7 @@ internal fun LazyListScope.playerStatsItems(stats: PlayerStats, onSeason: (Int) 
     item { SeasonLineHeader() }
     items(stats.line.size, key = { "line:${stats.line[it].label}" }) { SeasonLine(stats.line[it]) }
     if (stats.log.isNotEmpty()) {
+        item { PointsByWeek(stats.log) }
         item { GameLogHeader(stats.logHeaders) }
         items(stats.log.size, key = { "log:${stats.log[it].week}" }) { GameLog(stats.log[it]) }
     }
@@ -122,6 +125,28 @@ private fun SeasonLine(row: SeasonLineRow) {
         Text(row.perGame, Modifier.width(60.dp), style = NumberStyle, textAlign = TextAlign.End, maxLines = 1)
         // Nothing where he isn't ranked; the spoken description says "not ranked" and gives the field's size.
         Text(row.place?.let { ordinal(it.rank) }.orEmpty(), Modifier.width(56.dp), style = NumberStyle, textAlign = TextAlign.End, maxLines = 1)
+    }
+}
+
+/**
+ * Fantasy points (the log's first column) week by week as columns, the best week and the latest labeled; nothing when
+ * fewer than two weeks have points.
+ */
+@Composable
+private fun PointsByWeek(log: List<GameLogRow>) {
+    val points = log.map { it.cells.firstOrNull()?.toDoubleOrNull() }
+    if (points.count { it != null } < 2) return
+    val best = points.indices.maxByOrNull { points[it] ?: Double.NEGATIVE_INFINITY }
+    Column(Modifier.padding(horizontal = 16.dp).padding(top = 16.dp).testTag("pointsByWeek")) {
+        Text("Points by week", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        ColumnChart(
+            labels = log.map { it.week.toString() },
+            values = points,
+            valueText = { String.format(java.util.Locale.US, "%.1f", it) },
+            description = "Fantasy points by week: " + log.zip(points).joinToString { (r, p) -> "week ${r.week} ${p ?: "none"}" },
+            modifier = Modifier.padding(top = 6.dp),
+            labelled = setOfNotNull(best, points.indices.last),
+        )
     }
 }
 
