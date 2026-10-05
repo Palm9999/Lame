@@ -3,6 +3,7 @@ package dev.gridiron.core.data.live
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.ResultRow
+import dev.gridiron.core.datastore.KeeperRule
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.projections.Lineups
@@ -660,5 +661,19 @@ class FantasyLeagueTest {
         assertNull(draft.error)
         assertEquals(3, draft.picks.size)
         assertEquals("DST_KC", draft.picks.single { it.espnId == "-16012" }.playerId)
+    }
+
+    @Test
+    fun `the keeper rule saves on the active league`() = runTest {
+        val prefs = FakePrefsSource()
+        val repo = repo(prefs) { _, _ -> body }
+        assertNull(repo.keeperRule.first())
+        repo.configure("42", null, null)
+        repo.addLeague("77")
+        repo.setActive("42")
+        assertEquals(KeeperRule(), repo.keeperRule.first())
+        repo.setKeeperRule(KeeperRule(keepers = 3))
+        assertEquals(KeeperRule(keepers = 3), repo.keeperRule.first())
+        assertEquals(KeeperRule(), prefs.prefs.first().espnLeagues.single { it.leagueId == "77" }.keeperRule)
     }
 }

@@ -6,6 +6,7 @@ import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.datastore.EspnLeagueConfig
 import dev.gridiron.core.datastore.EspnLeagueEntry
 import dev.gridiron.core.datastore.EspnLogin
+import dev.gridiron.core.datastore.KeeperRule
 import dev.gridiron.core.datastore.PrefsSource
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringProfile
@@ -162,6 +163,20 @@ public class FantasyLeagueRepository(
             p.copy(espnLeagues = p.espnLeagues.map { if (it.leagueId == active) it.copy(teamId = teamId) else it })
         }
         _league.value?.let { saveRoster(it) }
+    }
+
+    /** The active league's keeper rule; null with no league. */
+    public val keeperRule: Flow<KeeperRule?> = prefs.prefs.map { p ->
+        val active = p.espnLeague?.leagueId
+        p.espnLeagues.firstOrNull { it.leagueId == active }?.keeperRule
+    }.distinctUntilChanged()
+
+    /** Saves [rule] on the active league. */
+    public suspend fun setKeeperRule(rule: KeeperRule) {
+        prefs.update { p ->
+            val active = p.espnLeague?.leagueId
+            p.copy(espnLeagues = p.espnLeagues.map { if (it.leagueId == active) it.copy(keeperRule = rule) else it })
+        }
     }
 
     private suspend fun switchTo(leagueId: String?) {

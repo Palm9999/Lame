@@ -66,11 +66,27 @@ public data class UserPrefs(
 public data class SeasonChoice(val seasons: List<Int>, val chosenIn: Int)
 
 /** One ESPN league the user added: its id, the user's team in it (null to find it from the SWID) and ESPN's name for it once synced. */
-public data class EspnLeagueEntry(val leagueId: String, val teamId: Int? = null, val name: String? = null) {
+public data class EspnLeagueEntry(
+    val leagueId: String,
+    val teamId: Int? = null,
+    val name: String? = null,
+    val keeperRule: KeeperRule = KeeperRule(),
+) {
     init {
         require(leagueId.isNotBlank() && leagueId.all { it.isDigit() }) { "an ESPN league id is digits" }
     }
 }
+
+/**
+ * How a keeper league prices a keeper: [keepers] per team, [penalty] rounds off a pick that was already a keeper,
+ * [undraftedRound] for a player never drafted (null: the league's last round), and cost-round [overrides] by player id.
+ */
+public data class KeeperRule(
+    val keepers: Int = 2,
+    val penalty: Int = 1,
+    val undraftedRound: Int? = null,
+    val overrides: Map<String, Int> = emptyMap(),
+)
 
 /** The login cookies a private league needs, shared by every league; null reads a public league. Safe to log. */
 public data class EspnLogin(val espnS2: String? = null, val swid: String? = null) {

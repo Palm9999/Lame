@@ -181,6 +181,18 @@ class UserPrefsStoreTest {
     }
 
     @Test
+    fun `the keeper rule round-trips through prefs and an older file reads the defaults`() {
+        val rule = KeeperRule(keepers = 3, penalty = 2, undraftedRound = 14, overrides = mapOf("00-0038542" to 5))
+        val prefs = UserPrefs.DEFAULT.copy(espnLeagues = listOf(EspnLeagueEntry("42", 3, "Work", rule), EspnLeagueEntry("77")))
+        withStore { it.update { _ -> prefs } }
+        val reread = withStore { it.prefs.first() }
+        assertEquals(rule, reread.espnLeagues.first().keeperRule)
+        assertEquals(KeeperRule(), reread.espnLeagues.last().keeperRule)
+        file.writeText("""{"formatVersion": 4, "espnLeagues": [{"leagueId": "5", "keeperRule": {"keepers": -1, "penalty": -2, "undraftedRound": 0}}]}""")
+        assertEquals(KeeperRule(keepers = 0, penalty = 0, undraftedRound = null), withStore { it.prefs.first() }.espnLeagues.single().keeperRule)
+    }
+
+    @Test
     fun `an unknown active league reads as the first, and a bad id is dropped`() {
         file.writeText("""{"formatVersion": 4, "espnLeagues": [{"leagueId": "abc"}, {"leagueId": "5"}, {"leagueId": "6"}], "espnActive": "9"}""")
         val read = withStore { it.prefs.first() }

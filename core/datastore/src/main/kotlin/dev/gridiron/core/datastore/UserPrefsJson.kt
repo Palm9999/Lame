@@ -52,7 +52,29 @@ internal data class UserPrefsDto(
 )
 
 @Serializable
-internal data class EspnLeagueEntryDto(val leagueId: String, val teamId: Int? = null, val name: String? = null)
+internal data class EspnLeagueEntryDto(
+    val leagueId: String,
+    val teamId: Int? = null,
+    val name: String? = null,
+    /** Missing in a file from before keepers: the defaults. */
+    val keeperRule: KeeperRuleDto? = null,
+)
+
+@Serializable
+internal data class KeeperRuleDto(
+    val keepers: Int = 2,
+    val penalty: Int = 1,
+    val undraftedRound: Int? = null,
+    val overrides: Map<String, Int> = emptyMap(),
+)
+
+/** Negative counts read as zero, a round under 1 as none. */
+private fun KeeperRuleDto.toRule(): KeeperRule = KeeperRule(
+    keepers = keepers.coerceAtLeast(0),
+    penalty = penalty.coerceAtLeast(0),
+    undraftedRound = undraftedRound?.takeIf { it >= 1 },
+    overrides = overrides.filterValues { it >= 1 },
+)
 
 @Serializable
 internal data class EspnLeagueDto(
@@ -168,7 +190,7 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
         .take(MAX_PRESETS)
     // Version 3 stored one league with its own cookies; it becomes the only league, active, and its cookies the shared login.
     val old = espnLeague?.let { orNull { EspnLeagueEntry(it.leagueId.trim(), it.teamId) } }
-    val leagues = (espnLeagues.mapNotNull { orNull { EspnLeagueEntry(it.leagueId.trim(), it.teamId, it.name?.takeIf { n -> n.isNotBlank() }) } } +
+    val leagues = (espnLeagues.mapNotNull { orNull { EspnLeagueEntry(it.leagueId.trim(), it.teamId, it.name?.takeIf { n -> n.isNotBlank() }, it.keeperRule?.toRule() ?: KeeperRule()) } } +
         listOfNotNull(old.takeIf { espnLeagues.isEmpty() })).distinctBy { it.leagueId }
     val s2 = (espnS2 ?: espnLeague?.espnS2)?.takeIf { it.isNotBlank() }
     val id = (swid ?: espnLeague?.swid)?.takeIf { it.isNotBlank() }
@@ -259,7 +281,10 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     oddsApiKey = oddsApiKey,
     gridPresets = gridPresets.map { json.encodeToJsonElement(PresetDto.serializer(), it.toDto()) },
     gridDensity = gridDensity.name,
-    espnLeagues = espnLeagues.map { EspnLeagueEntryDto(it.leagueId, it.teamId, it.name) },
+    espnLeagues = espnLeagues.map { e ->
+        val rule = e.keeperRule.takeIf { it != KeeperRule() }?.let { KeeperRuleDto(it.keepers, it.penalty, it.undraftedRound, it.overrides) }
+        EspnLeagueEntryDto(e.leagueId, e.teamId, e.name, rule)
+    },
     espnActive = espnLeague?.leagueId,
     espnS2 = espnLogin?.espnS2,
     swid = espnLogin?.swid,
