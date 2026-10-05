@@ -449,6 +449,17 @@ class ProjectionListScreenTest {
     }
 
     @Test
+    fun `start-sit charts the picked players' weeks through the playoffs, a bye as a gap`() {
+        val weekly = loaded.copy(rosWeekly = mapOf("w" to mapOf(4 to 16.0, 16 to 12.0), "q" to (4..17).associateWith { 20.0 }))
+        compose.setContent { GridironTheme { ProjectionListScreen(weekly, emptyMap(), onPlayer = {}, onBack = {}) } }
+        compose.onNodeWithTag("chip:startsit").performClick()
+        compose.onNodeWithTag("ss:w").performClick()
+        compose.onNodeWithTag("startsit").performScrollToNode(hasTestTag("roschart"))
+        compose.onNodeWithText("  Wide Out: 28.0 total · playoffs 12.0", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("roschart:row:5", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
     fun `start-sit names the pick between two ticked players`() {
         compose.setContent { GridironTheme { ProjectionListScreen(loaded, emptyMap(), onPlayer = {}, onBack = {}) } }
         compose.onNodeWithTag("chip:startsit").performClick()

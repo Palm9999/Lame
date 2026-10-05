@@ -44,6 +44,7 @@ import dev.gridiron.core.data.OpportunitiesResult
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoresWeek
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.live.DEFAULT_PLAYOFF_WEEKS
 import dev.gridiron.core.data.live.LeagueChoice
 import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.data.live.LineupReviewResult
@@ -394,7 +395,8 @@ public fun ProjectionListScreen(
                     // Once a team's inactives are posted, its Questionable players ESPN hasn't ruled out are playing.
                     val weekRows = remember(state, badges, inactivesPosted) { state.weekRows.map { confirmedActive(it, badges, inactivesPosted) } }
                     if (mode == ListMode.START_SIT) {
-                        StartSitView(weekRows, badges)
+                        val playoffs = (myTeam?.playoffWeeks ?: DEFAULT_PLAYOFF_WEEKS).toSet()
+                        StartSitView(weekRows, badges, state.rosWeekly, (state.week..(playoffs.maxOrNull() ?: state.week)).toList(), playoffs)
                     } else if (mode == ListMode.PLANNER && myTeam != null) {
                         PlannerView(myTeam, state, rostered, onPlayer)
                     } else if (mode == ListMode.REVIEW) {

@@ -70,7 +70,15 @@ private fun gaussian(rng: Random): Double {
  * and chance to score the most; the pick is the best chance.
  */
 @Composable
-internal fun StartSitView(weekRows: List<ProjectionRow>, badges: Map<String, String>) {
+internal fun StartSitView(
+    weekRows: List<ProjectionRow>,
+    badges: Map<String, String>,
+    /** Rest of season week by week, for the chart under the picks; empty hides it. */
+    rosWeekly: Map<String, Map<Int, Double>> = emptyMap(),
+    /** The chart's weeks: the upcoming one through the last fantasy playoff week. */
+    chartWeeks: List<Int> = emptyList(),
+    playoffs: Set<Int> = emptySet(),
+) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var picked by rememberSaveable { mutableStateOf(listOf<String>()) }
     val byId = remember(weekRows, badges) { weekRows.associate { it.playerId to outAdjusted(it, badges) } }
@@ -101,6 +109,8 @@ internal fun StartSitView(weekRows: List<ProjectionRow>, badges: Map<String, Str
                 if (picked.isNotEmpty()) TextButton(onClick = { picked = emptyList() }) { Text("Clear") }
             }
         }
+        val series = chartSeries(chosen, rosWeekly, chartWeeks)
+        if (series.isNotEmpty()) item { RosCompareChart(series, chartWeeks, playoffs) }
         item {
             Row(Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 for (t in PositionTab.entries) FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) }, modifier = Modifier.testTag("sstab:${t.name}"))
