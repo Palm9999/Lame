@@ -394,6 +394,39 @@ internal object EspnFantasyParser {
 
     private val OPEN_TRADE = setOf("PENDING", "PROPOSED")
 
+    private val ACTIVITY = mapOf("WAIVER" to ActivityKind.ADD, "FREEAGENT" to ActivityKind.ADD, "TRADE_ACCEPT" to ActivityKind.TRADE)
+
+    /**
+     * [week]'s executed moves from `mTransactions2` (types and statuses from memory, unverified): waiver claims and
+     * free-agent moves as adds, accepted trades as trades; anything else, or text that isn't JSON, reads as nothing.
+     */
+    fun activity(text: String, week: Int): List<ActivityItem> {
+        val root = try {
+            Json.parseToJsonElement(text) as? JsonObject
+        } catch (_: SerializationException) {
+            null
+        } ?: return emptyList()
+        return root.array("transactions").orEmpty().mapNotNull { e ->
+            val t = e as? JsonObject ?: return@mapNotNull null
+            if (t.string("status") != "EXECUTED") return@mapNotNull null
+            val kind = ACTIVITY[t.string("type")] ?: return@mapNotNull null
+            val moves = t.array("items").orEmpty().mapNotNull { i ->
+                val o = i as? JsonObject ?: return@mapNotNull null
+                ActivityMove(o.string("playerId") ?: return@mapNotNull null, null, null, o.int("fromTeamId") ?: 0, o.int("toTeamId") ?: 0)
+            }
+            if (moves.isEmpty()) return@mapNotNull null
+            ActivityItem(
+                id = t.string("id") ?: moves.toString(),
+                week = week,
+                kind = kind,
+                teamId = t.int("teamId") ?: moves.first().toTeamId,
+                bid = t.int("bidAmount")?.takeIf { kind == ActivityKind.ADD && it > 0 },
+                processedAtMillis = (t["processDate"] as? JsonPrimitive)?.longOrNull,
+                moves = moves,
+            )
+        }
+    }
+
     /** ESPN's `defaultPositionId`s (from memory, unverified against a live league). */
     private val POSITIONS = mapOf(1 to "QB", 2 to "RB", 3 to "WR", 4 to "TE", 5 to "K", 16 to "DST")
 

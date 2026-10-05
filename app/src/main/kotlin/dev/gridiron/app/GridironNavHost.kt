@@ -76,6 +76,7 @@ import dev.gridiron.feature.compare.CompareRoute
 import dev.gridiron.feature.players.GridRoute
 import dev.gridiron.feature.projections.AccuracyRoute
 import dev.gridiron.feature.projections.BreakoutsRoute
+import dev.gridiron.feature.projections.ActivityRoute
 import dev.gridiron.feature.projections.DynastyRoute
 import dev.gridiron.feature.projections.HistoryRoute
 import dev.gridiron.feature.projections.OpportunitiesRoute
@@ -200,6 +201,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
         if (deps.waiverTrends != null) add(MoreItem("League", "Waiver trends", "Who ESPN leagues are adding and dropping") { backStack.push(WaiverTrendsKey(season)) })
         if (deps.dynasty != null) add(MoreItem("League", "Dynasty & keepers", "Long-term values and who to keep") { backStack.push(DynastyKey(season)) })
         if (deps.league != null) add(MoreItem("League", "League history", "Champions, all-time table and records") { backStack.push(HistoryKey(season)) })
+        if (deps.league != null) add(MoreItem("League", "League activity", "Adds, drops and trades this season") { backStack.push(ActivityKey(season)) })
         if (deps.rosters != null) add(MoreItem("League", "Rosters", "Your saved rosters") { backStack.push(RostersKey) })
         if (deps.draft != null) add(MoreItem("League", "Draft", "ADP board and picks") { backStack.push(DraftKey) })
         add(MoreItem("App", "Projection accuracy", "How the model did, week by week") { backStack.push(AccuracyKey(season)) })
@@ -242,6 +244,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 if (deps.waiverTrends != null) add("Waiver trends" to { _: Int -> backStack.push(WaiverTrendsKey(season)) })
                                 if (deps.dynasty != null) add("Dynasty & keepers" to { _: Int -> backStack.push(DynastyKey(season)) })
                                 if (deps.league != null) add("League history" to { _: Int -> backStack.push(HistoryKey(season)) })
+                                if (deps.league != null) add("League activity" to { _: Int -> backStack.push(ActivityKey(season)) })
                                 if (deps.rosters != null) add("Rosters" to { _: Int -> backStack.push(RostersKey) })
                                 if (deps.draft != null) add("Draft" to { _: Int -> backStack.push(DraftKey) })
                                 add("Team defense" to { s: Int -> backStack.push(DefenseKey(s)) })
@@ -316,6 +319,17 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
                                 league = deps.league?.rostered ?: flowOf(null),
                                 myTeam = deps.league?.myTeam ?: flowOf(null),
+                            )
+                        }
+                    }
+                    entry<ActivityKey> { key ->
+                        deps.league?.let { league ->
+                            ActivityRoute(
+                                key.season,
+                                activity = { s -> league.activity(s) },
+                                ros = { s, p -> trendPoints(deps.projections, s, p).rosPoints },
+                                scoring = deps.scoring,
+                                onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back,
                             )
                         }
                     }

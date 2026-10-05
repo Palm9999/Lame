@@ -14,6 +14,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class WaiverTrendsKey(val season: Int) : NavKey
 @Serializable data class DynastyKey(val season: Int) : NavKey
 @Serializable data class HistoryKey(val season: Int) : NavKey
+@Serializable data class ActivityKey(val season: Int) : NavKey
 @Serializable data class AccuracyKey(val season: Int) : NavKey
 @Serializable data class InjuriesKey(val season: Int) : NavKey
 @Serializable data class DefenseKey(val season: Int) : NavKey
