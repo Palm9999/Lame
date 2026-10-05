@@ -259,9 +259,11 @@ public class FantasyLeagueRepository(
             }
         }
         var error: String? = null
+        val all = HashMap<Int, List<LeagueMatchup>>()
         val reviews = (through downTo 1).mapNotNull { week ->
             try {
                 val raw = EspnFantasyParser.matchups(http.get(EspnFantasyParser.matchupsUrl(cfg.leagueId, season, week), headers(cfg)), week)
+                all[week] = raw
                 val side = raw.firstNotNullOfOrNull { m -> listOfNotNull(m.home, m.away).firstOrNull { it.teamId == cfg.teamId } }
                     ?: return@mapNotNull null
                 val known = positionsOf(side.lineup)
@@ -276,7 +278,8 @@ public class FantasyLeagueRepository(
                 null
             }
         }
-        return LineupReviewResult(reviews, if (reviews.isEmpty()) error ?: "no finished weeks yet" else null)
+        val recap = if (all.isEmpty()) null else LeagueRecaps.of(all, league.teams.associate { it.id to it.name })
+        return LineupReviewResult(reviews, if (reviews.isEmpty()) error ?: "no finished weeks yet" else null, recap)
     }
 
     /**

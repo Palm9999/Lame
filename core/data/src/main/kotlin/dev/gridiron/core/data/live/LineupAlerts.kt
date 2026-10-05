@@ -93,3 +93,75 @@ public object LineupReview {
         )
     }
 }
+
+/** One finished game for the recap: [winner] beat [loser] by [margin] (a tie names the home side first, margin 0). */
+public data class RecapGame(val winner: String, val winnerScore: Double, val loser: String, val loserScore: Double) {
+    val margin: Double get() = winnerScore - loserScore
+}
+
+/** The latest finished week around the league: its three best starters, top team score, biggest win and closest game. */
+public data class WeekRecap(val week: Int, val topScorers: List<Pair<MatchupPlayer, String>>, val highScore: Pair<String, Double>?, val blowout: RecapGame?, val closest: RecapGame?)
+
+/**
+ * A team's season by ESPN's scores: its [wins] (a tie is half) against its all-play wins, the games it would have won
+ * playing every other team each week, scaled to its games. [luck] above zero: a better record than its scores earned.
+ */
+public data class TeamLuck(val teamId: Int, val name: String, val wins: Double, val games: Int, val allPlayWins: Double) {
+    val luck: Double get() = wins - allPlayWins
+}
+
+public data class LeagueRecap(val lastWeek: WeekRecap?, val luck: List<TeamLuck>)
+
+public object LeagueRecaps {
+    private val NOT_STARTING = setOf("BE", "IR")
+
+    /** From each finished week's matchups ([weeks]) and the teams' [names]. */
+    public fun of(weeks: Map<Int, List<LeagueMatchup>>, names: Map<Int, String>): LeagueRecap {
+        fun name(id: Int) = names[id] ?: "Team $id"
+        val games = weeks.mapValues { (_, ms) -> ms.mapNotNull { m -> m.away?.let { a -> m.home to a } } }
+        val last = weeks.keys.maxOrNull()?.let { w ->
+            val ms = weeks.getValue(w)
+            val sides = ms.flatMap { listOfNotNull(it.home, it.away) }
+            val results = games.getValue(w).map { (h, a) ->
+                if (h.espnTotal >= a.espnTotal) RecapGame(name(h.teamId), h.espnTotal, name(a.teamId), a.espnTotal)
+                else RecapGame(name(a.teamId), a.espnTotal, name(h.teamId), h.espnTotal)
+            }
+            WeekRecap(
+                week = w,
+                topScorers = sides.flatMap { s -> s.lineup.filter { it.slot !in NOT_STARTING && it.espnPoints != null }.map { it to name(s.teamId) } }
+                    .sortedByDescending { it.first.espnPoints }.take(3),
+                highScore = sides.maxByOrNull { it.espnTotal }?.let { name(it.teamId) to it.espnTotal },
+                blowout = results.maxByOrNull { it.margin },
+                closest = results.minByOrNull { it.margin },
+            )
+        }
+        val wins = HashMap<Int, Double>()
+        val played = HashMap<Int, Int>()
+        val allPlay = HashMap<Int, Double>()
+        for ((_, pairs) in games) {
+            val scores = pairs.flatMap { (h, a) -> listOf(h.teamId to h.espnTotal, a.teamId to a.espnTotal) }
+            for ((h, a) in pairs) {
+                played.merge(h.teamId, 1, Int::plus)
+                played.merge(a.teamId, 1, Int::plus)
+                when {
+                    h.espnTotal > a.espnTotal -> wins.merge(h.teamId, 1.0, Double::plus)
+                    a.espnTotal > h.espnTotal -> wins.merge(a.teamId, 1.0, Double::plus)
+                    else -> {
+                        wins.merge(h.teamId, 0.5, Double::plus)
+                        wins.merge(a.teamId, 0.5, Double::plus)
+                    }
+                }
+            }
+            // All-play: the share of the week's other teams each one outscored (a tie half), one game's worth.
+            for ((id, score) in scores) {
+                val others = scores.filter { it.first != id }
+                if (others.isEmpty()) continue
+                val beat = others.sumOf { (_, s) -> if (score > s) 1.0 else if (score == s) 0.5 else 0.0 }
+                allPlay.merge(id, beat / others.size, Double::plus)
+            }
+        }
+        val luck = played.keys.map { id -> TeamLuck(id, name(id), wins[id] ?: 0.0, played.getValue(id), allPlay[id] ?: 0.0) }
+            .sortedByDescending { it.luck }
+        return LeagueRecap(last, luck)
+    }
+}

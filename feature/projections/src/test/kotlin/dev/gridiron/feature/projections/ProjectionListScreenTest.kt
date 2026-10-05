@@ -14,14 +14,18 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
 import dev.gridiron.core.data.live.FantasyLeague
 import dev.gridiron.core.data.live.LeaguePlayer
+import dev.gridiron.core.data.live.LeagueRecap
 import dev.gridiron.core.data.live.LeagueTeam
 import dev.gridiron.core.data.live.LineupReviewResult
 import dev.gridiron.core.data.live.LiveWinChance
 import dev.gridiron.core.data.live.MatchupPlayer
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.PlayoffPicture
+import dev.gridiron.core.data.live.RecapGame
 import dev.gridiron.core.data.live.ScheduledGame
+import dev.gridiron.core.data.live.TeamLuck
 import dev.gridiron.core.data.live.TradeOffer
+import dev.gridiron.core.data.live.WeekRecap
 import dev.gridiron.core.data.live.WeekReview
 import dev.gridiron.core.designsystem.GridironTheme
 import org.junit.Assert.assertEquals
@@ -405,7 +409,16 @@ class ProjectionListScreenTest {
             GridironTheme {
                 ProjectionListScreen(
                     loaded, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team,
-                    review = ReviewState.Loaded(LineupReviewResult(weeks, null)), onReviewOpened = { asked++ },
+                    review = ReviewState.Loaded(
+                        LineupReviewResult(
+                            weeks, null,
+                            LeagueRecap(
+                                WeekRecap(3, emptyList(), "Ace" to 130.2, RecapGame("Ace", 130.2, "Bee", 80.0), RecapGame("Cee", 101.0, "Dee", 100.5)),
+                                listOf(TeamLuck(1, "Ace", 3.0, 3, 2.0)),
+                            ),
+                        ),
+                    ),
+                    onReviewOpened = { asked++ },
                 )
             }
         }
@@ -416,6 +429,9 @@ class ProjectionListScreenTest {
         compose.onNodeWithText("Week 3: 98.2 of a possible 112.6 (−14.4)").assertExists()
         compose.onNodeWithText("Should have started Sam Bench (18.4) over Pat Start (4.0)").assertExists()
         compose.onNodeWithText("Week 2: 120.0 of a possible 120.0 ✓").assertExists()
+        compose.onNodeWithTag("review").performScrollToNode(hasTestTag("luck:1"))
+        compose.onNodeWithText("Biggest win: Ace over Bee by 50.2", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("3.0 wins vs 2.0 all-play · +1.0", useUnmergedTree = true).assertExists()
     }
 
     @Test

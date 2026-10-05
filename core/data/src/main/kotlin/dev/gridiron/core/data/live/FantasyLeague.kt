@@ -74,7 +74,7 @@ public data class RawTradeOffer(val id: String, val proposer: Int?, val moves: L
 public data class MyMatchup(val mine: MatchupSide?, val theirs: MatchupSide?, val message: String?)
 
 /** The weeks reviewed, newest first; [message] says why there are none. */
-public data class LineupReviewResult(val weeks: List<WeekReview>, val message: String?)
+public data class LineupReviewResult(val weeks: List<WeekReview>, val message: String?, val recap: LeagueRecap? = null)
 
 /** [picture], or null with [message] saying why. */
 public data class PlayoffPictureResult(val picture: PlayoffPicture?, val message: String?)

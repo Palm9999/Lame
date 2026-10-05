@@ -1,6 +1,7 @@
 package dev.gridiron.feature.projections
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -13,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.gridiron.core.data.live.LeagueRecap
 import dev.gridiron.core.data.live.LineupReviewResult
 import dev.gridiron.core.data.live.MatchupPlayer
 import dev.gridiron.core.data.live.WeekReview
@@ -77,9 +79,58 @@ internal fun ReviewView(state: ReviewState) {
                         }
                     }
                 }
+                state.result.recap?.let { recap -> recapItems(recap) }
             }
         }
     }
+}
+
+/** The league recap under the review: the latest week around the league, then luck, record against scores. */
+private fun androidx.compose.foundation.lazy.LazyListScope.recapItems(recap: LeagueRecap) {
+    recap.lastWeek?.let { w ->
+        item { Label("League, week ${w.week}") }
+        item {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("recap:week")) {
+                w.highScore?.let { (team, score) -> Line("Top score: $team, ${pts(score)}") }
+                w.blowout?.let { g -> Line("Biggest win: ${g.winner} over ${g.loser} by ${pts(g.margin)}") }
+                w.closest?.let { g -> Line("Closest: ${g.winner} over ${g.loser} by ${pts(g.margin)}") }
+                if (w.topScorers.isNotEmpty()) {
+                    Line("Best starters: " + w.topScorers.joinToString { (p, team) -> "${p.name} ${pts(p.espnPoints ?: 0.0)} ($team)" })
+                }
+            }
+        }
+    }
+    if (recap.luck.isNotEmpty()) {
+        item { Label("Luck: record against scores") }
+        item {
+            Text(
+                "All-play wins: the games each team would have won playing every other team each week. Above zero, a better record than its scores earned.",
+                Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        itemsIndexed(recap.luck, key = { _, t -> "luck:${t.teamId}" }) { _, t ->
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("luck:${t.teamId}")) {
+                Text(t.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    "${pts(t.wins)} wins vs ${pts(t.allPlayWins)} all-play · " + (if (t.luck >= 0) "+" else "−") + pts(kotlin.math.abs(t.luck)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun Line(text: String) {
+    Text(text, style = MaterialTheme.typography.bodySmall)
+}
+
+@Composable
+private fun Label(text: String) {
+    Text(text, Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 private fun pts(value: Double): String = String.format(Locale.US, "%.1f", value)
