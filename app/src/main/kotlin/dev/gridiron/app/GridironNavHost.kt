@@ -61,6 +61,7 @@ import dev.gridiron.core.data.kickoffs
 import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.LineupReviewResult
 import dev.gridiron.core.data.live.LiveRepository
+import dev.gridiron.core.data.live.WaiverTrendsRepository
 import dev.gridiron.core.data.live.MyMatchup
 import dev.gridiron.core.data.live.OpponentResult
 import dev.gridiron.core.data.live.PlayoffPictureResult
@@ -74,6 +75,8 @@ import dev.gridiron.feature.players.GridRoute
 import dev.gridiron.feature.projections.AccuracyRoute
 import dev.gridiron.feature.projections.BreakoutsRoute
 import dev.gridiron.feature.projections.OpportunitiesRoute
+import dev.gridiron.feature.projections.WaiverTrendsRoute
+import dev.gridiron.feature.projections.trendPoints
 import dev.gridiron.feature.projections.ProjectionListRoute
 import dev.gridiron.feature.projections.ProjectionsRoute
 import dev.gridiron.feature.scoring.ScoringEditRoute
@@ -122,6 +125,8 @@ data class Deps(
     val breakouts: BreakoutRepository? = null,
     /** Past absences, for the Player page's return outlook; null where a test doesn't need it. */
     val returns: InjuryReturnRepository? = null,
+    /** ESPN's most added and dropped; null where a test doesn't need it. */
+    val waiverTrends: WaiverTrendsRepository? = null,
 )
 
 /**
@@ -186,6 +191,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
         add(MoreItem("Players", "Injury report", "ESPN's live list and practice") { backStack.push(InjuriesKey(season)) })
         add(MoreItem("Players", "Team defense", "Each defense's season") { backStack.push(DefenseKey(season)) })
         if (deps.league != null) add(MoreItem("League", "ESPN leagues", "Sync, teams and matchups") { backStack.push(LeagueKey) })
+        if (deps.waiverTrends != null) add(MoreItem("League", "Waiver trends", "Who ESPN leagues are adding and dropping") { backStack.push(WaiverTrendsKey(season)) })
         if (deps.rosters != null) add(MoreItem("League", "Rosters", "Your saved rosters") { backStack.push(RostersKey) })
         if (deps.draft != null) add(MoreItem("League", "Draft", "ADP board and picks") { backStack.push(DraftKey) })
         add(MoreItem("App", "Projection accuracy", "How the model did, week by week") { backStack.push(AccuracyKey(season)) })
@@ -224,6 +230,8 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 if (deps.scores != null) add("Scores" to { s: Int -> backStack.push(ScoresKey(s)) })
                                 add("Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) })
                                 if (deps.league != null) add("ESPN leagues" to { _: Int -> backStack.push(LeagueKey) })
+                                // ESPN's roster shares are live: always this season's.
+                                if (deps.waiverTrends != null) add("Waiver trends" to { _: Int -> backStack.push(WaiverTrendsKey(season)) })
                                 if (deps.rosters != null) add("Rosters" to { _: Int -> backStack.push(RostersKey) })
                                 if (deps.draft != null) add("Draft" to { _: Int -> backStack.push(DraftKey) })
                                 add("Team defense" to { s: Int -> backStack.push(DefenseKey(s)) })
@@ -285,6 +293,19 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 league = deps.league?.rostered ?: flowOf(null),
                                 myTeam = deps.league?.myTeam ?: flowOf(null),
                                 injuriesChanged = deps.live?.changes ?: flowOf(0L),
+                            )
+                        }
+                    }
+                    entry<WaiverTrendsKey> { key ->
+                        deps.waiverTrends?.let { repository ->
+                            WaiverTrendsRoute(
+                                key.season,
+                                trends = { s -> repository.load(s) },
+                                points = { s, p -> trendPoints(deps.projections, s, p) },
+                                scoring = deps.scoring,
+                                onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
+                                league = deps.league?.rostered ?: flowOf(null),
+                                myTeam = deps.league?.myTeam ?: flowOf(null),
                             )
                         }
                     }

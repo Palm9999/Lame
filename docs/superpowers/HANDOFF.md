@@ -45,7 +45,9 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** nothing is pending; the 2026-10-05 rounds (trade value, power rankings, Planner, matchup preview, live win chance, widget, draft; then news alerts, trade offers, the rest-of-season chart and the league recap; then the injury return outlook and game day, win-max lineup measured and dropped) are shipped. Ideas offered and not picked: waiver trends (ESPN's most added), keeper/dynasty values, a manager report card, league history, shareable cards. Offer the user the next round as a short pick-list (features and accuracy ideas, each accuracy idea backtested on `tune.db` and shipped only beyond 2 SE). Untried leads: rest of season discounting an injured player's coming weeks by the return outlook (now it counts him in full from his next week; a backtest needs rest-of-season accuracy, not weekly); a TE handcuff rule that gives the backup TE part of the starter's targets by position (the team-wide rule under-projects him by about 1.9; only 43 cases to fit on); ESPN's QB rushing TDs (noisy, 0.85-1.08 of ESPN's).
+**Next:** the user picked the 2026-10-05 round: (1) waiver trends, built (below); then (2) keeper/dynasty values, (3) a manager report card, (4) league history, (5) shareable cards, in that order, one at a time, each through brainstorming (a short design in chat for a bounded one) and its own push. Untried accuracy leads (not picked this round): rest of season discounting an injured player's coming weeks by the return outlook (a backtest needs rest-of-season accuracy, not weekly); a TE handcuff rule giving the backup TE part of the starter's targets (about 1.9 under; only 43 cases); ESPN's QB rushing TDs (noisy, 0.85-1.08 of ESPN's).
+
+**Just built: Waiver trends** (More → League, or ☰). ESPN's `kona_player_info` on `leaguedefaults/3` with a filter for the 1,000 most rostered and one stat line each (without it the list is about 20 MB; with it about 600 KB compressed; `view=players_wl` is 35 KB but has no `percentChange`); the 1,000th player is at 0.0%, so the list covers everyone rostered. Each fetch saves the day's roster % in `live.db` (`roster_pct`); a 7-10-day-old snapshot turns on the weekly change (the user chose snapshots over ESPN's figure alone). ESPN's `percentChange` window is unknown: on a Monday its biggest riser was +1.7, so it looks daily, not weekly. A player with no NFL team has `proTeamId` 0 (no team shown).
 
 ## Rulings that still bind
 
@@ -60,6 +62,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - **Places read best first** ("1st of 62", never "percentile" wording; 2026-10-03). **My players** are always listed, unranked below the bar (2026-10-03). **Several leagues:** one active league, one shared login, every league's team a roster (2026-10-03). **Matchups:** ESPN's numbers lead, the app's beside them (2026-10-01).
 
 ## Deferred minors
+
+**Deferred minors (waiver trends):** snapshots are kept only when the screen is opened (no background fetch), so the weekly change needs an open 7-10 days earlier; days are UTC; the 25-row cut and the 15-minute memory cache are judgments; a player `player_xref` can't match isn't tappable and has no points; the snapshot is ESPN's public leagues, not the user's league; ESPN's `percentChange` is shown as is.
 
 **Deferred minors (lineup alerts, Questionable):** before inactives post, a Questionable starter still projects at his discount (ESPN's badge can't tell an active Q from an undecided one), so an early-Sunday My lineup may suggest sitting him; the pre-game lineup alert itself doesn't lift the discount; Projections reads kickoffs when it loads and when My lineup opens, so a week list or Start/sit left open across the cutoff lifts only after reopening; the Player page card reads them each time the page loads; the waterfall and the Grid's projection columns read the stored final, so they keep the discount (a confirmed-active player's card can read above the waterfall it opens). Review's last week is the later of the stats build's and ESPN's.
 
@@ -103,7 +107,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Open checks on the phone
 
-None open (the user confirmed every earlier check, 2026-10-05).
+- **Waiver trends:** More → Waiver trends: Most added and Most dropped fill, the position chips narrow them, a row opens the Player page, and with a league synced the Free agents chip and owner tags show. Open it once a day for a week: from day 7 the note should read "over the last week".
 
 ## Container notes
 

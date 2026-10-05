@@ -30,6 +30,7 @@ import dev.gridiron.core.data.live.NewsAlertChecker
 import dev.gridiron.core.data.live.PropsRepository
 import dev.gridiron.core.data.live.UrlConnectionHttpClient
 import dev.gridiron.core.data.live.UrlConnectionHttpGet
+import dev.gridiron.core.data.live.WaiverTrendsRepository
 import dev.gridiron.core.data.live.WeekPlayer
 import dev.gridiron.core.data.live.starterIds
 import dev.gridiron.core.database.ReopenableQueryExecutor
@@ -181,6 +182,7 @@ class GridironApplication : Application() {
             opportunities = OpportunitiesRepository(executor, projectionsRepo, { live.injuries() }),
             breakouts = BreakoutRepository(executor),
             returns = InjuryReturnRepository(executor),
+            waiverTrends = WaiverTrendsRepository(liveDb, UrlConnectionHttpGet(), players),
         )
     }
 

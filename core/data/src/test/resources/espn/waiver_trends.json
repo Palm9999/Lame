@@ -1,0 +1,699 @@
+{
+ "players": [
+  {
+   "id": 4695883,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 3,
+    "firstName": "Jalen",
+    "fullName": "Jalen Coker",
+    "id": 4695883,
+    "injured": true,
+    "injuryStatus": "OUT",
+    "lastName": "Coker",
+    "proTeamId": 29,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 2.13,
+     "auctionValueAverageChange": -0.15,
+     "averageDraftPosition": 130.25,
+     "averageDraftPositionPercentChange": -0.52,
+     "date": 1791232217658,
+     "leagueType": 0,
+     "percentChange": -0.39,
+     "percentOwned": 87.02,
+     "percentStarted": 8.7
+    }
+   }
+  },
+  {
+   "id": 4360248,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 4,
+    "firstName": "Kyle",
+    "fullName": "Kyle Pitts Sr.",
+    "id": 4360248,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "Pitts Sr.",
+    "proTeamId": 1,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 3.68,
+     "auctionValueAverageChange": -0.1,
+     "averageDraftPosition": 100.91,
+     "averageDraftPositionPercentChange": -0.02,
+     "date": 1791232216253,
+     "leagueType": 0,
+     "percentChange": -0.36,
+     "percentOwned": 77.49,
+     "percentStarted": 30.43
+    }
+   }
+  },
+  {
+   "id": 4239996,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 2,
+    "firstName": "Travis",
+    "fullName": "Travis Etienne Jr.",
+    "id": 4239996,
+    "injured": true,
+    "injuryStatus": "INJURY_RESERVE",
+    "lastName": "Etienne Jr.",
+    "proTeamId": 18,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 15.44,
+     "auctionValueAverageChange": -0.15,
+     "averageDraftPosition": 69.82,
+     "averageDraftPositionPercentChange": -1.11,
+     "date": 1791232215923,
+     "leagueType": 0,
+     "percentChange": -0.33,
+     "percentOwned": 90.26,
+     "percentStarted": 11.77
+    }
+   }
+  },
+  {
+   "id": 4569559,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 3,
+    "firstName": "Devaughn",
+    "fullName": "Devaughn Vele",
+    "id": 4569559,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "Vele",
+    "proTeamId": 18,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.25,
+     "auctionValueAverageChange": -0.02,
+     "averageDraftPosition": 165.91,
+     "averageDraftPositionPercentChange": -0.29,
+     "date": 1791232217209,
+     "leagueType": 0,
+     "percentChange": -0.3,
+     "percentOwned": 65.51,
+     "percentStarted": 22.89
+    }
+   }
+  },
+  {
+   "id": -16029,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 16,
+    "firstName": "Panthers",
+    "fullName": "Panthers D/ST",
+    "id": -16029,
+    "injured": false,
+    "lastName": "D/ST",
+    "proTeamId": 29,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.01,
+     "auctionValueAverageChange": 0.0,
+     "averageDraftPosition": 169.14,
+     "averageDraftPositionPercentChange": -0.04,
+     "date": 1791232214485,
+     "leagueType": 0,
+     "percentChange": -0.26,
+     "percentOwned": 11.57,
+     "percentStarted": 5.59
+    }
+   }
+  },
+  {
+   "id": 4880281,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 3,
+    "firstName": "Jordyn",
+    "fullName": "Jordyn Tyson",
+    "id": 4880281,
+    "injured": true,
+    "injuryStatus": "INJURY_RESERVE",
+    "lastName": "Tyson",
+    "proTeamId": 18,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.09,
+     "auctionValueAverageChange": -0.02,
+     "averageDraftPosition": 168.11,
+     "averageDraftPositionPercentChange": 0.25,
+     "date": 1791232217859,
+     "leagueType": 0,
+     "percentChange": -0.16,
+     "percentOwned": 34.24,
+     "percentStarted": 0.18
+    }
+   }
+  },
+  {
+   "id": 3054850,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 2,
+    "firstName": "Alvin",
+    "fullName": "Alvin Kamara",
+    "id": 3054850,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "Kamara",
+    "proTeamId": 18,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.17,
+     "auctionValueAverageChange": -0.03,
+     "averageDraftPosition": 160.34,
+     "averageDraftPositionPercentChange": 0.04,
+     "date": 1791232215105,
+     "leagueType": 0,
+     "percentChange": -0.13,
+     "percentOwned": 65.24,
+     "percentStarted": 20.9
+    }
+   }
+  },
+  {
+   "id": 15818,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 3,
+    "firstName": "Keenan",
+    "fullName": "Keenan Allen",
+    "id": 15818,
+    "injured": true,
+    "injuryStatus": "OUT",
+    "lastName": "Allen",
+    "proTeamId": 11,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.12,
+     "auctionValueAverageChange": 0.0,
+     "averageDraftPosition": 165.4,
+     "averageDraftPositionPercentChange": -0.32,
+     "date": 1791232214783,
+     "leagueType": 0,
+     "percentChange": -0.13,
+     "percentOwned": 43.93,
+     "percentStarted": 4.28
+    }
+   }
+  },
+  {
+   "id": 3886598,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 3,
+    "firstName": "Jauan",
+    "fullName": "Jauan Jennings",
+    "id": 3886598,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "Jennings",
+    "proTeamId": 16,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.0,
+     "auctionValueAverageChange": 0.0,
+     "averageDraftPosition": 169.43,
+     "averageDraftPositionPercentChange": 0.03,
+     "date": 1791232215378,
+     "leagueType": 0,
+     "percentChange": 0.03,
+     "percentOwned": 7.95,
+     "percentStarted": 2.3
+    }
+   }
+  },
+  {
+   "id": 4568263,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 5,
+    "firstName": "Ryan",
+    "fullName": "Ryan Fitzgerald",
+    "id": 4568263,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "Fitzgerald",
+    "proTeamId": 29,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.01,
+     "auctionValueAverageChange": 0.0,
+     "averageDraftPosition": 169.16,
+     "averageDraftPositionPercentChange": -0.05,
+     "date": 1791232217171,
+     "leagueType": 0,
+     "percentChange": 0.03,
+     "percentOwned": 3.05,
+     "percentStarted": 2.58
+    }
+   }
+  },
+  {
+   "id": 5123663,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 3,
+    "firstName": "Isaac",
+    "fullName": "Isaac TeSlaa",
+    "id": 5123663,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "TeSlaa",
+    "proTeamId": 8,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.0,
+     "auctionValueAverageChange": 0.0,
+     "averageDraftPosition": 169.34,
+     "averageDraftPositionPercentChange": 0.01,
+     "date": 1791225018765,
+     "leagueType": 0,
+     "percentChange": 0.04,
+     "percentOwned": 2.0,
+     "percentStarted": 0.27
+    }
+   }
+  },
+  {
+   "id": -16003,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 16,
+    "firstName": "Bears",
+    "fullName": "Bears D/ST",
+    "id": -16003,
+    "injured": false,
+    "lastName": "D/ST",
+    "proTeamId": 3,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.09,
+     "auctionValueAverageChange": 0.02,
+     "averageDraftPosition": 166.44,
+     "averageDraftPositionPercentChange": 0.84,
+     "date": 1791232214564,
+     "leagueType": 0,
+     "percentChange": 0.06,
+     "percentOwned": 38.18,
+     "percentStarted": 34.77
+    }
+   }
+  },
+  {
+   "id": 4360423,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 1,
+    "firstName": "Michael",
+    "fullName": "Michael Penix Jr.",
+    "id": 4360423,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "Penix Jr.",
+    "proTeamId": 1,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.04,
+     "auctionValueAverageChange": -0.01,
+     "averageDraftPosition": 169.05,
+     "averageDraftPositionPercentChange": -0.04,
+     "date": 1791232216281,
+     "leagueType": 0,
+     "percentChange": 0.12,
+     "percentOwned": 6.03,
+     "percentStarted": 2.19
+    }
+   }
+  },
+  {
+   "id": 4887558,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 2,
+    "firstName": "Emanuel",
+    "fullName": "Emanuel Wilson",
+    "id": 4887558,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "Wilson",
+    "proTeamId": 26,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.04,
+     "auctionValueAverageChange": 0.03,
+     "averageDraftPosition": 168.53,
+     "averageDraftPositionPercentChange": 1.17,
+     "date": 1791232217873,
+     "leagueType": 0,
+     "percentChange": 0.13,
+     "percentOwned": 50.06,
+     "percentStarted": 23.33
+    }
+   }
+  },
+  {
+   "id": 4429835,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 2,
+    "firstName": "George",
+    "fullName": "George Holani",
+    "id": 4429835,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "Holani",
+    "proTeamId": 26,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.0,
+     "auctionValueAverageChange": 0.0,
+     "averageDraftPosition": 169.92,
+     "averageDraftPositionPercentChange": -0.01,
+     "date": 1791232216928,
+     "leagueType": 0,
+     "percentChange": 0.13,
+     "percentOwned": 16.58,
+     "percentStarted": 6.21
+    }
+   }
+  },
+  {
+   "id": -16001,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 16,
+    "firstName": "Falcons",
+    "fullName": "Falcons D/ST",
+    "id": -16001,
+    "injured": false,
+    "lastName": "D/ST",
+    "proTeamId": 1,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.01,
+     "auctionValueAverageChange": -0.01,
+     "averageDraftPosition": 169.33,
+     "averageDraftPositionPercentChange": 0.04,
+     "date": 1791232214573,
+     "leagueType": 0,
+     "percentChange": 0.16,
+     "percentOwned": 1.5,
+     "percentStarted": 1.08
+    }
+   }
+  },
+  {
+   "id": 2576925,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 4,
+    "firstName": "Darren",
+    "fullName": "Darren Waller",
+    "id": 2576925,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "Waller",
+    "proTeamId": 29,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.08,
+     "auctionValueAverageChange": -0.01,
+     "averageDraftPosition": 167.96,
+     "averageDraftPositionPercentChange": 0.12,
+     "date": 1791232214907,
+     "leagueType": 0,
+     "percentChange": 0.27,
+     "percentOwned": 35.23,
+     "percentStarted": 22.04
+    }
+   }
+  },
+  {
+   "id": 4360763,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 3,
+    "firstName": "Brycen",
+    "fullName": "Brycen Tremayne",
+    "id": 4360763,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "Tremayne",
+    "proTeamId": 29,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.0,
+     "auctionValueAverageChange": 0.0,
+     "averageDraftPosition": 169.94,
+     "averageDraftPositionPercentChange": 0.03,
+     "date": 1791232216314,
+     "leagueType": 0,
+     "percentChange": 0.5,
+     "percentOwned": 1.97,
+     "percentStarted": 1.39
+    }
+   }
+  },
+  {
+   "id": 3116385,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 2,
+    "firstName": "Joe",
+    "fullName": "Joe Mixon",
+    "id": 3116385,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "Mixon",
+    "proTeamId": 0,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.0,
+     "auctionValueAverageChange": 0.0,
+     "averageDraftPosition": 169.9,
+     "averageDraftPositionPercentChange": 0.01,
+     "date": 1791232215165,
+     "leagueType": 0,
+     "percentChange": 0.86,
+     "percentOwned": 3.23,
+     "percentStarted": 0.03
+    }
+   }
+  },
+  {
+   "id": 3116406,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 3,
+    "firstName": "Tyreek",
+    "fullName": "Tyreek Hill",
+    "id": 3116406,
+    "injured": true,
+    "injuryStatus": "OUT",
+    "lastName": "Hill",
+    "proTeamId": 0,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 0.05,
+     "auctionValueAverageChange": 0.0,
+     "averageDraftPosition": 167.92,
+     "averageDraftPositionPercentChange": 0.37,
+     "date": 1791232215171,
+     "leagueType": 0,
+     "percentChange": 1.72,
+     "percentOwned": 28.52,
+     "percentStarted": 0.08
+    }
+   }
+  },
+  {
+   "id": -16026,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 16,
+    "firstName": "Seahawks",
+    "fullName": "Seahawks D/ST",
+    "id": -16026,
+    "injured": false,
+    "lastName": "D/ST",
+    "proTeamId": 26,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 2.34,
+     "auctionValueAverageChange": -0.01,
+     "averageDraftPosition": 83.68,
+     "averageDraftPositionPercentChange": 1.17,
+     "date": 1791232214494,
+     "leagueType": 0,
+     "percentChange": -0.01,
+     "percentOwned": 98.42,
+     "percentStarted": 94.05
+    }
+   }
+  },
+  {
+   "id": -16023,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 16,
+    "firstName": "Steelers",
+    "fullName": "Steelers D/ST",
+    "id": -16023,
+    "injured": false,
+    "lastName": "D/ST",
+    "proTeamId": 23,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 1.17,
+     "auctionValueAverageChange": -0.03,
+     "averageDraftPosition": 115.53,
+     "averageDraftPositionPercentChange": -1.38,
+     "date": 1791232214503,
+     "leagueType": 0,
+     "percentChange": -0.03,
+     "percentOwned": 94.73,
+     "percentStarted": 88.27
+    }
+   }
+  },
+  {
+   "id": 4429795,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 2,
+    "firstName": "Jahmyr",
+    "fullName": "Jahmyr Gibbs",
+    "id": 4429795,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "Gibbs",
+    "proTeamId": 8,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 73.2,
+     "auctionValueAverageChange": -0.47,
+     "averageDraftPosition": 1.69,
+     "averageDraftPositionPercentChange": 0.0,
+     "date": 1791232216915,
+     "leagueType": 0,
+     "percentChange": 0.0,
+     "percentOwned": 99.95,
+     "percentStarted": 99.86
+    }
+   }
+  },
+  {
+   "id": 4374302,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 3,
+    "firstName": "Amon-Ra",
+    "fullName": "Amon-Ra St. Brown",
+    "id": 4374302,
+    "injured": false,
+    "injuryStatus": "ACTIVE",
+    "lastName": "St. Brown",
+    "proTeamId": 8,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 52.44,
+     "auctionValueAverageChange": -0.34,
+     "averageDraftPosition": 8.85,
+     "averageDraftPositionPercentChange": -0.16,
+     "date": 1791232216572,
+     "leagueType": 0,
+     "percentChange": 0.0,
+     "percentOwned": 99.93,
+     "percentStarted": 99.72
+    }
+   }
+  },
+  {
+   "id": 4362628,
+   "onTeamId": 0,
+   "status": "WAIVERS",
+   "player": {
+    "active": true,
+    "defaultPositionId": 3,
+    "firstName": "Ja'Marr",
+    "fullName": "Ja'Marr Chase",
+    "id": 4362628,
+    "injured": false,
+    "injuryStatus": "QUESTIONABLE",
+    "lastName": "Chase",
+    "proTeamId": 4,
+    "ownership": {
+     "activityLevel": null,
+     "auctionValueAverage": 55.04,
+     "auctionValueAverageChange": -1.12,
+     "averageDraftPosition": 5.81,
+     "averageDraftPositionPercentChange": -0.47,
+     "date": 1791232216464,
+     "leagueType": 0,
+     "percentChange": 0.0,
+     "percentOwned": 99.93,
+     "percentStarted": 99.67
+    }
+   }
+  }
+ ]
+}

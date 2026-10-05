@@ -195,6 +195,9 @@ internal object EspnFantasyParser {
         25 to "SF", 26 to "SEA", 27 to "TB", 28 to "WAS", 29 to "CAR", 30 to "JAX", 33 to "BAL", 34 to "HOU",
     )
 
+    /** nflverse's team code for ESPN's pro team id. */
+    fun proTeam(id: Int): String? = PRO_TEAMS[id]
+
     /** The app's id for a D/ST, from its ESPN player id. */
     fun dstPlayerId(espnId: String): String? {
         val n = espnId.toIntOrNull() ?: return null
