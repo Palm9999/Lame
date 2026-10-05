@@ -45,7 +45,9 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** the user picked the 2026-10-05 round: (1) waiver trends, built (below); then (2) keeper/dynasty values, (3) a manager report card, (4) league history, (5) shareable cards, in that order, one at a time, each through brainstorming (a short design in chat for a bounded one) and its own push. Untried accuracy leads (not picked this round): rest of season discounting an injured player's coming weeks by the return outlook (a backtest needs rest-of-season accuracy, not weekly); a TE handcuff rule giving the backup TE part of the starter's targets (about 1.9 under; only 43 cases); ESPN's QB rushing TDs (noisy, 0.85-1.08 of ESPN's).
+**Next:** the user picked the 2026-10-05 round: (1) waiver trends, built (below); (2) dynasty & keepers, built (below); then (3) a manager report card, (4) league history, (5) shareable cards, in that order, one at a time, each through brainstorming (a short design in chat for a bounded one) and its own push. Untried accuracy leads (not picked this round): rest of season discounting an injured player's coming weeks by the return outlook (a backtest needs rest-of-season accuracy, not weekly); a TE handcuff rule giving the backup TE part of the starter's targets (about 1.9 under; only 43 cases); ESPN's QB rushing TDs (noisy, 0.85-1.08 of ESPN's).
+
+**Just built: Dynasty & keepers** (More → League, or ☰). The user chose market values (FantasyCalc) over an app age-curve model, and keepers priced by the round drafted. FantasyCalc: about 420 players plus 24 rookie picks (dropped), 27 players without an `espnId` (shown, not linked), `overallRank` counts the picks (so ranks are recounted). A rostered player's cost is his own pick whoever made it (a traded player keeps his round). ESPN's `mDraftDetail` shape (`draftDetail.picks[]`: `playerId`, `roundId`, `teamId`, `keeper`) is from memory: unverified until the user's keeper league is synced.
 
 **Just built: Waiver trends** (More → League, or ☰). ESPN's `kona_player_info` on `leaguedefaults/3` with a filter for the 1,000 most rostered and one stat line each (without it the list is about 20 MB; with it about 600 KB compressed; `view=players_wl` is 35 KB but has no `percentChange`); the 1,000th player is at 0.0%, so the list covers everyone rostered. Each fetch saves the day's roster % in `live.db` (`roster_pct`); a 7-10-day-old snapshot turns on the weekly change (the user chose snapshots over ESPN's figure alone). ESPN's `percentChange` window is unknown: on a Monday its biggest riser was +1.7, so it looks daily, not weekly. A player with no NFL team has `proTeamId` 0 (no team shown).
 
@@ -62,6 +64,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - **Places read best first** ("1st of 62", never "percentile" wording; 2026-10-03). **My players** are always listed, unranked below the bar (2026-10-03). **Several leagues:** one active league, one shared login, every league's team a roster (2026-10-03). **Matchups:** ESPN's numbers lead, the app's beside them (2026-10-01).
 
 ## Deferred minors
+
+**Deferred minors (dynasty & keepers):** the draft is read every time the screen opens (no cache); keeper costs ignore how many years a player was kept; a negative-surplus player is still marked Keep when he is in the top N; the 6-hour value cache is a judgment; K and D/ST have no worth; a pick ESPN makes for a player later released and re-added still prices at that pick; the Grid, Player page and Trade don't use dynasty values.
 
 **Deferred minors (waiver trends):** snapshots are kept only when the screen is opened (no background fetch), so the weekly change needs an open 7-10 days earlier; days are UTC; the 25-row cut and the 15-minute memory cache are judgments; a player `player_xref` can't match isn't tappable and has no points; the snapshot is ESPN's public leagues, not the user's league; ESPN's `percentChange` is shown as is.
 
@@ -107,6 +111,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Open checks on the phone
 
+- **Dynasty & keepers:** More → Dynasty & keepers: the Dynasty tab fills in your league's format (Superflex if it starts an OP); on Keepers, check each player's cost round against your league's real draft (if every player reads the undrafted round, ESPN's draft shape differs: report it), set Keep, Penalty and Undrafted round, and override one cost.
 - **Waiver trends:** More → Waiver trends: Most added and Most dropped fill, the position chips narrow them, a row opens the Player page, and with a league synced the Free agents chip and owner tags show. Open it once a day for a week: from day 7 the note should read "over the last week".
 
 ## Container notes

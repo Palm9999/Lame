@@ -114,4 +114,4 @@ Features and where they live: `docs/ARCHITECTURE.md` (Features). Gaps that still
 - **Android SDK** — Platform 37, JDK 17+
 - **Gradle caching & configuration cache** enabled (`gradle.properties`)
 - **Build artifact** — APK auto-published to [releases/download/app/gridiron.apk](https://github.com/Palm9999/Lame/releases/download/app/gridiron.apk) on every push and every Tuesday morning
-- **Data attribution** — nflverse (CC BY 4.0), FTN Data via nflverse (CC BY-SA 4.0), ffopportunity, ESPN (news, injuries and weekly projections), The Odds API (player props, with the user's own key), Fantasy Football Calculator ADP, US National Weather Service
+- **Data attribution** — nflverse (CC BY 4.0), FTN Data via nflverse (CC BY-SA 4.0), ffopportunity, ESPN (news, injuries and weekly projections), The Odds API (player props, with the user's own key), Fantasy Football Calculator ADP, FantasyCalc (dynasty and redraft values), US National Weather Service
