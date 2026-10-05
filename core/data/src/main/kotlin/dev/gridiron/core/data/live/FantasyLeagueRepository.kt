@@ -310,6 +310,22 @@ public class FantasyLeagueRepository(
     }
 
     /**
+     * The user's and the opponent's sides of [week]'s matchup as ESPN has them now (lineups with live points, app ids
+     * filled in). Never throws: [MyMatchup.message] says why there is none.
+     */
+    public suspend fun myMatchup(season: Int, week: Int, scoring: ScoringProfile): MyMatchup {
+        val cfg = prefs.prefs.first().espnLeague ?: return MyMatchup(null, null, "no league id set")
+        val teamId = cfg.teamId ?: return MyMatchup(null, null, "choose your team first")
+        val result = matchups(season, week, scoring)
+        result.error?.let { return MyMatchup(null, null, it) }
+        val m = result.matchups.firstOrNull { it.home.teamId == teamId || it.away?.teamId == teamId }
+            ?: return MyMatchup(null, null, "ESPN lists no matchup for you in week $week")
+        val mine = if (m.home.teamId == teamId) m.home else m.away
+        val theirs = if (m.home.teamId == teamId) m.away else m.home
+        return MyMatchup(mine, theirs, if (theirs == null) "you have a bye in week $week" else null)
+    }
+
+    /**
      * The user's opponent in [week], from ESPN's schedule, with the roster from the last sync and the user's slots, so
      * the same lineup picker can rate both. Never throws: [OpponentResult.message] says why there is no opponent.
      */

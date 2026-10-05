@@ -58,6 +58,9 @@ public data class FantasyLeague(
 /** The league, the user's team id (null when none is chosen) and the regular-season games still to play. */
 public data class PlayoffPicture(val league: FantasyLeague, val myTeamId: Int?, val remaining: List<ScheduledGame>)
 
+/** The user's side and the opponent's of a week's matchup; [message] says why one is missing. */
+public data class MyMatchup(val mine: MatchupSide?, val theirs: MatchupSide?, val message: String?)
+
 /** The weeks reviewed, newest first; [message] says why there are none. */
 public data class LineupReviewResult(val weeks: List<WeekReview>, val message: String?)
 

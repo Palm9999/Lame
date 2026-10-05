@@ -24,10 +24,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -38,13 +38,19 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.gridiron.core.data.GameState
 import dev.gridiron.core.data.Kickoffs
-import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.OpportunitiesResult
+import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.ScoresWeek
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.live.LeagueChoice
 import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.data.live.LineupReviewResult
+import dev.gridiron.core.data.live.LivePlayer
+import dev.gridiron.core.data.live.LiveWin
+import dev.gridiron.core.data.live.LiveWinChance
+import dev.gridiron.core.data.live.MyMatchup
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.OpponentResult
 import dev.gridiron.core.data.live.PlayoffPictureResult
@@ -52,6 +58,7 @@ import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.Lineups
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -90,6 +97,10 @@ public fun ProjectionListRoute(
     playoffPicture: suspend (season: Int, week: Int) -> PlayoffPictureResult = { _, _ -> PlayoffPictureResult(null, "not available") },
     /** The user's finished weeks against their best lineups, asked when Review opens. */
     lineupReview: suspend (season: Int, throughWeek: Int) -> LineupReviewResult = { _, _ -> LineupReviewResult(emptyList(), "not available") },
+    /** The week's games with live clocks (ESPN's scoreboard), for the live win chance; null when unavailable. */
+    liveWeek: suspend (season: Int, week: Int) -> ScoresWeek? = { _, _ -> null },
+    /** Both sides of the user's matchup as ESPN has them now, live points included. */
+    myMatchup: suspend (season: Int, week: Int, profile: ScoringProfile) -> MyMatchup = { _, _, _ -> MyMatchup(null, null, "not available") },
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -131,6 +142,18 @@ public fun ProjectionListRoute(
         inactivesPosted = locked.inactivesPosted,
         playoffs = playoffs,
         review = review,
+        liveFetch = live@{
+            val loaded = state as? ProjectionListState.Loaded ?: return@live null
+            val active = profile ?: return@live null
+            val week = liveWeek(season, loaded.week) ?: return@live null
+            // Only while a game is on; before kickoff and after the finals the projections say it all.
+            if (week.games.none { it.state == GameState.LIVE }) return@live null
+            val m = myMatchup(season, loaded.week, active)
+            val mine = m.mine ?: return@live null
+            val theirs = m.theirs ?: return@live null
+            val players = loaded.weekRows.associate { it.playerId to LivePlayer(it.team, it.points, spread(it)) }
+            LiveWin.estimate(mine, theirs, week, players)
+        },
         onReviewOpened = {
             val week = (state as? ProjectionListState.Loaded)?.week
             if (week != null && review != ReviewState.Loading) {
@@ -207,6 +230,9 @@ private enum class ListMode { WEEK, ROS, LINEUP, TRADE, START_SIT, PLAYOFFS, REV
 /** My lineup re-syncs the league when its snapshot is older than this: lineups, waivers and trades move during the week. */
 internal const val LEAGUE_STALE_MILLIS: Long = 30 * 60 * 1000L
 
+/** The live win chance refreshes this often while a game is on, as Scores does. */
+internal const val LIVE_REFRESH_MILLIS: Long = 60 * 1000L
+
 @Composable
 public fun ProjectionListScreen(
     state: ProjectionListState,
@@ -238,6 +264,8 @@ public fun ProjectionListScreen(
     review: ReviewState = ReviewState.Idle,
     /** Review was opened: the route reads the finished weeks. */
     onReviewOpened: () -> Unit = {},
+    /** My lineup's live win chance, asked each minute while it is open and a game is on; null when none is. */
+    liveFetch: suspend () -> LiveWinChance? = { null },
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
@@ -246,6 +274,21 @@ public fun ProjectionListScreen(
         (chosen == ListMode.LINEUP || chosen == ListMode.REVIEW || chosen == ListMode.PLANNER) && myTeam == null -> ListMode.WEEK
         (chosen == ListMode.TRADE || chosen == ListMode.PLAYOFFS) && !canTrade -> ListMode.WEEK
         else -> chosen
+    }
+    var live by remember { mutableStateOf<LiveWinChance?>(null) }
+    LaunchedEffect(mode == ListMode.LINEUP, (state as? ProjectionListState.Loaded)?.week) {
+        live = null
+        while (mode == ListMode.LINEUP) {
+            live = try {
+                liveFetch()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            if (live == null) break
+            delay(LIVE_REFRESH_MILLIS)
+        }
     }
     LaunchedEffect(mode, myTeam?.teamName) {
         if (mode == ListMode.LINEUP) onLineupOpened()
@@ -342,7 +385,7 @@ public fun ProjectionListScreen(
                         val cuffs = remember(myTeam, weekRows, owners) { handcuffs(myTeam, weekRows, owners.orEmpty()) }
                         LineupList(
                             mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, weekRows, badges), faabText(myTeam),
-                            cuffs, ownersKnown = owners != null,
+                            cuffs, ownersKnown = owners != null, live = live,
                         )
                     } else {
                         Row(
@@ -399,6 +442,8 @@ private fun LineupList(
     handcuffs: List<HandcuffLine> = emptyList(),
     /** Whether a handcuff's owner is known (the league is synced): otherwise it isn't said. */
     ownersKnown: Boolean = false,
+    /** The live win chance while a game is on. */
+    live: LiveWinChance? = null,
 ) {
     LazyColumn(Modifier.fillMaxSize().testTag("lineup:list")) {
         item {
@@ -428,6 +473,21 @@ private fun LineupList(
                 }
                 versus?.let {
                     Text(it, Modifier.testTag("lineup:vs"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                }
+                live?.let { l ->
+                    Text(
+                        "Live: ${points(l.myScore)}–${points(l.theirScore)} · heading for ${points(l.myExpected)}–${points(l.theirExpected)} · " +
+                            winLine(l.chance),
+                        Modifier.testTag("lineup:live"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "Points so far are ESPN's, under your league's scoring; what's left is projected under yours. Updates each minute.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
                 check?.let { c ->
                     val text = if (c.gain < 0.05) {

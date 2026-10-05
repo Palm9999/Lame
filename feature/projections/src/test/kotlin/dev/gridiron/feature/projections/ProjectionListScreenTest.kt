@@ -16,6 +16,7 @@ import dev.gridiron.core.data.live.FantasyLeague
 import dev.gridiron.core.data.live.LeaguePlayer
 import dev.gridiron.core.data.live.LeagueTeam
 import dev.gridiron.core.data.live.LineupReviewResult
+import dev.gridiron.core.data.live.LiveWinChance
 import dev.gridiron.core.data.live.MatchupPlayer
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.PlayoffPicture
@@ -132,6 +133,23 @@ class ProjectionListScreenTest {
         compose.onNodeWithTag("lineup:vs").assertTextEquals("vs Rivals: 21.0 pts · You lead by 16.2 · 94% to win")
         compose.onNodeWithTag("lineup:range").assertExists()
         compose.onNodeWithTag("lineup:check").assertTextEquals("Your ESPN lineup is already the best (as of your last sync).")
+    }
+
+    @Test
+    fun `my lineup shows the live win chance while a game is on`() {
+        var calls = 0
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    loaded, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team,
+                    // Live once, then the games are over: the loop stops.
+                    liveFetch = { if (calls++ == 0) LiveWinChance(61.2, 40.0, 101.5, 90.3, 0.72) else null },
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("lineup:live").assertTextEquals("Live: 61.2–40.0 · heading for 101.5–90.3 · 72% to win")
     }
 
     @Test
