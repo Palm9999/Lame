@@ -5,6 +5,7 @@ import dev.gridiron.core.data.AccuracyRepository
 import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
+import dev.gridiron.core.data.DraftRepository
 import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.OpportunitiesRepository
@@ -170,6 +171,8 @@ class GridironApplication : Application() {
             scores = scores,
             league = league,
             onLineupSummary = { widget.lineup(it) },
+            draft = DraftRepository(executor, UrlConnectionHttpGet()),
+            draftDir = noBackupFilesDir,
             opportunities = OpportunitiesRepository(executor, projectionsRepo, { live.injuries() }),
             breakouts = BreakoutRepository(executor),
         )

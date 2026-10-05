@@ -32,33 +32,34 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import dev.gridiron.core.data.AccuracyRepository
+import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
-import dev.gridiron.core.data.BreakoutRepository
+import dev.gridiron.core.data.DraftRepository
+import dev.gridiron.core.data.GridDisplayRepository
+import dev.gridiron.core.data.GridPresetRepository
+import dev.gridiron.core.data.Kickoffs
 import dev.gridiron.core.data.OpportunitiesRepository
 import dev.gridiron.core.data.OpportunitiesResult
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerStatsRepository
 import dev.gridiron.core.data.ProjectionsRepository
-import dev.gridiron.core.data.GridDisplayRepository
-import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.RosterRepository
-import dev.gridiron.core.model.Roster
+import dev.gridiron.core.data.ScoresRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
-import dev.gridiron.core.data.ScoresRepository
-import dev.gridiron.core.data.Kickoffs
-import dev.gridiron.core.data.kickoffs
 import dev.gridiron.core.data.TeamsRepository
+import dev.gridiron.core.data.kickoffs
 import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.LineupReviewResult
-import dev.gridiron.core.data.live.MyMatchup
-import dev.gridiron.core.data.live.PlayoffPictureResult
 import dev.gridiron.core.data.live.LiveRepository
+import dev.gridiron.core.data.live.MyMatchup
 import dev.gridiron.core.data.live.OpponentResult
+import dev.gridiron.core.data.live.PlayoffPictureResult
 import dev.gridiron.core.data.live.PropsRepository
 import dev.gridiron.core.ingest.currentSeason
+import dev.gridiron.core.model.Roster
 import dev.gridiron.feature.compare.CompareRoute
 import dev.gridiron.feature.players.GridRoute
 import dev.gridiron.feature.projections.AccuracyRoute
@@ -71,6 +72,7 @@ import dev.gridiron.feature.scoring.ScoringListRoute
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
+import java.io.File
 
 /** What the screens need, built by [GridironApplication] or by a test. */
 data class Deps(
@@ -99,6 +101,10 @@ data class Deps(
     val league: FantasyLeagueRepository? = null,
     /** Receives My lineup's one-line summary for the home-screen widget. */
     val onLineupSummary: (String) -> Unit = {},
+    /** The draft board's ADP and last-season points; null hides Draft. */
+    val draft: DraftRepository? = null,
+    /** Where the draft's picks are kept. */
+    val draftDir: File? = null,
     /** Week-by-week NFL scores; null where a test doesn't need them. */
     val scores: ScoresRepository? = null,
     /** Who moves up when a starter is hurt; null where a test doesn't need it. */
@@ -187,6 +193,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 add("Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) })
                                 if (deps.league != null) add("ESPN leagues" to { _: Int -> backStack.push(LeagueKey) })
                                 if (deps.rosters != null) add("Rosters" to { _: Int -> backStack.push(RostersKey) })
+                                if (deps.draft != null) add("Draft" to { _: Int -> backStack.push(DraftKey) })
                                 add("Team defense" to { s: Int -> backStack.push(DefenseKey(s)) })
                                 if (deps.settings != null) add("Settings" to { _: Int -> backStack.push(SettingsKey) })
                                 if (refresher != null) add("Refresh stats" to { _: Int -> refresh() })
@@ -300,6 +307,20 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                         )
                     }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }
+                    entry<DraftKey> {
+                        val draft = deps.draft
+                        val dir = deps.draftDir
+                        if (draft != null && dir != null) {
+                            val team by (deps.league?.myTeam ?: flowOf(null)).collectAsState(initial = null)
+                            val others by (deps.league?.otherTeams ?: flowOf(emptyList())).collectAsState(initial = emptyList())
+                            val year = java.time.LocalDate.now().year
+                            DraftScreen(
+                                year, draft::board, deps.scoring.active,
+                                teams = if (team != null && others.isNotEmpty()) others.size + 1 else 12,
+                                slots = team?.slots, file = File(dir, "draft-$year.txt"), onBack = back,
+                            )
+                        }
+                    }
                     entry<RostersKey> {
                         deps.rosters?.let { RostersScreen(it, deps.players, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
                     }

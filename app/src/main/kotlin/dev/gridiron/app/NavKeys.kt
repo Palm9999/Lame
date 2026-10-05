@@ -16,6 +16,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class DefenseKey(val season: Int) : NavKey
 @Serializable data object SettingsKey : NavKey
 @Serializable data object RostersKey : NavKey
+@Serializable data object DraftKey : NavKey
 @Serializable data object LeagueKey : NavKey
 @Serializable data class MatchupsKey(val season: Int) : NavKey
 @Serializable data object NewsKey : NavKey
