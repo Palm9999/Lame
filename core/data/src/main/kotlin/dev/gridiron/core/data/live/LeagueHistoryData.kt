@@ -42,6 +42,9 @@ public data class HistoryGame(
     }
 }
 
+/** League history's seasons, oldest first; [skipped] names each season that couldn't be read and why; [me] is the user's ESPN owner id. */
+public data class HistoryResult(val seasons: List<HistorySeason>, val skipped: List<Pair<Int, String>>, val me: String?, val error: String?)
+
 /** One season of the league; [members] maps owner ids to ESPN display names. */
 public data class HistorySeason(
     val season: Int,

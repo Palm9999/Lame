@@ -362,6 +362,51 @@ public class FantasyLeagueRepository(
         }
     }
 
+    /**
+     * The active league's seasons, oldest first, for League history: the earlier seasons ESPN lists (`mStatus`), each
+     * read once and kept as `history-<league>-<year>.json`, and [currentSeason] read every time. A season that fails is
+     * left out and named in [HistoryResult.skipped]; [HistoryResult.me] is the owner of the user's team this season.
+     * Never throws.
+     */
+    public suspend fun history(currentSeason: Int): HistoryResult {
+        load()
+        val cfg = prefs.prefs.first().espnLeague ?: return HistoryResult(emptyList(), emptyList(), null, "no league id set")
+        val headers = headers(cfg)
+        val skipped = mutableListOf<Pair<Int, String>>()
+        val earlier = try {
+            EspnHistoryParser.previousSeasons(http.get(EspnHistoryParser.statusUrl(cfg.leagueId, currentSeason), headers))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Offline: whatever seasons are already kept.
+            withContext(Dispatchers.IO) {
+                dir.listFiles().orEmpty().mapNotNull { Regex("history-${cfg.leagueId}-(\\d+)\\.json").matchEntire(it.name)?.groupValues?.get(1)?.toInt() }.sorted()
+            }
+        }.filter { it < currentSeason }
+        val seasons = (earlier + currentSeason).mapNotNull { year ->
+            val file = File(dir, "history-${cfg.leagueId}-$year.json")
+            val kept = if (year < currentSeason) withContext(Dispatchers.IO) { file.takeIf { it.isFile }?.readText()?.let(::historySeasonFromJson) } else null
+            kept ?: try {
+                val season = EspnHistoryParser.parse(http.get(EspnHistoryParser.url(cfg.leagueId, year), headers), year)
+                if (year < currentSeason) withContext(Dispatchers.IO) { file.writeText(season.toJson()) }
+                season
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: LiveFormatException) {
+                skipped += year to (e.message ?: "ESPN changed its league format")
+                null
+            } catch (e: IOException) {
+                skipped += year to friendly(e.message)
+                null
+            } catch (e: Exception) {
+                skipped += year to "couldn't read it"
+                null
+            }
+        }
+        val me = cfg.teamId?.let { id -> seasons.lastOrNull { it.season == currentSeason }?.teams?.firstOrNull { it.id == id }?.ownerId }
+        return HistoryResult(seasons, skipped, me, if (seasons.isEmpty()) skipped.firstOrNull()?.second ?: "no seasons found" else null)
+    }
+
     public suspend fun tradeOffers(season: Int): TradeOffersResult {
         load()
         val cfg = prefs.prefs.first().espnLeague ?: return TradeOffersResult(emptyList(), "no league id set")
