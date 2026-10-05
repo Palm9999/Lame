@@ -8,6 +8,7 @@ import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.DraftRepository
 import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
+import dev.gridiron.core.data.InjuryReturnRepository
 import dev.gridiron.core.data.OpportunitiesRepository
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerStatsRepository
@@ -179,6 +180,7 @@ class GridironApplication : Application() {
             draftDir = noBackupFilesDir,
             opportunities = OpportunitiesRepository(executor, projectionsRepo, { live.injuries() }),
             breakouts = BreakoutRepository(executor),
+            returns = InjuryReturnRepository(executor),
         )
     }
 

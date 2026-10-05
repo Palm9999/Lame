@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import dev.gridiron.core.data.PlayerHeader
+import dev.gridiron.core.data.ReturnOutlook
 import dev.gridiron.core.data.live.InjuryNote
 import dev.gridiron.core.data.live.LiveInjury
 import dev.gridiron.core.data.live.LiveStatus
@@ -79,6 +80,20 @@ class LiveScreensTest {
         compose.onNodeWithText("Questionable").assertExists()
         compose.onNodeWithText("Barkley (neck) was limited.").assertExists()
         compose.onNodeWithText("Barkley to play").assertExists()
+    }
+
+    @Test
+    fun anOutPlayerShowsHowSoonHeIsLikelyBack() {
+        val outlook = ReturnOutlook("Out", "hamstring", 97, 0, 0, listOf(6, 8), listOf(0.0, 0.28), 2024, 2026)
+        val page = PlayerPage(
+            PlayerHeader("P1", "Saquon Barkley", "RB", "PHI"), LiveStatus("Out", "O", null, null, t), emptyList(), emptyList(), t,
+            returnOutlook = outlook,
+        )
+        compose.setContent { GridironTheme { PlayerScreen("P1", page, liveAvailable = true, onBack = {}, onOpen = {}) } }
+
+        compose.onNodeWithTag("player:return").assertExists()
+        compose.onNodeWithText("Played again by: wk 6 0% · wk 8 28%").assertExists()
+        compose.onNodeWithText("From 97 past hamstring absences", substring = true).assertExists()
     }
 
     @Test

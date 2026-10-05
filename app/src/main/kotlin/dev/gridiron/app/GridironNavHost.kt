@@ -38,6 +38,7 @@ import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.DraftRepository
 import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
+import dev.gridiron.core.data.InjuryReturnRepository
 import dev.gridiron.core.data.Kickoffs
 import dev.gridiron.core.data.OpportunitiesRepository
 import dev.gridiron.core.data.OpportunitiesResult
@@ -112,6 +113,8 @@ data class Deps(
     val opportunities: OpportunitiesRepository? = null,
     /** Rising roles; null where a test doesn't need it. */
     val breakouts: BreakoutRepository? = null,
+    /** Past absences, for the Player page's return outlook; null where a test doesn't need it. */
+    val returns: InjuryReturnRepository? = null,
 )
 
 /**
@@ -306,6 +309,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             breakouts = deps.breakouts,
                             league = deps.league,
                             inactivesPosted = { s, w -> deps.scores?.week(s, w)?.kickoffs(java.time.Instant.now())?.inactivesPosted.orEmpty() },
+                            returns = deps.returns,
                         )
                     }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }

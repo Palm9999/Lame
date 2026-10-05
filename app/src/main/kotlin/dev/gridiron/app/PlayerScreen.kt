@@ -3,6 +3,8 @@ package dev.gridiron.app
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,8 +14,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -37,19 +37,24 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.BreakoutRow
+import dev.gridiron.core.data.InjuryReturnRepository
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerHeader
 import dev.gridiron.core.data.PlayerStats
 import dev.gridiron.core.data.PlayerStatsRepository
 import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.ReturnOutlook
 import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.basisText
+import dev.gridiron.core.data.chancesText
 import dev.gridiron.core.data.live.DEFAULT_PLAYOFF_WEEKS
 import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.InjuryNote
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.LiveStatus
 import dev.gridiron.core.data.live.NewsItem
+import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.Roster
 import dev.gridiron.feature.projections.ProjectionCard
@@ -78,6 +83,8 @@ data class PlayerPage(
     val stats: PlayerStats? = null,
     /** The section failed to load: it says so and the rest of the page stays. */
     val statsUnavailable: Boolean = false,
+    /** How soon he is likely back, while he is Out, Doubtful or on IR; null otherwise or with too little history. */
+    val returnOutlook: ReturnOutlook? = null,
 )
 
 private val NO_CHANGES: StateFlow<Long> = MutableStateFlow(0L)
@@ -101,6 +108,8 @@ fun PlayerRoute(
     league: FantasyLeagueRepository? = null,
     /** NFL teams whose inactives are posted in a week (ESPN's scoreboard): a confirmed-active Questionable player's card loses his discount. */
     inactivesPosted: suspend (season: Int, week: Int) -> Set<String> = { _, _ -> emptySet() },
+    /** Past absences, for how soon an injured player is likely back. */
+    returns: InjuryReturnRepository? = null,
 ) {
     val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList<Roster>()) }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -137,6 +146,13 @@ fun PlayerRoute(
         }
         // Only while his role is growing, and only for the season the projection card is about.
         val rising = if (breakouts != null && card != null) breakouts.forPlayer(playerId, card.season)?.takeIf { it.score > 0.0 } else null
+        val outlook = try {
+            returns?.outlook(playerId, card?.season ?: currentSeason(), status?.abbr, stats)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null // never costs the rest of the page
+        }
         page = PlayerPage(
             header = header,
             status = status,
@@ -145,6 +161,7 @@ fun PlayerRoute(
             asOf = live?.fetchedAt(),
             projection = card,
             risingRole = rising,
+            returnOutlook = outlook,
         )
     }
     var season by remember(playerId) { mutableStateOf<Int?>(null) }
@@ -249,6 +266,7 @@ fun PlayerScreen(
                                 }
                             }
                         }
+                        page.returnOutlook?.let { ReturnOutlookLine(it) }
                     }
                 }
                 if (page.notes.isNotEmpty()) {
@@ -317,6 +335,15 @@ internal fun SectionTitle(text: String) {
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.Bold,
     )
+}
+
+/** "Played again by: wk 7 28% · wk 8 53%…" and where the numbers come from. */
+@Composable
+private fun ReturnOutlookLine(outlook: ReturnOutlook) {
+    Column(Modifier.padding(top = 8.dp).testTag("player:return")) {
+        Text("Played again by: ${outlook.chancesText()}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        Text(outlook.basisText(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
 }
 
 /** Red for Out, IR and Doubtful; the accent for Questionable. */
