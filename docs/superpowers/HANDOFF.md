@@ -45,7 +45,9 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** the user picked the 2026-10-05 round: (1) waiver trends, (2) dynasty & keepers, (3) the manager report card, (4) league history and (5) shareable cards are all built (below). The next round (2026-10-05, features only, no accuracy ideas): (1) league activity feed, built (below); then (2) trade partners (managers deep where you're thin and vice versa), (3) "where we differ" (players the app projects well above or below ESPN this week), (4) a Tuesday matchup summary alert (last result, report-card place, this week's win chance), one at a time, each through brainstorming and its own push. Untried accuracy leads (not picked this round): rest of season discounting an injured player's coming weeks by the return outlook (a backtest needs rest-of-season accuracy, not weekly); a TE handcuff rule giving the backup TE part of the starter's targets (about 1.9 under; only 43 cases); ESPN's QB rushing TDs (noisy, 0.85-1.08 of ESPN's).
+**Next:** the user picked the 2026-10-05 round: (1) waiver trends, (2) dynasty & keepers, (3) the manager report card, (4) league history and (5) shareable cards are all built (below). The next round (2026-10-05, features only, no accuracy ideas): (1) league activity feed and (2) trade partners, built (below); then (3) "where we differ" (players the app projects well above or below ESPN this week), (4) a Tuesday matchup summary alert (last result, report-card place, this week's win chance), one at a time, each through brainstorming and its own push. Untried accuracy leads (not picked this round): rest of season discounting an injured player's coming weeks by the return outlook (a backtest needs rest-of-season accuracy, not weekly); a TE handcuff rule giving the backup TE part of the starter's targets (about 1.9 under; only 43 cases); ESPN's QB rushing TDs (noisy, 0.85-1.08 of ESPN's).
+
+**Just built: Trade partners** (Projections → Trade, bottom: Best partners). Fit is the plain gain of each position's best bench player over the weakest starter he'd replace, both ways; the design's "need against the league's typical starter" was dropped as it changed nothing on the cases tried. Placed after Suggested trades so the existing Trade layout doesn't shift.
 
 **Just built: League activity** (More → League, or ☰): every executed add, drop and trade this season from `mTransactions2` (shape unverified), a trade graded by each side's rest-of-season points in less out.
 
@@ -72,6 +74,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - **Places read best first** ("1st of 62", never "percentile" wording; 2026-10-03). **My players** are always listed, unranked below the bar (2026-10-03). **Several leagues:** one active league, one shared login, every league's team a roster (2026-10-03). **Matchups:** ESPN's numbers lead, the app's beside them (2026-10-01).
 
 ## Deferred minors
+
+**Deferred minors (trade partners):** season totals, not weekly (byes ignored); K and D/ST left out; a one-way fit (you sell only) ranks with two-way ones; the section sits at the bottom of a long list.
 
 **Deferred minors (league activity):** a trade is graded with today's projections, not the rosters or projections at the time; every week is read on each open past the 15-minute hold (one request a week); lineup moves and failed claims are hidden; a player `player_xref` can't match shows as "a player".
 
@@ -127,6 +131,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Open checks on the phone
 
+- **Trade partners:** Projections → Trade, scroll to Best partners: the top teams should read as deep where you're thin; tap one and its roster loads.
 - **League activity:** More → League activity with your league synced: this season's adds, drops and trades should list by week; if it says "no moves yet" in a league with moves, ESPN's transaction shape differs (report it).
 - **Shareable cards:** tap Share on Review (recap, report card), a Player page and a graded trade; the preview should look like the card on screen, and the share sheet should offer the image to Messages and others.
 - **League history:** More → League history with your league synced: past seasons should list with champions; check All-time against what you remember (titles, records) and Head-to-head against a rival. Report any season named as "Couldn't read".

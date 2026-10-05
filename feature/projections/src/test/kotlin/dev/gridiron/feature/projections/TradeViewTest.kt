@@ -33,4 +33,19 @@ class TradeViewTest {
         assertEquals("+25.6", gainText(25.6))
         assertEquals("−7.8", gainText(-7.8))
     }
+
+    @Test
+    fun `a partner reads what they have and what you can offer`() {
+        val fit = dev.gridiron.core.projections.PartnerFit(
+            "Rivals", 150.0,
+            theyHave = listOf(dev.gridiron.core.projections.LineupCandidate("r3", "RB", 120.0)),
+            theyNeed = listOf("WR"),
+            youOffer = listOf(dev.gridiron.core.projections.LineupCandidate("w2", "WR", 140.0)),
+        )
+        assertEquals(
+            "Rivals · has RB Pat (120.0) · short at WR: you offer WR Chris (140.0)",
+            partnerText(fit, mapOf("r3" to "Pat", "w2" to "Chris")),
+        )
+        assertEquals("Thin · short at WR: you offer WR w2 (140.0)", partnerText(fit.copy(partner = "Thin", theyHave = emptyList()), emptyMap()))
+    }
 }

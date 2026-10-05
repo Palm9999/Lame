@@ -36,6 +36,8 @@ import dev.gridiron.core.model.Position
 import dev.gridiron.core.projections.LineupCandidate
 import dev.gridiron.core.projections.TradeIdea
 import dev.gridiron.core.projections.TradeOutcome
+import dev.gridiron.core.projections.PartnerFit
+import dev.gridiron.core.projections.TradePartners
 import dev.gridiron.core.projections.Trades
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -96,6 +98,16 @@ internal fun verdict(outcome: TradeOutcome): String {
 }
 
 /** "+25.6" or "−7.8". */
+/** "Rivals · has RB Pat (120.0) · short at WR: you offer Chris (140.0)". */
+internal fun partnerText(fit: PartnerFit, names: Map<String, String>): String {
+    fun list(ps: List<LineupCandidate>) = ps.joinToString { "${it.position} ${names[it.playerId] ?: it.playerId} (${pts(it.points)})" }
+    return listOfNotNull(
+        fit.partner,
+        fit.theyHave.takeIf { it.isNotEmpty() }?.let { "has ${list(it)}" },
+        fit.youOffer.takeIf { it.isNotEmpty() }?.let { "short at ${fit.theyNeed.joinToString("/")}: you offer ${list(it)}" },
+    ).joinToString(" · ")
+}
+
 internal fun gainText(value: Double): String =
     if (value >= 0) "+" + String.format(Locale.US, "%.1f", value) else "−" + String.format(Locale.US, "%.1f", -value)
 
@@ -144,6 +156,10 @@ internal fun TradeView(
         }
     }
     val names = remember(mine, others) { (mine + others.values.flatten()).associate { it.playerId to it.name } }
+    val fits = remember(myTeam, mine, others) {
+        TradePartners.rank(myTeam.slots, candidates(mine), others.map { (name, players) -> name to candidates(players) })
+            .filter { f -> partners.any { it.teamName == f.partner } }
+    }
     var sharing by remember { mutableStateOf(false) }
     if (sharing && outcome != null) {
         SharePreview("gridiron-trade.png", onDismiss = { sharing = false }) {
@@ -313,6 +329,17 @@ internal fun TradeView(
                         "projection (on IR, say) counts as nothing."
                 },
             )
+        }
+        if (fits.isNotEmpty()) {
+            item { Label("Best partners: deep where you're thin, short where you're deep") }
+            itemsIndexed(fits, key = { _, f -> "fit:${f.partner}" }) { _, f ->
+                Text(
+                    partnerText(f, names),
+                    Modifier.fillMaxWidth().clickable { partnerName = f.partner; get = emptyList(); cuts = emptyList() }
+                        .padding(horizontal = 16.dp, vertical = 6.dp).testTag("fit:${f.partner}"),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
         }
     }
 }
