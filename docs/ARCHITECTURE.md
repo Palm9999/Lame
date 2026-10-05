@@ -41,6 +41,8 @@ Module map, data flow, design decisions and database schema. `CLAUDE.md` keeps o
 
 **Player page** — ESPN status, injury notes, tagged news, Season stats, a "Rising role" line while the player's score is above zero, and a "This week" card (opens the waterfall) with TD chance, "Nth of M rest of season" and "Playoffs (weeks 15–17): N pts". A stash (out for now, with rest-of-season points) gets the card with "Not projected this week". While he is Out, Doubtful (ESPN, else nflverse's listing for his next game) or on IR, "Played again by: wk 7 28% · wk 8 53%…" for his team's next four games (`InjuryReturnRepository`: Kaplan-Meier over every past absence in `stats.db`, after the games he has already missed, IR's four at least; his body part's own curve with 30+ cases, else every injury).
 
+**Bottom bar** — Grid, Projections, Scores, News and More (`BottomBar`, `MoreScreen`: everything else, grouped Players, League, App), each tab opened over the Grid for the current season; the open tab again returns to its top. Icons are drawn outlines (`GridironIcons`), no icon library. The Grid's ☰ menu stays: it opens screens for the season the Grid shows.
+
 **☰ menu** — Projections, Opportunities, Rising roles, Projection accuracy, News, Scores, Injury report (ESPN's live list with nflverse practice for the current season; the official list for past seasons), Team defense, Draft, ESPN leagues, Rosters, Settings, Refresh stats.
 
 **Projections modes** (scored with the active profile; league tools need a synced league with your team chosen):

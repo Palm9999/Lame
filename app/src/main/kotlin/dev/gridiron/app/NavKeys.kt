@@ -23,3 +23,4 @@ import kotlinx.serialization.Serializable
 @Serializable data class ScoresKey(val season: Int) : NavKey
 @Serializable data class GameKey(val season: Int, val week: Int, val home: String, val away: String) : NavKey
 @Serializable data class PlayerKey(val playerId: String) : NavKey
+@Serializable data object MoreKey : NavKey

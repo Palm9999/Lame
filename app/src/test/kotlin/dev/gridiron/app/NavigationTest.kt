@@ -246,4 +246,25 @@ class NavigationTest {
         }
         compose.onNodeWithText("Scored with", substring = true).assertExists()
     }
+
+    @Test
+    fun theBottomBarOpensTabsOverTheGrid() {
+        compose.setContent { GridironTheme { GridironNavHost(deps) } }
+        settle()
+
+        compose.onNodeWithTag("tab:More").performClick()
+        settle()
+        compose.onNodeWithTag("more").assertExists()
+        compose.onNodeWithTag("more:Team defense").performClick()
+        settle()
+        compose.onNodeWithTag("more").assertDoesNotExist()
+        // The open tab again goes back to its top; Grid goes home.
+        compose.onNodeWithTag("tab:More").performClick()
+        settle()
+        compose.onNodeWithTag("more").assertExists()
+        compose.onNodeWithTag("tab:Grid").performClick()
+        settle()
+        compose.onNodeWithTag("more").assertDoesNotExist()
+        compose.onNodeWithTag("menu").assertExists()
+    }
 }

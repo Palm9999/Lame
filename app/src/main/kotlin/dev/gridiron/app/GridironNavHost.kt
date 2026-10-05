@@ -5,14 +5,17 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,9 +27,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
@@ -58,8 +64,9 @@ import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.MyMatchup
 import dev.gridiron.core.data.live.OpponentResult
 import dev.gridiron.core.data.live.PlayoffPictureResult
-import dev.gridiron.core.data.live.TradeOffersResult
 import dev.gridiron.core.data.live.PropsRepository
+import dev.gridiron.core.data.live.TradeOffersResult
+import dev.gridiron.core.designsystem.GridironIcons
 import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.core.model.Roster
 import dev.gridiron.feature.compare.CompareRoute
@@ -172,8 +179,29 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
 
     val backStack = rememberNavBackStack(GridKey)
     val back: () -> Unit = { backStack.removeLastOrNull() }
+    val season = currentSeason()
+    val more = buildList {
+        if (deps.opportunities != null) add(MoreItem("Players", "Opportunities", "Who moves up when a starter is hurt") { backStack.push(OpportunitiesKey(season)) })
+        if (deps.breakouts != null) add(MoreItem("Players", "Rising roles", "Roles growing over the last four games") { backStack.push(BreakoutsKey(season)) })
+        add(MoreItem("Players", "Injury report", "ESPN's live list and practice") { backStack.push(InjuriesKey(season)) })
+        add(MoreItem("Players", "Team defense", "Each defense's season") { backStack.push(DefenseKey(season)) })
+        if (deps.league != null) add(MoreItem("League", "ESPN leagues", "Sync, teams and matchups") { backStack.push(LeagueKey) })
+        if (deps.rosters != null) add(MoreItem("League", "Rosters", "Your saved rosters") { backStack.push(RostersKey) })
+        if (deps.draft != null) add(MoreItem("League", "Draft", "ADP board and picks") { backStack.push(DraftKey) })
+        add(MoreItem("App", "Projection accuracy", "How the model did, week by week") { backStack.push(AccuracyKey(season)) })
+        if (deps.settings != null) add(MoreItem("App", "Settings", "Seasons, alerts and keys") { backStack.push(SettingsKey) })
+        if (refresher != null) add(MoreItem("App", "Refresh stats", "Rebuild from nflverse, ESPN and ffopportunity") { refresh() })
+    }
+    val tabs = buildList {
+        add(Tab("Grid", GridironIcons.Table, GridKey))
+        add(Tab("Projections", GridironIcons.Trend, ProjectionListKey(season)))
+        if (deps.scores != null) add(Tab("Scores", GridironIcons.Scores, ScoresKey(season)))
+        if (deps.live != null) add(Tab("News", GridironIcons.News, NewsKey))
+        add(Tab("More", GridironIcons.More, MoreKey))
+    }
     Column(Modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f)) {
+        // The bottom bar below takes the navigation bar's inset: screens above it leave it alone.
+        Box(Modifier.weight(1f).consumeWindowInsets(WindowInsets.navigationBars)) {
             NavDisplay(
                 backStack = backStack,
                 onBack = back,
@@ -347,10 +375,34 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                         }
                     }
                     entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back, props = deps.props?.status) } }
+                    entry<MoreKey> { MoreScreen(more) }
                 },
             )
         }
         (refreshState as? RefreshState.Running)?.let { RefreshBar(it.text) }
+        BottomBar(tabs, selected = tabs.firstOrNull { it.key == backStack.getOrNull(1) } ?: tabs.first()) { tab ->
+            // A tab opens over the Grid, so Back from any tab returns there; the open tab again goes to its top.
+            while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+            if (tab.key != GridKey) backStack.add(tab.key)
+        }
+    }
+}
+
+/** One bottom-bar destination. */
+private data class Tab(val label: String, val icon: ImageVector, val key: NavKey)
+
+@Composable
+private fun BottomBar(tabs: List<Tab>, selected: Tab, onTab: (Tab) -> Unit) {
+    NavigationBar(Modifier.testTag("bottomBar")) {
+        for (tab in tabs) {
+            NavigationBarItem(
+                selected = tab == selected,
+                onClick = { onTab(tab) },
+                icon = { Icon(tab.icon, contentDescription = null) },
+                label = { Text(tab.label, maxLines = 1) },
+                modifier = Modifier.testTag("tab:${tab.label}"),
+            )
+        }
     }
 }
 
@@ -383,7 +435,7 @@ private fun LegacyPrompt(refresher: Refresher?, state: RefreshState, refresh: ()
 @Composable
 private fun RefreshBar(text: String) {
     Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
-        Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
             Text(text, style = MaterialTheme.typography.labelMedium)
             LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp))
         }
