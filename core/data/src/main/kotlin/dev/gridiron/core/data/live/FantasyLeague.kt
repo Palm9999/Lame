@@ -53,7 +53,22 @@ public data class FantasyLeague(
     val playoffTeams: Int? = null,
     /** NFL weeks per regular-season matchup (ESPN's `matchupPeriodLength`, almost always one). */
     val periodWeeks: Int = 1,
-)
+    /** Roster spots, bench included and IR left out (so a draft's rounds); 0 when the snapshot predates it. */
+    val rosterSize: Int = 0,
+) {
+    /** What a never-drafted player costs to keep: the draft's last round, 16 for a snapshot without roster settings. */
+    public val undraftedRound: Int get() = rosterSize.takeIf { it > 0 } ?: DEFAULT_ROUNDS
+
+    private companion object {
+        const val DEFAULT_ROUNDS = 16
+    }
+}
+
+/** One pick of the league's draft: ESPN's player id, the app's (null when unknown), the round, the drafting team, and whether it was a keeper. */
+public data class DraftPick(val espnId: String, val playerId: String?, val round: Int, val teamId: Int, val keeper: Boolean)
+
+/** The league's draft, or why it can't be read; empty picks with no error when there is no draft yet. */
+public data class DraftResult(val picks: List<DraftPick>, val error: String?)
 
 /** The league, the user's team id (null when none is chosen) and the regular-season games still to play. */
 public data class PlayoffPicture(val league: FantasyLeague, val myTeamId: Int?, val remaining: List<ScheduledGame>)
@@ -225,6 +240,7 @@ internal object EspnFantasyParser {
             teams = ranked,
             fetchedAtMillis = fetchedAtMillis,
             lineupSlots = lineupSlots(root.obj("settings")?.obj("rosterSettings")?.obj("lineupSlotCounts")),
+            rosterSize = rosterSize(root.obj("settings")?.obj("rosterSettings")?.obj("lineupSlotCounts")),
             playoffWeeks = playoffWeeks(root.obj("settings")?.obj("scheduleSettings")),
             playoffTeams = root.obj("settings")?.obj("scheduleSettings")?.int("playoffTeamCount")?.takeIf { it > 0 },
             periodWeeks = root.obj("settings")?.obj("scheduleSettings")?.int("matchupPeriodLength")?.takeIf { it > 0 } ?: 1,
@@ -253,6 +269,38 @@ internal object EspnFantasyParser {
         val first = matchups * length + 1
         val last = first + weeks - 1
         return if (last <= 18) (first..last).toList() else emptyList()
+    }
+
+    /** Every slot in ESPN's `lineupSlotCounts` but IR, bench included: one draft round each. */
+    private fun rosterSize(counts: JsonObject?): Int =
+        counts?.entries.orEmpty().sumOf { (id, n) -> if (id == IR_SLOT) 0 else (n as? JsonPrimitive)?.intOrNull?.coerceAtLeast(0) ?: 0 }
+
+    private const val IR_SLOT = "21"
+
+    fun draftUrl(leagueId: String, season: Int): String =
+        "https://lm-api-reads.fantasy.espn.com/apis/v3/games/ffl/seasons/$season/segments/0/leagues/$leagueId?view=mDraftDetail"
+
+    /**
+     * The picks of `draftDetail` (shape from memory, unverified against a live league): `playerId`, `roundId`, `teamId`,
+     * `keeper`. No draft yet, or a pick missing any of the first three, reads as nothing; text that isn't JSON is a
+     * [LiveFormatException].
+     */
+    fun draft(text: String): List<DraftPick> {
+        val root = try {
+            Json.parseToJsonElement(text) as? JsonObject
+        } catch (_: SerializationException) {
+            null
+        } ?: throw LiveFormatException("ESPN sent something that isn't the league's draft")
+        return root.obj("draftDetail")?.array("picks").orEmpty().mapNotNull { e ->
+            val p = e as? JsonObject ?: return@mapNotNull null
+            DraftPick(
+                espnId = p.string("playerId") ?: return@mapNotNull null,
+                playerId = null,
+                round = p.int("roundId")?.takeIf { it > 0 } ?: return@mapNotNull null,
+                teamId = p.int("teamId") ?: return@mapNotNull null,
+                keeper = (p["keeper"] as? JsonPrimitive)?.booleanOrNull == true,
+            )
+        }
     }
 
     /** ESPN's `lineupSlotCounts` (slot id to count) as starters by label; the bench, IR and unknown ids are dropped. */
@@ -404,6 +452,7 @@ internal fun FantasyLeague.toJson(): String = buildJsonObject {
     faabBudget?.let { put("faabBudget", it) }
     playoffTeams?.let { put("playoffTeams", it) }
     put("periodWeeks", periodWeeks)
+    put("rosterSize", rosterSize)
     put(
         "teams",
         buildJsonArray {
@@ -457,6 +506,7 @@ internal fun fantasyLeagueFromJson(text: String): FantasyLeague? = try {
         faabBudget = o.int("faabBudget"),
         playoffTeams = o.int("playoffTeams"),
         periodWeeks = o.int("periodWeeks") ?: 1,
+        rosterSize = o.int("rosterSize") ?: 0,
         teams = o.array("teams")!!.map { e ->
             val t = e as JsonObject
             LeagueTeam(

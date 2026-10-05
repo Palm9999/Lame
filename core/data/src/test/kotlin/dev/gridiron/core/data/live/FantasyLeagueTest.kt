@@ -600,4 +600,65 @@ class FantasyLeagueTest {
     fun `a league id must be digits`() = runTest {
         assertThrows<IllegalArgumentException> { repo(FakePrefsSource()) { _, _ -> body }.addLeague("abc") }
     }
+    @Test
+    fun `roster size sums the slots without IR`() {
+        val counts = "\"rosterSettings\":{\"lineupSlotCounts\":{\"0\":1,\"2\":2,\"4\":2,\"6\":1,\"23\":1,\"16\":1,\"17\":1,\"20\":6,\"21\":2,\"99\":3,\"7\":0}}"
+        val league = EspnFantasyParser.parse(withSettings(counts), "42", 5L)
+        assertEquals(18, league.rosterSize)
+        assertEquals(18, league.undraftedRound)
+        assertEquals(18, fantasyLeagueFromJson(league.toJson())!!.rosterSize)
+    }
+
+    @Test
+    fun `an old snapshot falls back to 16 rounds`() {
+        val old = EspnFantasyParser.parse(body, "42", 5L)
+        assertEquals(0, old.rosterSize)
+        assertEquals(16, old.undraftedRound)
+        val json = old.toJson().replace(",\"rosterSize\":0", "")
+        assertEquals(16, fantasyLeagueFromJson(json)!!.undraftedRound)
+    }
+
+    // mDraftDetail as remembered, unverified against a live league.
+    private val draftBody = """
+        {"draftDetail":{"drafted":true,"picks":[
+          {"overallPickNumber":1,"roundId":1,"roundPickNumber":1,"teamId":2,"playerId":222,"keeper":false},
+          {"overallPickNumber":2,"roundId":1,"roundPickNumber":2,"teamId":1,"playerId":111,"keeper":true},
+          {"overallPickNumber":20,"roundId":10,"roundPickNumber":2,"teamId":2,"playerId":-16012,"keeper":false},
+          {"overallPickNumber":21,"roundId":11,"teamId":2}
+        ]}}
+    """.trimIndent()
+
+    @Test
+    fun `draft picks parse round, team and keeper`() {
+        assertTrue(EspnFantasyParser.draftUrl("42", 2026).endsWith("/seasons/2026/segments/0/leagues/42?view=mDraftDetail"))
+        assertEquals(
+            listOf(
+                DraftPick("222", null, 1, 2, keeper = false),
+                DraftPick("111", null, 1, 1, keeper = true),
+                DraftPick("-16012", null, 10, 2, keeper = false),
+            ),
+            EspnFantasyParser.draft(draftBody),
+        )
+    }
+
+    @Test
+    fun `no draft yet is an empty list`() {
+        assertEquals(emptyList<DraftPick>(), EspnFantasyParser.draft("""{"draftDetail":{"drafted":false}}"""))
+        assertEquals(emptyList<DraftPick>(), EspnFantasyParser.draft("""{"id":42}"""))
+        assertThrows<LiveFormatException> { EspnFantasyParser.draft("<html>") }
+    }
+
+    @Test
+    fun `the league's draft links picks through the snapshot`() = runTest {
+        val prefs = FakePrefsSource()
+        val repo = FantasyLeagueRepository(prefs, { url, _ -> if ("mDraftDetail" in url) draftBody else body }, players, dir) { Instant.parse("2026-10-01T00:00:00Z") }
+        assertEquals("no league id set", repo.draft(2026).error)
+        repo.configure("42", null, null)
+        assertEquals("sync your league first", repo.draft(2026).error)
+        assertTrue(repo.sync(2026).ok)
+        val draft = repo.draft(2026)
+        assertNull(draft.error)
+        assertEquals(3, draft.picks.size)
+        assertEquals("DST_KC", draft.picks.single { it.espnId == "-16012" }.playerId)
+    }
 }

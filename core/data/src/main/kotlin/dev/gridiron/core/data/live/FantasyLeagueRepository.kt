@@ -316,6 +316,27 @@ public class FantasyLeagueRepository(
      * Pending trades involving the user's team, players mapped to app ids through the last sync's rosters (a player
      * not on them is left out). Never throws; an unreadable response is no offers.
      */
+    /** The active league's draft for [season], picks linked through the last sync's rosters (a D/ST by its team). Never throws. */
+    public suspend fun draft(season: Int): DraftResult {
+        load()
+        val cfg = prefs.prefs.first().espnLeague ?: return DraftResult(emptyList(), "no league id set")
+        val league = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
+            ?: return DraftResult(emptyList(), "sync your league first")
+        val ids = league.teams.flatMap { t -> t.players.mapNotNull { p -> p.playerId?.let { p.espnId to it } } }.toMap()
+        return try {
+            val picks = EspnFantasyParser.draft(http.get(EspnFantasyParser.draftUrl(cfg.leagueId, season), headers(cfg)))
+            DraftResult(picks.map { it.copy(playerId = ids[it.espnId] ?: EspnFantasyParser.dstPlayerId(it.espnId)) }, null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: LiveFormatException) {
+            DraftResult(emptyList(), e.message ?: "ESPN changed its draft format")
+        } catch (e: IOException) {
+            DraftResult(emptyList(), friendly(e.message))
+        } catch (e: Exception) {
+            DraftResult(emptyList(), "couldn't read the draft")
+        }
+    }
+
     public suspend fun tradeOffers(season: Int): TradeOffersResult {
         load()
         val cfg = prefs.prefs.first().espnLeague ?: return TradeOffersResult(emptyList(), "no league id set")
