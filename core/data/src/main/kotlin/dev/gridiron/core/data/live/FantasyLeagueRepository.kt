@@ -275,13 +275,14 @@ public class FantasyLeagueRepository(
         }
         var error: String? = null
         val all = HashMap<Int, List<LeagueMatchup>>()
+        val known = HashMap<String, String?>()
         val reviews = (through downTo 1).mapNotNull { week ->
             try {
                 val raw = EspnFantasyParser.matchups(http.get(EspnFantasyParser.matchupsUrl(cfg.leagueId, season, week), headers(cfg)), week)
                 all[week] = raw
+                known += positionsOf(raw.flatMap { m -> listOfNotNull(m.home, m.away).flatMap { it.lineup } })
                 val side = raw.firstNotNullOfOrNull { m -> listOfNotNull(m.home, m.away).firstOrNull { it.teamId == cfg.teamId } }
                     ?: return@mapNotNull null
-                val known = positionsOf(side.lineup)
                 LineupReview.of(week, side, mine.slots) { known[it.espnId] ?: it.position }
             } catch (e: CancellationException) {
                 throw e
@@ -293,8 +294,17 @@ public class FantasyLeagueRepository(
                 null
             }
         }
-        val recap = if (all.isEmpty()) null else LeagueRecaps.of(all, league.teams.associate { it.id to it.name })
-        return LineupReviewResult(reviews, if (reviews.isEmpty()) error ?: "no finished weeks yet" else null, recap)
+        val names = league.teams.associate { it.id to it.name }
+        val recap = if (all.isEmpty()) null else LeagueRecaps.of(all, names)
+        val draft = if (all.isEmpty()) null else draft(season)
+        val picks = draft?.picks?.takeIf { draft.error == null && it.isNotEmpty() }
+        val cards = ReportCards.of(all, picks, mine.slots, { known[it.espnId] ?: it.position }, names)
+        return LineupReviewResult(
+            reviews, if (reviews.isEmpty()) error ?: "no finished weeks yet" else null, recap,
+            reportCards = cards,
+            myTeamId = cfg.teamId,
+            draftMessage = if (picks != null) null else draft?.error ?: "no draft found",
+        )
     }
 
     /**

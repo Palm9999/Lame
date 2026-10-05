@@ -1,5 +1,6 @@
 package dev.gridiron.feature.projections
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -10,15 +11,23 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.gridiron.core.data.live.Grade
 import dev.gridiron.core.data.live.LeagueRecap
 import dev.gridiron.core.data.live.LineupReviewResult
 import dev.gridiron.core.data.live.MatchupPlayer
+import dev.gridiron.core.data.live.ReportCard
 import dev.gridiron.core.data.live.WeekReview
 import java.util.Locale
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
 /** The lineup review: asked for when the mode opens, being fetched, or read. */
 public sealed interface ReviewState {
@@ -80,6 +89,7 @@ internal fun ReviewView(state: ReviewState) {
                     }
                 }
                 state.result.recap?.let { recap -> recapItems(recap) }
+                reportCardItems(state.result)
             }
         }
     }
@@ -119,6 +129,53 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recapItems(recap: Lea
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+        }
+    }
+}
+
+/** Every manager's places, best overall first; a tap shows the numbers behind them. */
+private fun androidx.compose.foundation.lazy.LazyListScope.reportCardItems(result: LineupReviewResult) {
+    val cards = result.reportCards
+    if (cards.isEmpty()) return
+    item { Label("Report card") }
+    item {
+        Text(
+            "Lineups: points scored of the best lineups allowed. Strength: all-play. Luck: wins over all-play. " +
+                "Draft: starting points from each team's picks, wherever they start. Moves: starters it didn't draft.",
+            Modifier.padding(horizontal = 16.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    result.draftMessage?.let { why -> item { Note("Draft and Moves: $why.") } }
+    itemsIndexed(cards, key = { _, c -> "card:${c.teamId}" }) { _, c -> ReportCardRow(c, cards.size, c.teamId == result.myTeamId) }
+}
+
+@Composable
+private fun ReportCardRow(card: ReportCard, teams: Int, mine: Boolean) {
+    var open by rememberSaveable(card.teamId) { mutableStateOf(false) }
+    Column(Modifier.fillMaxWidth().clickable { open = !open }.padding(horizontal = 16.dp, vertical = 6.dp).testTag("card:${card.teamId}")) {
+        Text(
+            "${placeText(card.overall)} of $teams · ${card.name}" + if (mine) " (you)" else "",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = if (mine) FontWeight.Bold else FontWeight.SemiBold,
+        )
+        Text(
+            Grade.entries.mapNotNull { g -> card.places[g]?.let { "${g.label} ${placeText(it)}" } }.joinToString(" · "),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (open) {
+            Text(
+                listOfNotNull(
+                    card.lineupShare?.let { "${(it * 100).roundToInt()}% of the best lineups" },
+                    "all-play " + String.format(Locale.US, "%.3f", card.allPlay).removePrefix("0"),
+                    "luck ${if (card.luck >= 0) "+" else "−"}${pts(abs(card.luck))} wins",
+                    card.draftPoints?.let { "draft ${pts(it)}" },
+                    card.movesPoints?.let { "moves ${pts(it)}" },
+                ).joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+            )
         }
     }
 }

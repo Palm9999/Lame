@@ -45,7 +45,9 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** the user picked the 2026-10-05 round: (1) waiver trends, built (below); (2) dynasty & keepers, built (below); then (3) a manager report card, (4) league history, (5) shareable cards, in that order, one at a time, each through brainstorming (a short design in chat for a bounded one) and its own push. Untried accuracy leads (not picked this round): rest of season discounting an injured player's coming weeks by the return outlook (a backtest needs rest-of-season accuracy, not weekly); a TE handcuff rule giving the backup TE part of the starter's targets (about 1.9 under; only 43 cases); ESPN's QB rushing TDs (noisy, 0.85-1.08 of ESPN's).
+**Next:** the user picked the 2026-10-05 round: (1) waiver trends, built (below); (2) dynasty & keepers and (3) the manager report card, built (below); then (4) league history, (5) shareable cards, in that order, one at a time, each through brainstorming (a short design in chat for a bounded one) and its own push. Untried accuracy leads (not picked this round): rest of season discounting an injured player's coming weeks by the return outlook (a backtest needs rest-of-season accuracy, not weekly); a TE handcuff rule giving the backup TE part of the starter's targets (about 1.9 under; only 43 cases); ESPN's QB rushing TDs (noisy, 0.85-1.08 of ESPN's).
+
+**Just built: Report card** (Projections → Review, under the recap; the user approved the five categories with Luck counted in the overall). Places read "3rd of 12" (the places ruling); a tie shares the better place; overall is the average place, ties by all-play. It adds one `mDraftDetail` read per Review open; without a draft, Draft and Moves are left out and the section says why.
 
 **Just built: Dynasty & keepers** (More → League, or ☰). The user chose market values (FantasyCalc) over an app age-curve model, and keepers priced by the round drafted. FantasyCalc: about 420 players plus 24 rookie picks (dropped), 27 players without an `espnId` (shown, not linked), `overallRank` counts the picks (so ranks are recounted). A rostered player's cost is his own pick whoever made it (a traded player keeps his round). ESPN's `mDraftDetail` shape (`draftDetail.picks[]`: `playerId`, `roundId`, `teamId`, `keeper`) is from memory: unverified until the user's keeper league is synced.
 
@@ -64,6 +66,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - **Places read best first** ("1st of 62", never "percentile" wording; 2026-10-03). **My players** are always listed, unranked below the bar (2026-10-03). **Several leagues:** one active league, one shared login, every league's team a roster (2026-10-03). **Matchups:** ESPN's numbers lead, the app's beside them (2026-10-01).
 
 ## Deferred minors
+
+**Deferred minors (report card):** points count only in starting lineups and by ESPN's scores; a traded player's points before the trade count as the other team's move; Draft credits the drafting team even for weeks another team started him (by design); the categories are equally weighted; Luck is in the overall although it isn't skill (the user approved).
 
 **Deferred minors (dynasty & keepers):** the draft is read every time the screen opens (no cache); keeper costs ignore how many years a player was kept; a negative-surplus player is still marked Keep when he is in the top N; the 6-hour value cache is a judgment; K and D/ST have no worth; a pick ESPN makes for a player later released and re-added still prices at that pick; the Grid, Player page and Trade don't use dynasty values.
 
@@ -111,6 +115,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Open checks on the phone
 
+- **Report card:** Projections → Review: under the recap, every manager has a place and five category places; tap one for the numbers. With a draft found, Draft and Moves show.
 - **Dynasty & keepers:** More → Dynasty & keepers: the Dynasty tab fills in your league's format (Superflex if it starts an OP); on Keepers, check each player's cost round against your league's real draft (if every player reads the undrafted round, ESPN's draft shape differs: report it), set Keep, Penalty and Undrafted round, and override one cost.
 - **Waiver trends:** More → Waiver trends: Most added and Most dropped fill, the position chips narrow them, a row opens the Player page, and with a league synced the Free agents chip and owner tags show. Open it once a day for a week: from day 7 the note should read "over the last week".
 

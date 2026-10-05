@@ -676,4 +676,30 @@ class FantasyLeagueTest {
         assertEquals(KeeperRule(keepers = 3), repo.keeperRule.first())
         assertEquals(KeeperRule(), prefs.prefs.first().espnLeagues.single { it.leagueId == "77" }.keeperRule)
     }
+
+    @Test
+    fun `the review grades every manager, with draft grades only when a draft is found`() = runTest {
+        val prefs = FakePrefsSource()
+        var draft = "{}"
+        val repo = repo(prefs) { url, _ ->
+            when {
+                "view=mMatchup" in url -> matchupBody
+                "mDraftDetail" in url -> draft
+                else -> body
+            }
+        }
+        repo.configure("42", null, null)
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+        val none = repo.lineupReview(2026, 4)
+        assertEquals(2, none.myTeamId)
+        assertTrue(none.reportCards.isNotEmpty())
+        assertTrue(none.reportCards.all { it.draftPoints == null })
+        assertEquals("no draft found", none.draftMessage)
+
+        draft = draftBody
+        val graded = repo.lineupReview(2026, 4)
+        assertNull(graded.draftMessage)
+        assertTrue(graded.reportCards.all { it.draftPoints != null })
+    }
 }

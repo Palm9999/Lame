@@ -89,7 +89,17 @@ public data class RawTradeOffer(val id: String, val proposer: Int?, val moves: L
 public data class MyMatchup(val mine: MatchupSide?, val theirs: MatchupSide?, val message: String?)
 
 /** The weeks reviewed, newest first; [message] says why there are none. */
-public data class LineupReviewResult(val weeks: List<WeekReview>, val message: String?, val recap: LeagueRecap? = null)
+public data class LineupReviewResult(
+    val weeks: List<WeekReview>,
+    val message: String?,
+    val recap: LeagueRecap? = null,
+    /** Every manager's report card, best overall first; empty with no finished week. */
+    val reportCards: List<ReportCard> = emptyList(),
+    /** The user's team, to mark its card. */
+    val myTeamId: Int? = null,
+    /** Why the cards have no draft or moves grades ("no draft found"); null when they have them. */
+    val draftMessage: String? = null,
+)
 
 /** [picture], or null with [message] saying why. */
 public data class PlayoffPictureResult(val picture: PlayoffPicture?, val message: String?)
