@@ -25,6 +25,7 @@ import dev.gridiron.core.data.live.LineupAlert
 import dev.gridiron.core.data.live.LineupAlerts
 import dev.gridiron.core.data.live.LiveDb
 import dev.gridiron.core.data.live.LiveRepository
+import dev.gridiron.core.data.live.NewsAlertChecker
 import dev.gridiron.core.data.live.PropsRepository
 import dev.gridiron.core.data.live.UrlConnectionHttpClient
 import dev.gridiron.core.data.live.UrlConnectionHttpGet
@@ -118,6 +119,9 @@ class GridironApplication : Application() {
         val status = live.injuries().mapNotNull { i -> i.playerId?.let { it to i.abbr } }.toMap()
         return LineupAlerts.check(team, players, status, week, window)
     }
+
+    /** ESPN stories about rostered players since [InjuryAlertWorker]'s last run. */
+    internal val newsAlerts by lazy { NewsAlertChecker(live, rosters.rosters, File(noBackupFilesDir, "news-alerts.txt")) }
 
     /** What [InjuryAlertWorker] checks: rostered players' ESPN status against the last list seen. */
     internal val injuryAlerts by lazy {

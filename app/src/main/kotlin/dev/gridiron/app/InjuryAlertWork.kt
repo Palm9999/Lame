@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -18,6 +19,7 @@ import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import dev.gridiron.core.data.live.InjuryAlert
+import dev.gridiron.core.data.live.NewsAlert
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import java.util.concurrent.TimeUnit
@@ -31,6 +33,8 @@ class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
         val app = applicationContext as GridironApplication
         if (!app.settings.injuryAlerts.first()) return Result.success()
         notify(applicationContext, app.injuryAlerts.check())
+        // The injury check just refreshed ESPN's feeds: stories about rostered players since the last run.
+        notifyNews(applicationContext, app.newsAlerts.check())
         // The week's kickoff windows each get a lineup check shortly before; a missing scoreboard just skips them.
         try {
             app.upcomingWeek()?.let { LineupAlertWorker.schedule(applicationContext, it) }
@@ -58,6 +62,33 @@ class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             work.enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.KEEP, request)
+        }
+
+        private const val NEWS_CHANNEL = "news"
+
+        /** One notification per story; a tap opens it in the browser. */
+        private fun notifyNews(context: Context, alerts: List<NewsAlert>) {
+            if (alerts.isEmpty()) return
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+            val manager = context.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(NotificationChannel(NEWS_CHANNEL, "Roster news", NotificationManager.IMPORTANCE_LOW))
+            val compat = NotificationManagerCompat.from(context)
+            for (alert in alerts) {
+                val open = PendingIntent.getActivity(
+                    context, alert.item.id.hashCode(),
+                    Intent(Intent.ACTION_VIEW, Uri.parse(alert.item.url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                    PendingIntent.FLAG_IMMUTABLE,
+                )
+                val notification = NotificationCompat.Builder(context, NEWS_CHANNEL)
+                    .setSmallIcon(R.drawable.ic_stat_injury)
+                    .setContentTitle(alert.title)
+                    .setContentText(alert.text)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(alert.text))
+                    .setContentIntent(open)
+                    .setAutoCancel(true)
+                    .build()
+                compat.notify(("news:" + alert.item.id).hashCode(), notification)
+            }
         }
 
         private fun notify(context: Context, alerts: List<InjuryAlert>) {

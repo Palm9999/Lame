@@ -112,10 +112,10 @@ private fun AlertsSection(settings: SettingsRepository) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Injury and lineup alerts", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text("Injury, lineup and news alerts", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
             Text(
                 "A notification when a player on your rosters changes ESPN status (checked about every two hours), and " +
-                    "about 90 minutes before kickoff when a starter in your ESPN lineup is out or on bye.",
+                    "ESPN news about them, and about 90 minutes before kickoff when a starter in your ESPN lineup is out or on bye.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
