@@ -16,4 +16,12 @@ class MatchupPreviewTest {
         assertEquals(listOf(2.0, 3.0, 10.0, -8.0), p.slots.map { it.edge })
         assertEquals(listOf("w1", "w3"), p.swing.map { it.playerId })
     }
+
+    @Test
+    fun `the widget summary names the week, both totals and the win chance`() {
+        val mine = view(LineupLine("QB", r("q1", 20.0, 12.0, 28.0)))
+        val theirs = view(LineupLine("QB", r("q2", 18.0, 10.0, 26.0))).copy(teamName = "Rivals")
+        assertEquals("Wk 5 · 20.0 vs Rivals 18.0 · ${winLine(winChance(mine, theirs))}", widgetSummary(mine, theirs))
+        assertEquals("Wk 5 · 20.0 projected", widgetSummary(mine, null))
+    }
 }

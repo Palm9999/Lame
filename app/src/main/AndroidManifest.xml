@@ -22,6 +22,19 @@
             </intent-filter>
         </activity>
 
+        <!-- The home-screen widget: My lineup's summary and the latest lineup alert. -->
+        <receiver
+            android:name=".LineupWidget"
+            android:exported="false"
+            android:label="@string/app_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_lineup_info" />
+        </receiver>
+
         <!-- Shares Grid CSV exports; only cache/exports is exposed. -->
         <provider
             android:name="androidx.core.content.FileProvider"

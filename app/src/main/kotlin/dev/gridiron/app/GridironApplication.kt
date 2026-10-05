@@ -71,6 +71,7 @@ class GridironApplication : Application() {
     private val projectionsRepo by lazy { ProjectionsRepository(executor) }
     private val propsRepo by lazy { PropsRepository(liveDb, UrlConnectionHttpClient()) }
     private val rosters by lazy { RosterRepository(prefs) }
+    internal val widget by lazy { WidgetStore(this) }
     private val scoring by lazy { ScoringRepository(prefs) }
     private val scores by lazy { ScoresRepository(executor, UrlConnectionHttpGet()) }
     private val league by lazy { FantasyLeagueRepository(prefs, UrlConnectionHttpGet(), players, noBackupFilesDir) }
@@ -168,6 +169,7 @@ class GridironApplication : Application() {
             playerStats = PlayerStatsRepository(executor),
             scores = scores,
             league = league,
+            onLineupSummary = { widget.lineup(it) },
             opportunities = OpportunitiesRepository(executor, projectionsRepo, { live.injuries() }),
             breakouts = BreakoutRepository(executor),
         )

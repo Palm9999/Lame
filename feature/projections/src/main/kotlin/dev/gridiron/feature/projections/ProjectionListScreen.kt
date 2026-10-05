@@ -101,6 +101,8 @@ public fun ProjectionListRoute(
     liveWeek: suspend (season: Int, week: Int) -> ScoresWeek? = { _, _ -> null },
     /** Both sides of the user's matchup as ESPN has them now, live points included. */
     myMatchup: suspend (season: Int, week: Int, profile: ScoringProfile) -> MyMatchup = { _, _, _ -> MyMatchup(null, null, "not available") },
+    /** Receives My lineup's one-line summary for the home-screen widget. */
+    onLineupSummary: (String) -> Unit = {},
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -142,6 +144,7 @@ public fun ProjectionListRoute(
         inactivesPosted = locked.inactivesPosted,
         playoffs = playoffs,
         review = review,
+        onLineupSummary = onLineupSummary,
         liveFetch = live@{
             val loaded = state as? ProjectionListState.Loaded ?: return@live null
             val active = profile ?: return@live null
@@ -266,6 +269,8 @@ public fun ProjectionListScreen(
     onReviewOpened: () -> Unit = {},
     /** My lineup's live win chance, asked each minute while it is open and a game is on; null when none is. */
     liveFetch: suspend () -> LiveWinChance? = { null },
+    /** My lineup's one-line summary each time it changes, for the home-screen widget. */
+    onLineupSummary: (String) -> Unit = {},
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
@@ -383,6 +388,8 @@ public fun ProjectionListScreen(
                         val stashes = if (rostered == null) null else remember(myTeam, state, rostered) { rosAdds(myTeam, state.rosRows, rostered, state.rosWeekly) }
                         val mine = lineupView(myTeam, state.week, weekRows, badges, started)
                         val cuffs = remember(myTeam, weekRows, owners) { handcuffs(myTeam, weekRows, owners.orEmpty()) }
+                        val summary = widgetSummary(mine, rival)
+                        LaunchedEffect(summary) { onLineupSummary(summary) }
                         LineupList(
                             mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, weekRows, badges), faabText(myTeam),
                             cuffs, ownersKnown = owners != null, live = live,

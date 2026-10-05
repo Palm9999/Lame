@@ -97,6 +97,8 @@ data class Deps(
     val playerStats: PlayerStatsRepository? = null,
     /** The user's ESPN fantasy league. Null where a test doesn't need it. */
     val league: FantasyLeagueRepository? = null,
+    /** Receives My lineup's one-line summary for the home-screen widget. */
+    val onLineupSummary: (String) -> Unit = {},
     /** Week-by-week NFL scores; null where a test doesn't need them. */
     val scores: ScoresRepository? = null,
     /** Who moves up when a starter is hurt; null where a test doesn't need it. */
@@ -232,6 +234,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             lineupReview = { s, w -> deps.league?.lineupReview(s, w) ?: LineupReviewResult(emptyList(), "no league") },
                             liveWeek = { s, w -> deps.scores?.week(s, w) },
                             myMatchup = { s, w, p -> deps.league?.myMatchup(s, w, p) ?: MyMatchup(null, null, "no league") },
+                            onLineupSummary = deps.onLineupSummary,
                         )
                     }
                     entry<OpportunitiesKey> { key ->

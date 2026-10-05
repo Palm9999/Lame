@@ -311,3 +311,8 @@ internal fun matchupPreview(mine: LineupView, theirs: LineupView, swingCount: In
         .sortedByDescending { it.ceiling - it.floor }.take(swingCount)
     return MatchupPreview(pairs, swing)
 }
+
+/** The home-screen widget's lineup line: "Wk 5 · 112.4 vs Rivals 104.8 · 64% to win", or the total alone without a rival. */
+internal fun widgetSummary(mine: LineupView, rival: LineupView?): String =
+    "Wk ${mine.week} · ${String.format(java.util.Locale.US, "%.1f", mine.total)}" +
+        (rival?.let { " vs ${it.teamName} ${String.format(java.util.Locale.US, "%.1f", it.total)} · ${winLine(winChance(mine, it))}" } ?: " projected")

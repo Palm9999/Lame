@@ -33,7 +33,10 @@ class LineupAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
         val app = applicationContext as GridironApplication
         if (!app.settings.injuryAlerts.first()) return Result.success()
         val window = Instant.ofEpochMilli(inputData.getLong(KICKOFF, 0L))
-        notify(applicationContext, app.lineupAlerts(window))
+        val alerts = app.lineupAlerts(window)
+        notify(applicationContext, alerts)
+        // The widget shows the latest check's first problem, or that it found none.
+        app.widget.alert(alerts.firstOrNull()?.let { "${it.title.removePrefix("Lineup: ")}. ${it.text}" })
         return Result.success()
     }
 
