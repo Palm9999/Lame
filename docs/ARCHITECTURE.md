@@ -35,6 +35,37 @@ Module map, data flow, design decisions and database schema. `CLAUDE.md` keeps o
 5. **Query Layer** — `:core:statquery` generates parameterized SQL for any stat grid query (columns, filters, week ranges, percentiles). Tests run it through the JDBC executor against a Kotlin-built database (`GRIDIRON_STATS_DB`); the phone runs it through the bundled SQLite driver
 6. **Python ETL** (`etl/`) — kept only as CI's parity reference for the Kotlin port; nothing it builds reaches the app
 
+## Features
+
+**Grid** — Tapping a row opens the Player page. Presets and rosters live in the prefs JSON (`UserPrefs.gridPresets`, `UserPrefs.rosters`). A preset stores pack, sort, direction, position chip, per-game, teams, snap floor, advanced filters and a weeks rule, never the season, scoring profile, roster or name search (at most 30, names unique ignoring case). "Filters (n)" counts advanced filters plus teams, roster, snap floor, per game on, heat off and compact rows. ☰ → Rosters manages rosters; the Player page toggles membership; the roster chip narrows to one (`GridRequest.onlyPlayers`) and stars rostered players, who are always listed, unranked below the bar (`StatQuerySpec.alwaysShow`). Places read best first ("1st of 62", never "percentile"), from `StatQuerySpec.ranks` (Compare cells, the Player page's Rank column).
+
+**Player page** — ESPN status, injury notes, tagged news, Season stats, a "Rising role" line while the player's score is above zero, and a "This week" card (opens the waterfall) with TD chance, "Nth of M rest of season" and "Playoffs (weeks 15–17): N pts". A stash (out for now, with rest-of-season points) gets the card with "Not projected this week".
+
+**☰ menu** — Projections, Opportunities, Rising roles, Projection accuracy, News, Scores, Injury report (ESPN's live list with nflverse practice for the current season; the official list for past seasons), Team defense, Draft, ESPN leagues, Rosters, Settings, Refresh stats.
+
+**Projections modes** (scored with the active profile; league tools need a synced league with your team chosen):
+- *Week / Rest of season / Value* — by position, K and D/ST included, with "TD n%" (`anytimeTd`: 1 − e^−(rushing + receiving TDs)). Value ranks every position on points over replacement (`ReplacementLevel`: each position's slots × teams first, then flex slots; teams and slots from the league, else 12 on `DEFAULT_SLOTS`)
+- *My lineup* — `Lineups.best` on the league's slots (Out/IR count zero), "Likely low–high" and "N% to win" (`winChance` in `LineupView.kt`), the opponent's best lineup from ESPN's schedule, a slot-by-slot matchup preview with three swing players (`matchupPreview`), the lineup check against your ESPN lineup (`lineupCheck`), kickoff locks from ESPN's scoreboard (🔒), five waiver pickups and five rest-of-season adds (`Lineups.pickups`, with a FAAB bid when the league bids: `faabBid`, a judgment), handcuffs for RBs then WRs (`handcuffs`; `HANDCUFF_POSITIONS` is RB and WR, TE left out because the team-wide rule under-projects the backup TE by about 1.9), and while a game is on, "Live: a–b · heading for c–d · N% to win" each minute (`LiveWin`, `GameClock.shareLeft`). Opening it re-syncs a league snapshot older than 30 minutes (`LEAGUE_STALE_MILLIS`)
+- *Start/sit* — two to four players, the chance each scores most (`chanceToLead`), and a weekly rest-of-season chart through the playoffs (`RosCompareChart`)
+- *Trade* — `Trades.evaluate`: each side's value is each remaining week's best lineup plus `BENCH_WEIGHT` (0.1, a judgment) of the best bench player; the side receiving more players cuts its lowest unless you pick "Cut instead:"; also read over the league's playoff weeks (`FantasyLeague.playoffWeeks`, default 15–17). `Trades.ideas` suggests 1-for-1, 2-for-1, 1-for-2 and 2-for-2 trades lifting both sides. Pending ESPN offers involving your team are graded at the top (`tradeOffers`)
+- *Playoff odds* — power rankings (`Trades.value` per team, strongest and weakest position), then `Playoffs.simulate`: 10,000 runs of the remaining schedule with `WEEKLY_CV`, seeded by wins then points for; a snapshot older than 30 minutes is re-synced first (`PICTURE_MAX_AGE_MILLIS`)
+- *Review* — each finished week's ESPN points against the best lineup they allowed (`LineupReview.of`), the swaps, the season's bench total, and a league recap with each team's luck (`LeagueRecaps`)
+- *Planner* — lineup holes through the playoffs with the free agent who fills each (`ProjectionsRepository.byeWeeks`), and K and D/ST streamers for the next 3 weeks
+
+**Questionable at kickoff** — from 90 minutes before a team's kickoff (`INACTIVES_LEAD`), a Questionable player ESPN doesn't list Out, Doubtful, IR or suspended loses the forecast's `questionable` discount (`confirmedActive` in `ProjectionListViewModel.kt`; TD chance via `liftedTd`) in the week list, Start/sit, My lineup and the Player card. The waterfall and Grid projection columns keep the stored final.
+
+**Opportunities** — healthy players moving up because a top-two RB/WR/TE or QB1 is Doubtful, Out or IR, or newly Questionable (`Opportunities.find`, `OpportunitiesRepository`): this week's projection against the last four games, tagged free agent, yours or the owning team.
+
+**Rising roles** — ☰ → Rising roles (`BreakoutRepository`, `BreakoutsScreen`), the Grid's RISE column for the week after the range, the Player page line. Score: usage and expected points over the last four games against the eight before (45/40) plus teammates out (15). Predicts a role that keeps growing (`BreakoutBacktestTest`: the top 15% keep a 25%-larger role about 55% of the time against about 21%), not points and not beating a projection; both were tested and failed.
+
+**Scores** — a season's weeks from the `game` table; ESPN's scoreboard adds kickoff, clock and live scores (fetched when a week with games to play opens, every minute while one is live); a game opens both teams' players with that week's points (`ScoresRepository`, `EspnParser.scoreboard`, `ScoresScreen.kt`; parse tested against `core/data/src/test/resources/espn/scoreboard.json`, its live game built by hand).
+
+**ESPN leagues** — several leagues sharing one login (prefs `espnLogin`: `espn_s2`, `SWID`, sent only to ESPN, never printed); one active league that every screen follows, switched there or from a chip on Projections. `FantasyLeagueRepository` reads `lm-api-reads.fantasy.espn.com/.../leagues/{id}` into `noBackupFilesDir/league-<id>.json`, maps ESPN ids through `player_xref` (a D/ST, −16000 minus ESPN's team id, to `DST_<team>`), and saves your team as roster `espn-<league>` (parsing in `core/data/.../live/FantasyLeague.kt`). Free agents (`GridRequest.excludePlayers`) are everyone on no team in the last snapshot. Matchups show ESPN's points first, the app's beside them.
+
+**Draft** — ☰ → Draft. The app's own projections don't exist before a season's first game (before September `currentSeason()` is still last season), so the board is Fantasy Football Calculator's ADP (format from a catch's worth in the active profile; teams from the league, else 12) beside last season's points per game (`DraftRepository`); tap = taken, long-press = yours (`noBackupFilesDir/draft-<year>.txt`); suggestions by roster need (`DraftAdvice`, judgments).
+
+**Alerts and widget** — `InjuryAlertWorker` (WorkManager, every two hours) notifies rostered players' ESPN status changes (`InjuryAlertChecker`), then new ESPN stories tagging them (`NewsAlertChecker`, at most 5 a run), and schedules a `LineupAlertWorker` 90 minutes before each kickoff window (`LineupAlerts.check`: starters Out, IR, Doubtful, suspended or on bye, each with a bench replacement; one check per window). One Settings switch ("Injury, lineup and news alerts", prefs `injuryAlerts`). `LineupWidget` shows My lineup's summary and the latest lineup check from `noBackupFilesDir/widget.txt` (`WidgetStore`).
+
 ## Key Design Decisions
 
 **Stat Components, Not Fantasy Points** — The database ships raw stats (receptions, yards, touchdowns). League scoring is applied on-device, so any league format works offline.
@@ -47,17 +78,17 @@ Module map, data flow, design decisions and database schema. `CLAUDE.md` keeps o
 
 **Navigation 3, No Hilt** — Screens navigate through Navigation 3 (`app/.../GridironNavHost.kt`, `NavKeys.kt`). Repositories are wired by hand in `GridironApplication`; Hilt is not used.
 
-## Database Schema (Version 9)
+## Database Schema (Version 12)
 
 Long/narrow design: adding a metric is an `INSERT`, not a migration.
 
 | Table | Purpose |
 |---|---|
 | `player_week_stat` | Facts: `(player_id, season, week, team, metric_id, value)`, indexed as covering index on `(metric_id, season, week, value)` |
-| `player_window_stat` | Component sums per `(player_id, season, window, metric_id)` for `S` (the regular season played so far) and `L3`, `L4`, `L5`, `L8` (the last N weeks ending there), filled from `player_week_stat` at the end of a build; primary key `(metric_id, season, window, player_id)`, so the Grid's read is a key seek and the table needs no second index. `window_def (season, window, first_week, last_week)` gives each window's bounds. `StatQueryBuilder` reads the rollup, not the weekly facts, when the Grid's week range equals a window and no fantasy column is planned (fantasy points are scored per week, so they keep the weekly path); `SeasonInfo.rollups` carries the windows from the catalog, and a window whose `window_def` bounds no longer match the spec reads nothing, and a database without the tables falls back silently |
+| `player_window_stat` | Component sums per `(player_id, season, window, metric_id)` for `S` (the regular season played so far) and `L3`, `L4`, `L5`, `L8` (the last N weeks ending there), filled from `player_week_stat` at the end of a build; primary key `(metric_id, season, window, player_id)`, so the Grid's read is a key seek and the table needs no second index. `window_def (season, window, first_week, last_week)` gives each window's bounds. `StatQueryBuilder` reads the rollup, not the weekly facts, when the Grid's week range equals a window, fantasy columns included (`rollupScoring` weights the window's sums; only yardage bonuses and points- and yards-allowed tiers read weekly facts); `SeasonInfo.rollups` carries the windows from the catalog, and a window whose `window_def` bounds no longer match the spec reads nothing, and a database without the tables falls back silently |
 | `metric` | Metric registry: name, definition, formula, tier, predictive use, stability, internal flag, plus `dist_family` (distribution for on-device Monte Carlo/percentile reconstruction) and `zero_inflated` |
 | `player` | Players with at least one stat in the built seasons, plus a `DST_<TEAM>` pseudo-player per team |
-| `espn_projection` | ESPN's weekly projections per `(player_id, season, week, metric_id)` in our metric ids, for the forecast's blend (the app never reads it); downloaded each build for the newest season, copied from the last build for finished ones |
+| `espn_projection` | (schema 11) ESPN's weekly projections per `(player_id, season, week, metric_id)` in our metric ids, for the forecast's blend (the app never reads it); downloaded each build for the newest season, copied from the last build for finished ones |
 | `player_xref` | ESPN athlete id → `player_id` for every player nflverse lists, stats or not; links ESPN news and injuries |
 | `schema_meta` | Schema version, seasons, attribution |
 | `game` | nflverse schedule for the built seasons: opponents, results, spread and total, starting QBs, head coaches; the forecast's matchups and game script |
@@ -65,6 +96,7 @@ Long/narrow design: adding a metric is an `INSERT`, not a migration.
 | `player_week_projection_factor` | Per (player, week, factor) log-space attribution multiplier for one projection adjustment stage |
 | `player_ros_projection` | Rest-of-season aggregate: summed weekly mean/variance per (player, metric) |
 | `player_ros_week` | The same rest of season week by week (schema 12): each remaining game's mean/variance per (player, week, metric), no row on a bye; Trade, rest-of-season adds and the playoff-week points read it, and an older database without it falls back to totals |
+| `player_week_signal` | (schema 10) Rising roles: a 0–100 score per RB/WR/TE entering each week, written by `:core:forecast` (`Breakout.kt`) |
 | `team_week_defense` | Per (team, season, week) points/yards allowed, sacks, INTs, fumbles recovered, defensive TDs, safeties, kickoff-return TDs |
 | `injury_report` | Per (player, season, week) nflverse injury report status/injury/practice |
 
