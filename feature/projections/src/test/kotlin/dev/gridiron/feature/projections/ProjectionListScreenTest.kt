@@ -158,6 +158,28 @@ class ProjectionListScreenTest {
     }
 
     @Test
+    fun `my lineup shows game day with a Questionable starter's late replacement`() {
+        val later = java.time.Instant.now().plusSeconds(86_400)
+        val withBench = loaded.copy(weekRows = loaded.weekRows + ProjectionRow("w3", "Late Receiver", "WR", "SF", 9.0, 4.0, 15.0))
+        val roster = team.copy(players = team.players + LeaguePlayer("4", "Late Receiver", "BE", "w3"))
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    withBench, mapOf("w" to "Q"), onPlayer = {}, onBack = {}, myTeam = roster,
+                    kickoffTimes = mapOf("KC" to later, "SF" to later.plusSeconds(3_600)),
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithTag("lineup:list").performScrollToNode(hasTestTag("pivot:w"))
+        compose.onNodeWithTag("pivot:w").assertTextEquals(
+            "Wide Out (WR) is Questionable, kicking off ${kickoffText(later)}. If he's out, Late Receiver (${kickoffText(later.plusSeconds(3_600))}, 9.0) can still go in.",
+        )
+        compose.onNodeWithTag("lineup:list").performScrollToNode(hasTestTag("kickoff:0"))
+        compose.onNodeWithTag("kickoff:0").assertExists()
+    }
+
+    @Test
     fun `an unavailable opponent says why and keeps the lineup`() {
         compose.setContent {
             GridironTheme {

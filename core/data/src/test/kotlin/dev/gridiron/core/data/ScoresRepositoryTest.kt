@@ -182,5 +182,8 @@ class ScoresRepositoryTest {
         assertEquals(week.started(now), early.inactivesPosted)
         val posted = week.kickoffs(java.time.Instant.parse("2026-10-04T18:55:00Z"))
         assertEquals(week.started(now) + setOf("GB", "CHI"), posted.inactivesPosted)
+        // Each team's kickoff where ESPN gave one.
+        assertEquals(java.time.Instant.parse("2026-10-04T20:25:00Z"), early.times["CHI"])
+        assertEquals(setOf("KC", "BUF", "SF", "SEA", "GB", "CHI"), early.times.keys)
     }
 }

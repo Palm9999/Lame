@@ -148,6 +148,7 @@ public fun ProjectionListRoute(
         partners = others.filter { it.season == season },
         started = locked.started,
         inactivesPosted = locked.inactivesPosted,
+        kickoffTimes = locked.times,
         playoffs = playoffs,
         review = review,
         onLineupSummary = onLineupSummary,
@@ -279,6 +280,8 @@ public fun ProjectionListScreen(
     started: Set<String> = emptySet(),
     /** NFL teams whose inactives are posted: the week's lists drop the Questionable discount of their players ESPN doesn't rule out. */
     inactivesPosted: Set<String> = emptySet(),
+    /** Each NFL team's kickoff this week (ESPN's scoreboard), for My lineup's game day. */
+    kickoffTimes: Map<String, java.time.Instant> = emptyMap(),
     playoffs: PlayoffState = PlayoffState.Idle,
     /** Playoff odds was opened: the route reads the league's schedule. */
     onPlayoffsOpened: () -> Unit = {},
@@ -412,11 +415,12 @@ public fun ProjectionListScreen(
                         val stashes = if (rostered == null) null else remember(myTeam, state, rostered) { rosAdds(myTeam, state.rosRows, rostered, state.rosWeekly) }
                         val mine = lineupView(myTeam, state.week, weekRows, badges, started)
                         val cuffs = remember(myTeam, weekRows, owners) { handcuffs(myTeam, weekRows, owners.orEmpty()) }
+                        val day = remember(mine, kickoffTimes, badges, inactivesPosted) { gameDay(mine, kickoffTimes, badges, java.time.Instant.now(), inactivesPosted) }
                         val summary = widgetSummary(mine, rival)
                         LaunchedEffect(summary) { onLineupSummary(summary) }
                         LineupList(
                             mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, weekRows, badges), faabText(myTeam),
-                            cuffs, ownersKnown = owners != null, live = live,
+                            cuffs, ownersKnown = owners != null, live = live, gameDay = day,
                         )
                     } else {
                         Row(
@@ -475,6 +479,8 @@ private fun LineupList(
     ownersKnown: Boolean = false,
     /** The live win chance while a game is on. */
     live: LiveWinChance? = null,
+    /** The week's kickoffs for the lineup and its Questionable starters' late replacements; null hides it. */
+    gameDay: GameDay? = null,
 ) {
     LazyColumn(Modifier.fillMaxSize().testTag("lineup:list")) {
         item {
@@ -561,6 +567,29 @@ private fun LineupList(
             item { SectionLabel("Bench") }
             itemsIndexed(view.bench, key = { _, row -> "b:${row.playerId}" }) { _, row ->
                 ProjectionListRow("BE", row, badges[row.playerId], onPlayer, LeadWidth)
+            }
+        }
+        gameDay?.let { day ->
+            item { SectionLabel("Game day") }
+            itemsIndexed(day.windows, key = { _, w -> "k:${w.kickoff}" }) { i, w ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("kickoff:$i"), verticalAlignment = Alignment.Top) {
+                    Text(
+                        kickoffText(w.kickoff),
+                        Modifier.width(96.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = if (i == 0) FontWeight.Bold else FontWeight.Normal,
+                        color = if (i == 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(windowText(w), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            itemsIndexed(day.pivots, key = { _, p -> "pivot:${p.player.playerId}" }) { _, p ->
+                Text(
+                    pivotText(p),
+                    Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("pivot:${p.player.playerId}"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (p.options.isEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
+                )
             }
         }
         if (rival != null) {

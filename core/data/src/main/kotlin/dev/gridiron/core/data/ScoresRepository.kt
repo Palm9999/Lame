@@ -69,9 +69,10 @@ public fun ScoresWeek.started(now: Instant): Set<String> =
 
 /**
  * Who is locked and whose inactives are known by a moment: [started] teams' games have kicked off; [inactivesPosted]
- * teams' kick off within [INACTIVES_LEAD] (when the NFL posts inactives) or have started.
+ * teams' kick off within [INACTIVES_LEAD] (when the NFL posts inactives) or have started. [times]: each team's kickoff
+ * this week, where ESPN gave one.
  */
-public data class Kickoffs(val started: Set<String>, val inactivesPosted: Set<String>)
+public data class Kickoffs(val started: Set<String>, val inactivesPosted: Set<String>, val times: Map<String, Instant> = emptyMap())
 
 /** The NFL posts each team's inactives 90 minutes before its kickoff. */
 public val INACTIVES_LEAD: Duration = Duration.ofMinutes(90)
@@ -81,7 +82,8 @@ public fun ScoresWeek.kickoffs(now: Instant): Kickoffs {
     val started = started(now)
     val posted = games.filter { g -> g.kickoff?.let { !it.minus(INACTIVES_LEAD).isAfter(now) } == true }
         .flatMapTo(HashSet(started)) { listOf(it.home, it.away) }
-    return Kickoffs(started, posted)
+    val times = games.flatMap { g -> g.kickoff?.let { k -> listOf(g.home to k, g.away to k) }.orEmpty() }.toMap()
+    return Kickoffs(started, posted, times)
 }
 
 /** One player's week in a game: his fantasy points under the scoring profile. */
