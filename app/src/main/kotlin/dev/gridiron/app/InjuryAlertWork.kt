@@ -35,6 +35,14 @@ class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
         notify(applicationContext, app.injuryAlerts.check())
         // The injury check just refreshed ESPN's feeds: stories about rostered players since the last run.
         notifyNews(applicationContext, app.newsAlerts.check())
+        // Tuesday from 9: last week, the report card's place and this week's win chance, once.
+        try {
+            app.weeklySummaryIfDue()?.let { notifySummary(applicationContext, it) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Not sent, so the next run tries again.
+        }
         // The week's kickoff windows each get a lineup check shortly before; a missing scoreboard just skips them.
         try {
             app.upcomingWeek()?.let { LineupAlertWorker.schedule(applicationContext, it) }
@@ -65,6 +73,27 @@ class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
 
         private const val NEWS_CHANNEL = "news"
+        private const val SUMMARY_CHANNEL = "summary"
+
+        private fun notifySummary(context: Context, text: String) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+            val manager = context.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(NotificationChannel(SUMMARY_CHANNEL, "Weekly summary", NotificationManager.IMPORTANCE_DEFAULT))
+            val open = PendingIntent.getActivity(
+                context, 1,
+                Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                PendingIntent.FLAG_IMMUTABLE,
+            )
+            val notification = NotificationCompat.Builder(context, SUMMARY_CHANNEL)
+                .setSmallIcon(R.drawable.ic_stat_injury)
+                .setContentTitle("Your week")
+                .setContentText(text)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                .setContentIntent(open)
+                .setAutoCancel(true)
+                .build()
+            NotificationManagerCompat.from(context).notify("summary".hashCode(), notification)
+        }
 
         /** One notification per story; a tap opens it in the browser. */
         private fun notifyNews(context: Context, alerts: List<NewsAlert>) {

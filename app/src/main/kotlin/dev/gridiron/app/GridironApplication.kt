@@ -47,6 +47,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
 import java.io.File
+import java.time.DayOfWeek
+import java.time.ZonedDateTime
+import dev.gridiron.core.data.live.LastResult
+import dev.gridiron.core.data.live.MyTeam
+import dev.gridiron.core.data.live.NextMatch
+import dev.gridiron.core.data.live.WeeklySummary
+import dev.gridiron.core.model.ScoringProfile
+import dev.gridiron.core.projections.LineupCandidate
+import dev.gridiron.core.projections.projectPoints
 import java.time.Instant
 
 /**
@@ -121,6 +130,56 @@ class GridironApplication : Application() {
         if (live.refresh().injuriesError != null) return emptyList()
         val status = live.injuries().mapNotNull { i -> i.playerId?.let { it to i.abbr } }.toMap()
         return LineupAlerts.check(team, players, status, week, window)
+    }
+
+    /**
+     * [InjuryAlertWorker]'s Tuesday summary, once a week from 9 local: last week's ESPN result, the report card's overall
+     * place and the coming week's win chance, each left out when it can't be read; null when not due or nothing is known.
+     */
+    internal suspend fun weeklySummaryIfDue(now: ZonedDateTime = ZonedDateTime.now()): String? {
+        if (now.dayOfWeek != DayOfWeek.TUESDAY || now.hour < 9) return null
+        val week = upcomingWeek(syncFirst = true) ?: return null
+        val key = "${week.season}:${week.week}"
+        val sent = File(noBackupFilesDir, "summary-sent.txt")
+        if (!WeeklySummary.due(now, sent.takeIf { it.isFile }?.readText()?.trim(), key)) return null
+        val snapshot = league.league.value ?: return null
+        val names = snapshot.teams.associate { it.id to it.name }
+        val profile = scoring.active.first()
+        val previous = week.week - 1
+        val last = if (previous < 1) null else league.myMatchup(week.season, previous, profile).let { m ->
+            val mine = m.mine ?: return@let null
+            val theirs = m.theirs ?: return@let null
+            LastResult(previous, mine.espnTotal, theirs.espnTotal, names[theirs.teamId] ?: "Team ${theirs.teamId}")
+        }
+        val place = if (previous < 1) null else league.lineupReview(week.season, previous).let { r ->
+            r.reportCards.firstOrNull { it.teamId == r.myTeamId }?.let { it.overall to r.reportCards.size }
+        }
+        val next = nextMatch(week.season, week.week, profile)
+        val text = WeeklySummary.text(last, place, next) ?: return null
+        sent.writeText(key)
+        return text
+    }
+
+    /** The coming week's opponent and win chance from both best lineups' projections; null without either. */
+    private suspend fun nextMatch(season: Int, week: Int, profile: ScoringProfile): NextMatch? {
+        val mine = league.myTeam.first()?.takeIf { it.season == season } ?: return null
+        val theirs = league.opponent(season, week).team ?: return null
+        val projected = projectionsRepo.weekAll(season, week).associateBy { it.playerId }
+        if (projected.isEmpty()) return null
+        val sd = HashMap<String, Double>()
+        fun roster(team: MyTeam) = team.players.mapNotNull { p ->
+            val id = p.playerId ?: return@mapNotNull null
+            val listed = projected[id] ?: return@mapNotNull null
+            val pos = listed.position ?: return@mapNotNull null
+            val pts = projectPoints(listed.components, profile, Position.fromCode(pos), draws = 1_000)
+            sd[id] = maxOf(0.0, pts.ceiling - pts.floor) / (2 * 1.2816)
+            LineupCandidate(id, pos, pts.points)
+        }
+        val chance = WeeklySummary.winChance(
+            WeeklySummary.strength(mine.slots, roster(mine), sd),
+            WeeklySummary.strength(mine.slots, roster(theirs), sd),
+        )
+        return NextMatch(week, theirs.teamName, chance)
     }
 
     /** ESPN stories about rostered players since [InjuryAlertWorker]'s last run. */
