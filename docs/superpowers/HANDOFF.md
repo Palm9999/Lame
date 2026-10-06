@@ -45,7 +45,9 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** the user picked the 2026-10-05 round: (1) waiver trends, (2) dynasty & keepers, (3) the manager report card, (4) league history and (5) shareable cards are all built (below). The 2026-10-06 round (features only; the user skipped ESPN shape verification, all three of their leagues are private and they chose not to share cookies): (1) alert switches, built (below); then (2) strength of schedule, (3) a waiver claim planner (FAAB bids across the week's adds, against budget and the league's spending), one at a time, each through brainstorming and its own push. Untried accuracy leads stay as listed. Untried accuracy leads (not picked this round): rest of season discounting an injured player's coming weeks by the return outlook (a backtest needs rest-of-season accuracy, not weekly); a TE handcuff rule giving the backup TE part of the starter's targets (about 1.9 under; only 43 cases); ESPN's QB rushing TDs (noisy, 0.85-1.08 of ESPN's).
+**Next:** the user picked the 2026-10-05 round: (1) waiver trends, (2) dynasty & keepers, (3) the manager report card, (4) league history and (5) shareable cards are all built (below). The 2026-10-06 round (features only; the user skipped ESPN shape verification, all three of their leagues are private and they chose not to share cookies): (1) alert switches and (3) the waiver claim planner are built (below); (2) strength of schedule was dropped by the user (projections move only 2-5% by opponent). Nothing is pending: offer the next round as a short pick-list. Untried accuracy leads stay as listed. Untried accuracy leads (not picked this round): rest of season discounting an injured player's coming weeks by the return outlook (a backtest needs rest-of-season accuracy, not weekly); a TE handcuff rule giving the backup TE part of the starter's targets (about 1.9 under; only 43 cases); ESPN's QB rushing TDs (noisy, 0.85-1.08 of ESPN's).
+
+**Just built: Claim plan** (My lineup, bottom): up to five FAAB claims in priority order with bids that never overspend what could all win, shared drops marked conditional, and where your FAAB ranks in the league.
 
 **Just built: Alert switches** (Settings → Alerts): injury changes, roster news, lineup checks and the Tuesday summary each switch on their own; the two-hourly worker runs while any is on; prefs `alerts` (`AlertSwitches`), an older file's single `injuryAlerts` value sets all four.
 
@@ -80,6 +82,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - **Places read best first** ("1st of 62", never "percentile" wording; 2026-10-03). **My players** are always listed, unranked below the bar (2026-10-03). **Several leagues:** one active league, one shared login, every league's team a roster (2026-10-03). **Matchups:** ESPN's numbers lead, the app's beside them (2026-10-01).
 
 ## Deferred minors
+
+**Deferred minors (claim plan):** the adds are each valued alone (two adds' combined value isn't checked); bids use the same judgment curve as before; a drop needed for roster room on an open spot counts as distinct; the section sits at the very bottom of My lineup.
 
 **Deferred minors (Tuesday summary):** it shares the injury alerts' switch (no own toggle); the report card place reads every finished week from ESPN (one request a week, plus the draft) once a Tuesday; win chance uses each roster's best lineup, not the lineup set in ESPN; a phone off all Tuesday skips the week.
 
@@ -141,6 +145,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Open checks on the phone
 
+- **Claim plan:** in a FAAB league, My lineup's bottom lists claims #1-#5 with bids and drops; the bids together never exceed what's left, and "You have $N, Xth most of 12" should match ESPN's FAAB standings.
+- **Alert switches:** Settings → Alerts: four switches; turn one off and its notifications stop while the others continue.
 - **Tuesday summary:** with alerts on and a league synced, a "Your week" notification should arrive Tuesday morning (the first two-hourly run after 9) with last week's score, your report card place and this week's win chance, once.
 - **Where we differ:** More → Where we differ: Above and Below ESPN should list a week's gaps of a few points; an empty screen saying no ESPN projections means the build has none for that week.
 - **Trade partners:** Projections → Trade, scroll to Best partners: the top teams should read as deep where you're thin; tap one and its roster loads.

@@ -426,9 +426,12 @@ public fun ProjectionListScreen(
                         val day = remember(mine, kickoffTimes, badges, inactivesPosted) { gameDay(mine, kickoffTimes, badges, java.time.Instant.now(), inactivesPosted) }
                         val summary = widgetSummary(mine, rival)
                         LaunchedEffect(summary) { onLineupSummary(summary) }
+                        val plan = remember(stashes, myTeam, partners) {
+                            stashes?.let { s -> myTeam.faabLeft?.let { claimPlan(s, it, partners.map { p -> p.teamName to p.faabLeft }) } }
+                        }
                         LineupList(
                             mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, weekRows, badges), faabText(myTeam),
-                            cuffs, ownersKnown = owners != null, live = live, gameDay = day,
+                            cuffs, ownersKnown = owners != null, live = live, gameDay = day, claims = plan,
                         )
                     } else {
                         Row(
@@ -490,6 +493,8 @@ private fun LineupList(
     live: LiveWinChance? = null,
     /** The week's kickoffs for the lineup and its Questionable starters' late replacements; null hides it. */
     gameDay: GameDay? = null,
+    /** The week's ordered FAAB claims; null when the league doesn't bid or what's left isn't known. */
+    claims: ClaimPlan? = null,
 ) {
     // One scale for every range bar in the lineup, so rows compare at a glance.
     val rangeMax = (view.starters.mapNotNull { it.row } + view.bench).maxOfOrNull { it.ceiling } ?: 0.0
@@ -708,6 +713,21 @@ private fun LineupList(
                     Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (claims != null && claims.claims.isNotEmpty()) {
+            item { SectionLabel("Claim plan") }
+            claims.standing?.let { text ->
+                item {
+                    Text(text, Modifier.padding(horizontal = 16.dp, vertical = 2.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            itemsIndexed(claims.claims, key = { _, c -> "claim:${c.line.add.playerId}" }) { _, c ->
+                Text(
+                    claimText(c),
+                    Modifier.fillMaxWidth().clickable { onPlayer(c.line.add.playerId) }.padding(horizontal = 16.dp, vertical = 6.dp).testTag("claim:${c.priority}"),
+                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }
