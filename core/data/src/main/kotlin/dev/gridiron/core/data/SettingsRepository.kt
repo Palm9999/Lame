@@ -1,5 +1,6 @@
 package dev.gridiron.core.data
 
+import dev.gridiron.core.datastore.AlertSwitches
 import dev.gridiron.core.datastore.PrefsSource
 import dev.gridiron.core.datastore.SeasonChoice
 import kotlinx.coroutines.flow.Flow
@@ -49,11 +50,11 @@ public class SettingsRepository(
         prefs.update { it.copy(oddsApiKey = clean) }
     }
 
-    /** Whether injury alerts are on (they are unless turned off). */
-    public val injuryAlerts: Flow<Boolean> = prefs.prefs.map { it.injuryAlerts }.distinctUntilChanged()
+    /** Which alerts are on (each is unless turned off). */
+    public val alerts: Flow<AlertSwitches> = prefs.prefs.map { it.alerts }.distinctUntilChanged()
 
-    public suspend fun setInjuryAlerts(on: Boolean) {
-        prefs.update { it.copy(injuryAlerts = on) }
+    public suspend fun setAlerts(change: (AlertSwitches) -> AlertSwitches) {
+        prefs.update { it.copy(alerts = change(it.alerts)) }
     }
 
     public companion object {

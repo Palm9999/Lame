@@ -22,13 +22,12 @@ class MainActivity : ComponentActivity() {
         // Injury alerts follow the Settings switch; turned on, they need Android's leave to notify (asked once here,
         // and Android stops asking after the user declines twice).
         lifecycleScope.launch {
-            app.settings.injuryAlerts.collect { on ->
+            app.settings.alerts.collect { alerts ->
+                val on = alerts.any
                 InjuryAlertWorker.schedule(this@MainActivity, on)
-                // Off forgets what was seen, so turning alerts back on doesn't replay every change since.
-                if (!on) {
-                    app.injuryAlerts.forget()
-                    app.newsAlerts.forget()
-                }
+                // Off forgets what was seen, so turning an alert back on doesn't replay every change since.
+                if (!alerts.injury) app.injuryAlerts.forget()
+                if (!alerts.news) app.newsAlerts.forget()
                 val granted = ContextCompat.checkSelfPermission(this@MainActivity, Manifest.permission.POST_NOTIFICATIONS) ==
                     PackageManager.PERMISSION_GRANTED
                 if (on && !granted) askToNotify.launch(Manifest.permission.POST_NOTIFICATIONS)

@@ -97,28 +97,40 @@ fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit, props: Flow
     }
 }
 
-/** The injury alerts switch: on unless turned off. */
+/** One switch per alert, each on unless turned off. */
 @Composable
 private fun AlertsSection(settings: SettingsRepository) {
-    val on by settings.injuryAlerts.collectAsState(initial = null)
+    val alerts by settings.alerts.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
-    val checked = on ?: return
+    val now = alerts ?: return
+    Text("Alerts", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+    AlertSwitch("Injury changes", "A player on your rosters changes ESPN status (checked about every two hours).", now.injury, "injury") { on ->
+        scope.launch { settings.setAlerts { it.copy(injury = on) } }
+    }
+    AlertSwitch("Roster news", "ESPN stories about players on your rosters.", now.news, "news") { on ->
+        scope.launch { settings.setAlerts { it.copy(news = on) } }
+    }
+    AlertSwitch("Lineup checks", "About 90 minutes before kickoff, when a starter in your ESPN lineup is out or on bye.", now.lineup, "lineup") { on ->
+        scope.launch { settings.setAlerts { it.copy(lineup = on) } }
+    }
+    AlertSwitch("Tuesday summary", "Last week's result, your report card place and this week's win chance.", now.summary, "summary") { on ->
+        scope.launch { settings.setAlerts { it.copy(summary = on) } }
+    }
+}
+
+@Composable
+private fun AlertSwitch(title: String, detail: String, checked: Boolean, tag: String, onChange: (Boolean) -> Unit) {
     Row(
         Modifier
             .fillMaxWidth()
-            .toggleable(value = checked, role = Role.Switch) { now -> scope.launch { settings.setInjuryAlerts(now) } }
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .testTag("alerts"),
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .testTag("alerts:$tag"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text("Injury, lineup and news alerts", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-            Text(
-                "A notification when a player on your rosters changes ESPN status (checked about every two hours), and " +
-                    "ESPN news about them, and about 90 minutes before kickoff when a starter in your ESPN lineup is out or on bye.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Switch(checked = checked, onCheckedChange = null)
     }

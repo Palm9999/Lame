@@ -31,7 +31,7 @@ import java.util.concurrent.TimeUnit
 class LineupAlertWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as GridironApplication
-        if (!app.settings.injuryAlerts.first()) return Result.success()
+        if (!app.settings.alerts.first().lineup) return Result.success()
         val window = Instant.ofEpochMilli(inputData.getLong(KICKOFF, 0L))
         val alerts = app.lineupAlerts(window)
         notify(applicationContext, alerts)

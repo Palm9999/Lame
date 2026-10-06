@@ -49,11 +49,21 @@ class SettingsScreenTest {
     fun injuryAlertsAreOnAndTheSwitchTurnsThemOff() {
         val prefs = FakePrefsSource()
         show(prefs)
-        compose.onNodeWithTag("alerts").assertIsOn()
-        compose.onNodeWithTag("alerts").performClick()
+        compose.onNodeWithTag("alerts:injury").assertIsOn()
+        compose.onNodeWithTag("alerts:injury").performClick()
         compose.waitForIdle()
-        compose.onNodeWithTag("alerts").assertIsOff()
-        assertEquals(false, prefs.current.injuryAlerts)
+        compose.onNodeWithTag("alerts:injury").assertIsOff()
+        assertEquals(false, prefs.current.alerts.injury)
+    }
+
+    @Test
+    fun eachAlertSwitchesOnItsOwn() {
+        val prefs = FakePrefsSource()
+        show(prefs)
+        compose.onNodeWithTag("alerts:summary").performClick()
+        compose.onNodeWithTag("alerts:news").performClick()
+        compose.waitForIdle()
+        assertEquals(dev.gridiron.core.datastore.AlertSwitches(injury = true, news = false, lineup = true, summary = false), prefs.current.alerts)
     }
 
     @Test

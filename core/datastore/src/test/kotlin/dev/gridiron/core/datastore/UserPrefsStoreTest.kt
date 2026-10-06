@@ -125,11 +125,24 @@ class UserPrefsStoreTest {
     }
 
     @Test
+    fun `each alert has its own switch, and an older file's one switch sets all four`() {
+        file.writeText("""{"formatVersion":4,"injuryAlerts":false}""")
+        assertEquals(AlertSwitches(false, false, false, false), withStore { it.prefs.first() }.alerts)
+        file.writeText("""{"formatVersion":4}""")
+        assertEquals(AlertSwitches(), withStore { it.prefs.first() }.alerts)
+        val mixed = AlertSwitches(injury = true, news = false, lineup = true, summary = false)
+        withStore { store -> store.update { it.copy(alerts = mixed) } }
+        assertEquals(mixed, withStore { it.prefs.first() }.alerts)
+        assertEquals(true, mixed.any)
+        assertEquals(false, AlertSwitches(false, false, false, false).any)
+    }
+
+    @Test
     fun `injury alerts are on in an older file, and turning them off survives a reopen`() {
         file.writeText("""{"formatVersion":4}""")
-        assertEquals(true, withStore { it.prefs.first() }.injuryAlerts)
-        withStore { store -> store.update { it.copy(injuryAlerts = false) } }
-        assertEquals(false, withStore { it.prefs.first() }.injuryAlerts)
+        assertEquals(true, withStore { it.prefs.first() }.alerts.injury)
+        withStore { store -> store.update { it.copy(alerts = it.alerts.copy(injury = false)) } }
+        assertEquals(false, withStore { it.prefs.first() }.alerts.injury)
     }
 
     @Test

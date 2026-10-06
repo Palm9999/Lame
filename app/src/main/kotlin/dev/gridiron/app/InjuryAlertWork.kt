@@ -31,13 +31,17 @@ import java.util.concurrent.TimeUnit
 class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
         val app = applicationContext as GridironApplication
-        if (!app.settings.injuryAlerts.first()) return Result.success()
-        notify(applicationContext, app.injuryAlerts.check())
-        // The injury check just refreshed ESPN's feeds: stories about rostered players since the last run.
-        notifyNews(applicationContext, app.newsAlerts.check())
+        val alerts = app.settings.alerts.first()
+        if (!alerts.any) return Result.success()
+        // The injury check refreshes ESPN's feeds, which the news check reads, so it runs whenever either is on.
+        if (alerts.injury || alerts.news) {
+            val injuries = app.injuryAlerts.check()
+            if (alerts.injury) notify(applicationContext, injuries)
+        }
+        if (alerts.news) notifyNews(applicationContext, app.newsAlerts.check())
         // Tuesday from 9: last week, the report card's place and this week's win chance, once.
         try {
-            app.weeklySummaryIfDue()?.let { notifySummary(applicationContext, it) }
+            if (alerts.summary) app.weeklySummaryIfDue()?.let { notifySummary(applicationContext, it) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -45,7 +49,7 @@ class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
         // The week's kickoff windows each get a lineup check shortly before; a missing scoreboard just skips them.
         try {
-            app.upcomingWeek()?.let { LineupAlertWorker.schedule(applicationContext, it) }
+            if (alerts.lineup) app.upcomingWeek()?.let { LineupAlertWorker.schedule(applicationContext, it) }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
