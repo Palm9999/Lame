@@ -55,9 +55,13 @@ class OpportunitiesRepositoryTest {
     @Test
     fun `a hurt starter's team sends its next man up, projected`() = runTest {
         val season = 2026
-        val window = WeekRange(1, 3)
-        val usage = repo.usage(season, window, ScoringPresets.PPR)
-        val team = usage.filter { it.position == "RB" }.groupBy { it.team }.values.first { it.size >= 3 }
+        // A team on bye in the upcoming week has no projections to rank; take one that plays. The depth chart is the
+        // repository's own window: the last four weeks before the upcoming one.
+        val projections = ProjectionsRepository(executor)
+        val week = checkNotNull(projections.status().upcoming[season])
+        val usage = repo.usage(season, WeekRange(maxOf(1, week - 4), week - 1), ScoringPresets.PPR)
+        val team = usage.filter { it.position == "RB" }.groupBy { it.team }.values
+            .first { it.size >= 3 && projections.game(season, week, it.first().team) != null }
             .sortedWith(compareByDescending { it.usage })
         hurt = listOf(injury(team[0].playerId, "O"))
 
