@@ -106,6 +106,16 @@ class PlayerStatsRepositoryTest {
     }
 
     @Test
+    fun `a receivers game log carries charted stats by week, a dash where NGS has none, and a kicker has none`() = runTest {
+        val s = repo.stats(topId(StatPack.RECEIVING, PositionFilter.WR), Position.WR, ppr, season = 2025)
+        assertEquals(PlayerStatSets.chartedColumns(Position.WR).size, s.chartedHeaders.size)
+        assertTrue(s.log.all { it.charted.size == s.chartedHeaders.size }, s.log.toString())
+        // The season's top receiver clears NGS's 5-target floor most weeks.
+        assertTrue(s.log.count { it.charted[0] != StatFormat.MISSING } > s.log.size / 2, s.log.map { it.charted }.toString())
+        assertTrue(repo.stats(topId(StatPack.KICKING, PositionFilter.K), Position.K, ppr, season = 2025).chartedHeaders.isEmpty())
+    }
+
+    @Test
     fun `a kickers line has no expected points, and his game log adds up`() = runTest {
         val id = topId(StatPack.KICKING, PositionFilter.K)
         assertLogAddsUp(id, Position.K, StatColumn.FG_ATT)

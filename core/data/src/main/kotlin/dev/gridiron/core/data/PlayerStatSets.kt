@@ -11,6 +11,17 @@ import dev.gridiron.core.statquery.StatColumn.FANTASY_POINTS
 import dev.gridiron.core.statquery.StatColumn.FG_ATT
 import dev.gridiron.core.statquery.StatColumn.FG_MADE
 import dev.gridiron.core.statquery.StatColumn.FG_MADE_50
+import dev.gridiron.core.statquery.StatColumn.FTN_BLITZ_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_CATCHABLE_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_DROP_RATE
+import dev.gridiron.core.statquery.StatColumn.FTN_PLAY_ACTION_RATE
+import dev.gridiron.core.statquery.StatColumn.NGS_AGGRESSIVENESS
+import dev.gridiron.core.statquery.StatColumn.NGS_RYOE
+import dev.gridiron.core.statquery.StatColumn.NGS_RYOE_PER_ATT
+import dev.gridiron.core.statquery.StatColumn.NGS_SEPARATION
+import dev.gridiron.core.statquery.StatColumn.NGS_STACKED_BOX_PCT
+import dev.gridiron.core.statquery.StatColumn.NGS_TIME_TO_THROW
+import dev.gridiron.core.statquery.StatColumn.NGS_YAC_OVER_EXPECTED
 import dev.gridiron.core.statquery.StatColumn.INTERCEPTIONS
 import dev.gridiron.core.statquery.StatColumn.PASSING_TDS
 import dev.gridiron.core.statquery.StatColumn.PASSING_YARDS
@@ -44,6 +55,17 @@ public object PlayerStatSets {
         Position.K -> K
         Position.DST -> DST
         else -> WR_TE
+    }
+
+    /**
+     * The Player page's "Charted by week" table: Next Gen Stats and FTN charting, a dash where the week has none (NGS
+     * publishes only weeks over its volume floor; FTN starts in 2022). None for K or D/ST.
+     */
+    public fun chartedColumns(position: Position?): List<StatColumn> = when (position) {
+        Position.QB -> listOf(NGS_TIME_TO_THROW, NGS_AGGRESSIVENESS, FTN_PLAY_ACTION_RATE, FTN_BLITZ_RATE)
+        Position.RB, Position.FB -> listOf(NGS_RYOE, NGS_RYOE_PER_ATT, NGS_STACKED_BOX_PCT)
+        Position.K, Position.DST -> emptyList()
+        else -> listOf(NGS_SEPARATION, NGS_YAC_OVER_EXPECTED, FTN_CATCHABLE_RATE, FTN_DROP_RATE)
     }
 
     /** The Player page's usage-by-week charts: the shares that show a role growing or shrinking. None for K or D/ST. */

@@ -15,6 +15,7 @@ import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.statquery.StatQueryBuilder
 import dev.gridiron.core.statquery.StatQuerySpec
 import dev.gridiron.core.statquery.ValueMode
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import java.util.Locale
 
@@ -72,13 +73,14 @@ public class PlayerStatsRepository(
 
         val logColumns = PlayerStatSets.logColumns(position)
         val usageColumns = PlayerStatSets.usageColumns(position)
+        val chartedColumns = PlayerStatSets.chartedColumns(position)
         val played = executor.query(PlayerStatsQueries.weekTeams(playerId, chosen)) { it.long(0).toInt() to it.textOrNull(1) }
             .filter { (week, _) -> week in weeks.first..weeks.last }
         val schedule = executor.query(PlayerStatsQueries.games(chosen)) {
             ScheduleGame(it.long(0).toInt(), it.text(1), it.text(2), it.intOrNull(3), it.intOrNull(4))
         }
         val log = played.map { (week, team) ->
-            val values = weekValues(playerId, position, chosen, week, (logColumns + usageColumns).distinct(), scoring)
+            val values = weekValues(playerId, position, chosen, week, (logColumns + usageColumns + chartedColumns).distinct(), scoring)
             val m = matchup(team, week, schedule)
             GameLogRow(
                 week = week,
@@ -86,8 +88,11 @@ public class PlayerStatsRepository(
                 result = m.result,
                 cells = logColumns.map { c -> format.format(c, zeroFilled(c, values[c]), perGame = false) }.toImmutableList(),
                 usage = usageColumns.map { values[it] }.toImmutableList(),
+                // Charted stats are never zero-filled: no row means not charted, not zero.
+                charted = chartedColumns.map { c -> format.format(c, values[c], perGame = false) }.toImmutableList(),
             )
         }
+        val anyCharted = log.any { row -> row.charted.any { it != StatFormat.MISSING } }
 
         return PlayerStats(
             season = chosen,
@@ -99,6 +104,7 @@ public class PlayerStatsRepository(
             logHeaders = logColumns.map { names[it.metricId]?.abbr ?: it.metricId }.toImmutableList(),
             log = log.toImmutableList(),
             usageHeaders = usageColumns.map { names[it.metricId]?.name ?: it.metricId }.toImmutableList(),
+            chartedHeaders = if (anyCharted) chartedColumns.map { names[it.metricId]?.abbr ?: it.metricId }.toImmutableList() else persistentListOf(),
         )
     }
 

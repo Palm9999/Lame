@@ -67,6 +67,10 @@ internal fun LazyListScope.playerStatsItems(stats: PlayerStats, onSeason: (Int) 
         stats.usageHeaders.forEachIndexed { i, name -> item(key = "usage:$name") { UsageByWeek(name, stats.log, i) } }
         item { GameLogHeader(stats.logHeaders) }
         items(stats.log.size, key = { "log:${stats.log[it].week}" }) { GameLog(stats.log[it]) }
+        if (stats.chartedHeaders.isNotEmpty()) {
+            item { GameLogHeader(stats.chartedHeaders, "Charted by week (Next Gen Stats, FTN)") }
+            items(stats.log.size, key = { "charted:${stats.log[it].week}" }) { GameLog(stats.log[it], charted = true) }
+        }
     }
 }
 
@@ -177,9 +181,9 @@ private fun UsageByWeek(name: String, log: List<GameLogRow>, index: Int) {
 }
 
 @Composable
-private fun GameLogHeader(headers: List<String>) {
+private fun GameLogHeader(headers: List<String>, title: String = "Game log") {
     Text(
-        "Game log",
+        title,
         Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
         style = MaterialTheme.typography.titleSmall,
         fontWeight = FontWeight.Bold,
@@ -192,9 +196,9 @@ private fun GameLogHeader(headers: List<String>) {
 }
 
 @Composable
-private fun GameLog(row: GameLogRow) {
+private fun GameLog(row: GameLogRow, charted: Boolean = false) {
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("gameLog:${row.week}"),
+        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag(if (charted) "charted:${row.week}" else "gameLog:${row.week}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(row.week.toString(), Modifier.width(28.dp), style = NumberStyle)
@@ -205,6 +209,6 @@ private fun GameLog(row: GameLogRow) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
-        row.cells.forEach { Text(it, Modifier.width(40.dp), style = NumberStyle, textAlign = TextAlign.End, maxLines = 1) }
+        (if (charted) row.charted else row.cells).forEach { Text(it, Modifier.width(40.dp), style = NumberStyle, textAlign = TextAlign.End, maxLines = 1) }
     }
 }
