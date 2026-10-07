@@ -8,12 +8,16 @@ class GameDayRefreshTest {
     private fun next(now: String) = nextGameDayRefresh(ZonedDateTime.parse(now)).toString()
 
     @Test
-    fun `the next refresh is Saturday 10 pm or Sunday 9 am, whichever comes first`() {
-        // Tuesday 2026-10-06 → Saturday 10-10 at 22:00.
-        assertEquals("2026-10-10T22:00-04:00[America/New_York]", next("2026-10-06T12:00-04:00[America/New_York]"))
+    fun `the next refresh is Thursday 3 pm, Saturday 10 pm, Sunday 9 am or Monday 3 pm, whichever comes first`() {
+        // Tuesday 2026-10-06 → Thursday 10-08 at 15:00.
+        assertEquals("2026-10-08T15:00-04:00[America/New_York]", next("2026-10-06T12:00-04:00[America/New_York]"))
+        // Thursday 16:00 → Saturday 22:00.
+        assertEquals("2026-10-10T22:00-04:00[America/New_York]", next("2026-10-08T16:00-04:00[America/New_York]"))
         // Saturday 23:00 → Sunday 9:00.
         assertEquals("2026-10-11T09:00-04:00[America/New_York]", next("2026-10-10T23:00-04:00[America/New_York]"))
-        // Sunday 9:00 exactly → next Saturday.
-        assertEquals("2026-10-17T22:00-04:00[America/New_York]", next("2026-10-11T09:00-04:00[America/New_York]"))
+        // Sunday 9:00 exactly → Monday 15:00.
+        assertEquals("2026-10-12T15:00-04:00[America/New_York]", next("2026-10-11T09:00-04:00[America/New_York]"))
+        // Monday 15:00 exactly → Thursday.
+        assertEquals("2026-10-15T15:00-04:00[America/New_York]", next("2026-10-12T15:00-04:00[America/New_York]"))
     }
 }

@@ -116,7 +116,7 @@ private fun AlertsSection(settings: SettingsRepository) {
     AlertSwitch("Tuesday summary", "Last week's result, your report card place and this week's win chance.", now.summary, "summary") { on ->
         scope.launch { settings.setAlerts { it.copy(summary = on) } }
     }
-    AlertSwitch("Game-day refresh", "Rebuilds the stats Saturday at 10 pm and Sunday at 9 am, after the final injury reports.", now.refresh, "refresh") { on ->
+    AlertSwitch("Game-day refresh", "Rebuilds the stats Thursday and Monday at 3 pm, Saturday at 10 pm and Sunday at 9 am, then notifies you.", now.refresh, "refresh") { on ->
         scope.launch { settings.setAlerts { it.copy(refresh = on) } }
     }
     AlertSwitch("Quiet hours", "Holds injury and news alerts from 10 pm to 8 am and sends them after. Lineup checks still come.", now.quiet, "quiet") { on ->

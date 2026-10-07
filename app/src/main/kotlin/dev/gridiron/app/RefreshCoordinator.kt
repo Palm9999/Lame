@@ -67,7 +67,8 @@ fun interface StatsBuilder {
  *
  * Runs on [scope] (the application's), so it continues when the user leaves
  * the screen. If the process dies mid-build, `stats.db` is untouched: the new
- * database only ever exists as `stats.db.new` until one atomic rename.
+ * database only ever exists as `stats.db.new` until one atomic rename, and
+ * [pending] stays true so [RefreshWorker] runs the refresh again.
  */
 class RefreshCoordinator(
     dir: File,
@@ -81,10 +82,15 @@ class RefreshCoordinator(
     private val millis: () -> Long = { System.nanoTime() / 1_000_000 },
     /** The build's download folder; its files are only ever left behind by a killed process. */
     workDir: File? = null,
+    /** Called as each refresh starts: the app books a [RefreshWorker] so WorkManager restarts a killed build. */
+    private val onStart: () -> Unit = {},
 ) : Refresher {
     private val db = File(dir, DB_NAME)
     private val next = File(dir, "$DB_NAME.new")
     private val builtHere = File(dir, "$DB_NAME.built-here")
+
+    /** Exists from a refresh's start to its end, so outlives a process killed in between. */
+    private val running = File(dir, "$DB_NAME.refreshing")
 
     private val _state = MutableStateFlow<RefreshState>(RefreshState.Idle)
     override val state: StateFlow<RefreshState> = _state.asStateFlow()
@@ -107,14 +113,23 @@ class RefreshCoordinator(
     override fun refresh(): Boolean {
         if (job?.isActive == true) return false
         _state.value = RefreshState.Running(progressText(IngestProgress.Checking(null)))
-        job = scope.launch { run() }
+        running.createNewFile()
+        job = scope.launch {
+            run()
+            running.delete()
+        }
+        onStart()
         return true
     }
 
-    /** For the game-day job: starts a refresh, or joins the one already running, and waits for it to end. */
-    suspend fun refreshAndWait() {
+    /** Whether a refresh is running, or one started and never finished (Android killed the process). */
+    val pending: Boolean get() = job?.isActive == true || running.isFile
+
+    /** For the game-day job: starts a refresh, or joins the one already running, and returns how it ended. */
+    suspend fun refreshAndWait(): RefreshState.Finished? {
         refresh()
         job?.join()
+        return state.value as? RefreshState.Finished
     }
 
     override fun acknowledge() {
