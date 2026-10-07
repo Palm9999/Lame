@@ -59,6 +59,8 @@ public data class StatQuerySpec(
     val offset: Int = 0,
     val scoring: ScoringProfile? = null,
     val rollups: List<RollupWindow> = emptyList(),
+    /** [StatColumn.DYNASTY_VALUE]'s value by player id; a player without one reads blank. */
+    val external: Map<String, Double> = emptyMap(),
 ) {
     init {
         require(season in MIN_SEASON..MAX_SEASON) { "season $season outside $MIN_SEASON..$MAX_SEASON" }
@@ -72,11 +74,16 @@ public data class StatQuerySpec(
         val usesFantasy = (columns + sort.map { it.column } + filters.map { it.column } + qualifiers.map { it.column })
             .any { it.isFantasy }
         require(!usesFantasy || scoring != null) { "fantasy columns need a scoring profile" }
+        require(external.size <= MAX_EXTERNAL) { "at most $MAX_EXTERNAL external values, got ${external.size}" }
+        require(external.values.all { it.isFinite() }) { "external values must be finite" }
     }
 
     public companion object {
         public const val DEFAULT_LIMIT: Int = 100
         public const val MAX_LIMIT: Int = 1000
+
+        /** Two binds each, well under SQLite's 32,766. */
+        public const val MAX_EXTERNAL: Int = 5000
 
         /** First season of nflverse play-by-play. */
         public const val MIN_SEASON: Int = 1999

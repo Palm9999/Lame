@@ -24,7 +24,7 @@ class MetricsTest {
     @Test
     fun `ids are unique and every Python metric is here`() {
         assertEquals(METRICS.size, byId.size)
-        assertEquals(160, METRICS.size)
+        assertEquals(161, METRICS.size)
     }
 
     @Test

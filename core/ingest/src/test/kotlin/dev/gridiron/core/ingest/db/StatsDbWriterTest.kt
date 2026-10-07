@@ -55,7 +55,7 @@ class StatsDbWriterTest {
         assertEquals(listOf(listOf("WR1", "Wide Receiver", "wide receiver")), query(file, "SELECT player_id, full_name, search_name FROM player"))
         assertEquals(listOf(listOf("102", "WR1"), listOf("105", "OLD1")), query(file, "SELECT espn_id, player_id FROM player_xref ORDER BY espn_id"))
         assertEquals(listOf(listOf("2")), query(file, "SELECT COUNT(*) FROM player_week_stat"))
-        assertEquals(listOf(listOf("160")), query(file, "SELECT COUNT(*) FROM metric"))
+        assertEquals(listOf(listOf("161")), query(file, "SELECT COUNT(*) FROM metric"))
         assertEquals(1, query(file, "SELECT name FROM sqlite_master WHERE name = 'idx_pws_metric_season_week'").size)
         assertEquals(1, query(file, "SELECT name FROM sqlite_master WHERE name = 'sqlite_stat1'").size)
         assertEquals(listOf(listOf("Questionable")), query(file, "SELECT status FROM injury_report"))

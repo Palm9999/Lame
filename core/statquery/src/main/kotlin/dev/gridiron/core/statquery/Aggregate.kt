@@ -90,7 +90,20 @@ public sealed interface Aggregate {
         override val scalesWithGames: Boolean get() = false
         override fun toSql(ref: (Component) -> String): String = ref(RISING_PSEUDO)
     }
+
+    /**
+     * A value from outside `stats.db` (FantasyCalc's dynasty value), bound into the query from
+     * [StatQuerySpec.external]. One value per player, like [Aggregate.RisingRole]: per-game mode leaves it alone.
+     */
+    public data object External : Aggregate {
+        override val components: Set<Component> get() = emptySet()
+        override val scalesWithGames: Boolean get() = false
+        override fun toSql(ref: (Component) -> String): String = ref(EXTERNAL_PSEUDO)
+    }
 }
+
+/** Stands in for [Aggregate.External]'s value where [Aggregate.toSql] expects a component. */
+internal val EXTERNAL_PSEUDO: Component = Component("@ext")
 
 /** Stands in for the signal where [Aggregate.toSql] expects a component; `@` never appears in a metric id. */
 internal val RISING_PSEUDO: Component = Component("@rise")

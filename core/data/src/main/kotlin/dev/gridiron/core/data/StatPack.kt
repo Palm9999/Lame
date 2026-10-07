@@ -17,6 +17,7 @@ import dev.gridiron.core.statquery.StatColumn.DST_SACKS
 import dev.gridiron.core.statquery.StatColumn.DST_SAFETIES
 import dev.gridiron.core.statquery.StatColumn.DST_TDS
 import dev.gridiron.core.statquery.StatColumn.EPA_PER_DROPBACK
+import dev.gridiron.core.statquery.StatColumn.DYNASTY_VALUE
 import dev.gridiron.core.statquery.StatColumn.EXPECTED_FANTASY_POINTS
 import dev.gridiron.core.statquery.StatColumn.EZ_TARGETS
 import dev.gridiron.core.statquery.StatColumn.FANTASY_POINTS
@@ -106,6 +107,12 @@ public enum class StatPack(
         "Rising roles",
         listOf(RISING_ROLES, TARGET_SHARE, CARRY_SHARE, WOPR, TARGETS, CARRIES, SNAP_SHARE, WEIGHTED_OPPORTUNITIES),
         RISING_ROLES,
+        null,
+    ),
+    DYNASTY(
+        "Dynasty value",
+        listOf(DYNASTY_VALUE, FANTASY_POINTS, EXPECTED_FANTASY_POINTS, FPOE, RISING_ROLES, SNAP_SHARE, TARGET_SHARE, CARRY_SHARE),
+        DYNASTY_VALUE,
         null,
     ),
     RECEIVING(

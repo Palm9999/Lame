@@ -56,9 +56,10 @@ public class StatsRepository(
         return Catalog(seasons.toImmutableList(), metrics.associateBy { it.id }.toImmutableMap(), teams.toImmutableList())
     }
 
-    public suspend fun grid(request: GridRequest, catalog: Catalog): GridPage {
+    /** [external]: the dynasty column's values by player id, for a request that shows, sorts or filters by it. */
+    public suspend fun grid(request: GridRequest, catalog: Catalog, external: Map<String, Double> = emptyMap()): GridPage {
         val threshold = threshold(request)
-        val spec = spec(request, threshold).copy(rollups = request.season.rollups)
+        val spec = spec(request, threshold).copy(rollups = request.season.rollups, external = external)
         val q = StatQueryBuilder.grid(spec)
         val layout = q.layout
 
@@ -155,11 +156,11 @@ public class StatsRepository(
         SampleThreshold.forRequest(request.sort, request.pack, request.playedWeeks, request.perGame)
 
     /** How many players [request] matches, ignoring the page limit. Backs the filter sheet's live count. */
-    public suspend fun count(request: GridRequest): Int =
+    public suspend fun count(request: GridRequest, external: Map<String, Double> = emptyMap()): Int =
         if (request.onlyPlayers?.isEmpty() == true) {
             0
         } else {
-            val spec = spec(request, threshold(request)).copy(rollups = request.season.rollups)
+            val spec = spec(request, threshold(request)).copy(rollups = request.season.rollups, external = external)
             executor.query(StatQueryBuilder.count(spec)) { it.long(0).toInt() }.single()
         }
 }

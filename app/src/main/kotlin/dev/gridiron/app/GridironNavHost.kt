@@ -269,6 +269,12 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             presets = deps.gridPresets,
                             display = deps.gridDisplay,
                             leagueRostered = deps.league?.rostered ?: flowOf(null),
+                            dynasty = deps.dynasty?.let { repository ->
+                                { profile ->
+                                    repository.load(dynastyFormat(deps.league?.league?.value, profile)).values
+                                        .mapNotNull { v -> v.playerId?.let { it to v.value.toDouble() } }.toMap()
+                                }
+                            },
                             recovery = buildList {
                                 if (refresher != null) add("Refresh stats" to { refresh() })
                                 if (deps.settings != null) add("Settings" to { backStack.push(SettingsKey) })

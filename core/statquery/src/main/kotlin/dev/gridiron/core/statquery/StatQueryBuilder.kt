@@ -184,6 +184,9 @@ private class Plan(columns: List<StatColumn>) {
     /** Whether the base joins the Rising roles signal as `sig`. */
     val signal: Boolean = this.columns.any { it.isSignal }
 
+    /** Whether the base joins the spec's external values as `ext`. */
+    val external: Boolean = this.columns.any { it.isExternal }
+
     val games: String = ref(Components.GAMES)
 
     fun index(column: StatColumn): Int {
@@ -194,6 +197,7 @@ private class Plan(columns: List<StatColumn>) {
 
     fun ref(component: Component): String {
         if (component == RISING_PSEUDO) return "sig.score"
+        if (component == EXTERNAL_PSEUDO) return "ext.value"
         ScoredOutput.entries.firstOrNull { it.pseudo == component }?.let {
             // Played but scored nothing: zero points, not unknown.
             return "COALESCE(fsum.${it.alias}, 0)"
@@ -277,6 +281,17 @@ private class SqlWriter {
             // The week after the range, or the newest the table has: the table's last week is the upcoming one.
             line("  LEFT JOIN player_week_signal sig ON sig.player_id = agg.player_id AND sig.season = ${int(spec.season)}")
             line("    AND sig.week = (SELECT MIN(${int(spec.weeks.last + 1)}, MAX(w.week)) FROM player_week_signal w WHERE w.season = ${int(spec.season)})")
+        }
+        if (plan.external) {
+            // Bound row by row, sorted so equal specs give identical SQL; an empty map joins an empty table.
+            val rows = spec.external.entries.sortedBy { it.key }
+            if (rows.isEmpty()) {
+                line("  LEFT JOIN (SELECT NULL AS player_id, NULL AS value WHERE 0) ext ON ext.player_id = agg.player_id")
+            } else {
+                line("  LEFT JOIN (SELECT column1 AS player_id, column2 AS value FROM (VALUES")
+                line(rows.joinToString(",\n") { (id, v) -> "    (${text(id)}, ${real(v)})" })
+                line("  )) ext ON ext.player_id = agg.player_id")
+            }
         }
         line("  WHERE ${plan.games} >= ${int(spec.minGames)}" + alwaysShowClause(spec, "p.player_id", " OR "))
         line(")")

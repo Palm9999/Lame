@@ -221,6 +221,10 @@ _M: list[Metric] = [
            "it says the role is growing, not that points will follow.",
            positions=("RB", "WR", "TE"), predicts="Whether the role keeps growing over the next four games",
            decimals=0, computed=True),
+    Metric("dynasty_value", "Dynasty Value", "DYN", "fantasy",
+           "FantasyCalc's dynasty trade value in your league's format (teams, Superflex, PPR), read live when the "
+           "column shows. Market value, not this app's projection; blank for a player FantasyCalc doesn't list.",
+           decimals=0, computed=True),
 
     # ---------------- Scoring inputs (internal, sparse) ----------------
     *[

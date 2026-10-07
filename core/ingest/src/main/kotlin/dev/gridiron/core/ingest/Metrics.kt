@@ -443,6 +443,10 @@ private val REGISTRY: List<Metric> = listOf(
             "it says the role is growing, not that points will follow.",
         positions = PASS_CATCHERS, predicts = "Whether the role keeps growing over the next four games",
         decimals = 0, computed = true),
+    Metric("dynasty_value", "Dynasty Value", "DYN", "fantasy",
+        "FantasyCalc's dynasty trade value in your league's format (teams, Superflex, PPR), read live when the " +
+            "column shows. Market value, not this app's projection; blank for a player FantasyCalc doesn't list.",
+        decimals = 0, computed = true),
 ) + SCORING_INPUTS.map {
     Metric(it.id, it.name, it.id.uppercase(), "fantasy", it.definition,
         decimals = it.decimals, isInternal = true, sparse = true)

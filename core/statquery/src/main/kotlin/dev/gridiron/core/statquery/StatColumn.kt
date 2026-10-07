@@ -2,6 +2,7 @@ package dev.gridiron.core.statquery
 
 import dev.gridiron.core.statquery.Aggregate.ClampedWeightedSum
 import dev.gridiron.core.statquery.Aggregate.ClampedWeightedSum.Term
+import dev.gridiron.core.statquery.Aggregate.External
 import dev.gridiron.core.statquery.Aggregate.Ratio
 import dev.gridiron.core.statquery.Aggregate.RisingRole
 import dev.gridiron.core.statquery.Aggregate.Scored
@@ -133,6 +134,9 @@ public enum class StatColumn(
 
     // Rising roles: the forecast's signal for the week after the range, not a sum of weekly facts.
     RISING_ROLES("rising_roles", RisingRole),
+
+    // FantasyCalc's dynasty value under the active format, bound in from the spec (blank without it).
+    DYNASTY_VALUE("dynasty_value", External),
     ;
 
     /**
@@ -163,6 +167,9 @@ public enum class StatColumn(
     /** Read from the forecast's `player_week_signal`, not computed from facts. */
     public val isSignal: Boolean get() = aggregate === RisingRole
 
-    /** Has no stored weekly facts: scored on the device or written by the forecast. */
-    public val isComputed: Boolean get() = isFantasy || isSignal
+    /** Not in `stats.db` at all: [StatQuerySpec.external] carries its values. */
+    public val isExternal: Boolean get() = aggregate === External
+
+    /** Has no stored weekly facts: scored on the device, written by the forecast or bound in from outside. */
+    public val isComputed: Boolean get() = isFantasy || isSignal || isExternal
 }

@@ -216,6 +216,8 @@ class GridViewModel(
     private val display: GridDisplayRepository? = null,
     /** Who is on a league team (the last ESPN sync); null turns the free-agents choice off. */
     leagueRostered: Flow<LeagueRostered?> = flowOf(null),
+    /** FantasyCalc's dynasty values by player id under a profile's format; null leaves the dynasty column blank. */
+    private val dynasty: (suspend (ScoringProfile) -> Map<String, Double>)? = null,
 ) : ViewModel() {
 
     private sealed interface CatalogLoad {
@@ -388,7 +390,7 @@ class GridViewModel(
                 .debounce(debounceMillis)
                 .mapLatest { (r, load) ->
                     try {
-                        lastPage.value = repository.grid(r, load.catalog)
+                        lastPage.value = repository.grid(r, load.catalog, external(r))
                         pageError.value = null
                     } catch (e: CancellationException) {
                         throw e
@@ -404,7 +406,8 @@ class GridViewModel(
                     val r = request.value
                     if (filters == null || r == null) return@mapLatest
                     val result = try {
-                        DraftCount.Matches(repository.count(r.copy(filters = filters)))
+                        val counted = r.copy(filters = filters)
+                        DraftCount.Matches(repository.count(counted, external(counted)))
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -442,6 +445,19 @@ class GridViewModel(
                 message.value = "Saved scoring profiles couldn't be read, so they were reset."
                 scoring.dismissResetNotice()
             }
+        }
+    }
+
+    /** The dynasty values [r] needs: empty unless it shows, sorts or filters by them (a failed fetch reads blank). */
+    private suspend fun external(r: GridRequest): Map<String, Double> {
+        val uses = (r.pack.columns + r.sort + r.filters.map { it.column }).any { it.isExternal }
+        if (!uses) return emptyMap()
+        return try {
+            dynasty?.invoke(r.scoring).orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyMap()
         }
     }
 
@@ -730,10 +746,14 @@ class GridViewModel(
             presets: GridPresetRepository? = null,
             display: GridDisplayRepository? = null,
             leagueRostered: Flow<LeagueRostered?> = flowOf(null),
+            dynasty: (suspend (ScoringProfile) -> Map<String, Double>)? = null,
         ): ViewModelProvider.Factory =
             viewModelFactory {
                 initializer {
-                    GridViewModel(repository, scoring, tray, badges = badges, rosters = rosters, presets = presets, display = display, leagueRostered = leagueRostered)
+                    GridViewModel(
+                        repository, scoring, tray, badges = badges, rosters = rosters, presets = presets, display = display,
+                        leagueRostered = leagueRostered, dynasty = dynasty,
+                    )
                 }
             }
     }
