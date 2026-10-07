@@ -47,7 +47,9 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** the 2026-10-07 second round: the user asked for the pick-list (1 Ask Gridiron with the user's own Anthropic key, 2 game-day refresh, 3 TD regression board, 4 player comps, 5 mock draft simulator, 6 usage trend charts, 7 matchup preview) and said start where I want; (2) game-day refresh is built (below). (1) Ask Gridiron was written (Claude Opus 5.5 through the Java SDK `com.anthropic:anthropic-java`, a `run_sql` tool over the read-only `stats.db`, the key entered on its own screen) but never compiled: Maven Central answered Gradle's SDK downloads with 429 for over an hour in the container (curl got 200), and the user chose to leave it out of the build (2026-10-07); the code is not in the repo. Next: (3) TD regression board, then the rest in list order unless the user redirects.
+**Next:** the 2026-10-07 second round: the user asked for the pick-list (1 Ask Gridiron with the user's own Anthropic key, 2 game-day refresh, 3 TD regression board, 4 player comps, 5 mock draft simulator, 6 usage trend charts, 7 matchup preview) and said start where I want; (2) game-day refresh is built (below). (1) Ask Gridiron was written (Claude Opus 5.5 through the Java SDK `com.anthropic:anthropic-java`, a `run_sql` tool over the read-only `stats.db`, the key entered on its own screen) but never compiled: Maven Central answered Gradle's SDK downloads with 429 for over an hour in the container (curl got 200), and the user chose to leave it out of the build (2026-10-07); the code is not in the repo. (3) TD regression board is built (below). Next: (4) player comps, then the rest in list order unless the user redirects.
+
+**Just built: TD regression** (More → Players, or ☰): touchdowns against ffopportunity's expected touchdowns through its last processed week, Running hot and Running cold, 25 each, by position.
 
 **Just built: Game-day refresh** (Settings → Alerts, on by default, prefs `gameDayRefresh`): `GameDayRefreshWorker` (WorkManager, needs a network) runs `RefreshCoordinator.refreshAndWait` Saturday 10 pm and Sunday 9 am local, then appends the next run; a run Android kills is retried by WorkManager. Pure `nextGameDayRefresh` is tested.
 
@@ -100,6 +102,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - **Places read best first** ("1st of 62", never "percentile" wording; 2026-10-03). **My players** are always listed, unranked below the bar (2026-10-03). **Several leagues:** one active league, one shared login, every league's team a roster (2026-10-03). **Matchups:** ESPN's numbers lead, the app's beside them (2026-10-01).
 
 ## Deferred minors
+
+**Deferred minors (TD regression):** no owner tags or Free agents chip (Rising roles has them); the 2-touchdown floor is a judgment; it isn't wired to the Player page or Trade; passing touchdowns count with rushing and receiving for a QB, so a QB's gap is mostly passing.
 
 **Deferred minors (game-day refresh):** fixed times (no picker), every week of the year (offseason runs too); no notification when it finishes (the Finished toast shows only if the app is open); a Thursday or Monday game gets no refresh of its own; it lives under Alerts though it isn't one.
 
@@ -167,6 +171,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Open checks on the phone
 
+- **TD regression:** More → TD regression: Running hot lists players with more touchdowns than expected (+ gaps), Running cold the reverse; the note's week should be a week or so behind the current one.
 - **Game-day refresh:** don't refresh by hand after Friday; Sunday morning, a player nflverse listed Out on Friday should have no projection on Projections' week list (the app has no build-time display, so this is the tell).
 - **Quiet hours:** Settings → Alerts → Quiet hours on: nothing from injuries or news between 10 pm and 8 am, then the overnight changes arrive after 8.
 - **Daily waiver snapshot:** with alerts on, don't open Waiver trends for a week; then open it: the note should read "over the last week".
