@@ -26,7 +26,7 @@ private class FakeRow(private val columns: List<Any?>) : ResultRow {
 
 /** Answers the backtest's queries by what they read. */
 private class AccuracyExecutor(
-    private val meta: List<Pair<String, String>>,
+    var meta: List<Pair<String, String>>,
     private val firstWeeks: List<List<Any?>> = emptyList(),
     private val projected: List<List<Any?>> = emptyList(),
     private val facts: List<List<Any?>> = emptyList(),
@@ -134,6 +134,8 @@ class AccuracyViewModelTest {
 
         vm.load(2025, ScoringPresets.PPR, dataVersion = 0L)
         advanceUntilIdle()
+        // A refresh rebuilds the forecast, so its build time moves on and the kept backtest isn't used.
+        executor.meta = ok + ("forecast_built_at" to "2026-10-08T12:00:00Z")
         vm.load(2025, ScoringPresets.PPR, dataVersion = 1L)
         advanceUntilIdle()
 

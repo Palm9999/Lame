@@ -5,6 +5,8 @@ import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNotSame
+import org.junit.jupiter.api.Assertions.assertSame
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.sql.DriverManager
@@ -100,6 +102,19 @@ class AccuracyRepositoryTest {
             // Last four: week 2 has (4 + 10) / 2 = 7 against 22; week 4 has (4 + 10 + 22) / 3 = 12 against 8.
             assertEquals((15.0 + 4.0) / 2, wr.lastFour.mae, 1e-9)
             assertEquals(0.5, wr.calibration, 1e-9)
+        }
+    }
+
+    @Test
+    fun `a second backtest of the same season and profile is the kept one, a new profile computes again`() = runTest {
+        fixture(
+            listOf(meta("forecast_status", "ok"), meta("forecast_week:2025", "5"), player("w", "WR")) +
+                played("w", 2025, 1, 5.0) + projected("w", 2025, 1, 6.0),
+        ).use { executor ->
+            val repo = AccuracyRepository(executor)
+            val first = repo.backtest(2025, ScoringPresets.PPR)
+            assertSame(first, repo.backtest(2025, ScoringPresets.PPR))
+            assertNotSame(first, repo.backtest(2025, ScoringPresets.HALF_PPR))
         }
     }
 

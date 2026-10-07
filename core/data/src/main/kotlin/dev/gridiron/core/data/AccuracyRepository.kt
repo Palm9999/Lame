@@ -20,6 +20,11 @@ import dev.gridiron.core.statquery.Components
 public class AccuracyRepository(private val executor: QueryExecutor) {
     private val projections = ProjectionsRepository(executor)
 
+    private data class Key(val status: ForecastStatus, val season: Int, val profile: ScoringProfile, val draws: Int, val widening: Map<Position, Double>)
+
+    /** The last backtest per season and profile; a refresh changes the forecast status, so stale ones are never read. */
+    private val cache = java.util.concurrent.ConcurrentHashMap<Key, List<PositionAccuracy>>()
+
     /** How the last refresh's forecast went. */
     public suspend fun status(): ForecastStatus = projections.status()
 
@@ -37,7 +42,7 @@ public class AccuracyRepository(private val executor: QueryExecutor) {
     /**
      * [season]'s backtest under [profile], by position. It simulates every
      * counted player-week, which is seconds of work on a phone, so call it
-     * off the main thread.
+     * off the main thread. Kept until the next refresh, so a second visit is instant.
      */
     public suspend fun backtest(
         season: Int,
@@ -45,7 +50,23 @@ public class AccuracyRepository(private val executor: QueryExecutor) {
         draws: Int = BACKTEST_DRAWS,
         widening: Map<Position, Double> = RANGE_WIDENING,
     ): List<PositionAccuracy> {
-        val beforeWeek = status().upcoming[season] ?: Int.MAX_VALUE
+        val status = status()
+        val key = Key(status, season, profile, draws, widening)
+        cache[key]?.let { return it }
+        return compute(season, profile, draws, widening, status).also { result ->
+            cache.keys.removeIf { it.status != status }
+            cache[key] = result
+        }
+    }
+
+    private suspend fun compute(
+        season: Int,
+        profile: ScoringProfile,
+        draws: Int,
+        widening: Map<Position, Double>,
+        status: ForecastStatus,
+    ): List<PositionAccuracy> {
+        val beforeWeek = status.upcoming[season] ?: Int.MAX_VALUE
 
         data class Row(val playerId: String, val position: String, val week: Int, val component: ProjectionComponent)
 
