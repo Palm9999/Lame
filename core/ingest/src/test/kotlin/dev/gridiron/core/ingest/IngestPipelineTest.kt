@@ -244,7 +244,8 @@ class IngestPipelineTest {
         assertEquals(facts(first), facts(second))
         // ESPN's projections are downloaded in full: every week for the newest season, and for any season the last
         // build has none of (none here).
-        val conditional = fetcher.calls.filter { (url, _) -> url !in listOf(2024, 2025).map { Sources.url(Input.ESPN_PROJECTIONS, it) } }
+        val espnUrls = listOf(2024, 2025).flatMap { listOf(Sources.url(Input.ESPN_PROJECTIONS, it), Sources.url(Input.ESPN_KICKERS_DEFENSE, it)) }
+        val conditional = fetcher.calls.filter { (url, _) -> url !in espnUrls }
         assertTrue(conditional.all { (_, previous) -> previous != null }, "${fetcher.calls}")
     }
 
@@ -935,12 +936,25 @@ class IngestPipelineTest {
         servePlayers()
         serveSeason(2025)
         fetcher.serve(Sources.url(Input.ESPN_PROJECTIONS, 2025), espnJson(2025, espnId = 102, week = 1, receptions = 6.5), "e1")
+        // A D/ST's ESPN id is -16000 minus its team's (12: KC); its four touchdown kinds add up to ours.
+        fetcher.serve(
+            Sources.url(Input.ESPN_KICKERS_DEFENSE, 2025),
+            """{"players": [{"id": -16012, "player": {"id": -16012, "fullName": "Chiefs D/ST", "stats": [
+              {"seasonId": 2025, "scoringPeriodId": 1, "statSourceId": 1, "statSplitTypeId": 1, "stats": {"99": 2.5, "93": 0.1, "94": 0.1, "101": 0.05, "102": 0.05, "120": 18.0}}
+            ]}}]}""".toByteArray(),
+            "k1",
+        )
         val out = File(dir, "stats.db")
 
         val report = pipeline.build(listOf(2025), previous = null, out = out)
 
         assertEquals(listOf(listOf("WR1", "2025", "1", "receptions", "6.5")), espnRows(out))
+        assertEquals(
+            listOf(listOf("dst_sacks", "2.5"), listOf("dst_tds", "0.3"), listOf("points_allowed", "18.0")),
+            query(out, "SELECT metric_id, ROUND(value, 6) FROM espn_projection WHERE player_id = 'DST_KC' ORDER BY 1"),
+        )
         assertTrue("X-Fantasy-Filter" in fetcher.headers.getValue(Sources.url(Input.ESPN_PROJECTIONS, 2025)))
+        assertTrue("[16,17]" in fetcher.headers.getValue(Sources.url(Input.ESPN_KICKERS_DEFENSE, 2025)).getValue("X-Fantasy-Filter"))
         assertEquals(emptyList<String>(), report.warnings.filter { "ESPN" in it })
     }
 
@@ -973,7 +987,10 @@ class IngestPipelineTest {
         val second = File(dir, "second.db")
         pipeline.build(listOf(2024, 2025), first, second)
 
-        assertEquals(listOf(Sources.url(Input.ESPN_PROJECTIONS, 2025)), fetcher.calls.map { it.first }.filter { "espn" in it || "fantasy" in it })
+        assertEquals(
+            listOf(Sources.url(Input.ESPN_PROJECTIONS, 2025), Sources.url(Input.ESPN_KICKERS_DEFENSE, 2025)),
+            fetcher.calls.map { it.first }.filter { "espn" in it || "fantasy" in it },
+        )
         assertEquals(listOf(listOf("WR1", "2024", "1", "receptions", "5.0"), listOf("WR1", "2025", "1", "receptions", "7.0")), espnRows(second))
     }
 }

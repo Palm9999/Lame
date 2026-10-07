@@ -21,19 +21,20 @@ import dev.gridiron.core.ingest.validate.checkNgs
 import dev.gridiron.core.ingest.validate.crossCheck
 import dev.gridiron.core.ingest.validate.dropUnplayedWeeks
 import dev.gridiron.core.ingest.validate.expectedCoverage
-import dev.gridiron.core.ingest.validate.ftnCoverageWarning
 import dev.gridiron.core.ingest.validate.fantasyContract
+import dev.gridiron.core.ingest.validate.ftnCoverageWarning
 import dev.gridiron.core.ingest.validate.validateDatabase
+import dev.gridiron.core.model.EspnTeams
+import java.io.File
+import java.io.IOException
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.IOException
-import java.time.Instant
-import java.time.ZoneOffset
 
 /** What a build is doing, for a progress line. */
 public sealed interface IngestProgress {
@@ -491,22 +492,26 @@ public class IngestPipeline(
             for (season in seasons) {
                 job.ensureActive()
                 if (season != newest && previous != null && writer.copyEspnProjectionsFrom(previous, season)) continue
-                val projections = try {
-                    when (val r = fetch(Input.ESPN_PROJECTIONS, season, known = null)) {
-                        is FetchResult.Downloaded -> r.file.inputStream().use { readEspnProjections(it, season) }.also { r.file.delete() }
-                        else -> null.also { warnings += "$season: ESPN projections aren't available; the model projects alone" }
-                    }
-                } catch (e: IOException) {
-                    null.also { warnings += "$season: couldn't download ESPN projections (${e.message}); the model projects alone" }
-                } catch (e: EspnFormatException) {
-                    null.also { warnings += "$season: ESPN changed its projections format (${e.message}); the model projects alone" }
-                } ?: continue
-                writer.writeEspnProjections(
-                    projections.flatMap { p ->
-                        val id = byEspnId[p.espnId] ?: return@flatMap emptyList()
-                        p.stats.filterValues { it != 0.0 }.map { (metric, value) -> Fact(id, p.season, p.week, null, metric, value) }
-                    },
-                )
+                for (input in listOf(Input.ESPN_PROJECTIONS, Input.ESPN_KICKERS_DEFENSE)) {
+                    // Kickers and D/STs feed only Where we differ, so without them the model isn't alone.
+                    val outcome = if (input == Input.ESPN_PROJECTIONS) "the model projects alone" else "Where we differ leaves out K and D/ST"
+                    val projections = try {
+                        when (val r = fetch(input, season, known = null)) {
+                            is FetchResult.Downloaded -> r.file.inputStream().use { readEspnProjections(it, season) }.also { r.file.delete() }
+                            else -> null.also { warnings += "$season: ${input.label} aren't available; $outcome" }
+                        }
+                    } catch (e: IOException) {
+                        null.also { warnings += "$season: couldn't download ${input.label} (${e.message}); $outcome" }
+                    } catch (e: EspnFormatException) {
+                        null.also { warnings += "$season: ESPN changed its projections format (${e.message}); $outcome" }
+                    } ?: continue
+                    writer.writeEspnProjections(
+                        projections.flatMap { p ->
+                            val id = byEspnId[p.espnId] ?: EspnTeams.dstPlayerId(p.espnId) ?: return@flatMap emptyList()
+                            p.stats.filterValues { it != 0.0 }.map { (metric, value) -> Fact(id, p.season, p.week, null, metric, value) }
+                        },
+                    )
+                }
             }
         }
 

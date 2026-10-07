@@ -92,7 +92,7 @@ public class ProjectionsRepository(private val executor: QueryExecutor) {
 
     public suspend fun rosAll(season: Int): List<ListedProjection> = listed(ProjectionQueries.rosAll(season))
 
-    /** ESPN's projection for [week] (QB, RB, WR and TE); empty when the database predates `espn_projection` or has none. */
+    /** ESPN's projection for [week] (QB, RB, WR, TE, and K and D/ST from builds since they were stored); empty when the database predates `espn_projection` or has none. */
     /** The model's own projection before ESPN, props and the Questionable discount; only players ESPN projects. Empty on failure. */
     public suspend fun modelWeek(season: Int, week: Int): List<ListedProjection> = try {
         listed(ProjectionQueries.weekAll(season, week, stage = "model"))

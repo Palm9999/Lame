@@ -44,6 +44,14 @@ class DifferScreenTest {
     }
 
     @Test
+    fun `kickers and D-STs are compared too, at their own chips`() {
+        fun k(id: String, xp: Double) = ListedProjection(id, "Kicker $id", "K", "KC", listOf(ProjectionComponent("xp_made", xp, 0.0)))
+        val rows = differRows(app + k("k1", 4.0), espn + k("k1", 2.0), ScoringPresets.PPR, above = true, position = "K")
+        assertEquals(listOf("k1"), rows.map { it.playerId })
+        assertEquals(2.0, rows.single().gap, 1e-9)
+    }
+
+    @Test
     fun `the screen flips between above and below`() {
         var opened: String? = null
         compose.setContent {
