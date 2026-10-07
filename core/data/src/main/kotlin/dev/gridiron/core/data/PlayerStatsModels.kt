@@ -16,7 +16,14 @@ public data class SeasonLineRow(
 )
 
 /** One played week: [opponent] reads "vs DAL", "@ DAL" or a dash; [result] reads "W 27–20", or is null before a score exists. */
-public data class GameLogRow(val week: Int, val opponent: String, val result: String?, val cells: ImmutableList<String>)
+public data class GameLogRow(
+    val week: Int,
+    val opponent: String,
+    val result: String?,
+    val cells: ImmutableList<String>,
+    /** The week's shares, one per [PlayerStats.usageHeaders], as fractions; null where the week has none. */
+    val usage: ImmutableList<Double?> = persistentListOf(),
+)
 
 /** Everything the Player page's "Season stats" section shows for one player and season. */
 public data class PlayerStats(
@@ -32,6 +39,8 @@ public data class PlayerStats(
     /** The game log's column headers, one per cell. */
     val logHeaders: ImmutableList<String>,
     val log: ImmutableList<GameLogRow>,
+    /** The usage charts' names, one per [GameLogRow.usage] value ([PlayerStatSets.usageColumns]). */
+    val usageHeaders: ImmutableList<String> = persistentListOf(),
 ) {
     public companion object {
         /** A player with no games in any built season. */

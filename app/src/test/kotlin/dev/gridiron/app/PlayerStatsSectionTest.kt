@@ -42,9 +42,10 @@ class PlayerStatsSectionTest {
         ),
         logHeaders = persistentListOf("FPTS", "TAR"),
         log = persistentListOf(
-            GameLogRow(1, "vs BAL", "W 27–20", persistentListOf("18.4", "9")),
-            GameLogRow(2, "@ DAL", "L 17–24", persistentListOf("7.1", "5")),
+            GameLogRow(1, "vs BAL", "W 27–20", persistentListOf("18.4", "9"), persistentListOf(0.72, 0.18)),
+            GameLogRow(2, "@ DAL", "L 17–24", persistentListOf("7.1", "5"), persistentListOf(0.91, null)),
         ),
+        usageHeaders = persistentListOf("Snap Share", "Target Share"),
     )
 
     private fun show(page: PlayerPage, onSeason: (Int) -> Unit = {}) {
@@ -76,6 +77,10 @@ class PlayerStatsSectionTest {
         compose.onNodeWithText("12th").assertExists()
         compose.onNodeWithText("1st").assertExists()
         compose.onNodeWithTag("gameLog:1").assertExists()
+        // Snap share has two weeks, so it charts; target share has one, so it doesn't.
+        compose.onNodeWithText("Snap Share by week").assertExists()
+        compose.onNodeWithText("91%").assertExists()
+        compose.onNodeWithTag("usage:Target Share").assertDoesNotExist()
         compose.onNodeWithText("vs BAL W 27–20").assertExists()
         compose.onNodeWithText("@ DAL L 17–24").assertExists()
         // The best week reads in the log and above its bar in the points chart.

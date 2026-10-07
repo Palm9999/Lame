@@ -64,6 +64,7 @@ internal fun LazyListScope.playerStatsItems(stats: PlayerStats, onSeason: (Int) 
     items(stats.line.size, key = { "line:${stats.line[it].label}" }) { SeasonLine(stats.line[it]) }
     if (stats.log.isNotEmpty()) {
         item { PointsByWeek(stats.log) }
+        stats.usageHeaders.forEachIndexed { i, name -> item(key = "usage:$name") { UsageByWeek(name, stats.log, i) } }
         item { GameLogHeader(stats.logHeaders) }
         items(stats.log.size, key = { "log:${stats.log[it].week}" }) { GameLog(stats.log[it]) }
     }
@@ -146,6 +147,31 @@ private fun PointsByWeek(log: List<GameLogRow>) {
             description = "Fantasy points by week: " + log.zip(points).joinToString { (r, p) -> "week ${r.week} ${p ?: "none"}" },
             modifier = Modifier.padding(top = 6.dp),
             labelled = setOfNotNull(best, points.indices.last),
+        )
+    }
+}
+
+/**
+ * One share ([PlayerStats.usageHeaders] at [index]) week by week, on a 0-100% scale so a role's size reads true; the
+ * first, best and latest weeks labeled. Nothing when fewer than two weeks have it.
+ */
+@Composable
+private fun UsageByWeek(name: String, log: List<GameLogRow>, index: Int) {
+    val shares = log.map { it.usage.getOrNull(index) }
+    if (shares.count { it != null } < 2) return
+    val pct = { v: Double -> String.format(java.util.Locale.US, "%.0f%%", v * 100) }
+    val best = shares.indices.maxByOrNull { shares[it] ?: Double.NEGATIVE_INFINITY }
+    Column(Modifier.padding(horizontal = 16.dp).padding(top = 12.dp).testTag("usage:$name")) {
+        Text("$name by week", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+        ColumnChart(
+            labels = log.map { it.week.toString() },
+            values = shares,
+            valueText = pct,
+            description = "$name by week: " + log.zip(shares).joinToString { (r, v) -> "week ${r.week} ${v?.let(pct) ?: "none"}" },
+            modifier = Modifier.padding(top = 6.dp),
+            max = 1.0,
+            labelled = setOfNotNull(shares.indexOfFirst { it != null }, best, shares.indexOfLast { it != null }),
+            height = 48.dp,
         )
     }
 }
