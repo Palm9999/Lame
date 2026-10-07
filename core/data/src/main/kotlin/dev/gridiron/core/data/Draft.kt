@@ -23,6 +23,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import java.io.IOException
+import kotlin.random.Random
 
 /**
  * One player on the draft board: Fantasy Football Calculator's average draft position ([adp], picks), his bye, and,
@@ -211,4 +212,45 @@ public object DraftAdvice {
 
     /** Most a roster wants at each position: beyond these the picks are wasted depth. Judgment. */
     public val CAPS: Map<String, Int> = mapOf("QB" to 2, "RB" to 7, "WR" to 7, "TE" to 2, "K" to 1, "DST" to 1)
+}
+
+/**
+ * A snake mock draft against bots: each bot takes one of [DraftAdvice]'s top three for its own roster, weighted
+ * [BOT_WEIGHTS], so bots follow ADP and need without drafting the same way every time. Picks are board keys in
+ * draft order; teams count from 0.
+ */
+public object MockDraft {
+    /** The team making overall pick [n] (from 0): 0..teams-1 in odd rounds, back again in even ones. */
+    public fun team(n: Int, teams: Int): Int = (n % teams).let { if ((n / teams) % 2 == 0) it else teams - 1 - it }
+
+    /** "3.07": round and pick within it for overall pick [n] (from 0). */
+    public fun label(n: Int, teams: Int): String = "${n / teams + 1}.${(n % teams + 1).toString().padStart(2, '0')}"
+
+    /** [picks] with the bots' picks added until it's [slot]'s turn, the draft's [rounds] are done or the board runs out. */
+    public fun run(
+        board: List<BoardPlayer>,
+        picks: List<String>,
+        slot: Int,
+        teams: Int,
+        rounds: Int,
+        slots: Map<String, Int>,
+        random: Random,
+    ): List<String> {
+        val byKey = board.associateBy { it.key }
+        val out = picks.toMutableList()
+        while (out.size < teams * rounds && team(out.size, teams) != slot) {
+            val t = team(out.size, teams)
+            val taken = out.toSet()
+            val roster = out.indices.filter { team(it, teams) == t }.mapNotNull { byKey[out[it]] }
+            val options = DraftAdvice.suggestions(board.filter { it.key !in taken }, roster, slots, out.size / teams + 1, rounds, BOT_WEIGHTS.size)
+            if (options.isEmpty()) break
+            val w = BOT_WEIGHTS.take(options.size)
+            var r = random.nextDouble() * w.sum()
+            out += options[w.indices.firstOrNull { r -= w[it]; r < 0 } ?: options.lastIndex].key
+        }
+        return out
+    }
+
+    /** How often a bot takes its first, second and third choice. Judgment. */
+    public val BOT_WEIGHTS: List<Double> = listOf(0.6, 0.25, 0.15)
 }
