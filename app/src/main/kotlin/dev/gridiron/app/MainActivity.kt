@@ -25,6 +25,7 @@ class MainActivity : ComponentActivity() {
             app.settings.alerts.collect { alerts ->
                 val on = alerts.any
                 InjuryAlertWorker.schedule(this@MainActivity, on)
+                GameDayRefreshWorker.schedule(this@MainActivity, alerts.refresh)
                 // Off forgets what was seen, so turning an alert back on doesn't replay every change since.
                 if (!alerts.injury) app.injuryAlerts.forget()
                 if (!alerts.news) app.newsAlerts.forget()

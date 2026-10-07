@@ -47,7 +47,9 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** the 2026-10-07 round (the user took all eight, order mine): (1) quiet hours, (2) daily waiver snapshot, (3) return outlook on the Injury report, (4) dynasty values in Trade and on the Player page, (5) Grid and Compare share cards are built (below); of the accuracy leads, (6) the rest-of-season injury discount shipped (below) and (7) TE handcuff and (8) ESPN QB rushing TDs are under "Tried and rejected". No untried accuracy leads are left. Nothing else is pending: offer the next round as a short pick-list.
+**Next:** the 2026-10-07 second round: the user asked for the pick-list (1 Ask Gridiron with the user's own Anthropic key, 2 game-day refresh, 3 TD regression board, 4 player comps, 5 mock draft simulator, 6 usage trend charts, 7 matchup preview) and said start where I want; (2) game-day refresh is built (below). Continue with (1), then the rest in list order unless the user redirects.
+
+**Just built: Game-day refresh** (Settings → Alerts, on by default, prefs `gameDayRefresh`): `GameDayRefreshWorker` (WorkManager, needs a network) runs `RefreshCoordinator.refreshAndWait` Saturday 10 pm and Sunday 9 am local, then appends the next run; a run Android kills is retried by WorkManager. Pure `nextGameDayRefresh` is tested.
 
 **Just built: Rest-of-season injury discount** (`FORECAST_VERSION` 18): a player nflverse lists Out or Doubtful this week keeps rest of season from the healthy roster, each coming game times the chance such a player has played by then (`returnCurve` in `:core:forecast`, every past listing in the database, 8 games deep, pooled statuses and positions). Proxy backtest on 2022-2025 (no past rest-of-season rows are stored): his next four games' PPR points, missed ones zero, against season average × games: MAE 23.8 → 11.0 (−12.8 ±1.5, 553 listings, leave-one-season-out curve), bias +22.3 → +0.8. Checked on the real 2026 build with a simulated Out listing: Puka Nacua's weekly receiving yards 95 → 27, 49, 67, 70, then about 80. A Tuesday build has no week's listings yet, so it changes nothing until Wednesday-Friday.
 
@@ -98,6 +100,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - **Places read best first** ("1st of 62", never "percentile" wording; 2026-10-03). **My players** are always listed, unranked below the bar (2026-10-03). **Several leagues:** one active league, one shared login, every league's team a roster (2026-10-03). **Matchups:** ESPN's numbers lead, the app's beside them (2026-10-01).
 
 ## Deferred minors
+
+**Deferred minors (game-day refresh):** fixed times (no picker), every week of the year (offseason runs too); no notification when it finishes (the Finished toast shows only if the app is open); a Thursday or Monday game gets no refresh of its own; it lives under Alerts though it isn't one.
 
 **Deferred minors (claim plan):** the adds are each valued alone (two adds' combined value isn't checked); bids use the same judgment curve as before; a drop needed for roster room on an open spot counts as distinct; the section sits at the very bottom of My lineup.
 
@@ -163,6 +167,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Open checks on the phone
 
+- **Game-day refresh:** don't refresh by hand after Friday; Sunday morning, a player nflverse listed Out on Friday should have no projection on Projections' week list (the app has no build-time display, so this is the tell).
 - **Quiet hours:** Settings → Alerts → Quiet hours on: nothing from injuries or news between 10 pm and 8 am, then the overnight changes arrive after 8.
 - **Daily waiver snapshot:** with alerts on, don't open Waiver trends for a week; then open it: the note should read "over the last week".
 - **Injury report outlook:** More → Injury report: Out, Doubtful and IR rows show "Played again by: wk N …" a moment after the list.
@@ -184,11 +189,15 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 - A fresh container has no Android SDK, `stats.db`, pytest or `local.properties`. Install cmdline-tools from `https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip`, then `sdkmanager --sdk_root=/opt/android-sdk "platforms;android-37.0" "build-tools;36.0.0"`; write `sdk.dir=/opt/android-sdk` to `local.properties` (git-ignored), export `ANDROID_HOME`, `pip install pytest numpy`.
 - Build `stats.db` with the Kotlin command (about 5 minutes for 2024-2026): the Python `build` lacks the `game` and projection tables `:core:data` tests need. `etl/build/{stats,accuracy,tune}.db` and `parity/` survive only as long as the container.
-- Maven Central 429s for minutes at a time (repo1 too): add a `~/.gradle/init.d` script swapping `repo.maven.apache.org` for `https://maven-central.storage-download.googleapis.com/maven2/`, or loop `./gradlew ... --max-workers=2 -q` with a 40 s pause until the log has no "429" or "Could not resolve". Robolectric fetches its own artifact and can hit the same 429.
+- Maven Central 429s for minutes at a time (repo1 too): add a `~/.gradle/init.d` script swapping `repo.maven.apache.org` for `https://maven-central.storage-download.googleapis.com/maven2/`, or loop `./gradlew ... --max-workers=2 -q` with a 40 s pause until the log has no "429" or "Could not resolve". Robolectric fetches its own artifact and can hit the same 429. The `init.d` mirror script can be refused by the session's auto mode; the retry loop always works (8 tries).
 - Foreground `sleep` is blocked: run `./gradlew` in a background script and wait with an `until grep -q EXIT log` loop.
 - `RealDatabaseContractTest > scoring a full season for every player is fast` can fail on timing here; CI passes it.
 - Against a 2024-2025 `accuracy.db`, two `OpportunitiesRepositoryTest` cases and `ProjectionsContractTest > every team's projected week adds up to one game` fail on missing 2026 data: use a 2024-2026 `stats.db`.
 - Gradle treats a test as up to date when only an environment variable changed: add `--rerun`. Probe and reforecast runs need `--no-configuration-cache` (otherwise the test JVM keeps the first run's env and every probe writes to the first CSV path).
 - **Accuracy harness** (scratch tests, never committed): `tune.db` is a 2021-2025 build with ESPN (about 214 MB, about 10 minutes). `ReforecastScratchTest` in `core/forecast` tests copies `REFORECAST_IN` to `REFORECAST_OUT`, clears the projection tables, creates `player_ros_week` if missing and runs `Forecast.run`, with constants made env-overridable in the working copy only. `BiasProbeTest` in `core/data` tests (env-gated) dumps each counted player-week as CSV; compare pairs in Python. About 2 minutes a configuration. `RangeDumpTest`/`RangeProbeTest` add the phone's floor and ceiling (`projectPoints(..., widening = emptyMap())`, 2000 draws) for calibration checks and range refits (Python bisection on `calibratedRange`'s rule, then check against `AccuracyGateTest` per season).
 - Bash sometimes fails with a transient "classifier gave no verdict": retry once, or use Read, Grep and Glob.
+- Run `./gradlew test` with `--max-workers=2`: 3 workers got the container killed for memory.
+- If a dozen unrelated `:core:data` and forecast contract tests fail at once, check `SELECT count(*) FROM game` in `stats.db`: an empty schedule (a failed download; the build log says "no schedule") breaks them all.
+- Keep the accuracy harness's scratch tests out of the tree between runs (the stop hook flags untracked files).
+- PRs from this branch go to `claude/dreamy-euler-phbdq1` (every PR so far used that base).
 - The user also pushes to the branch: `git pull --no-rebase` before pushing.

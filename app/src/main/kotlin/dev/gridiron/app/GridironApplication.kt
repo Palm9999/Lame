@@ -194,7 +194,7 @@ class GridironApplication : Application() {
 
     private val workDir by lazy { File(noBackupFilesDir, "ingest-work") }
 
-    private val refresher by lazy {
+    internal val refresher by lazy {
         RefreshCoordinator(
             dir = noBackupFilesDir,
             executor = executor,

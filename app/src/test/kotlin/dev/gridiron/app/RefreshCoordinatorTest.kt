@@ -92,6 +92,19 @@ class RefreshCoordinatorTest {
     }
 
     @Test
+    fun theGameDayJobWaitsForTheRefreshAndJoinsOneAlreadyRunning() = runTest {
+        db.writeText("old")
+        val refresher = coordinator()
+        refresher.refreshAndWait()
+        assertEquals("new", db.readText())
+        assertTrue(refresher.state.value is RefreshState.Finished)
+
+        refresher.refresh()
+        refresher.refreshAndWait()
+        assertEquals(2, builds.size)
+    }
+
+    @Test
     fun aFailedBuildKeepsTheCurrentDatabase() = runTest {
         db.writeText("old")
         val refresher = coordinator(build = { out, _ ->
