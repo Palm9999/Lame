@@ -34,6 +34,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
+import dev.gridiron.core.designsystem.GridironTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -62,6 +63,16 @@ public object ImageShare {
         }
     }
 
+    /** Every card's width in pixels, whatever the phone's density: 1080, a feed's full width. */
+    public const val WIDTH_PX: Int = 1080
+
+    /** [bitmap] scaled to [WIDTH_PX] wide, keeping its shape. */
+    public fun fixedWidth(bitmap: Bitmap): Bitmap {
+        if (bitmap.width == WIDTH_PX || bitmap.width <= 0) return bitmap
+        val height = (bitmap.height.toLong() * WIDTH_PX / bitmap.width).toInt().coerceAtLeast(1)
+        return Bitmap.createScaledBitmap(bitmap, WIDTH_PX, height, true)
+    }
+
     /** Opens the share sheet on [file]; false when the provider can't serve it. */
     public fun send(context: Context, file: File): Boolean {
         val uri = try {
@@ -75,9 +86,12 @@ public object ImageShare {
     }
 }
 
-/** The look every shared card has: the app's name on top, the card, and the data credit under it, at a phone's width. */
+/**
+ * The look every shared card has: the app's name on top, the card, and the data credit under it, at a phone's width.
+ * Always the light theme, so a card reads the same wherever it's posted, whatever the phone's mode.
+ */
 @Composable
-public fun ShareCardFrame(content: @Composable () -> Unit) {
+public fun ShareCardFrame(content: @Composable () -> Unit) = GridironTheme(darkTheme = false) {
     Column(
         Modifier.width(360.dp).background(MaterialTheme.colorScheme.surface).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
@@ -113,7 +127,7 @@ public fun SharePreview(fileName: String, onDismiss: () -> Unit, card: @Composab
                     Button(
                         onClick = {
                             scope.launch {
-                                val file = ImageShare.write(context, fileName, layer.toImageBitmap().asAndroidBitmap())
+                                val file = ImageShare.write(context, fileName, ImageShare.fixedWidth(layer.toImageBitmap().asAndroidBitmap()))
                                 if (file == null || !ImageShare.send(context, file)) {
                                     Toast.makeText(context, "Couldn't share the card", Toast.LENGTH_SHORT).show()
                                 } else {

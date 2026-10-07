@@ -1,6 +1,5 @@
 package dev.gridiron.feature.projections
 
-import dev.gridiron.core.ui.SharePreview
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -20,10 +19,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,16 +32,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.TradeOffer
+import dev.gridiron.core.data.tdGapTag
+import dev.gridiron.core.designsystem.SectionHeader
+import dev.gridiron.core.designsystem.SummaryCard
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.projections.LineupCandidate
+import dev.gridiron.core.projections.PartnerFit
 import dev.gridiron.core.projections.TradeIdea
 import dev.gridiron.core.projections.TradeOutcome
-import dev.gridiron.core.projections.PartnerFit
 import dev.gridiron.core.projections.TradePartners
 import dev.gridiron.core.projections.Trades
+import dev.gridiron.core.ui.SharePreview
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import dev.gridiron.core.data.tdGapTag
 import java.util.Locale
 
 /**
@@ -215,7 +217,7 @@ internal fun TradeView(
             }
         }
         item {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            SummaryCard {
                 if (outcome == null) {
                     Text(
                         "Tick players to send and receive, or tap a suggestion. Each roster is valued at its best lineup's rest-of-season points.",
@@ -276,7 +278,7 @@ internal fun TradeView(
             o to Trades.evaluate(myTeam.slots, candidates(mine), candidates(theirRoster), o.give.toSet(), o.get.toSet())
         }
         if (graded.isNotEmpty()) {
-            item { Label("Pending offers (from ESPN)") }
+            item { SectionHeader("Pending offers (from ESPN)") }
             itemsIndexed(graded, key = { _, (o, _) -> "offer:${o.id}" }) { _, (o, out) ->
                 Row(
                     Modifier.fillMaxWidth().clickable {
@@ -300,7 +302,7 @@ internal fun TradeView(
                 }
             }
         }
-        item { Label("Suggested trades") }
+        item { SectionHeader("Suggested trades") }
         when (val found = ideas) {
             null -> item { Note("Looking for trades that help both sides…") }
             else -> if (found.isEmpty()) {
@@ -335,11 +337,11 @@ internal fun TradeView(
             }
         }
         searchMillis?.let { ms -> item { Note("Searched every team in ${String.format(Locale.US, "%.1f", ms / 1000.0)} s.") } }
-        item { Label("You send") }
+        item { SectionHeader("You send") }
         itemsIndexed(mine, key = { _, p -> "give:${p.playerId}" }) { _, p ->
             PickRow(p, p.playerId in give, "give", playoffs, dynasty[p.playerId], tdGaps[p.playerId]) { on -> give = if (on) give + p.playerId else give - p.playerId }
         }
-        item { Label("You receive from ${partner.teamName}") }
+        item { SectionHeader("You receive from ${partner.teamName}") }
         itemsIndexed(theirs, key = { _, p -> "get:${p.playerId}" }) { _, p ->
             PickRow(p, p.playerId in get, "get", playoffs, dynasty[p.playerId], tdGaps[p.playerId]) { on -> get = if (on) get + p.playerId else get - p.playerId }
         }
@@ -356,7 +358,7 @@ internal fun TradeView(
             )
         }
         if (fits.isNotEmpty()) {
-            item { Label("Best partners: deep where you're thin, short where you're deep") }
+            item { SectionHeader("Best partners: deep where you're thin, short where you're deep") }
             itemsIndexed(fits, key = { _, f -> "fit:${f.partner}" }) { _, f ->
                 Text(
                     partnerText(f, names),
@@ -394,16 +396,6 @@ private fun PickRow(p: TradePlayer, checked: Boolean, side: String, playoffs: Li
         }
         Text(if (p.points > 0.0) pts(p.points) else "—", style = MaterialTheme.typography.bodyMedium)
     }
-}
-
-@Composable
-private fun Label(text: String) {
-    Text(
-        text,
-        Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
 }
 
 @Composable

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.MaterialTheme
@@ -18,6 +19,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.live.PlayoffPicture
+import dev.gridiron.core.designsystem.Meter
+import dev.gridiron.core.designsystem.SectionHeader
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.projections.LineupCandidate
 import dev.gridiron.core.projections.Lineups
@@ -28,11 +31,11 @@ import dev.gridiron.core.projections.SimGame
 import dev.gridiron.core.projections.SimTeam
 import dev.gridiron.core.projections.TeamWeek
 import dev.gridiron.core.projections.Trades
+import kotlin.math.roundToInt
+import kotlin.math.sqrt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.util.Locale
-import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 /** Playoff odds: asked for when the mode opens, being fetched, found, or why not. */
 public sealed interface PlayoffState {
@@ -138,7 +141,7 @@ internal fun PlayoffsView(state: PlayoffState, rosRows: List<ProjectionRow>, ros
             odds == null -> item { Note("Simulating the season…") }
             else -> {
                 power?.let { rows ->
-                    item { Label("Power rankings: rest-of-season roster strength") }
+                    item { SectionHeader("Power rankings: rest-of-season roster strength") }
                     itemsIndexed(rows, key = { _, r -> "power:${r.teamId}" }) { i, r ->
                         val mine = r.teamId == picture.myTeamId
                         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("power:${r.teamId}"), verticalAlignment = Alignment.CenterVertically) {
@@ -155,7 +158,7 @@ internal fun PlayoffsView(state: PlayoffState, rosRows: List<ProjectionRow>, ros
                             Text(String.format(Locale.US, "%.0f", r.value), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
                         }
                     }
-                    item { Label("Playoff odds") }
+                    item { SectionHeader("Playoff odds") }
                 }
                 val cut = picture.league.playoffTeams ?: DEFAULT_PLAYOFF_TEAMS
                 item {
@@ -177,7 +180,10 @@ internal fun PlayoffsView(state: PlayoffState, rosRows: List<ProjectionRow>, ros
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Text(chanceText(o.playoffChance), Modifier.testTag("odds:chance:${o.teamId}"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Column(Modifier.width(72.dp), horizontalAlignment = Alignment.End) {
+                            Text(chanceText(o.playoffChance), Modifier.testTag("odds:chance:${o.teamId}"), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            Meter(o.playoffChance, "Playoff chance ${chanceText(o.playoffChance)}", Modifier.padding(top = 2.dp))
+                        }
                     }
                 }
                 item {
@@ -195,16 +201,6 @@ internal fun PlayoffsView(state: PlayoffState, rosRows: List<ProjectionRow>, ros
 private fun record(wins: Double, losses: Double, ties: Int): String {
     fun n(v: Double) = if (v % 1.0 == 0.0) v.toInt().toString() else String.format(Locale.US, "%.1f", v)
     return "${n(wins)}–${n(losses)}" + if (ties > 0) "–$ties" else ""
-}
-
-@Composable
-private fun Label(text: String) {
-    Text(
-        text,
-        Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
 }
 
 @Composable

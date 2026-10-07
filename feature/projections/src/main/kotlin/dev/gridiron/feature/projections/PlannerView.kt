@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.live.MyTeam
+import dev.gridiron.core.designsystem.SectionHeader
 import dev.gridiron.core.projections.LineupCandidate
 import dev.gridiron.core.projections.Lineups
 import java.util.Locale
@@ -106,7 +107,7 @@ internal fun PlannerView(
         }
         if (rostered == null) item { Note("Sync your league to see free agents; suggestions below may be rostered.") }
         discountNote(team, state.rosRows)?.let { item { Note(it) } }
-        item { Label("Lineup holes, weeks ${weeks.first()}–${weeks.last()}") }
+        item { SectionHeader("Lineup holes, weeks ${weeks.first()}–${weeks.last()}") }
         if (gaps.isEmpty()) {
             item { Note("Your roster fills every starting slot every week through the fantasy playoffs.") }
         } else {
@@ -124,7 +125,7 @@ internal fun PlannerView(
                 }
             }
         }
-        item { Label("Streamers: best free-agent D/ST and K") }
+        item { SectionHeader("Streamers: best free-agent D/ST and K") }
         if (streamers.isEmpty()) item { Note("No free-agent D/ST or kicker projected in the next $STREAM_WEEKS weeks.") }
         itemsIndexed(streamers, key = { _, s -> "stream:${s.week}:${s.position}" }) { _, s ->
             Column(
@@ -155,16 +156,6 @@ internal fun discountNote(team: MyTeam, rosRows: List<ProjectionRow>): String? {
 }
 
 private fun pts(value: Double): String = String.format(Locale.US, "%.1f", value)
-
-@Composable
-private fun Label(text: String) {
-    Text(
-        text,
-        Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
 
 @Composable
 private fun Note(text: String) {
