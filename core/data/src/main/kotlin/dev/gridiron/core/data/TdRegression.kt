@@ -3,6 +3,7 @@ package dev.gridiron.core.data
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.statquery.Bind
 import dev.gridiron.core.statquery.SqlQuery
+import java.util.Locale
 
 /** One player's touchdowns this season against ffopportunity's expected touchdowns, through [throughWeek]. */
 public data class TdRegressionRow(
@@ -18,7 +19,19 @@ public data class TdRegressionRow(
 }
 
 /** [rows] best gap first; [throughWeek] is the last week ffopportunity has processed (0 when none). */
-public data class TdRegressionBoard(val throughWeek: Int, val rows: List<TdRegressionRow>)
+public data class TdRegressionBoard(val throughWeek: Int, val rows: List<TdRegressionRow>) {
+    /** Touchdowns above expected by player id, for Trade's rows. */
+    val gaps: Map<String, Double> get() = rows.associate { it.playerId to it.gap }
+}
+
+/** The Player page's line: "7 TDs against 4.3 expected through week 5: running hot (+2.7)". */
+public fun tdRegressionLine(row: TdRegressionRow, throughWeek: Int): String {
+    val side = if (row.gap >= 0.0) "running hot" else "running cold"
+    return String.format(Locale.US, "%.0f TDs against %.1f expected through week %d: %s (%+.1f)", row.tds, row.expected, throughWeek, side, row.gap)
+}
+
+/** Trade's tag: "TDs +2.7 vs exp". */
+public fun tdGapTag(gap: Double): String = String.format(Locale.US, "TDs %+.1f vs exp", gap)
 
 /**
  * The TD regression board: every QB, RB, WR and TE's passing, rushing and receiving touchdowns against expected

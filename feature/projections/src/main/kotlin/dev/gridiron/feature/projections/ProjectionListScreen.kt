@@ -118,6 +118,8 @@ public fun ProjectionListRoute(
     tradeOffers: suspend (season: Int) -> TradeOffersResult = { TradeOffersResult(emptyList(), null) },
     /** FantasyCalc's dynasty values by player id under the profile's format, asked when Trade opens. */
     dynastyValues: suspend (profile: ScoringProfile) -> Map<String, Int> = { emptyMap() },
+    /** Touchdowns above expected by player id (the TD regression board), asked when Trade opens. */
+    tdGaps: suspend (season: Int) -> Map<String, Double> = { emptyMap() },
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -136,6 +138,7 @@ public fun ProjectionListRoute(
     var review by remember { mutableStateOf<ReviewState>(ReviewState.Idle) }
     var pending by remember { mutableStateOf<List<TradeOffer>>(emptyList()) }
     var dynasty by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    var gaps by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     val scope = rememberCoroutineScope()
     suspend fun readKickoffs(week: Int) {
         locked = try {
@@ -165,7 +168,18 @@ public fun ProjectionListRoute(
         onLineupSummary = onLineupSummary,
         offers = pending,
         dynasty = dynasty,
+        tdGaps = gaps,
         onTradeOpened = {
+            // Like dynasty values, a bonus.
+            scope.launch {
+                gaps = try {
+                    tdGaps(season)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyMap()
+                }
+            }
             // Dynasty values are a bonus: Trade grades without them.
             profile?.let { active ->
                 scope.launch {
@@ -322,6 +336,8 @@ public fun ProjectionListScreen(
     onTradeOpened: () -> Unit = {},
     /** FantasyCalc's dynasty value by player id, shown in Trade. */
     dynasty: Map<String, Int> = emptyMap(),
+    /** Touchdowns above expected by player id, shown in Trade. */
+    tdGaps: Map<String, Double> = emptyMap(),
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
@@ -433,7 +449,7 @@ public fun ProjectionListScreen(
                     } else if (mode == ListMode.PLAYOFFS) {
                         PlayoffsView(playoffs, state.rosRows, state.rosWeekly)
                     } else if (mode == ListMode.TRADE && myTeam != null) {
-                        TradeView(myTeam, partners, state.rosRows, state.rosWeekly, offers, dynasty)
+                        TradeView(myTeam, partners, state.rosRows, state.rosWeekly, offers, dynasty, tdGaps)
                     } else if (mode == ListMode.LINEUP && myTeam != null) {
                         val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, weekRows, badges, started) }
                         val pickups = if (rostered == null) null else remember(myTeam, weekRows, badges, rostered, starterOut, started) { waiverPickups(myTeam, weekRows, badges, rostered, starterOut, started) }

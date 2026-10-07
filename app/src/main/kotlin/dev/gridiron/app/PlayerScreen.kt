@@ -43,6 +43,8 @@ import dev.gridiron.core.data.CompSeason
 import dev.gridiron.core.data.CompsRepository
 import dev.gridiron.core.data.DynastyValue
 import dev.gridiron.core.data.InjuryReturnRepository
+import dev.gridiron.core.data.TdRegressionRepository
+import dev.gridiron.core.data.tdRegressionLine
 import dev.gridiron.core.model.ScoringProfile
 import java.util.Locale
 import dev.gridiron.core.data.PlayerDirectory
@@ -100,6 +102,8 @@ data class PlayerPage(
     val comps: List<CompSeason> = emptyList(),
     /** "5,200 · 34th of 420 · 8th of 95 RBs · redraft 3,100": his FantasyCalc dynasty value; null when unpriced. */
     val dynasty: String? = null,
+    /** His touchdowns against expected (`tdRegressionLine`); null when he isn't on the TD regression board. */
+    val tdRegression: String? = null,
 )
 
 private val NO_CHANGES: StateFlow<Long> = MutableStateFlow(0L)
@@ -131,6 +135,8 @@ fun PlayerRoute(
     comps: CompsRepository? = null,
     /** Opens another player's page (a similar season). */
     onPlayer: (String) -> Unit = {},
+    /** Touchdowns against expected this season. */
+    tdRegression: TdRegressionRepository? = null,
 ) {
     val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList<Roster>()) }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -188,6 +194,15 @@ fun PlayerRoute(
         } catch (e: Exception) {
             emptyList() // never costs the rest of the page
         }
+        val tds = try {
+            tdRegression?.board(card?.season ?: currentSeason())?.let { b ->
+                b.rows.firstOrNull { it.playerId == playerId }?.let { tdRegressionLine(it, b.throughWeek) }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null // never costs the rest of the page
+        }
         page = PlayerPage(
             header = header,
             status = status,
@@ -199,6 +214,7 @@ fun PlayerRoute(
             returnOutlook = outlook,
             comps = similar,
             dynasty = dynasty,
+            tdRegression = tds,
         )
     }
     var season by remember(playerId) { mutableStateOf<Int?>(null) }
@@ -293,6 +309,10 @@ fun PlayerScreen(
                 page.risingRole?.let { row ->
                     item { SectionTitle("Rising role") }
                     item { RisingRoleLine(row) }
+                }
+                page.tdRegression?.let { text ->
+                    item { SectionTitle("Touchdowns vs expected") }
+                    item { Text(text, Modifier.padding(horizontal = 16.dp).testTag("tdRegression"), style = MaterialTheme.typography.bodyMedium) }
                 }
                 page.dynasty?.let { text ->
                     item { SectionTitle("Dynasty value") }
