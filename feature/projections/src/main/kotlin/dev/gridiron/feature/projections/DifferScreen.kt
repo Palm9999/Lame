@@ -82,8 +82,13 @@ public sealed interface DifferState {
 
     public data class Unavailable(val message: String) : DifferState
 
-    /** The app's final projections and ESPN's for the upcoming [week]. */
-    public data class Loaded(val week: Int, val app: List<ListedProjection>, val espn: List<ListedProjection>) : DifferState
+    /** The app's final projections, the model's alone (empty in a build before it was stored) and ESPN's for the upcoming [week]. */
+    public data class Loaded(
+        val week: Int,
+        val app: List<ListedProjection>,
+        val espn: List<ListedProjection>,
+        val model: List<ListedProjection> = emptyList(),
+    ) : DifferState
 }
 
 public class DifferViewModel(private val repository: ProjectionsRepository) : ViewModel() {
@@ -98,7 +103,7 @@ public class DifferViewModel(private val repository: ProjectionsRepository) : Vi
                 when {
                     status.status != "ok" -> DifferState.Unavailable("No projections yet. Refresh stats to build them.")
                     week == null -> DifferState.Unavailable("No upcoming games in $season.")
-                    else -> DifferState.Loaded(week, repository.weekAll(season, week), repository.espnWeek(season, week))
+                    else -> DifferState.Loaded(week, repository.weekAll(season, week), repository.espnWeek(season, week), repository.modelWeek(season, week))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -149,6 +154,7 @@ public fun DifferScreen(
     var above by rememberSaveable { mutableStateOf(true) }
     var position by rememberSaveable { mutableStateOf<String?>(null) }
     var freeOnly by rememberSaveable { mutableStateOf(false) }
+    var modelAlone by rememberSaveable { mutableStateOf(false) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -163,8 +169,13 @@ public fun DifferScreen(
                         Text("No ESPN projections for week ${state.week} in this build. Refresh stats.", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
                         return@Column
                     }
+                    val alone = modelAlone && state.model.isNotEmpty()
                     Text(
-                        "Week ${state.week}, your scoring. The app's number already leans 50–65% on ESPN's, so a gap is where its own model disagrees.",
+                        if (alone) {
+                            "Week ${state.week}, your scoring. The model alone, before ESPN, props and the Questionable discount."
+                        } else {
+                            "Week ${state.week}, your scoring. The app's number already leans 50–65% on ESPN's, so a gap is where its own model disagrees."
+                        },
                         Modifier.padding(horizontal = 16.dp),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -172,6 +183,9 @@ public fun DifferScreen(
                     Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(selected = above, onClick = { above = true }, label = { Text("Above ESPN") }, modifier = Modifier.testTag("differ:above"))
                         FilterChip(selected = !above, onClick = { above = false }, label = { Text("Below ESPN") }, modifier = Modifier.testTag("differ:below"))
+                        if (state.model.isNotEmpty()) {
+                            FilterChip(selected = modelAlone, onClick = { modelAlone = !modelAlone }, label = { Text("Model alone") }, modifier = Modifier.testTag("differ:model"))
+                        }
                         if (league != null) {
                             FilterChip(selected = freeOnly, onClick = { freeOnly = !freeOnly }, label = { Text("Free agents") }, modifier = Modifier.testTag("chip:free"))
                         }
@@ -181,7 +195,7 @@ public fun DifferScreen(
                             FilterChip(selected = position == p, onClick = { position = p }, label = { Text(p ?: "All") }, modifier = Modifier.testTag("pos:${p ?: "all"}"))
                         }
                     }
-                    val rows = differRows(state.app, state.espn, profile, above, position, limit = if (freeOnly) Int.MAX_VALUE else 15)
+                    val rows = differRows(if (alone) state.model else state.app, state.espn, profile, above, position, limit = if (freeOnly) Int.MAX_VALUE else 15)
                         .map { it to ownerOf(it.playerId, league, mine) }
                         .filter { (_, owner) -> !freeOnly || owner == Owner.FreeAgent }
                         .take(15)
@@ -199,7 +213,7 @@ public fun DifferScreen(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                    Text("App ${one(r.app)} · ESPN ${one(r.espn)}", style = MaterialTheme.typography.labelSmall)
+                                    Text("${if (alone) "Model" else "App"} ${one(r.app)} · ESPN ${one(r.espn)}", style = MaterialTheme.typography.labelSmall)
                                     owner?.let {
                                         Text(
                                             when (it) {

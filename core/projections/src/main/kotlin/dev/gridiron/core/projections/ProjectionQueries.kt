@@ -79,16 +79,16 @@ public object ProjectionQueries {
         )
     }
 
-    /** Every player's final projection for one week, with who he is. */
-    public fun weekAll(season: Int, week: Int): SqlQuery = SqlQuery(
+    /** Every player's [stage] projection for one week ("final", or "model": the model alone before ESPN), with who he is. */
+    public fun weekAll(season: Int, week: Int, stage: String = "final"): SqlQuery = SqlQuery(
         """
         SELECT p.player_id, pl.full_name, pl.position, pl.team, p.metric_id, p.mean, p.variance, m.dist_family
         FROM player_week_projection p
         JOIN player pl ON pl.player_id = p.player_id
         LEFT JOIN metric m ON m.id = p.metric_id
-        WHERE p.season = ? AND p.week = ? AND p.stage = 'final'
+        WHERE p.season = ? AND p.week = ? AND p.stage = ?
         """.trimIndent(),
-        listOf(Bind.Integer(season.toLong()), Bind.Integer(week.toLong())),
+        listOf(Bind.Integer(season.toLong()), Bind.Integer(week.toLong()), Bind.Text(stage)),
     )
 
     /** ESPN's own projection for [week], in the app's metric ids, shaped like [weekAll] (variance 0). */

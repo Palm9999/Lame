@@ -3,6 +3,7 @@ package dev.gridiron.feature.projections
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -56,6 +57,26 @@ class DifferScreenTest {
         compose.onNodeWithTag("differ:below").performClick()
         compose.onNodeWithText("Espn Likes").assertIsDisplayed()
         compose.onAllNodesWithText("App Likes").assertCountEquals(0)
+    }
+
+    @Test
+    fun `model alone compares the model's own number, and hides without one`() {
+        val model = listOf(wr("b", "Espn Likes", 8.0, 100.0))
+        compose.setContent {
+            GridironTheme { DifferScreen(DifferState.Loaded(6, app, espn, model), ScoringPresets.PPR, null, emptySet(), {}, onBack = {}) }
+        }
+        compose.onNodeWithText("App Likes").assertIsDisplayed()
+        compose.onNodeWithTag("differ:model").performClick()
+        compose.onNodeWithText("Model 18.0 · ESPN 12.0").assertIsDisplayed()
+        compose.onAllNodesWithText("App Likes").assertCountEquals(0)
+    }
+
+    @Test
+    fun `without a stored model there is no model chip`() {
+        compose.setContent {
+            GridironTheme { DifferScreen(DifferState.Loaded(6, app, espn), ScoringPresets.PPR, null, emptySet(), {}, onBack = {}) }
+        }
+        compose.onAllNodesWithTag("differ:model").assertCountEquals(0)
     }
 
     @Test

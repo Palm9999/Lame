@@ -327,6 +327,8 @@ internal class Projector(
                 if (referencePoints(shown) >= K.UPCOMING_MIN_POINTS) {
                     emit(d.player.playerId, state.season, state.week, "baseline", prepared.baseline, cv)
                     emit(d.player.playerId, state.season, state.week, "final", shown, cv)
+                    // The model alone (no ESPN, props or Questionable discount), for Where we differ.
+                    if (espn != null) emit(d.player.playerId, state.season, state.week, "model", scripted, cv)
                     emitFactors(state, prepared, game, afterMatchup, scripted, ifPlaying, espn, withProps)
                     practice?.let {
                         sink.factor(
