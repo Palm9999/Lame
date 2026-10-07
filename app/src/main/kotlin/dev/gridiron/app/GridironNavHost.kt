@@ -340,7 +340,11 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                     }
                     entry<TdRegressionKey> { key ->
                         deps.tdRegression?.let { repo ->
-                            TdRegressionRoute(key.season, repo, onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion)
+                            TdRegressionRoute(
+                                key.season, repo, onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
+                                league = deps.league?.rostered ?: flowOf(null),
+                                myTeam = deps.league?.myTeam ?: flowOf(null),
+                            )
                         }
                     }
                     entry<DifferKey> { key ->

@@ -36,6 +36,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.gridiron.core.data.TdRegressionBoard
 import dev.gridiron.core.data.TdRegressionRepository
 import dev.gridiron.core.data.TdRegressionRow
+import dev.gridiron.core.data.live.LeagueRostered
+import dev.gridiron.core.data.live.MyTeam
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -54,8 +56,13 @@ public fun TdRegressionRoute(
     onBack: () -> Unit,
     /** Bumped when a refresh swaps in new stats: the board loads again. */
     dataVersion: Flow<Long> = flowOf(0L),
+    /** Everyone on a league team, for the owner tags; null when no league is synced. */
+    league: Flow<LeagueRostered?> = flowOf(null),
+    myTeam: Flow<MyTeam?> = flowOf(null),
 ) {
     val version by dataVersion.collectAsStateWithLifecycle(initialValue = 0L)
+    val taken by league.collectAsStateWithLifecycle(initialValue = null)
+    val team by myTeam.collectAsStateWithLifecycle(initialValue = null)
     val board by produceState<Result<TdRegressionBoard>?>(null, season, version) {
         value = try {
             Result.success(repository.board(season))
@@ -65,14 +72,25 @@ public fun TdRegressionRoute(
             Result.failure(e)
         }
     }
-    TdRegressionScreen(board, onPlayer, onBack)
+    TdRegressionScreen(
+        board, onPlayer, onBack,
+        taken?.takeIf { it.season == season },
+        team?.takeIf { it.season == season }?.players?.mapNotNull { it.playerId }?.toSet().orEmpty(),
+    )
 }
 
 private const val SHOWN = 25
 
 @Composable
-public fun TdRegressionScreen(board: Result<TdRegressionBoard>?, onPlayer: (String) -> Unit, onBack: () -> Unit) {
+public fun TdRegressionScreen(
+    board: Result<TdRegressionBoard>?,
+    onPlayer: (String) -> Unit,
+    onBack: () -> Unit,
+    league: LeagueRostered? = null,
+    mine: Set<String> = emptySet(),
+) {
     var cold by rememberSaveable { mutableStateOf(false) }
+    var freeOnly by rememberSaveable { mutableStateOf(false) }
     var position by rememberSaveable { mutableStateOf<String?>(null) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -99,16 +117,29 @@ public fun TdRegressionScreen(board: Result<TdRegressionBoard>?, onPlayer: (Stri
                         for (code in listOf(null, "QB", "RB", "WR", "TE")) {
                             FilterChip(selected = position == code, onClick = { position = code }, label = { Text(code ?: "All") })
                         }
+                        if (league != null) {
+                            FilterChip(selected = freeOnly, onClick = { freeOnly = !freeOnly }, label = { Text("Free agents") }, modifier = Modifier.testTag("chip:free"))
+                        }
                     }
                     val rows = loaded.rows.filter { (position == null || it.position == position) && (if (cold) it.gap < 0 else it.gap > 0) }
                         .let { if (cold) it.asReversed() else it }
+                        .map { it to ownerOf(it.playerId, league, mine) }
+                        .filter { (_, owner) -> !freeOnly || owner == Owner.FreeAgent }
                         .take(SHOWN)
                     LazyColumn(Modifier.fillMaxSize()) {
-                        items(rows, key = { it.playerId }) { row ->
+                        items(rows, key = { (row, _) -> row.playerId }) { (row, owner) ->
                             Column(Modifier.fillMaxWidth().clickable { onPlayer(row.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp).testTag("td:${row.playerId}")) {
                                 Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                 Text(
-                                    listOfNotNull(row.position, row.team, tdLine(row)).joinToString(" · "),
+                                    listOfNotNull(
+                                        row.position, row.team, tdLine(row),
+                                        when (owner) {
+                                            Owner.FreeAgent -> "Free agent"
+                                            Owner.Yours -> "Yours"
+                                            is Owner.Other -> "On ${owner.team}"
+                                            null -> null
+                                        },
+                                    ).joinToString(" · "),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
