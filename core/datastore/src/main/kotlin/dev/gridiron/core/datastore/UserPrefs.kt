@@ -76,6 +76,8 @@ public data class AlertSwitches(
     val summary: Boolean = true,
     /** Holds injury and news alerts from 10 pm to 8 am; off unless turned on. */
     val quiet: Boolean = false,
+    /** Rebuilds the stats Saturday night and Sunday morning, after the final injury reports; on unless turned off. */
+    val refresh: Boolean = true,
 ) {
     /** True while any alert needs the two-hourly check. */
     public val any: Boolean get() = injury || news || lineup || summary

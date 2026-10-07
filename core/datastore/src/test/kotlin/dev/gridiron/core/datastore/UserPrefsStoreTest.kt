@@ -140,6 +140,9 @@ class UserPrefsStoreTest {
     @Test
     fun `quiet hours are off in an older file, survive a reopen and hold 10 pm to 8 am`() {
         assertEquals(false, withStore { it.prefs.first() }.alerts.quiet)
+        assertEquals(true, withStore { it.prefs.first() }.alerts.refresh)
+        withStore { store -> store.update { it.copy(alerts = it.alerts.copy(refresh = false)) } }
+        assertEquals(false, withStore { it.prefs.first() }.alerts.refresh)
         withStore { store -> store.update { it.copy(alerts = it.alerts.copy(quiet = true)) } }
         val quiet = withStore { it.prefs.first() }.alerts
         assertEquals(true, quiet.quiet)

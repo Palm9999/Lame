@@ -47,7 +47,9 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** the 2026-10-07 round (the user took all eight, order mine): (1) quiet hours, (2) daily waiver snapshot, (3) return outlook on the Injury report, (4) dynasty values in Trade and on the Player page, (5) Grid and Compare share cards are built (below); of the accuracy leads, (6) the rest-of-season injury discount shipped (below) and (7) TE handcuff and (8) ESPN QB rushing TDs are under "Tried and rejected". No untried accuracy leads are left. Nothing else is pending: offer the next round as a short pick-list.
+**Next:** the 2026-10-07 second round: the user asked for the pick-list (1 Ask Gridiron with the user's own Anthropic key, 2 game-day refresh, 3 TD regression board, 4 player comps, 5 mock draft simulator, 6 usage trend charts, 7 matchup preview) and said start where I want; (2) game-day refresh is built (below). Continue with (1), then the rest in list order unless the user redirects.
+
+**Just built: Game-day refresh** (Settings → Alerts, on by default, prefs `gameDayRefresh`): `GameDayRefreshWorker` (WorkManager, needs a network) runs `RefreshCoordinator.refreshAndWait` Saturday 10 pm and Sunday 9 am local, then appends the next run; a run Android kills is retried by WorkManager. Pure `nextGameDayRefresh` is tested.
 
 **Just built: Rest-of-season injury discount** (`FORECAST_VERSION` 18): a player nflverse lists Out or Doubtful this week keeps rest of season from the healthy roster, each coming game times the chance such a player has played by then (`returnCurve` in `:core:forecast`, every past listing in the database, 8 games deep, pooled statuses and positions). Proxy backtest on 2022-2025 (no past rest-of-season rows are stored): his next four games' PPR points, missed ones zero, against season average × games: MAE 23.8 → 11.0 (−12.8 ±1.5, 553 listings, leave-one-season-out curve), bias +22.3 → +0.8. Checked on the real 2026 build with a simulated Out listing: Puka Nacua's weekly receiving yards 95 → 27, 49, 67, 70, then about 80. A Tuesday build has no week's listings yet, so it changes nothing until Wednesday-Friday.
 
@@ -98,6 +100,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - **Places read best first** ("1st of 62", never "percentile" wording; 2026-10-03). **My players** are always listed, unranked below the bar (2026-10-03). **Several leagues:** one active league, one shared login, every league's team a roster (2026-10-03). **Matchups:** ESPN's numbers lead, the app's beside them (2026-10-01).
 
 ## Deferred minors
+
+**Deferred minors (game-day refresh):** fixed times (no picker), every week of the year (offseason runs too); no notification when it finishes (the Finished toast shows only if the app is open); a Thursday or Monday game gets no refresh of its own; it lives under Alerts though it isn't one.
 
 **Deferred minors (claim plan):** the adds are each valued alone (two adds' combined value isn't checked); bids use the same judgment curve as before; a drop needed for roster room on an open spot counts as distinct; the section sits at the very bottom of My lineup.
 
@@ -163,6 +167,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Open checks on the phone
 
+- **Game-day refresh:** leave the app closed Saturday evening; Sunday morning, open it: Settings' last refresh time (or the Grid's newest data) should read Saturday 10 pm or Sunday 9 am.
 - **Quiet hours:** Settings → Alerts → Quiet hours on: nothing from injuries or news between 10 pm and 8 am, then the overnight changes arrive after 8.
 - **Daily waiver snapshot:** with alerts on, don't open Waiver trends for a week; then open it: the note should read "over the last week".
 - **Injury report outlook:** More → Injury report: Out, Doubtful and IR rows show "Played again by: wk N …" a moment after the list.

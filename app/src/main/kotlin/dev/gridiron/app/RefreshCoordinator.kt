@@ -111,6 +111,12 @@ class RefreshCoordinator(
         return true
     }
 
+    /** For the game-day job: starts a refresh, or joins the one already running, and waits for it to end. */
+    suspend fun refreshAndWait() {
+        refresh()
+        job?.join()
+    }
+
     override fun acknowledge() {
         _state.update { if (it is RefreshState.Finished) RefreshState.Idle else it }
     }
