@@ -13,6 +13,8 @@ internal data class TeamDefenseRow(
     val safeties: Double,
     /** Kickoffs returned for a TD. Punt return TDs score for defteam, so they're already in [defensiveTds]. */
     val kickReturnTds: Double,
+    /** Punts, field goals and extra points blocked; scored for the D/ST only, not stored in `team_week_defense`. */
+    val blockedKicks: Double = 0.0,
 )
 
 /** One row per (team, season, week): what the defense allowed and took away. Ports `teams.team_defense_from`. */
@@ -32,6 +34,7 @@ internal class TeamDefenseAggregator {
         var tds = 0.0
         var safeties = 0.0
         var kickReturnTds = 0.0
+        var blockedKicks = 0.0
     }
 
     private val games = LinkedHashMap<String, Game>()
@@ -67,6 +70,7 @@ internal class TeamDefenseAggregator {
         a.interceptions += p.interception ?: 0.0
         a.fumbles += p.fumbleLost ?: 0.0
         if (p.tdTeam != null && p.tdTeam == defense) a.tds += p.touchdown ?: 0.0
+        if (p.kickBlocked) a.blockedKicks++
     }
 
     fun rows(): List<TeamDefenseRow> = games.values
@@ -83,7 +87,7 @@ internal class TeamDefenseAggregator {
         return TeamDefenseRow(
             team, g.season, g.week, pointsAllowed,
             a?.yards ?: 0.0, a?.sacks ?: 0.0, a?.interceptions ?: 0.0, a?.fumbles ?: 0.0, a?.tds ?: 0.0,
-            a?.safeties ?: 0.0, a?.kickReturnTds ?: 0.0,
+            a?.safeties ?: 0.0, a?.kickReturnTds ?: 0.0, a?.blockedKicks ?: 0.0,
         )
     }
 }

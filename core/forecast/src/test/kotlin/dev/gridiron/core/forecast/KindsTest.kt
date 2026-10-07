@@ -45,6 +45,6 @@ class KindsTest {
     fun `reference points score kickers' and defenses' stats with the presets' values`() {
         assertEquals(3.0 + 4.0 + 5.0 - 1.0 + 2.0 - 1.0, referencePoints(mapOf("fg_made_0_39" to 1.0, "fg_made_40_49" to 1.0, "fg_made_50" to 1.0, "fg_missed" to 1.0, "xp_made" to 2.0, "xp_missed" to 1.0)), 1e-12)
         // Points allowed need their spread, so UnitProjector adds the tiers; referencePoints ignores them.
-        assertEquals(2.0 + 2.0 + 2.0 + 6.0 + 2.0, referencePoints(mapOf("dst_sacks" to 2.0, "dst_interceptions" to 1.0, "dst_fumble_recoveries" to 1.0, "dst_tds" to 1.0, "dst_safeties" to 1.0, "points_allowed" to 20.0, "g" to 1.0)), 1e-12)
+        assertEquals(2.0 + 2.0 + 2.0 + 6.0 + 2.0 + 2.0, referencePoints(mapOf("dst_sacks" to 2.0, "dst_interceptions" to 1.0, "dst_fumble_recoveries" to 1.0, "dst_tds" to 1.0, "dst_safeties" to 1.0, "dst_blocked_kicks" to 1.0, "points_allowed" to 20.0, "g" to 1.0)), 1e-12)
     }
 }

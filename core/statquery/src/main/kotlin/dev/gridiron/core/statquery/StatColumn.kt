@@ -101,6 +101,13 @@ public enum class StatColumn(
     FTN_OUT_OF_POCKET_RATE("ftn_out_of_pocket_rate", Ratio(C.FTN_OOP_DB, C.FTN_DROPBACKS)),
     FTN_THROWAWAY_RATE("ftn_throwaway_rate", Ratio(C.FTN_THROWAWAY, C.FTN_DROPBACKS), higherIsBetter = false),
     FTN_INT_WORTHY_RATE("ftn_int_worthy_rate", Ratio(C.FTN_INT_WORTHY, C.FTN_ATTEMPTS), higherIsBetter = false),
+    FTN_SCREEN_TARGET_RATE("ftn_screen_target_rate", Ratio(C.FTN_SCREEN_TARGETS, C.FTN_TARGETS)),
+    FTN_MOTION_TARGET_RATE("ftn_motion_target_rate", Ratio(C.FTN_MOTION_TARGETS, C.FTN_TARGETS)),
+    FTN_SCREEN_RATE("ftn_screen_rate", Ratio(C.FTN_SCREEN_DB, C.FTN_DROPBACKS)),
+    FTN_RPO_RATE("ftn_rpo_rate", Ratio(C.FTN_RPO_DB, C.FTN_DROPBACKS)),
+    FTN_NO_HUDDLE_RATE("ftn_no_huddle_rate", Ratio(C.FTN_NO_HUDDLE_DB, C.FTN_DROPBACKS)),
+    FTN_MOTION_RATE("ftn_motion_rate", Ratio(C.FTN_MOTION_DB, C.FTN_DROPBACKS)),
+    FTN_AVG_BOX("ftn_avg_box", Ratio(C.FTN_BOX_SUM, C.FTN_BOX_CARRIES)),
 
     // Kicking (the Grid's K chip)
     FG_MADE("fg_made", Total(C.FG_MADE)),
@@ -117,6 +124,7 @@ public enum class StatColumn(
     DST_FUMBLE_RECOVERIES("dst_fumble_recoveries", Total(C.DST_FUMBLE_RECOVERIES)),
     DST_TDS("dst_tds", Total(C.DST_TDS)),
     DST_SAFETIES("dst_safeties", Total(C.DST_SAFETIES)),
+    DST_BLOCKED_KICKS("dst_blocked_kicks", Total(C.DST_BLOCKED_KICKS)),
 
     // Fantasy: scored per player-week from the spec's profile.
     FANTASY_POINTS("fantasy_points", Scored(ScoredOutput.FANTASY_POINTS)),
@@ -140,8 +148,10 @@ public enum class StatColumn(
             CPOE, NGS_TIME_TO_THROW, NGS_AGGRESSIVENESS, NGS_INTENDED_AIR_YARDS -> ATTEMPTS
             NGS_RYOE, NGS_RYOE_PER_ATT, NGS_RUSH_EFFICIENCY, NGS_STACKED_BOX_PCT -> CARRIES
             NGS_SEPARATION, NGS_CUSHION, NGS_YAC_OVER_EXPECTED -> TARGETS
-            FTN_CATCHABLE_RATE, FTN_DROP_RATE, FTN_CONTESTED_RATE -> TARGETS
-            FTN_PLAY_ACTION_RATE, FTN_BLITZ_RATE, FTN_OUT_OF_POCKET_RATE, FTN_THROWAWAY_RATE -> DROPBACKS
+            FTN_CATCHABLE_RATE, FTN_DROP_RATE, FTN_CONTESTED_RATE, FTN_SCREEN_TARGET_RATE, FTN_MOTION_TARGET_RATE -> TARGETS
+            FTN_PLAY_ACTION_RATE, FTN_BLITZ_RATE, FTN_OUT_OF_POCKET_RATE, FTN_THROWAWAY_RATE,
+            FTN_SCREEN_RATE, FTN_RPO_RATE, FTN_NO_HUDDLE_RATE, FTN_MOTION_RATE -> DROPBACKS
+            FTN_AVG_BOX -> CARRIES
             FTN_INT_WORTHY_RATE -> ATTEMPTS
             SNAP_SHARE -> OFFENSE_SNAPS
             else -> null

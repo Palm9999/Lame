@@ -91,6 +91,14 @@ public object Components {
     public val FTN_OOP_DB: Component = Component("ftn_oop_db")
     public val FTN_THROWAWAY: Component = Component("ftn_throwaway")
     public val FTN_INT_WORTHY: Component = Component("ftn_int_worthy")
+    public val FTN_SCREEN_TARGETS: Component = Component("ftn_screen_targets")
+    public val FTN_MOTION_TARGETS: Component = Component("ftn_motion_targets")
+    public val FTN_SCREEN_DB: Component = Component("ftn_screen_db")
+    public val FTN_RPO_DB: Component = Component("ftn_rpo_db")
+    public val FTN_NO_HUDDLE_DB: Component = Component("ftn_no_huddle_db")
+    public val FTN_MOTION_DB: Component = Component("ftn_motion_db")
+    public val FTN_BOX_CARRIES: Component = Component("ftn_box_carries")
+    public val FTN_BOX_SUM: Component = Component("ftn_box_sum")
 
     // Scoring inputs. Internal and sparse (absent means zero); read only by
     // the scoring step, which applies the spec's profile per player-week.
@@ -145,6 +153,7 @@ public object Components {
     public val DST_FUMBLE_RECOVERIES: Component = Component("dst_fumble_recoveries")
     public val DST_TDS: Component = Component("dst_tds")
     public val DST_SAFETIES: Component = Component("dst_safeties")
+    public val DST_BLOCKED_KICKS: Component = Component("dst_blocked_kicks")
     public val POINTS_ALLOWED: Component = Component("points_allowed")
     public val YARDS_ALLOWED: Component = Component("yards_allowed")
 }

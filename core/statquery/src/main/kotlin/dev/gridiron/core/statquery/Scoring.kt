@@ -57,6 +57,7 @@ public val RULE_INPUTS: Map<ScoringRule, RuleInputs> = mapOf(
     ScoringRule.DST_FUMBLE_RECOVERY to on(C.DST_FUMBLE_RECOVERIES),
     ScoringRule.DST_TD to on(C.DST_TDS),
     ScoringRule.DST_SAFETY to on(C.DST_SAFETIES),
+    ScoringRule.DST_BLOCKED_KICK to on(C.DST_BLOCKED_KICKS),
 )
 
 public val BONUS_INPUTS: Map<BonusStat, List<Component>> = mapOf(

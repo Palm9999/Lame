@@ -11,7 +11,8 @@ class FtnPacksTest {
         assertEquals(
             listOf(
                 StatColumn.FTN_PLAY_ACTION_RATE, StatColumn.FTN_BLITZ_RATE, StatColumn.FTN_OUT_OF_POCKET_RATE,
-                StatColumn.FTN_THROWAWAY_RATE, StatColumn.FTN_INT_WORTHY_RATE, StatColumn.DROPBACKS,
+                StatColumn.FTN_THROWAWAY_RATE, StatColumn.FTN_INT_WORTHY_RATE, StatColumn.FTN_SCREEN_RATE,
+                StatColumn.FTN_RPO_RATE, StatColumn.FTN_MOTION_RATE, StatColumn.FTN_NO_HUDDLE_RATE, StatColumn.DROPBACKS,
             ),
             StatPack.FTN_PASSING.columns,
         )
@@ -25,12 +26,19 @@ class FtnPacksTest {
         assertEquals(
             listOf(
                 StatColumn.FTN_CATCHABLE_RATE, StatColumn.FTN_DROP_RATE, StatColumn.FTN_CONTESTED_RATE,
-                StatColumn.FTN_DROPS, StatColumn.FTN_CREATED_REC, StatColumn.TARGETS,
+                StatColumn.FTN_DROPS, StatColumn.FTN_CREATED_REC, StatColumn.FTN_SCREEN_TARGET_RATE,
+                StatColumn.FTN_MOTION_TARGET_RATE, StatColumn.TARGETS,
             ),
             StatPack.FTN_RECEIVING.columns,
         )
         assertEquals(StatColumn.FTN_CATCHABLE_RATE, StatPack.FTN_RECEIVING.defaultSort)
         assertEquals(StatColumn.TARGETS, StatPack.FTN_RECEIVING.population)
+    }
+
+    @Test
+    fun `FTN Rushing ranks the box count by carries`() {
+        assertEquals(listOf(StatColumn.FTN_AVG_BOX, StatColumn.CARRIES), StatPack.FTN_RUSHING.columns)
+        assertEquals(StatColumn.CARRIES, StatPack.FTN_RUSHING.population)
     }
 
     @Test

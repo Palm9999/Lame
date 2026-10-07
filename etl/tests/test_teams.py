@@ -59,18 +59,33 @@ def test_a_safety_goes_to_the_team_that_scored_it_and_a_kickoff_return_td_to_the
     assert out["BUF"]["defensive_tds"] == 1
 
 
+def test_a_blocked_punt_field_goal_or_extra_point_is_the_defenses():
+    base = {"season": 2025, "week": 1, "season_type": "REG", "game_id": "g1", "home_team": "KC", "away_team": "BUF",
+            "yards_gained": 0, "sack": 0, "interception": 0, "fumble_lost": 0, "safety": 0, "touchdown": 0,
+            "td_team": None, "total_home_score": 0, "total_away_score": 0, "punt_blocked": 0,
+            "field_goal_result": None, "extra_point_result": None}
+    plays = pl.LazyFrame([
+        {**base, "posteam": "BUF", "defteam": "KC", "play_type": "punt", "punt_blocked": 1},
+        {**base, "posteam": "BUF", "defteam": "KC", "play_type": "field_goal", "field_goal_result": "blocked"},
+        {**base, "posteam": "KC", "defteam": "BUF", "play_type": "extra_point", "extra_point_result": "blocked"},
+        {**base, "posteam": "KC", "defteam": "BUF", "play_type": "field_goal", "field_goal_result": "missed"},
+    ])
+    out = {r["team"]: r for r in teams.team_defense_from(plays).to_dicts()}
+    assert (out["KC"]["blocked_kicks"], out["BUF"]["blocked_kicks"]) == (2, 1)
+
+
 def _defense(points: float) -> pl.DataFrame:
     return pl.DataFrame([{"team": "KC", "season": 2025, "week": 1, "points_allowed": points,
                           "yards_allowed": 300.0, "sacks": 3.0, "interceptions": 1.0,
                           "fumbles_recovered": 2.0, "defensive_tds": 1.0, "safeties": 1.0,
-                          "kick_return_tds": 1.0}])
+                          "kick_return_tds": 1.0, "blocked_kicks": 1.0}])
 
 
 def test_a_team_week_becomes_its_team_defenses_week():
     row = teams.dst_weekly(_defense(17)).to_dicts()[0]
     assert (row["player_id"], row["team"], row["g"]) == ("DST_KC", "KC", 1)
     assert (row["dst_sacks"], row["dst_interceptions"], row["dst_fumble_recoveries"]) == (3, 1, 2)
-    assert (row["dst_tds"], row["dst_safeties"], row["points_allowed"]) == (2, 1, 17)
+    assert (row["dst_tds"], row["dst_safeties"], row["dst_blocked_kicks"], row["points_allowed"]) == (2, 1, 1, 17)
     assert not any(k.startswith("pa_") for k in row), "tiers are the profile's, never stored"
 
 

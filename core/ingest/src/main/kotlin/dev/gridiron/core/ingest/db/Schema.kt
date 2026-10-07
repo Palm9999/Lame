@@ -13,7 +13,7 @@ public const val SCHEMA_VERSION: Int = 12
  * Bump whenever a transform, the schema or an input's meaning changes: a build
  * only copies a season out of a previous database built with the same version.
  */
-public const val INGEST_VERSION: Int = 8
+public const val INGEST_VERSION: Int = 9
 
 internal const val SOURCE_NOTE: String = "nflverse-data (CC BY 4.0); FTN Data via nflverse (CC BY-SA 4.0); ffopportunity expected points (GPL >= 3)"
 
@@ -111,7 +111,8 @@ internal val UNWINDOWED_METRICS: List<String> = listOf(
     "adot", "air_yards_share", "carry_share", "catch_rate", "cpoe", "epa_per_dropback", "racr",
     "rush_epa_per_carry", "rush_success_rate", "snap_share", "target_share", "wopr",
     "ftn_blitz_rate", "ftn_catchable_rate", "ftn_contested_rate", "ftn_drop_rate", "ftn_int_worthy_rate",
-    "ftn_out_of_pocket_rate", "ftn_play_action_rate", "ftn_throwaway_rate",
+    "ftn_out_of_pocket_rate", "ftn_play_action_rate", "ftn_throwaway_rate", "ftn_screen_target_rate", "ftn_motion_target_rate",
+    "ftn_screen_rate", "ftn_rpo_rate", "ftn_no_huddle_rate", "ftn_motion_rate", "ftn_avg_box",
     "ngs_aggressiveness", "ngs_cushion", "ngs_intended_air_yards", "ngs_rush_efficiency", "ngs_ryoe_per_att",
     "ngs_separation", "ngs_stacked_box_pct", "ngs_time_to_throw", "ngs_yac_over_expected",
     "fg_att_0_39", "fg_att_40_49", "fg_att_50", "rec_epa",

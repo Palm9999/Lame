@@ -44,7 +44,7 @@ internal fun referencePoints(components: Map<String, Double>): Double {
         v("receptions") + 0.1 * v("receiving_yards") + 6 * v("receiving_tds") +
         2 * (v("passing_2pt") + v("rushing_2pt") + v("receiving_2pt")) - 2 * v("fumbles_lost") +
         3 * v("fg_made_0_39") + 4 * v("fg_made_40_49") + 5 * v("fg_made_50") - v("fg_missed") + v("xp_made") - v("xp_missed") +
-        v("dst_sacks") + 2 * (v("dst_interceptions") + v("dst_fumble_recoveries") + v("dst_safeties")) + 6 * v("dst_tds")
+        v("dst_sacks") + 2 * (v("dst_interceptions") + v("dst_fumble_recoveries") + v("dst_safeties") + v("dst_blocked_kicks")) + 6 * v("dst_tds")
 }
 
 internal fun ordinal(n: Int): String {

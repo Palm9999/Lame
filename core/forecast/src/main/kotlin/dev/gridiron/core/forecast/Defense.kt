@@ -4,7 +4,7 @@ import kotlin.math.pow
 import kotlin.math.sqrt
 
 /** The D/ST stats projected as rates. Points allowed are projected beside them, as a mean and a spread. */
-internal val DST_STATS: List<String> = listOf("dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties")
+internal val DST_STATS: List<String> = listOf("dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "dst_blocked_kicks")
 
 internal const val POINTS_ALLOWED: String = "points_allowed"
 

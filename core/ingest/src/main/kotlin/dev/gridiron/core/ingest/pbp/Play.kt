@@ -28,7 +28,7 @@ internal val PBP_COLUMNS: List<String> = listOf(
     "total_home_score", "total_away_score",
     "kicker_player_id", "field_goal_attempt", "field_goal_result", "kick_distance",
     "extra_point_attempt", "extra_point_result", "safety", "posteam_score", "posteam_score_post",
-    "play_id",
+    "play_id", "punt_blocked",
 )
 
 internal class Play(
@@ -85,7 +85,12 @@ internal class Play(
     val posteamScorePost: Double?,
     /** With [gameId], the key FTN charting joins on. */
     val playId: Int? = null,
+    val puntBlocked: Double? = null,
 ) {
+    /** A punt, field goal or extra point the defense (defteam) blocked. */
+    val kickBlocked: Boolean
+        get() = (puntBlocked ?: 0.0) > 0.0 || fieldGoalResult == "blocked" || extraPointResult == "blocked"
+
     /** False for kneels and spikes: see [RATE_EXCLUDED_PLAY_TYPES]. */
     val isEfficiency: Boolean get() = playType !in RATE_EXCLUDED_PLAY_TYPES
 }
@@ -115,7 +120,7 @@ private fun CsvRow.toPlay(): Play? {
         fieldGoalResult = text("field_goal_result"), kickDistance = double("kick_distance"),
         extraPointAttempt = double("extra_point_attempt"), extraPointResult = text("extra_point_result"),
         safety = double("safety"), posteamScore = double("posteam_score"), posteamScorePost = double("posteam_score_post"),
-        playId = int("play_id"),
+        playId = int("play_id"), puntBlocked = double("punt_blocked"),
     )
 }
 

@@ -251,7 +251,7 @@ class RealDatabaseContractTest {
             w(ScoringRule.XP_MADE) * v("xp_made") + w(ScoringRule.XP_MISSED) * v("xp_missed") +
             w(ScoringRule.DST_SACK) * v("dst_sacks") + w(ScoringRule.DST_INTERCEPTION) * v("dst_interceptions") +
             w(ScoringRule.DST_FUMBLE_RECOVERY) * v("dst_fumble_recoveries") + w(ScoringRule.DST_TD) * v("dst_tds") +
-            w(ScoringRule.DST_SAFETY) * v("dst_safeties")
+            w(ScoringRule.DST_SAFETY) * v("dst_safeties") + w(ScoringRule.DST_BLOCKED_KICK) * v("dst_blocked_kicks")
         // Written by hand, not with pointsAllowedPoints: the highest tier starting at or below the points allowed.
         s["points_allowed"]?.let { allowed -> fp += profile.pointsAllowedTiers.last { allowed >= it.min }.points }
         s["yards_allowed"]?.let { allowed -> fp += profile.yardsAllowedTiers.last { allowed >= it.min }.points }

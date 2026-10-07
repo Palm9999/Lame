@@ -288,6 +288,7 @@ _M: list[Metric] = [
             ("dst_fumble_recoveries", "FR", "D/ST Fumble Recoveries", "Opponent fumbles the team recovered."),
             ("dst_tds", "DTD", "D/ST TDs", "Touchdowns by the defense or on a return: interceptions, fumbles, punts, kickoffs and blocked kicks."),
             ("dst_safeties", "SAF", "D/ST Safeties", "Safeties the team's defense scored."),
+            ("dst_blocked_kicks", "BLK", "D/ST Blocked Kicks", "Punts, field goals and extra points the team blocked."),
         ]
     ],
     Metric("points_allowed", "Points Allowed", "PA", "defense",
@@ -404,6 +405,20 @@ _M: list[Metric] = [
              "Share of dropbacks ended with an intentional throwaway, as charted by FTN. Charted from 2022."),
             ("ftn_int_worthy_rate", "IW%", "Interception-Worthy Rate", ("QB",), False, 1,
              "Share of pass attempts FTN charted as interception-worthy, whether or not the defense caught them. Charted from 2022."),
+            ("ftn_screen_target_rate", "SCR%", "Screen Target Rate", ("RB", "WR", "TE"), True, 1,
+             "Share of targets on screen passes, as charted by FTN. A role profile. Charted from 2022."),
+            ("ftn_motion_target_rate", "MOT%", "Motion Target Rate", ("RB", "WR", "TE"), True, 1,
+             "Share of targets on plays with pre-snap motion, as charted by FTN. A scheme profile. Charted from 2022."),
+            ("ftn_screen_rate", "SCRN%", "Screen Rate", ("QB",), True, 1,
+             "Share of dropbacks that were screen passes, as charted by FTN. A scheme profile. Charted from 2022."),
+            ("ftn_rpo_rate", "RPO%", "RPO Rate", ("QB",), True, 1,
+             "Share of dropbacks that were run-pass options, as charted by FTN. A scheme profile. Charted from 2022."),
+            ("ftn_no_huddle_rate", "NH%", "No-Huddle Rate", ("QB",), True, 1,
+             "Share of dropbacks run without a huddle, as charted by FTN. A tempo profile. Charted from 2022."),
+            ("ftn_motion_rate", "MTN%", "Motion Rate", ("QB",), True, 1,
+             "Share of dropbacks with pre-snap motion, as charted by FTN. A scheme profile. Charted from 2022."),
+            ("ftn_avg_box", "BOX", "Defenders in Box", ("QB", "RB", "WR", "TE"), True, 2,
+             "Average defenders in the box on his carries, as charted by FTN. A heavy box makes running harder. Charted from 2022."),
         ]
     ],
     *[
@@ -420,6 +435,14 @@ _M: list[Metric] = [
             ("ftn_oop_db", "FTN Out-of-Pocket Dropbacks", "Charted dropbacks where the quarterback left the pocket.", ("QB",)),
             ("ftn_throwaway", "FTN Throwaways", "Charted dropbacks ended with a throwaway.", ("QB",)),
             ("ftn_int_worthy", "FTN Interception-Worthy Throws", "Charted pass attempts FTN marked interception-worthy.", ("QB",)),
+            ("ftn_screen_targets", "FTN Screen Targets", "Charted targets on screen passes.", ("RB", "WR", "TE")),
+            ("ftn_motion_targets", "FTN Motion Targets", "Charted targets on plays with pre-snap motion.", ("RB", "WR", "TE")),
+            ("ftn_screen_db", "FTN Screen Dropbacks", "Charted dropbacks that were screen passes.", ("QB",)),
+            ("ftn_rpo_db", "FTN RPO Dropbacks", "Charted dropbacks that were run-pass options.", ("QB",)),
+            ("ftn_no_huddle_db", "FTN No-Huddle Dropbacks", "Charted dropbacks run without a huddle.", ("QB",)),
+            ("ftn_motion_db", "FTN Motion Dropbacks", "Charted dropbacks with pre-snap motion.", ("QB",)),
+            ("ftn_box_carries", "FTN Box-Counted Carries", "Carries on plays FTN counted the box: the denominator of defenders in box.", ("QB", "RB", "WR", "TE")),
+            ("ftn_box_sum", "FTN Box Defenders", "Defenders in the box summed over his box-counted carries.", ("QB", "RB", "WR", "TE")),
         ]
     ],
 ]
@@ -441,7 +464,7 @@ DIST_FAMILIES: dict[str, str] = {
     **{m: "poisson" for m in (
         "fg_att", "fg_made", "fg_att_0_39", "fg_att_40_49", "fg_att_50", "fg_made_0_39", "fg_made_40_49",
         "fg_made_50", "fg_missed", "xp_att", "xp_made", "xp_missed",
-        "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties",
+        "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "dst_blocked_kicks",
     )},
     "dst_sacks": "negbinom",
     "points_allowed": "normal",

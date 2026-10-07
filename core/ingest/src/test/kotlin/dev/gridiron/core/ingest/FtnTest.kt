@@ -16,6 +16,7 @@ class FtnTest {
     private val header = listOf(
         "nflverse_game_id", "nflverse_play_id", "is_play_action", "is_qb_out_of_pocket", "is_interception_worthy",
         "is_throw_away", "is_catchable_ball", "is_contested_ball", "is_created_reception", "is_drop", "n_blitzers",
+        "is_screen_pass", "is_rpo", "is_motion", "is_no_huddle", "n_defense_box",
     )
 
     private fun stream(header: List<String>, vararg rows: Map<String, Any?>) =
@@ -25,13 +26,15 @@ class FtnTest {
         "nflverse_game_id" to "g1", "nflverse_play_id" to 7, "is_play_action" to "FALSE", "is_qb_out_of_pocket" to "FALSE",
         "is_interception_worthy" to "FALSE", "is_throw_away" to "FALSE", "is_catchable_ball" to "FALSE",
         "is_contested_ball" to "FALSE", "is_created_reception" to "FALSE", "is_drop" to "FALSE", "n_blitzers" to 0,
+        "is_screen_pass" to "FALSE", "is_rpo" to "FALSE", "is_motion" to "FALSE", "is_no_huddle" to "FALSE", "n_defense_box" to 0,
     ) + overrides
 
     private fun flags(
         catchable: Boolean = false, contested: Boolean = false, drop: Boolean = false, created: Boolean = false,
         playAction: Boolean = false, outOfPocket: Boolean = false, throwAway: Boolean = false,
-        intWorthy: Boolean = false, blitzers: Int = 0,
-    ) = FtnFlags(catchable, contested, drop, created, playAction, outOfPocket, throwAway, intWorthy, blitzers)
+        intWorthy: Boolean = false, blitzers: Int = 0, screen: Boolean = false, rpo: Boolean = false,
+        motion: Boolean = false, noHuddle: Boolean = false, box: Int = 0,
+    ) = FtnFlags(catchable, contested, drop, created, playAction, outOfPocket, throwAway, intWorthy, blitzers, screen, rpo, motion, noHuddle, box)
 
     /** Runs the aggregator over plays, each with the FTN flags it was charted with (null: FTN has no row for it). */
     private fun run(vararg charted: Pair<Play, FtnFlags?>): List<PlayerWeek> {
@@ -98,6 +101,34 @@ class FtnTest {
         assertEquals(2.0 / 3.0, qb["ftn_play_action_rate"]!!, 1e-12)
         assertEquals(2.0 / 3.0, qb["ftn_blitz_rate"]!!, 1e-12)
         assertEquals(2.0 / 3.0, qb["ftn_out_of_pocket_rate"]!!, 1e-12)
+    }
+
+    @Test
+    fun `screens and motion are credited to the target and the passer, RPO and no-huddle to the passer`() {
+        val rows = run(
+            pass(1) to flags(screen = true, motion = true, rpo = true),
+            pass(2) to flags(noHuddle = true, motion = true),
+            pass(3) to flags(),
+            pass(4) to flags(),
+        )
+        val wr = rows.row("WR1")
+        assertEquals(1.0, wr["ftn_screen_targets"])
+        assertEquals(0.25, wr["ftn_screen_target_rate"])
+        assertEquals(0.5, wr["ftn_motion_target_rate"])
+        val qb = rows.row("QB1")
+        assertEquals(0.25, qb["ftn_screen_rate"])
+        assertEquals(0.25, qb["ftn_rpo_rate"])
+        assertEquals(0.25, qb["ftn_no_huddle_rate"])
+        assertEquals(0.5, qb["ftn_motion_rate"])
+    }
+
+    @Test
+    fun `the box count averages over the rusher's carries FTN counted it on`() {
+        fun carry(playId: Int) = play(playId = playId, playType = "run", rusher = "RB1")
+        val rb = run(carry(1) to flags(box = 8), carry(2) to flags(box = 6), carry(3) to flags(box = 0)).row("RB1")
+        assertEquals(2.0, rb["ftn_box_carries"])
+        assertEquals(14.0, rb["ftn_box_sum"])
+        assertEquals(7.0, rb["ftn_avg_box"])
     }
 
     @Test

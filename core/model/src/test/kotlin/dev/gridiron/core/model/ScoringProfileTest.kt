@@ -78,7 +78,7 @@ class ScoringProfileTest {
 
     @Test
     fun `every rule belongs to a group and has a label`() {
-        assertEquals(36, ScoringRule.entries.size)
+        assertEquals(37, ScoringRule.entries.size)
         assertTrue(ScoringRule.entries.all { it.label.isNotBlank() })
         assertEquals(ScoringGroup.TURNOVERS, ScoringRule.FUMBLE_LOST.group)
     }

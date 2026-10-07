@@ -14,7 +14,7 @@ import polars as pl
 _DEF_COLUMNS = ["season", "week", "season_type", "game_id", "posteam", "defteam", "play_type", "safety",
                 "yards_gained", "sack", "interception", "fumble_lost", "touchdown",
                 "td_team", "home_team", "away_team", "total_home_score", "total_away_score",
-                "posteam_score", "posteam_score_post"]
+                "posteam_score", "posteam_score_post", "punt_blocked", "field_goal_result", "extra_point_result"]
 
 
 def team_defense(pbp_path: Path) -> pl.DataFrame:
@@ -28,7 +28,11 @@ def team_defense_from(lf: pl.LazyFrame) -> pl.DataFrame:
     lf = lf.filter(pl.col("season_type").is_in(["REG", "POST"]))
     num = lambda c: pl.col(c).cast(pl.Float64, strict=False).fill_null(0)  # noqa: E731
     names = lf.collect_schema().names()
-    lf = lf.with_columns(pl.lit(None, pl.Float64).alias(c) for c in ("posteam_score", "posteam_score_post") if c not in names)
+    lf = lf.with_columns(pl.lit(None, pl.Float64).alias(c) for c in ("posteam_score", "posteam_score_post", "punt_blocked") if c not in names)
+    lf = lf.with_columns(pl.lit(None, pl.String).alias(c) for c in ("field_goal_result", "extra_point_result") if c not in names)
+    # A punt, field goal or extra point the defense (defteam) blocked.
+    blocked = ((num("punt_blocked") > 0) | (pl.col("field_goal_result") == "blocked").fill_null(False)
+               | (pl.col("extra_point_result") == "blocked").fill_null(False))
 
     plays = (
         lf.filter(pl.col("defteam").is_not_null())
@@ -39,6 +43,7 @@ def team_defense_from(lf: pl.LazyFrame) -> pl.DataFrame:
             interceptions=num("interception").sum(),
             fumbles_recovered=num("fumble_lost").sum(),
             defensive_tds=(num("touchdown") * (pl.col("td_team") == pl.col("defteam")).fill_null(False)).sum(),
+            blocked_kicks=blocked.cast(pl.Float64).sum(),
         )
         .rename({"defteam": "team"})
     )
@@ -101,6 +106,7 @@ def dst_weekly(defense: pl.DataFrame) -> pl.DataFrame:
         dst_fumble_recoveries=pl.col("fumbles_recovered").cast(pl.Float64),
         dst_tds=(pl.col("defensive_tds") + pl.col("kick_return_tds")).cast(pl.Float64),
         dst_safeties=pl.col("safeties").cast(pl.Float64),
+        dst_blocked_kicks=pl.col("blocked_kicks").cast(pl.Float64),
         points_allowed=pl.col("points_allowed").cast(pl.Float64),
         yards_allowed=pl.col("yards_allowed").cast(pl.Float64),
     )
