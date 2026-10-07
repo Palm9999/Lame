@@ -47,6 +47,7 @@ import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.InjuryReturnRepository
 import dev.gridiron.core.data.Kickoffs
 import dev.gridiron.core.data.DynastyRepository
+import dev.gridiron.core.data.TdRegressionRepository
 import dev.gridiron.core.data.OpportunitiesRepository
 import dev.gridiron.core.data.dynastyFormat
 import dev.gridiron.core.data.OpportunitiesResult
@@ -76,6 +77,7 @@ import dev.gridiron.feature.compare.CompareRoute
 import dev.gridiron.feature.players.GridRoute
 import dev.gridiron.feature.projections.AccuracyRoute
 import dev.gridiron.feature.projections.BreakoutsRoute
+import dev.gridiron.feature.projections.TdRegressionRoute
 import dev.gridiron.feature.projections.ActivityRoute
 import dev.gridiron.feature.projections.DifferRoute
 import dev.gridiron.feature.projections.DynastyRoute
@@ -135,6 +137,8 @@ data class Deps(
     val waiverTrends: WaiverTrendsRepository? = null,
     /** FantasyCalc's dynasty values; null where a test doesn't need them. */
     val dynasty: DynastyRepository? = null,
+    /** The TD regression board; null where a test doesn't need it. */
+    val tdRegression: TdRegressionRepository? = null,
 )
 
 /**
@@ -197,6 +201,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
         if (deps.opportunities != null) add(MoreItem("Players", "Opportunities", "Who moves up when a starter is hurt") { backStack.push(OpportunitiesKey(season)) })
         if (deps.breakouts != null) add(MoreItem("Players", "Rising roles", "Roles growing over the last four games") { backStack.push(BreakoutsKey(season)) })
         add(MoreItem("Players", "Where we differ", "The app against ESPN this week") { backStack.push(DifferKey(season)) })
+        if (deps.tdRegression != null) add(MoreItem("Players", "TD regression", "Touchdowns above or below expected: sell high, buy low") { backStack.push(TdRegressionKey(season)) })
         add(MoreItem("Players", "Injury report", "ESPN's live list and practice") { backStack.push(InjuriesKey(season)) })
         add(MoreItem("Players", "Team defense", "Each defense's season") { backStack.push(DefenseKey(season)) })
         if (deps.league != null) add(MoreItem("League", "ESPN leagues", "Sync, teams and matchups") { backStack.push(LeagueKey) })
@@ -238,6 +243,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 if (deps.opportunities != null) add("Opportunities" to { s: Int -> backStack.push(OpportunitiesKey(s)) })
                                 if (deps.breakouts != null) add("Rising roles" to { s: Int -> backStack.push(BreakoutsKey(s)) })
                                 add("Where we differ" to { s: Int -> backStack.push(DifferKey(s)) })
+                                if (deps.tdRegression != null) add("TD regression" to { s: Int -> backStack.push(TdRegressionKey(s)) })
                                 add("Projection accuracy" to { s: Int -> backStack.push(AccuracyKey(s)) })
                                 if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
                                 if (deps.scores != null) add("Scores" to { s: Int -> backStack.push(ScoresKey(s)) })
@@ -327,6 +333,11 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 league = deps.league?.rostered ?: flowOf(null),
                                 myTeam = deps.league?.myTeam ?: flowOf(null),
                             )
+                        }
+                    }
+                    entry<TdRegressionKey> { key ->
+                        deps.tdRegression?.let { repo ->
+                            TdRegressionRoute(key.season, repo, onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion)
                         }
                     }
                     entry<DifferKey> { key ->

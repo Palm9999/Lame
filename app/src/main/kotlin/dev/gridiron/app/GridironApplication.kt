@@ -10,6 +10,7 @@ import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.InjuryReturnRepository
 import dev.gridiron.core.data.DynastyRepository
+import dev.gridiron.core.data.TdRegressionRepository
 import dev.gridiron.core.data.OpportunitiesRepository
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerStatsRepository
@@ -246,6 +247,7 @@ class GridironApplication : Application() {
             returns = InjuryReturnRepository(executor),
             waiverTrends = waiverTrends,
             dynasty = DynastyRepository(UrlConnectionHttpGet(), players),
+            tdRegression = TdRegressionRepository(executor),
         )
     }
 
