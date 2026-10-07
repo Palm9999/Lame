@@ -38,6 +38,9 @@ import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.BreakoutRow
 import dev.gridiron.core.charts.ordinal
+import dev.gridiron.core.data.COMP_METRICS
+import dev.gridiron.core.data.CompSeason
+import dev.gridiron.core.data.CompsRepository
 import dev.gridiron.core.data.DynastyValue
 import dev.gridiron.core.data.InjuryReturnRepository
 import dev.gridiron.core.model.ScoringProfile
@@ -93,6 +96,8 @@ data class PlayerPage(
     val statsUnavailable: Boolean = false,
     /** How soon he is likely back, while he is Out, Doubtful or on IR; null otherwise or with too little history. */
     val returnOutlook: ReturnOutlook? = null,
+    /** The five closest seasons by other players at his position (`CompsRepository`); empty without enough games. */
+    val comps: List<CompSeason> = emptyList(),
     /** "5,200 · 34th of 420 · 8th of 95 RBs · redraft 3,100": his FantasyCalc dynasty value; null when unpriced. */
     val dynasty: String? = null,
 )
@@ -122,6 +127,10 @@ fun PlayerRoute(
     returns: InjuryReturnRepository? = null,
     /** FantasyCalc's dynasty values under the profile's format; empty leaves the line out. */
     dynastyValues: suspend (profile: ScoringProfile) -> List<DynastyValue> = { emptyList() },
+    /** Similar seasons by other players. */
+    comps: CompsRepository? = null,
+    /** Opens another player's page (a similar season). */
+    onPlayer: (String) -> Unit = {},
 ) {
     val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList<Roster>()) }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -172,6 +181,13 @@ fun PlayerRoute(
         } catch (e: Exception) {
             null // never costs the rest of the page
         }
+        val similar = try {
+            comps?.comps(playerId, card?.season ?: currentSeason(), header?.position).orEmpty()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList() // never costs the rest of the page
+        }
         page = PlayerPage(
             header = header,
             status = status,
@@ -181,6 +197,7 @@ fun PlayerRoute(
             projection = card,
             risingRole = rising,
             returnOutlook = outlook,
+            comps = similar,
             dynasty = dynasty,
         )
     }
@@ -213,6 +230,7 @@ fun PlayerRoute(
         },
         onManageRosters = onManageRosters,
         onSeason = { season = it },
+        onPlayer = onPlayer,
     )
 }
 
@@ -229,6 +247,7 @@ fun PlayerScreen(
     rosters: List<Roster>? = null,
     onRosterToggle: (rosterId: String, on: Boolean) -> Unit = { _, _ -> },
     onManageRosters: () -> Unit = {},
+    onPlayer: (String) -> Unit = {},
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -278,6 +297,15 @@ fun PlayerScreen(
                 page.dynasty?.let { text ->
                     item { SectionTitle("Dynasty value") }
                     item { Text(text, Modifier.padding(horizontal = 16.dp).testTag("dynasty"), style = MaterialTheme.typography.bodyMedium) }
+                }
+                if (page.comps.isNotEmpty()) {
+                    item { SectionTitle("Similar seasons") }
+                    items(page.comps, key = { "comp:${it.playerId}:${it.season}" }) { c ->
+                        Column(Modifier.fillMaxWidth().clickable { onPlayer(c.playerId) }.padding(horizontal = 16.dp, vertical = 4.dp).testTag("comp:${c.playerId}")) {
+                            Text("${c.name} · ${c.season}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                            Text(compLine(page.header?.position, c), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
                 rosters?.let { list ->
                     item { SectionTitle("Rosters") }
@@ -426,3 +454,14 @@ internal fun dynastyLine(playerId: String, values: List<DynastyValue>): String? 
         "redraft ${String.format(Locale.US, "%,d", v.redraftValue)}",
     ).joinToString(" · ")
 }
+
+/** "6.1 TGT · 4.2 REC · 61 REC YDS a game": the first three of his position's comp metrics. */
+internal fun compLine(position: String?, c: CompSeason): String {
+    val names = COMP_METRICS[position].orEmpty().take(3).map { COMP_LABELS[it] ?: it }
+    return names.zip(c.perGame).joinToString(" · ") { (n, v) -> String.format(Locale.US, if (v >= 20) "%.0f %s" else "%.1f %s", v, n) } + " a game"
+}
+
+private val COMP_LABELS = mapOf(
+    "attempts" to "ATT", "passing_yards" to "PASS YDS", "passing_tds" to "PASS TD", "carries" to "CAR",
+    "rushing_yards" to "RUSH YDS", "rushing_tds" to "RUSH TD", "targets" to "TGT", "receptions" to "REC", "receiving_yards" to "REC YDS",
+)
