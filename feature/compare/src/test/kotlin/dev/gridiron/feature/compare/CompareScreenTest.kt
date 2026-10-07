@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.gridiron.core.data.Catalog
@@ -111,6 +112,21 @@ class CompareScreenTest {
         val (a, b) = topIds(StatPack.RECEIVING, PositionFilter.WR, 2)
         show(ready(CompareSlot(a, 2025, season2025), CompareSlot(b, 2025, season2025)))
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/compare_1_bars.png")
+    }
+
+    @Test
+    fun shareOpensACardOfBothPlayersFirstStats() {
+        val (a, b) = topIds(StatPack.RECEIVING, PositionFilter.WR, 2)
+        val state = ready(CompareSlot(a, 2025, season2025), CompareSlot(b, 2025, season2025))
+        val card = compareCard(state.page)
+        assertEquals(state.page.slots.joinToString(" vs ") { it.name }, card.title)
+        assertEquals("PPR", card.subtitle)
+        assertEquals(2, card.headers.size)
+        assertTrue(card.rows.isNotEmpty() && card.rows.all { it.second.size == 2 })
+        show(state)
+        compose.onNodeWithTag("share:compare").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("share:send").assertExists()
     }
 
     @Test

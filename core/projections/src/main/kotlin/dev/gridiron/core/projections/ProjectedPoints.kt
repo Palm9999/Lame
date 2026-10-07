@@ -17,15 +17,18 @@ public const val DST_POINTS_YARDS_CORRELATION: Double = 0.67
  * How much farther than the simulation's 10th and 90th percentiles each
  * position's floor and ceiling sit from the projection. The simulation draws
  * every stat independently, and TD counts ignore the projected variance, so
- * its range alone held only 53-65% of real games. These factors were fitted
- * on the 2024 and 2025 backtests (pooled) so the range holds about 80% at
- * each position (spec section 4's calibration target). K and D/ST were
- * fitted the same way when they arrived (sub-project 4), over every week
- * they're measured on: a kicker's simulation alone already holds 87%, so K
- * has no factor.
+ * its range alone held only 58-76% of real games (a kicker's 86%). These
+ * factors make it hold about 80% at each position (spec section 4's
+ * calibration target): refitted 2026-10-04 on top of the ESPN blend, under
+ * PPR, on a 2021-2025 build's 2022-2025 backtests pooled (2021 is a cold
+ * start), each the smallest factor holding 80%; fitted season by season they
+ * stay within about 0.1 of these (D/ST 0.2). K has no factor. Refit whenever
+ * a forecast layer changes the error's spread: dump each counted
+ * player-week's points, unwidened p10 and p90, and actual score, then
+ * bisect each position's factor on the same rule as [calibratedRange].
  */
 public val RANGE_WIDENING: Map<Position, Double> = mapOf(
-    Position.QB to 1.40, Position.RB to 1.59, Position.WR to 1.52, Position.TE to 1.40,
+    Position.QB to 1.27, Position.RB to 1.46, Position.WR to 1.38, Position.TE to 1.24,
     Position.DST to 1.22,
 )
 
@@ -47,6 +50,16 @@ public fun calibratedRange(
     val floor = minOf(p10, maxOf(points - k * (points - p10), minOf(p10, 0.0)))
     val ceiling = maxOf(p90, points + k * (p90 - points))
     return floor to ceiling
+}
+
+/**
+ * The chance of at least one rushing or receiving TD in one game, treating the projected count as Poisson. On 2022-2025
+ * (every projected QB, RB, WR and TE week, a missed game counting as none) it held within a few points at every level:
+ * 24% scored 24% of the time, 34% 35%, 45% 44%, 54% 53%; the lowest bins ran a little high (15% scored 12%).
+ */
+public fun anytimeTd(components: List<ProjectionComponent>): Double {
+    val expected = components.filter { it.metricId == "rushing_tds" || it.metricId == "receiving_tds" }.sumOf { it.mean }
+    return 1.0 - kotlin.math.exp(-expected.coerceAtLeast(0.0))
 }
 
 /** The metric registry's `dist_family` as the simulation's family; unknown or missing is gamma. */

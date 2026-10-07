@@ -6,6 +6,7 @@ import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.datastore.EspnLeagueConfig
 import dev.gridiron.core.datastore.EspnLeagueEntry
 import dev.gridiron.core.datastore.EspnLogin
+import dev.gridiron.core.datastore.KeeperRule
 import dev.gridiron.core.datastore.PrefsSource
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringProfile
@@ -92,6 +93,12 @@ public class FantasyLeagueRepository(
         emitAll(combine(league, config) { l, c -> if (l != null && c != null && c.leagueId == l.leagueId) l.myTeam(c.teamId) else null })
     }.distinctUntilChanged()
 
+    /** The active league's other teams, for trades; empty with no league or no team chosen. */
+    public val otherTeams: Flow<List<MyTeam>> = flow {
+        load()
+        emitAll(combine(league, config) { l, c -> if (l != null && c != null && c.leagueId == l.leagueId) l.otherTeams(c.teamId) else emptyList() })
+    }.distinctUntilChanged()
+
     /** Who is on a league team, from the saved snapshot (read from disk on first collect); null with no league synced. */
     public val rostered: Flow<LeagueRostered?> = flow {
         load()
@@ -156,6 +163,20 @@ public class FantasyLeagueRepository(
             p.copy(espnLeagues = p.espnLeagues.map { if (it.leagueId == active) it.copy(teamId = teamId) else it })
         }
         _league.value?.let { saveRoster(it) }
+    }
+
+    /** The active league's keeper rule; null with no league. */
+    public val keeperRule: Flow<KeeperRule?> = prefs.prefs.map { p ->
+        val active = p.espnLeague?.leagueId
+        p.espnLeagues.firstOrNull { it.leagueId == active }?.keeperRule
+    }.distinctUntilChanged()
+
+    /** Saves [rule] on the active league. */
+    public suspend fun setKeeperRule(rule: KeeperRule) {
+        prefs.update { p ->
+            val active = p.espnLeague?.leagueId
+            p.copy(espnLeagues = p.espnLeagues.map { if (it.leagueId == active) it.copy(keeperRule = rule) else it })
+        }
     }
 
     private suspend fun switchTo(leagueId: String?) {
@@ -226,6 +247,255 @@ public class FantasyLeagueRepository(
         } catch (e: Exception) {
             MatchupsResult(emptyList(), now, "couldn't read the matchups")
         }
+    }
+
+    /**
+     * The user's finished weeks 1 through [throughWeek], each against the best lineup ESPN's own points allowed
+     * ([LineupReview]), newest first; a player's position comes from the app's player list, else ESPN's.
+     * A week ESPN can't serve is skipped; none at all says why.
+     */
+    public suspend fun lineupReview(season: Int, throughWeek: Int): LineupReviewResult {
+        load()
+        val cfg = prefs.prefs.first().espnLeague ?: return LineupReviewResult(emptyList(), "no league id set")
+        val league = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
+            ?: return LineupReviewResult(emptyList(), "sync your league first")
+        val mine = league.myTeam(cfg.teamId) ?: return LineupReviewResult(emptyList(), "choose your team first")
+        // ESPN's own current week, when the stats build that gave [throughWeek] is behind it.
+        val through = maxOf(throughWeek, league.week - 1)
+        val positions = HashMap<String, String?>()
+        suspend fun positionsOf(lineup: List<MatchupPlayer>): Map<String, String?> {
+            val ids = players.playerIds(lineup.map { it.espnId }.filter { it.toIntOrNull()?.let { n -> n > 0 } == true })
+            return lineup.associate { p ->
+                p.espnId to if (EspnFantasyParser.dstPlayerId(p.espnId) != null) {
+                    "DST"
+                } else {
+                    ids[p.espnId]?.let { id -> positions.getOrPut(id) { players.header(id)?.position } }
+                }
+            }
+        }
+        var error: String? = null
+        val all = HashMap<Int, List<LeagueMatchup>>()
+        val known = HashMap<String, String?>()
+        val reviews = (through downTo 1).mapNotNull { week ->
+            try {
+                val raw = EspnFantasyParser.matchups(http.get(EspnFantasyParser.matchupsUrl(cfg.leagueId, season, week), headers(cfg)), week)
+                all[week] = raw
+                known += positionsOf(raw.flatMap { m -> listOfNotNull(m.home, m.away).flatMap { it.lineup } })
+                val side = raw.firstNotNullOfOrNull { m -> listOfNotNull(m.home, m.away).firstOrNull { it.teamId == cfg.teamId } }
+                    ?: return@mapNotNull null
+                LineupReview.of(week, side, mine.slots) { known[it.espnId] ?: it.position }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: LiveFormatException) {
+                error = e.message ?: "ESPN changed its matchup format"
+                null
+            } catch (e: IOException) {
+                error = friendly(e.message)
+                null
+            }
+        }
+        val names = league.teams.associate { it.id to it.name }
+        val recap = if (all.isEmpty()) null else LeagueRecaps.of(all, names)
+        val draft = if (all.isEmpty()) null else draft(season)
+        val picks = draft?.picks?.takeIf { draft.error == null && it.isNotEmpty() }
+        val cards = ReportCards.of(all, picks, mine.slots, { known[it.espnId] ?: it.position }, names)
+        return LineupReviewResult(
+            reviews, if (reviews.isEmpty()) error ?: "no finished weeks yet" else null, recap,
+            reportCards = cards,
+            myTeamId = cfg.teamId,
+            draftMessage = if (picks != null) null else draft?.error ?: "no draft found",
+        )
+    }
+
+    /**
+     * What playoff odds need: the active league as last synced, the user's team id, and the regular-season games ESPN
+     * hasn't decided yet (read from the matchups of [week], whose `schedule` lists the whole season). A snapshot older
+     * than [maxAgeMillis] is synced first, so a game decided since the last sync is in the records, not lost between
+     * them and the schedule. Never throws: [PlayoffPictureResult.message] says why there is none.
+     */
+    public suspend fun playoffPicture(season: Int, week: Int, maxAgeMillis: Long = PICTURE_MAX_AGE_MILLIS): PlayoffPictureResult {
+        load()
+        val cfg = prefs.prefs.first().espnLeague ?: return PlayoffPictureResult(null, "no league id set")
+        val synced = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
+        if (synced != null && clock().toEpochMilli() - synced.fetchedAtMillis > maxAgeMillis) sync(season)
+        val league = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
+            ?: return PlayoffPictureResult(null, "sync your league first")
+        return try {
+            val games = EspnFantasyParser.schedule(http.get(EspnFantasyParser.matchupsUrl(cfg.leagueId, season, week), headers(cfg)))
+            // Playoff rounds aren't regular-season games; without the league's playoff weeks every game counts.
+            val lastRegular = league.playoffWeeks.firstOrNull()?.let { (it - 1) / league.periodWeeks }
+            val remaining = games.filter { !it.decided && it.awayId != null && (lastRegular == null || it.period <= lastRegular) }
+            PlayoffPictureResult(PlayoffPicture(league, cfg.teamId, remaining), null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: LiveFormatException) {
+            PlayoffPictureResult(null, e.message ?: "ESPN changed its matchup format")
+        } catch (e: IOException) {
+            PlayoffPictureResult(null, friendly(e.message))
+        } catch (e: Exception) {
+            PlayoffPictureResult(null, "couldn't read the schedule")
+        }
+    }
+
+    /**
+     * Pending trades involving the user's team, players mapped to app ids through the last sync's rosters (a player
+     * not on them is left out). Never throws; an unreadable response is no offers.
+     */
+    /** The active league's draft for [season], picks linked through the last sync's rosters (a D/ST by its team). Never throws. */
+    public suspend fun draft(season: Int): DraftResult {
+        load()
+        val cfg = prefs.prefs.first().espnLeague ?: return DraftResult(emptyList(), "no league id set")
+        val league = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
+            ?: return DraftResult(emptyList(), "sync your league first")
+        val ids = league.teams.flatMap { t -> t.players.mapNotNull { p -> p.playerId?.let { p.espnId to it } } }.toMap()
+        return try {
+            val picks = EspnFantasyParser.draft(http.get(EspnFantasyParser.draftUrl(cfg.leagueId, season), headers(cfg)))
+            DraftResult(picks.map { it.copy(playerId = ids[it.espnId] ?: EspnFantasyParser.dstPlayerId(it.espnId)) }, null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: LiveFormatException) {
+            DraftResult(emptyList(), e.message ?: "ESPN changed its draft format")
+        } catch (e: IOException) {
+            DraftResult(emptyList(), friendly(e.message))
+        } catch (e: Exception) {
+            DraftResult(emptyList(), "couldn't read the draft")
+        }
+    }
+
+    /**
+     * The active league's seasons, oldest first, for League history: the earlier seasons ESPN lists (`mStatus`), each
+     * read once and kept as `history-<league>-<year>.json`, and [currentSeason] read every time. A season that fails is
+     * left out and named in [HistoryResult.skipped]; [HistoryResult.me] is the owner of the user's team this season.
+     * Never throws.
+     */
+    public suspend fun history(currentSeason: Int): HistoryResult {
+        load()
+        val cfg = prefs.prefs.first().espnLeague ?: return HistoryResult(emptyList(), emptyList(), null, "no league id set")
+        val headers = headers(cfg)
+        val skipped = mutableListOf<Pair<Int, String>>()
+        val earlier = try {
+            EspnHistoryParser.previousSeasons(http.get(EspnHistoryParser.statusUrl(cfg.leagueId, currentSeason), headers))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // Offline: whatever seasons are already kept.
+            withContext(Dispatchers.IO) {
+                dir.listFiles().orEmpty().mapNotNull { Regex("history-${cfg.leagueId}-(\\d+)\\.json").matchEntire(it.name)?.groupValues?.get(1)?.toInt() }.sorted()
+            }
+        }.filter { it < currentSeason }
+        val seasons = (earlier + currentSeason).mapNotNull { year ->
+            val file = File(dir, "history-${cfg.leagueId}-$year.json")
+            val kept = if (year < currentSeason) withContext(Dispatchers.IO) { file.takeIf { it.isFile }?.readText()?.let(::historySeasonFromJson) } else null
+            kept ?: try {
+                val season = EspnHistoryParser.parse(http.get(EspnHistoryParser.url(cfg.leagueId, year), headers), year)
+                if (year < currentSeason) withContext(Dispatchers.IO) { file.writeText(season.toJson()) }
+                season
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: LiveFormatException) {
+                skipped += year to (e.message ?: "ESPN changed its league format")
+                null
+            } catch (e: IOException) {
+                skipped += year to friendly(e.message)
+                null
+            } catch (e: Exception) {
+                skipped += year to "couldn't read it"
+                null
+            }
+        }
+        val me = cfg.teamId?.let { id -> seasons.lastOrNull { it.season == currentSeason }?.teams?.firstOrNull { it.id == id }?.ownerId }
+        return HistoryResult(seasons, skipped, me, if (seasons.isEmpty()) skipped.firstOrNull()?.second ?: "no seasons found" else null)
+    }
+
+    private var activityCache: Triple<String, Long, ActivityResult>? = null
+
+    /**
+     * Every executed move in the active league this [season], newest first: each week of `mTransactions2` through
+     * ESPN's current week, players named through `player_xref`. Held for fifteen minutes. Never throws.
+     */
+    public suspend fun activity(season: Int): ActivityResult {
+        load()
+        val cfg = prefs.prefs.first().espnLeague ?: return ActivityResult(emptyList(), null, emptyMap(), "no league id set")
+        val league = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
+            ?: return ActivityResult(emptyList(), cfg.teamId, emptyMap(), "sync your league first")
+        val key = "${cfg.leagueId}:$season:${cfg.teamId}"
+        val now = clock().toEpochMilli()
+        activityCache?.let { (k, at, r) -> if (k == key && now - at < ACTIVITY_MAX_AGE_MILLIS) return r }
+        var error: String? = null
+        val raw = (league.week downTo 1).flatMap { week ->
+            try {
+                EspnFantasyParser.activity(http.get(EspnFantasyParser.transactionsUrl(cfg.leagueId, season, week), headers(cfg)), week)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: IOException) {
+                error = friendly(e.message)
+                emptyList()
+            } catch (e: Exception) {
+                error = "couldn't read the league's moves"
+                emptyList()
+            }
+        }
+        val espnIds = raw.flatMap { i -> i.moves.map { it.espnId } }.distinct()
+        val ids = players.playerIds(espnIds.filter { it.toIntOrNull()?.let { n -> n > 0 } == true })
+        val names = HashMap<String, String?>()
+        suspend fun nameOf(playerId: String): String? = names.getOrPut(playerId) { players.header(playerId)?.name }
+        val items = raw.map { item ->
+            item.copy(
+                moves = item.moves.map { m ->
+                    val id = ids[m.espnId] ?: EspnFantasyParser.dstPlayerId(m.espnId)
+                    m.copy(playerId = id, name = id?.let { if (it.startsWith("DST_")) "${it.removePrefix("DST_")} D/ST" else nameOf(it) })
+                },
+            )
+        }.sortedWith(compareByDescending<ActivityItem> { it.week }.thenByDescending { it.processedAtMillis ?: 0L })
+        val result = ActivityResult(items, cfg.teamId, league.teams.associate { it.id to it.name }, if (items.isEmpty()) error else null)
+        if (error == null) activityCache = Triple(key, now, result)
+        return result
+    }
+
+    public suspend fun tradeOffers(season: Int): TradeOffersResult {
+        load()
+        val cfg = prefs.prefs.first().espnLeague ?: return TradeOffersResult(emptyList(), "no league id set")
+        val me = cfg.teamId ?: return TradeOffersResult(emptyList(), "choose your team first")
+        val league = _league.value?.takeIf { it.leagueId == cfg.leagueId && it.season == season }
+            ?: return TradeOffersResult(emptyList(), "sync your league first")
+        val ids = league.teams.flatMap { t -> t.players.mapNotNull { p -> p.playerId?.let { p.espnId to it } } }.toMap()
+        val names = league.teams.associate { it.id to it.name }
+        return try {
+            val raw = EspnFantasyParser.tradeOffers(http.get(EspnFantasyParser.transactionsUrl(cfg.leagueId, season, league.week), headers(cfg)))
+            val offers = raw.mapNotNull { o ->
+                if (o.moves.none { it.second == me || it.third == me }) return@mapNotNull null
+                val partnerId = o.moves.flatMap { listOf(it.second, it.third) }.firstOrNull { it != me } ?: return@mapNotNull null
+                TradeOffer(
+                    o.id, names[partnerId] ?: "Team $partnerId",
+                    give = o.moves.filter { it.second == me }.mapNotNull { ids[it.first] },
+                    get = o.moves.filter { it.third == me }.mapNotNull { ids[it.first] },
+                    fromMe = o.proposer == me,
+                )
+            }
+            TradeOffersResult(offers, null)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: IOException) {
+            TradeOffersResult(emptyList(), friendly(e.message))
+        } catch (e: Exception) {
+            TradeOffersResult(emptyList(), "couldn't read trade offers")
+        }
+    }
+
+    /**
+     * The user's and the opponent's sides of [week]'s matchup as ESPN has them now (lineups with live points, app ids
+     * filled in). Never throws: [MyMatchup.message] says why there is none.
+     */
+    public suspend fun myMatchup(season: Int, week: Int, scoring: ScoringProfile): MyMatchup {
+        val cfg = prefs.prefs.first().espnLeague ?: return MyMatchup(null, null, "no league id set")
+        val teamId = cfg.teamId ?: return MyMatchup(null, null, "choose your team first")
+        val result = matchups(season, week, scoring)
+        result.error?.let { return MyMatchup(null, null, it) }
+        val m = result.matchups.firstOrNull { it.home.teamId == teamId || it.away?.teamId == teamId }
+            ?: return MyMatchup(null, null, "ESPN lists no matchup for you in week $week")
+        val mine = if (m.home.teamId == teamId) m.home else m.away
+        val theirs = if (m.home.teamId == teamId) m.away else m.home
+        return MyMatchup(mine, theirs, if (theirs == null) "you have a bye in week $week" else null)
     }
 
     /**
@@ -302,6 +572,11 @@ public class FantasyLeagueRepository(
     }
 
     public companion object {
+        private const val ACTIVITY_MAX_AGE_MILLIS = 15 * 60 * 1000L
+
+        /** Playoff odds re-sync a snapshot older than this: a week decided since must be in the records. */
+        public const val PICTURE_MAX_AGE_MILLIS: Long = 30 * 60 * 1000L
+
         public fun rosterId(leagueId: String): String = "espn-$leagueId"
     }
 }

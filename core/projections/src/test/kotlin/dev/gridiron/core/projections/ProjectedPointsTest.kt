@@ -32,8 +32,8 @@ class ProjectedPointsTest {
 
     @Test
     fun `each position's range is widened around the points by its calibration factor`() {
-        assertEquals(4.4 to 17.0, calibratedRange(10.0, 6.0, 15.0, Position.QB).let { round(it.first) to round(it.second) })
-        assertEquals(10.0 - 1.52 * 4 to 10.0 + 1.52 * 5, calibratedRange(10.0, 6.0, 15.0, Position.WR))
+        assertEquals(4.92 to 16.35, calibratedRange(10.0, 6.0, 15.0, Position.QB).let { round(it.first) to round(it.second) })
+        assertEquals(10.0 - 1.38 * 4 to 10.0 + 1.38 * 5, calibratedRange(10.0, 6.0, 15.0, Position.WR))
         // No calibration data for other positions: the simulation's own range.
         assertEquals(6.0 to 15.0, calibratedRange(10.0, 6.0, 15.0, null))
         assertEquals(6.0 to 15.0, calibratedRange(10.0, 6.0, 15.0, Position.K))
@@ -79,5 +79,16 @@ class ProjectedPointsTest {
     fun `a D-ST's projected points are its tiers in expectation`() {
         val week = listOf(ProjectionComponent("points_allowed", 17.6, 100.0, "normal"), ProjectionComponent("g", 1.0, 0.0))
         assertEquals(ScoringPresets.PPR.expectedPointsAllowedPoints(17.6, 10.0), projectPoints(week, ScoringPresets.PPR, Position.DST).points, 1e-9)
+    }
+
+    @Test
+    fun `the anytime TD chance treats rushing plus receiving TDs as Poisson and ignores passing TDs`() {
+        val c = listOf(
+            ProjectionComponent("rushing_tds", 0.3, 0.3),
+            ProjectionComponent("receiving_tds", 0.2, 0.2),
+            ProjectionComponent("passing_tds", 2.0, 2.0),
+        )
+        assertEquals(1 - kotlin.math.exp(-0.5), anytimeTd(c), 1e-12)
+        assertEquals(0.0, anytimeTd(emptyList()), 1e-12)
     }
 }

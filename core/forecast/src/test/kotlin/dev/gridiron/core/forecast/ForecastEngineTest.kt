@@ -162,8 +162,9 @@ class ForecastEngineTest {
             run(db)
 
             assertEquals(0, weekRows(db, "WR_A", 2025, 3))
-            // AAA's two target-getters split all its targets; with the WR out, the RB has them all.
-            assertEquals(baseWr + baseRb, baselineTargets(db, "RB_A"), 1e-9)
+            // AAA's two target-getters split all its targets; with the WR out, the RB has them all, except the
+            // WR's own season form (layer 2b), which stays his: 9.45 and 9 targets in 2025's two games.
+            assertEquals(baseWr + baseRb - K.SEASON_FORM_WEIGHT * (9 * 1.05 + 9.0) / 2, baselineTargets(db, "RB_A"), 1e-9)
             assertTrue(targets(db, "RB_A", 3) > baseRbWeek3)
             // Week 4 doesn't know about the injury: the RB's rest of season past this week matches a healthy roster's.
             assertEquals(baseRbRos - baseRbWeek3, rosTargets(db, "RB_A") - targets(db, "RB_A", 3), 1e-9)
@@ -174,16 +175,25 @@ class ForecastEngineTest {
     }
 
     @Test
-    fun `a Questionable player is projected as usual`() {
+    fun `a Questionable player keeps his baseline, and his final is scaled by how often such players play`() {
         var base = 0.0
+        var final = 0.0
         league("base.db").use { db ->
             run(db)
             base = baselineTargets(db, "WR_A")
+            final = finalMean(db, "WR_A", 3, "targets")
         }
-        league("q.db").use { db ->
-            db.injury("WR_A", 2025, 3, "Questionable")
-            run(db)
-            assertEquals(base, baselineTargets(db, "WR_A"), 1e-12)
+        val cases = listOf(null to 0.78, "Limited Participation in Practice" to 0.78, "Full Participation in Practice" to 0.87, "Did Not Participate In Practice" to 0.52)
+        for ((i, case) in cases.withIndex()) {
+            val (practice, k) = case
+            league("q$i.db").use { db ->
+                db.injury("WR_A", 2025, 3, "Questionable", practice)
+                run(db)
+                assertEquals(base, baselineTargets(db, "WR_A"), 1e-12)
+                assertEquals(final * k, finalMean(db, "WR_A", 3, "targets"), 1e-9, practice)
+                val factor = db.query("SELECT log_multiplier, note FROM player_week_projection_factor WHERE player_id = 'WR_A' AND week = 3 AND factor = 'questionable'").single()
+                assertEquals(kotlin.math.ln(k), factor[0]!!.toDouble(), 1e-9)
+            }
         }
     }
 
@@ -213,6 +223,46 @@ class ForecastEngineTest {
             run(db)
             assertEquals(0, weekRows(db, "QB_A", 2025, 3))
             assertTrue(weekRows(db, "WR_A", 2025, 3) > 0)
+        }
+    }
+
+    @Test
+    fun `from the upcoming week on, the QB ESPN projects most starts, unless nflverse lists one ESPN doesn't doubt`() {
+        fun starts(espnBackup: Double?, listed: String? = null, espnStarter: Double? = null): Pair<Boolean, Boolean> =
+            league("qbe$espnBackup-$listed-$espnStarter.db").use { db ->
+                db.player("QB2_A", "QB", "AAA")
+                db.week("QB2_A", 2025, 2, "AAA", "attempts" to 5.0, "completions" to 3.0, "passing_yards" to 30.0)
+                // Passing yards at 0.04 a yard: 25 per point.
+                espnBackup?.let { db.espn("QB2_A", 2025, 3, "passing_yards" to it * 25) }
+                espnStarter?.let { db.espn("QB_A", 2025, 3, "passing_yards" to it * 25) }
+                listed?.let { db.exec("UPDATE game SET home_qb_id = ? WHERE season = 2025 AND week = 3 AND home_team = 'AAA'", it) }
+                run(db)
+                (weekRows(db, "QB_A", 2025, 3) > 0) to (weekRows(db, "QB2_A", 2025, 3) > 0)
+            }
+        // No listing: the usual starter, unless ESPN projects the other QB for enough points.
+        assertEquals(true to false, starts(espnBackup = null))
+        assertEquals(true to false, starts(espnBackup = K.STARTER_ESPN_POINTS - 1))
+        assertEquals(false to true, starts(espnBackup = K.STARTER_ESPN_POINTS + 4))
+        // Listed: he starts unless ESPN all but rules him out.
+        assertEquals(false to true, starts(espnBackup = 12.0, listed = "QB_A"))
+        assertEquals(true to false, starts(espnBackup = 12.0, listed = "QB_A", espnStarter = K.STARTER_DOUBT_ESPN_POINTS + 1))
+        assertEquals(false to true, starts(espnBackup = null, listed = "QB2_A"))
+    }
+
+    @Test
+    fun `a starter out this week keeps his rest of season even though ESPN projects his backup`() {
+        league("qbout.db").use { db ->
+            db.player("QB2_A", "QB", "AAA")
+            db.week("QB2_A", 2025, 2, "AAA", "attempts" to 5.0, "completions" to 3.0, "passing_yards" to 30.0)
+            db.espn("QB2_A", 2025, 3, "passing_yards" to 300.0)
+            db.injury("QB_A", 2025, 3, "Out")
+            run(db)
+            assertEquals(0, weekRows(db, "QB_A", 2025, 3))
+            assertTrue(weekRows(db, "QB2_A", 2025, 3) > 0)
+            // Week 4 (rest of season) goes back to the usual starter.
+            assertTrue(rosMean(db, "QB_A", "passing_yards") > 100.0)
+            // The backup's rest of season is the week he starts, as ESPN projects it.
+            assertEquals(300.0, rosMean(db, "QB2_A", "passing_yards"), 1e-9)
         }
     }
 
@@ -297,6 +347,33 @@ class ForecastEngineTest {
                 listOf(listOf("2")),
                 db.query("SELECT DISTINCT as_of_week FROM player_ros_projection"),
             )
+        }
+    }
+
+    @Test
+    fun `rest of season week by week sums to its total, players, kickers and defenses alike, with no bye row`() {
+        league("ros-weeks.db", units = true).use { db ->
+            run(db)
+            val summed = db.query(
+                """
+                SELECT r.player_id, r.metric_id, r.mean, r.variance, SUM(w.mean), SUM(w.variance)
+                FROM player_ros_projection r
+                JOIN player_ros_week w ON w.player_id = r.player_id AND w.season = r.season
+                  AND w.as_of_week = r.as_of_week AND w.metric_id = r.metric_id
+                GROUP BY r.player_id, r.metric_id
+                """.trimIndent(),
+            )
+            assertEquals(db.query("SELECT COUNT(*) FROM player_ros_projection").single()[0]!!.toInt(), summed.size)
+            for (row in summed) {
+                assertEquals(row[2]!!.toDouble(), row[4]!!.toDouble(), 1e-9, "${row[0]} ${row[1]} mean")
+                assertEquals(row[3]!!.toDouble(), row[5]!!.toDouble(), 1e-9, "${row[0]} ${row[1]} variance")
+            }
+            // BBB is on bye in week 4: week 3 only; AAA plays both.
+            assertEquals(listOf(listOf("3")), db.query("SELECT DISTINCT week FROM player_ros_week WHERE player_id = 'WR_B'"))
+            assertEquals(listOf(listOf("3"), listOf("4")), db.query("SELECT DISTINCT week FROM player_ros_week WHERE player_id = 'DST_AAA' ORDER BY week"))
+            assertEquals(finalMean(db, "WR_A", 3, "targets"), db.query(
+                "SELECT mean FROM player_ros_week WHERE player_id = 'WR_A' AND week = 3 AND metric_id = 'targets'",
+            ).single()[0]!!.toDouble(), 1e-9)
         }
     }
 
@@ -433,20 +510,25 @@ class ForecastEngineTest {
     }
 
     @Test
-    fun `a team's players split exactly its targets and carries`() {
+    fun `a team's players split exactly its targets and carries, then each moves toward his season form`() {
         league("a.db").use { db ->
             run(db)
             // AAA is team index 0, so playWeek's k is 1 + 0.05 x week; its 2025 week 2 WR had 9 targets.
             val weeks = listOf(2024 to 1, 2024 to 2, 2024 to 3, 2025 to 1, 2025 to 2)
             val targets = weeks.map { (s, w) -> 4.0 + if (s == 2025 && w == 2) 9.0 else 9 * (1.0 + 0.05 * w) }
             val carries = weeks.map { (_, w) -> 3.0 + 18 * (1.0 + 0.05 * w) }
-            fun baseline(metric: String) = db.query(
+            fun baseline(metric: String, ids: String = "'QB_A', 'RB_A', 'WR_A'") = db.query(
                 "SELECT SUM(mean) FROM player_week_projection WHERE season = 2025 AND week = 3 AND stage = 'baseline' " +
-                    "AND metric_id = '$metric' AND player_id IN ('QB_A', 'RB_A', 'WR_A')",
+                    "AND metric_id = '$metric' AND player_id IN ($ids)",
             ).single()[0]!!.toDouble()
 
-            assertEquals(ewma(targets, 4.0)!!, baseline("targets"), 1e-6)
-            assertEquals(ewma(carries, 4.0)!!, baseline("carries"), 1e-6)
+            // Layer 2b pulls the RB and WR toward their own 2025 games, so the team's sum moves toward its 2025
+            // average. The QB has no targets; his 3 carries a game also move a little toward the league's typical
+            // starter (layer 2c), so carries match to within that.
+            val w = K.SEASON_FORM_WEIGHT
+            assertEquals((1 - w) * ewma(targets, 4.0)!! + w * targets.takeLast(2).average(), baseline("targets"), 1e-6)
+            val qb = baseline("carries", "'QB_A'")
+            assertEquals(qb + (1 - w) * (ewma(carries, 4.0)!! - qb) + w * (carries.takeLast(2).average() - 3.0), baseline("carries"), 0.05)
         }
     }
 
@@ -462,6 +544,54 @@ class ForecastEngineTest {
                 listOf(listOf("0")),
                 db.query("SELECT COUNT(*) FROM player_week_projection WHERE player_id = 'WR_X' AND season = 2025 AND week = 3"),
             )
+        }
+    }
+
+    @Test
+    fun `a player back from a long absence is projected once ESPN projects him for enough points`() {
+        fun projected(espnYards: Double?): Int = league("back$espnYards.db").use { db ->
+            db.player("WR_X", "WR", "AAA")
+            for (week in 1..3) db.week("WR_X", 2024, week, "AAA", "targets" to 6.0, "receptions" to 4.0, "receiving_yards" to 50.0)
+            db.espn("RB_A", 2025, 3, "carries" to 15.0, "rushing_yards" to 70.0)
+            if (espnYards != null) db.espn("WR_X", 2025, 3, "receiving_yards" to espnYards)
+            run(db)
+            weekRows(db, "WR_X", 2025, 3)
+        }
+        assertTrue(projected(K.RETURN_MIN_ESPN_POINTS * 10) > 0)
+        assertEquals(0, projected(K.RETURN_MIN_ESPN_POINTS * 10 - 1))
+        assertEquals(0, projected(null))
+    }
+
+    @Test
+    fun `a player out for now keeps rest of season from ESPN's projections for the games it expects him back`() {
+        league("stash.db").use { db ->
+            db.player("WR_X", "WR", "AAA")
+            for (week in 1..3) db.week("WR_X", 2024, week, "AAA", "targets" to 6.0, "receptions" to 4.0, "receiving_yards" to 50.0)
+            // Not back for the upcoming week 3 (under the bar); back for week 4.
+            db.espn("WR_X", 2025, 3, "receiving_yards" to 10.0)
+            db.espn("WR_X", 2025, 4, "receptions" to 5.0, "receiving_yards" to 80.0)
+            run(db)
+            assertEquals(0, weekRows(db, "WR_X", 2025, 3))
+            assertEquals(80.0, rosMean(db, "WR_X", "receiving_yards"), 1e-9)
+            assertEquals(5.0, rosMean(db, "WR_X", "receptions"), 1e-9)
+        }
+        league("nostash.db").use { db ->
+            db.player("WR_X", "WR", "AAA")
+            for (week in 1..3) db.week("WR_X", 2024, week, "AAA", "targets" to 6.0, "receptions" to 4.0, "receiving_yards" to 50.0)
+            run(db)
+            assertEquals(listOf(listOf("0")), db.query("SELECT COUNT(*) FROM player_ros_projection WHERE player_id = 'WR_X'"))
+        }
+    }
+
+    @Test
+    fun `a returning player nflverse lists Out stays out whatever ESPN projects`() {
+        league("out.db").use { db ->
+            db.player("WR_X", "WR", "AAA")
+            for (week in 1..3) db.week("WR_X", 2024, week, "AAA", "targets" to 6.0, "receptions" to 4.0, "receiving_yards" to 50.0)
+            db.espn("WR_X", 2025, 3, "receiving_yards" to 80.0)
+            db.injury("WR_X", 2025, 3, "Out")
+            run(db)
+            assertEquals(0, weekRows(db, "WR_X", 2025, 3))
         }
     }
 

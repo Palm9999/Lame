@@ -198,6 +198,20 @@ CREATE TABLE window_def (
 
 WINDOWS_LAST = (3, 4, 5, 8)
 
+# Stored weekly but never summed into a window: weekly rates (a range
+# recomputes them from their components) and components no range query reads.
+# A metric left off this list is rolled up, so a new one is never lost.
+# core/ingest/.../db/Schema.kt holds the same list.
+UNWINDOWED_METRICS = (
+    "adot", "air_yards_share", "carry_share", "catch_rate", "cpoe", "epa_per_dropback", "racr",
+    "rush_epa_per_carry", "rush_success_rate", "snap_share", "target_share", "wopr",
+    "ftn_blitz_rate", "ftn_catchable_rate", "ftn_contested_rate", "ftn_drop_rate", "ftn_int_worthy_rate",
+    "ftn_out_of_pocket_rate", "ftn_play_action_rate", "ftn_throwaway_rate",
+    "ngs_aggressiveness", "ngs_cushion", "ngs_intended_air_yards", "ngs_rush_efficiency", "ngs_ryoe_per_att",
+    "ngs_separation", "ngs_stacked_box_pct", "ngs_time_to_throw", "ngs_yac_over_expected",
+    "fg_att_0_39", "fg_att_40_49", "fg_att_50", "rec_epa",
+)
+
 # Index budget matters here. The fact table is WITHOUT ROWID with a 4-column
 # text primary key, so every secondary index stores that whole key as its row
 # locator and ends up nearly the size of the table itself.
@@ -276,7 +290,8 @@ def write_windows(conn: sqlite3.Connection) -> None:
 
     `S` is weeks 1 through the last regular-season week played (the newest `g`
     row, as the Grid's season list reads it); `L<N>` is the N weeks ending
-    there, clipped at week 1. Playoff weeks are outside every window."""
+    there, clipped at week 1. Playoff weeks are outside every window, and so
+    are UNWINDOWED_METRICS."""
     played = conn.execute(
         "SELECT season, MAX(week) FROM player_week_stat WHERE metric_id = 'g' GROUP BY season"
     ).fetchall()
@@ -286,10 +301,12 @@ def write_windows(conn: sqlite3.Connection) -> None:
         for window, first in windows:
             conn.execute("INSERT INTO window_def VALUES (?, ?, ?, ?)", (season, window, first, last))
             conn.execute(
-                """INSERT INTO player_window_stat (player_id, season, window, metric_id, value)
+                f"""INSERT INTO player_window_stat (player_id, season, window, metric_id, value)
                    SELECT player_id, season, ?, metric_id, SUM(value) FROM player_week_stat
-                   WHERE season = ? AND week BETWEEN ? AND ? GROUP BY player_id, metric_id""",
-                (window, season, first, last),
+                   WHERE season = ? AND week BETWEEN ? AND ?
+                     AND metric_id NOT IN ({",".join("?" * len(UNWINDOWED_METRICS))})
+                   GROUP BY player_id, metric_id""",
+                (window, season, first, last, *UNWINDOWED_METRICS),
             )
     conn.commit()
 

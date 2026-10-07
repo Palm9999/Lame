@@ -158,4 +158,32 @@ class ScoresRepositoryTest {
         assertEquals(GameState.FINAL, merged.single { it.home == "GGG" }.state)
         assertNull(merged.single { it.home == "EEE" }.kickoff)
     }
+
+    @Test
+    fun `a week's started teams are those live, final or past their kickoff`() {
+        val now = java.time.Instant.parse("2026-10-04T18:00:00Z")
+        fun g(home: String, away: String, state: GameState, kickoff: String?) =
+            ScoreGame(home, away, null, null, state, kickoff?.let(java.time.Instant::parse), null, null, null)
+        val week = ScoresWeek(
+            2026, 5,
+            listOf(
+                g("KC", "BUF", GameState.FINAL, "2026-10-01T00:15:00Z"),
+                g("DAL", "NYG", GameState.LIVE, null),
+                g("SF", "SEA", GameState.SCHEDULED, "2026-10-04T17:00:00Z"),
+                g("GB", "CHI", GameState.SCHEDULED, "2026-10-04T20:25:00Z"),
+                g("MIA", "NE", GameState.SCHEDULED, null),
+            ),
+            emptyList(), null,
+        )
+        assertEquals(setOf("KC", "BUF", "DAL", "NYG", "SF", "SEA"), week.started(now))
+        // GB-CHI kicks off at 20:25: its inactives post at 18:55.
+        val early = week.kickoffs(now)
+        assertEquals(week.started(now), early.started)
+        assertEquals(week.started(now), early.inactivesPosted)
+        val posted = week.kickoffs(java.time.Instant.parse("2026-10-04T18:55:00Z"))
+        assertEquals(week.started(now) + setOf("GB", "CHI"), posted.inactivesPosted)
+        // Each team's kickoff where ESPN gave one.
+        assertEquals(java.time.Instant.parse("2026-10-04T20:25:00Z"), early.times["CHI"])
+        assertEquals(setOf("KC", "BUF", "SF", "SEA", "GB", "CHI"), early.times.keys)
+    }
 }

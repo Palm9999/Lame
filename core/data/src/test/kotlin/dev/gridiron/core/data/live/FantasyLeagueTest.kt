@@ -3,6 +3,7 @@ package dev.gridiron.core.data.live
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.database.QueryExecutor
 import dev.gridiron.core.database.ResultRow
+import dev.gridiron.core.datastore.KeeperRule
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.projections.Lineups
@@ -76,6 +77,42 @@ class FantasyLeagueTest {
             EspnFantasyParser.parse(withSlots, "42", 5L).lineupSlots,
         )
         assertEquals(emptyMap<String, Int>(), EspnFantasyParser.parse(body, "42", 5L).lineupSlots)
+    }
+
+    private fun withSettings(settings: String, mineExtra: String = "") = body
+        .replace("\"settings\":{\"name\":\"Sunday League\"}", "\"settings\":{\"name\":\"Sunday League\",$settings}")
+        .replace("\"name\":\"Mine\",", "\"name\":\"Mine\",$mineExtra")
+
+    @Test
+    fun `playoff weeks follow the schedule settings, ESPN's defaults giving 15 to 17`() {
+        // ESPN's leaguedefaults/3 (2026): 14 matchups of a week, 4 playoff teams, rounds of 1 and 2 weeks.
+        val defaults = "\"scheduleSettings\":{\"matchupPeriodCount\":14,\"matchupPeriodLength\":1,\"playoffTeamCount\":4," +
+            "\"playoffMatchupPeriodLength\":0,\"playoffMatchupPeriodLengthByRound\":{\"1\":1,\"2\":2}}"
+        assertEquals(listOf(15, 16, 17), EspnFantasyParser.parse(withSettings(defaults), "42", 5L).playoffWeeks)
+        // Six teams take three one-week rounds after a 13-week season.
+        val six = "\"scheduleSettings\":{\"matchupPeriodCount\":13,\"matchupPeriodLength\":1,\"playoffTeamCount\":6,\"playoffMatchupPeriodLength\":1}"
+        assertEquals(listOf(14, 15, 16), EspnFantasyParser.parse(withSettings(six), "42", 5L).playoffWeeks)
+        // Missing settings, or a schedule past week 18, say nothing; the team then uses 15-17.
+        val league = EspnFantasyParser.parse(body, "42", 5L)
+        assertEquals(emptyList<Int>(), league.playoffWeeks)
+        assertEquals(listOf(15, 16, 17), league.myTeam(2)!!.playoffWeeks)
+        val long = "\"scheduleSettings\":{\"matchupPeriodCount\":17,\"playoffTeamCount\":8}"
+        assertEquals(emptyList<Int>(), EspnFantasyParser.parse(withSettings(long), "42", 5L).playoffWeeks)
+    }
+
+    @Test
+    fun `FAAB is read when the league bids, and what is left follows the team's spending`() {
+        val bids = "\"acquisitionSettings\":{\"acquisitionBudget\":100,\"isUsingAcquisitionBudget\":true}"
+        val league = EspnFantasyParser.parse(withSettings(bids, "\"transactionCounter\":{\"acquisitionBudgetSpent\":37},"), "42", 5L)
+        assertEquals(100, league.faabBudget)
+        assertEquals(63, league.myTeam(2)!!.faabLeft)
+        // Saved and read back the same.
+        assertEquals(league, fantasyLeagueFromJson(league.toJson()))
+        // Spending unknown: the budget, but nothing said about what is left.
+        assertNull(EspnFantasyParser.parse(withSettings(bids), "42", 5L).myTeam(2)!!.faabLeft)
+        // A league on waiver order (ESPN's default) has no budget.
+        val order = "\"acquisitionSettings\":{\"acquisitionBudget\":100,\"isUsingAcquisitionBudget\":false}"
+        assertNull(EspnFantasyParser.parse(withSettings(order), "42", 5L).faabBudget)
     }
 
     @Test
@@ -256,6 +293,26 @@ class FantasyLeagueTest {
     }
 
     @Test
+    fun `other teams are every team but mine, on the league's slots`() = runTest {
+        fun t(id: Int) = LeagueTeam(id, "T$id", null, 0, 0, 0, 0.0, 0.0, id, listOf(LeaguePlayer("$id", "n$id", "BE", "P$id")))
+        val league = FantasyLeague("42", "L", 2026, 4, listOf(t(1), t(2), t(3)), 77L, lineupSlots = mapOf("QB" to 1, "RB" to 2))
+        val others = league.otherTeams(2)
+        assertEquals(listOf("T1", "T3"), others.map { it.teamName })
+        assertEquals(mapOf("QB" to 1, "RB" to 2), others.first().slots)
+        assertFalse(others.first().slotsAreDefault)
+        assertEquals(emptyList<MyTeam>(), league.otherTeams(9))
+        assertEquals(emptyList<MyTeam>(), league.otherTeams(null))
+
+        val prefs = FakePrefsSource()
+        val repo = repo(prefs) { _, _ -> body }
+        assertEquals(emptyList<MyTeam>(), repo.otherTeams.first())
+        repo.configure("42", null, null)
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+        assertTrue(repo.otherTeams.first().none { it.teamName == "Mine" })
+    }
+
+    @Test
     fun `matchups sends the cookies and the week, and an unmatched player has no app points`() = runTest {
         val prefs = FakePrefsSource()
         var seen: Pair<String, Map<String, String>>? = null
@@ -296,6 +353,98 @@ class FantasyLeagueTest {
         // The same matchup read from the other side.
         repo.chooseTeam(1)
         assertEquals("Mine", repo.opponent(2026, 4).team!!.teamName)
+    }
+
+    @Test
+    fun `the schedule lists every period's games, decided once ESPN names a winner`() {
+        val body = matchupBody.replace("\"id\":1,\"matchupPeriodId\":3,", "\"id\":1,\"matchupPeriodId\":3,\"winner\":\"HOME\",")
+            .replace("\"id\":2,\"matchupPeriodId\":4,", "\"id\":2,\"matchupPeriodId\":4,\"winner\":\"UNDECIDED\",")
+        assertEquals(
+            listOf(ScheduledGame(3, 1, 2, true), ScheduledGame(4, 2, 1, false), ScheduledGame(4, 3, null, false)),
+            EspnFantasyParser.schedule(body),
+        )
+        assertThrows<LiveFormatException> { EspnFantasyParser.schedule("{}") }
+    }
+
+    @Test
+    fun `the playoff picture keeps the undecided regular-season games, and says why when there is none`() = runTest {
+        val prefs = FakePrefsSource()
+        val scheduled = matchupBody.replace("\"id\":1,\"matchupPeriodId\":3,", "\"id\":1,\"matchupPeriodId\":3,\"winner\":\"AWAY\",")
+        val repo = repo(prefs) { url, _ -> if ("view=mMatchup" in url) scheduled else body }
+        assertEquals("no league id set", repo.playoffPicture(2026, 4).message)
+        repo.configure("42", null, null)
+        assertEquals("sync your league first", repo.playoffPicture(2026, 4).message)
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+        val picture = checkNotNull(repo.playoffPicture(2026, 4).picture)
+        assertEquals(2, picture.myTeamId)
+        // Period 3 is decided and period 4's other entry is a bye: one game left.
+        assertEquals(listOf(ScheduledGame(4, 2, 1, false)), picture.remaining)
+    }
+
+    @Test
+    fun `the lineup review reads each finished week from ESPN, newest first`() = runTest {
+        val prefs = FakePrefsSource()
+        val asked = mutableListOf<String>()
+        val repo = repo(prefs) { url, _ -> if ("view=mMatchup" in url) { asked += url; matchupBody } else body }
+        assertEquals("no league id set", repo.lineupReview(2026, 4).message)
+        repo.configure("42", null, null)
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+        val result = repo.lineupReview(2026, 4)
+        assertNull(result.message)
+        // The fixture only has team 2 in week 4 (and week 3 between teams 1 and 2, with no lineups).
+        assertEquals(listOf(4, 3), result.weeks.map { it.week })
+        // Star QB, Star WR, Flex Guy and the D/ST started; the unnamed unknown is skipped by the parser.
+        assertEquals(65.9, result.weeks.first().scored, 1e-9)
+        assertEquals((4 downTo 1).map { EspnFantasyParser.matchupsUrl("42", 2026, it) }, asked)
+    }
+
+    @Test
+    fun `playoff odds re-sync a stale snapshot first, so a week decided since isn't lost`() = runTest {
+        val prefs = FakePrefsSource()
+        var now = Instant.parse("2026-10-01T00:00:00Z")
+        var leagueReads = 0
+        val repo = FantasyLeagueRepository(prefs, { url, _ -> if ("view=mMatchup" in url) matchupBody else body.also { leagueReads++ } }, players, dir) { now }
+        repo.configure("42", null, null)
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+        assertEquals(1, leagueReads)
+        now = now.plusSeconds(10 * 60)
+        assertNotNull(repo.playoffPicture(2026, 4).picture)
+        assertEquals(1, leagueReads)
+        now = now.plusSeconds(60 * 60)
+        assertNotNull(repo.playoffPicture(2026, 4).picture)
+        assertEquals(2, leagueReads)
+    }
+
+    private val transactions = """
+        {"transactions":[
+          {"id":"t1","type":"TRADE_PROPOSAL","status":"PENDING","teamId":1,
+           "items":[{"playerId":111,"fromTeamId":1,"toTeamId":2,"type":"TRADE"},{"playerId":222,"fromTeamId":2,"toTeamId":1,"type":"TRADE"}]},
+          {"id":"t2","type":"TRADE_PROPOSAL","status":"CANCELED","teamId":1,"items":[{"playerId":111,"fromTeamId":1,"toTeamId":2}]},
+          {"id":"t3","type":"WAIVER","status":"PENDING","items":[{"playerId":5,"fromTeamId":0,"toTeamId":2}]}
+        ]}
+    """.trimIndent()
+
+    @Test
+    fun `pending trade offers are read from my side, others and odd shapes skipped`() = runTest {
+        assertEquals(1, EspnFantasyParser.tradeOffers(transactions).size)
+        assertEquals(emptyList<RawTradeOffer>(), EspnFantasyParser.tradeOffers("not json"))
+        val prefs = FakePrefsSource()
+        val ids = PlayerDirectory(
+            object : QueryExecutor {
+                override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> = emptyList()
+            },
+        )
+        val repo = FantasyLeagueRepository(prefs, { url, _ -> if ("mTransactions2" in url) transactions else body }, ids, dir) { Instant.parse("2026-10-01T00:00:00Z") }
+        repo.configure("42", null, null)
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+        val offer = repo.tradeOffers(2026).offers.single()
+        assertEquals("Rivals", offer.partner)
+        // No xref in this fixture: nobody maps to an app id, so the lists are empty but the offer stands.
+        assertEquals(false, offer.fromMe)
     }
 
     @Test
@@ -451,5 +600,106 @@ class FantasyLeagueTest {
     @Test
     fun `a league id must be digits`() = runTest {
         assertThrows<IllegalArgumentException> { repo(FakePrefsSource()) { _, _ -> body }.addLeague("abc") }
+    }
+    @Test
+    fun `roster size sums the slots without IR`() {
+        val counts = "\"rosterSettings\":{\"lineupSlotCounts\":{\"0\":1,\"2\":2,\"4\":2,\"6\":1,\"23\":1,\"16\":1,\"17\":1,\"20\":6,\"21\":2,\"99\":3,\"7\":0}}"
+        val league = EspnFantasyParser.parse(withSettings(counts), "42", 5L)
+        assertEquals(18, league.rosterSize)
+        assertEquals(18, league.undraftedRound)
+        assertEquals(18, fantasyLeagueFromJson(league.toJson())!!.rosterSize)
+    }
+
+    @Test
+    fun `an old snapshot falls back to 16 rounds`() {
+        val old = EspnFantasyParser.parse(body, "42", 5L)
+        assertEquals(0, old.rosterSize)
+        assertEquals(16, old.undraftedRound)
+        val json = old.toJson().replace(",\"rosterSize\":0", "")
+        assertEquals(16, fantasyLeagueFromJson(json)!!.undraftedRound)
+    }
+
+    // mDraftDetail as remembered, unverified against a live league.
+    private val draftBody = """
+        {"draftDetail":{"drafted":true,"picks":[
+          {"overallPickNumber":1,"roundId":1,"roundPickNumber":1,"teamId":2,"playerId":222,"keeper":false},
+          {"overallPickNumber":2,"roundId":1,"roundPickNumber":2,"teamId":1,"playerId":111,"keeper":true},
+          {"overallPickNumber":20,"roundId":10,"roundPickNumber":2,"teamId":2,"playerId":-16012,"keeper":false},
+          {"overallPickNumber":21,"roundId":11,"teamId":2}
+        ]}}
+    """.trimIndent()
+
+    @Test
+    fun `draft picks parse round, team and keeper`() {
+        assertTrue(EspnFantasyParser.draftUrl("42", 2026).endsWith("/seasons/2026/segments/0/leagues/42?view=mDraftDetail"))
+        assertEquals(
+            listOf(
+                DraftPick("222", null, 1, 2, keeper = false),
+                DraftPick("111", null, 1, 1, keeper = true),
+                DraftPick("-16012", null, 10, 2, keeper = false),
+            ),
+            EspnFantasyParser.draft(draftBody),
+        )
+    }
+
+    @Test
+    fun `no draft yet is an empty list`() {
+        assertEquals(emptyList<DraftPick>(), EspnFantasyParser.draft("""{"draftDetail":{"drafted":false}}"""))
+        assertEquals(emptyList<DraftPick>(), EspnFantasyParser.draft("""{"id":42}"""))
+        assertThrows<LiveFormatException> { EspnFantasyParser.draft("<html>") }
+    }
+
+    @Test
+    fun `the league's draft links picks through the snapshot`() = runTest {
+        val prefs = FakePrefsSource()
+        val repo = FantasyLeagueRepository(prefs, { url, _ -> if ("mDraftDetail" in url) draftBody else body }, players, dir) { Instant.parse("2026-10-01T00:00:00Z") }
+        assertEquals("no league id set", repo.draft(2026).error)
+        repo.configure("42", null, null)
+        assertEquals("sync your league first", repo.draft(2026).error)
+        assertTrue(repo.sync(2026).ok)
+        val draft = repo.draft(2026)
+        assertNull(draft.error)
+        assertEquals(3, draft.picks.size)
+        assertEquals("DST_KC", draft.picks.single { it.espnId == "-16012" }.playerId)
+    }
+
+    @Test
+    fun `the keeper rule saves on the active league`() = runTest {
+        val prefs = FakePrefsSource()
+        val repo = repo(prefs) { _, _ -> body }
+        assertNull(repo.keeperRule.first())
+        repo.configure("42", null, null)
+        repo.addLeague("77")
+        repo.setActive("42")
+        assertEquals(KeeperRule(), repo.keeperRule.first())
+        repo.setKeeperRule(KeeperRule(keepers = 3))
+        assertEquals(KeeperRule(keepers = 3), repo.keeperRule.first())
+        assertEquals(KeeperRule(), prefs.prefs.first().espnLeagues.single { it.leagueId == "77" }.keeperRule)
+    }
+
+    @Test
+    fun `the review grades every manager, with draft grades only when a draft is found`() = runTest {
+        val prefs = FakePrefsSource()
+        var draft = "{}"
+        val repo = repo(prefs) { url, _ ->
+            when {
+                "view=mMatchup" in url -> matchupBody
+                "mDraftDetail" in url -> draft
+                else -> body
+            }
+        }
+        repo.configure("42", null, null)
+        assertTrue(repo.sync(2026).ok)
+        repo.chooseTeam(2)
+        val none = repo.lineupReview(2026, 4)
+        assertEquals(2, none.myTeamId)
+        assertTrue(none.reportCards.isNotEmpty())
+        assertTrue(none.reportCards.all { it.draftPoints == null })
+        assertEquals("no draft found", none.draftMessage)
+
+        draft = draftBody
+        val graded = repo.lineupReview(2026, 4)
+        assertNull(graded.draftMessage)
+        assertTrue(graded.reportCards.all { it.draftPoints != null })
     }
 }

@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 7
+public const val FORECAST_VERSION: Int = 18
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -19,12 +19,63 @@ internal object K {
     // Layer 2, player share (shrinkage.py HALF_LIVES and SHRINKAGE_K; k in games).
     const val SHARE_HALF_LIFE = 4.5
     const val SHARE_K_GAMES = 5.0
+
+    // Layer 2b: an RB, WR or TE's baseline moves this far toward his per-game stats this season. On the same
+    // player-weeks, PPR MAE fell at RB, WR and TE in 2024 (-0.084 pooled, ±0.021 at 2 SE) and 2025 (-0.036,
+    // ±0.019); a QB blend gained nothing. 0.25 gained more in 2024 but no more in 2025, and pulls a rising
+    // player harder toward his early, smaller games.
+    const val SEASON_FORM_WEIGHT = 0.15
+
+    // Layer 2 amendment: an RB, WR or TE's target and carry shares move this far toward what his snap share over
+    // his last SNAP_GAMES games implies (the position's share per unit of snap share). Fitted on 2022-2023 and on
+    // 2024-2025 separately: 0.20-0.30 for targets and carries in both.
+    const val SNAP_SHARE_WEIGHT = 0.25
+    const val SNAP_GAMES = 3
+
+    // Layer 7: how far a QB, RB, WR or TE's final projection moves toward ESPN's for the same week. Fitted leaving
+    // one season out on 2022-2025 (points level): QB 0.55-0.60, RB 0.60-0.70, WR 0.65-0.75, TE 0.45-0.55.
+    val ESPN_WEIGHT: Map<String, Double> = mapOf("QB" to 0.55, "RB" to 0.6, "WR" to 0.65, "TE" to 0.5)
+
+    // ESPN's QB passing yards run high by the same share every season: starters' actual over ESPN's was 0.947,
+    // 0.954, 0.951, 0.950 and 0.940 in 2021-2025. Taking it out before the blend: QB PPR MAE -0.020 (±0.012)
+    // pooled on 2022-2025, every season lower.
+    const val ESPN_QB_PASS_YARDS_SCALE = 0.95
+
+    // Layer 2c: a starting QB's baseline keeps this share of its distance from the league's typical starter.
+    // Fitted leaving one season out on 2022-2025 (built from 2021): 0.60-0.65 in every fold.
+    const val QB_SPREAD = 0.65
     // Layer 2 amendment (spec, 2026-09-26): shrink toward the player's own last season; newcomers
     // toward half the position's average share; the starting QB toward a starter's share. Only
     // players who played for their team in one of its last ACTIVE_WINDOW games are projected.
     const val NEWCOMER_SHARE_FACTOR = 0.5
     const val STARTER_PASS_SHARE = 0.97
     const val ACTIVE_WINDOW = 2
+
+    // An RB, WR or TE outside the active window (back from injury, or sat the last games of last season) is
+    // projected again once ESPN projects him for this many PPR points. On 2022-2025 (built from 2021) ESPN's 3+
+    // plays about 87%; it adds 374 played weeks and teammates' PPR MAE falls 0.008 (±0.003). 5 and 8 add fewer
+    // and gain less. Treating a player ESPN stops projecting as out was tested and cost 0.019: not used.
+    const val RETURN_MIN_ESPN_POINTS = 3.0
+
+    // A player nflverse lists Out or Doubtful this week keeps rest of season from the healthy roster, each of his
+    // team's next games times the chance such a player has played by then (returnCurve, every past listing in the
+    // database; from the 8th game on, the 8th's). On 2022-2025, his next four games' points (missed ones zero)
+    // against his season average: MAE 23.8 undiscounted, 11.0 discounted (-12.8 ±1.5, 553 listings), bias +22.3 to +0.8.
+    const val RETURN_CURVE_GAMES = 8
+    const val RETURN_CURVE_MIN_CASES = 30
+
+    // A QB, RB, WR or TE nflverse lists Questionable is projected at what he scores if he plays times how often a
+    // Questionable player at his Friday practice level plays and scores, relative to a healthy one: on 2022-2025
+    // (projected 3+ PPR, DNPs counted as zero) actual over projected was 0.943 healthy, 0.824 full practice, 0.733
+    // limited and 0.488 no practice, steady by season (limited 0.70-0.78). Unknown practice counts as limited.
+    val QUESTIONABLE_PLAYS: Map<Practice, Double> = mapOf(Practice.FULL to 0.87, Practice.LIMITED to 0.78, Practice.NONE to 0.52)
+
+    // From the upcoming week on, the starting QB is the one ESPN projects most once it projects him for this many
+    // points, when nflverse lists no starter yet; on 2022-2025's team-weeks that picks the real starter 97% of the
+    // time against 89% for the last listed starter (210 of 231 changes caught). A listed starter ESPN projects under
+    // STARTER_DOUBT_ESPN_POINTS gives way to ESPN's pick. Past weeks always use the listed (actual) starter.
+    const val STARTER_ESPN_POINTS = 8.0
+    const val STARTER_DOUBT_ESPN_POINTS = 3.0
 
     // Layer 3, efficiency (shrinkage.py: half-life 10, catch_rate k = 15 games, int_rate k = 150 attempts).
     const val EFFICIENCY_HALF_LIFE = 10.0

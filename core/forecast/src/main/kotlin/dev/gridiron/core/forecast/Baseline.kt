@@ -16,6 +16,30 @@ internal fun teamVolume(games: List<TeamGame>, fallback: TeamVolume): TeamVolume
     )
 }
 
+/**
+ * Layer 2b: an RB, WR or TE's [projected] stats moved [K.SEASON_FORM_WEIGHT] of the way toward his per-game
+ * averages over this season's games so far. A QB, or anyone without a game yet this season, is unchanged.
+ */
+internal fun withSeasonForm(projected: Map<String, Double>, ctx: PlayerContext): Map<String, Double> {
+    if (ctx.position == "QB") return projected
+    val games = ctx.history.filter { it.season == ctx.season }
+    if (games.isEmpty()) return projected
+    val w = K.SEASON_FORM_WEIGHT
+    return projected.mapValues { (metric, mean) -> (1 - w) * mean + w * games.sumOf { it[metric] } / games.size }
+}
+
+/**
+ * Layer 2c: a starting QB's [projected] stats keep [K.QB_SPREAD] of their distance from [typical], the league's
+ * typical starter this week. A QB's projections otherwise spread wider than his games do. Anyone else is unchanged.
+ */
+internal fun withQbSpread(projected: Map<String, Double>, ctx: PlayerContext, typical: Map<String, Double>): Map<String, Double> {
+    if (ctx.position != "QB") return projected
+    return projected.mapValues { (metric, mean) ->
+        val reference = typical[metric] ?: return@mapValues mean
+        reference + K.QB_SPREAD * (mean - reference)
+    }
+}
+
 /** What the model knows about one player for one week. */
 internal class PlayerContext(
     val position: String,
@@ -65,7 +89,13 @@ internal class BaselineModel(
         val carry = share(ctx, rates.carryShare * K.NEWCOMER_SHARE_FACTOR, { it["carries"] }, { it.carries })
         if (ctx.position != "QB") {
             val target = share(ctx, rates.targetShare * K.NEWCOMER_SHARE_FACTOR, { it["targets"] }, { it.targets })
-            return Shares(pass = 0.0, target = target, carry = carry)
+            val snaps = recentSnapShare(ctx) ?: return Shares(pass = 0.0, target = target, carry = carry)
+            val w = K.SNAP_SHARE_WEIGHT
+            return Shares(
+                pass = 0.0,
+                target = (1 - w) * target + w * snaps * rates.targetsPerSnapShare,
+                carry = (1 - w) * carry + w * snaps * rates.carriesPerSnapShare,
+            )
         }
         // A starter is shrunk toward a starter's share, never toward his own backup history.
         val pass = if (starter) share(ctx, K.STARTER_PASS_SHARE, { it["attempts"] }, { it.passAttempts }, usePrior = false) else 0.0
@@ -138,6 +168,16 @@ internal class BaselineModel(
         val current = series(ctx.history.filter { it.season == ctx.season })
         val prior = if (!usePrior || ctx.regimeBreak) null else ewma(series(ctx.history.filter { it.season == ctx.season - 1 }), K.SHARE_HALF_LIFE)
         return shrink(ewma(current, K.SHARE_HALF_LIFE), current.size.toDouble(), prior ?: fallback, K.SHARE_K_GAMES)
+    }
+
+    /**
+     * Layer 2 amendment: his share of the team's offensive snaps over his last [K.SNAP_GAMES] games this season,
+     * or null with fewer than two. Snaps lead targets and carries: a player on the field more gets more of both.
+     */
+    private fun recentSnapShare(ctx: PlayerContext): Double? {
+        val games = ctx.history.filter { it.season == ctx.season && it["team_offense_snaps"] > 0.0 }.takeLast(K.SNAP_GAMES)
+        if (games.size < 2) return null
+        return games.sumOf { it["offense_snaps"] } / games.sumOf { it["team_offense_snaps"] }
     }
 
     /** Layer 3: a rate over every earlier game (half-life 10), shrunk toward the position's with k = 15 games. */

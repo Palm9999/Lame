@@ -9,9 +9,11 @@ internal interface ProjectionSink {
     fun factor(playerId: String, season: Int, week: Int, factor: String, logMultiplier: Double, note: String?)
 
     fun ros(playerId: String, season: Int, asOfWeek: Int, metricId: String, mean: Double, variance: Double)
+
+    fun rosWeek(playerId: String, season: Int, asOfWeek: Int, week: Int, metricId: String, mean: Double, variance: Double)
 }
 
-/** Inserts into the projection tables through three prepared statements. The caller owns the transaction. */
+/** Inserts into the projection tables through four prepared statements. The caller owns the transaction. */
 internal class ProjectionWriter(conn: SQLiteConnection) : ProjectionSink, AutoCloseable {
     private val projectionInsert = conn.prepare(
         "INSERT OR REPLACE INTO player_week_projection (player_id, season, week, metric_id, stage, mean, variance) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -21,6 +23,10 @@ internal class ProjectionWriter(conn: SQLiteConnection) : ProjectionSink, AutoCl
     )
     private val rosInsert = conn.prepare(
         "INSERT OR REPLACE INTO player_ros_projection (player_id, season, as_of_week, metric_id, mean, variance) VALUES (?, ?, ?, ?, ?, ?)",
+    )
+
+    private val rosWeekInsert = conn.prepare(
+        "INSERT OR REPLACE INTO player_ros_week (player_id, season, as_of_week, week, metric_id, mean, variance) VALUES (?, ?, ?, ?, ?, ?, ?)",
     )
 
     var rows: Long = 0
@@ -69,9 +75,25 @@ internal class ProjectionWriter(conn: SQLiteConnection) : ProjectionSink, AutoCl
         rows++
     }
 
+    override fun rosWeek(playerId: String, season: Int, asOfWeek: Int, week: Int, metricId: String, mean: Double, variance: Double) {
+        with(rosWeekInsert) {
+            bindText(1, playerId)
+            bindLong(2, season.toLong())
+            bindLong(3, asOfWeek.toLong())
+            bindLong(4, week.toLong())
+            bindText(5, metricId)
+            bindDouble(6, mean)
+            bindDouble(7, variance)
+            step()
+            reset()
+        }
+        rows++
+    }
+
     override fun close() {
         projectionInsert.close()
         factorInsert.close()
         rosInsert.close()
+        rosWeekInsert.close()
     }
 }

@@ -1,13 +1,32 @@
 package dev.gridiron.feature.projections
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertTextEquals
+import androidx.compose.ui.test.onAllNodesWithTag
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
+import dev.gridiron.core.data.live.FantasyLeague
 import dev.gridiron.core.data.live.LeaguePlayer
+import dev.gridiron.core.data.live.LeagueRecap
+import dev.gridiron.core.data.live.LeagueTeam
+import dev.gridiron.core.data.live.LineupReviewResult
+import dev.gridiron.core.data.live.LiveWinChance
+import dev.gridiron.core.data.live.MatchupPlayer
 import dev.gridiron.core.data.live.MyTeam
+import dev.gridiron.core.data.live.PlayoffPicture
+import dev.gridiron.core.data.live.RecapGame
+import dev.gridiron.core.data.live.ScheduledGame
+import dev.gridiron.core.data.live.TeamLuck
+import dev.gridiron.core.data.live.TradeOffer
+import dev.gridiron.core.data.live.WeekRecap
+import dev.gridiron.core.data.live.WeekReview
 import dev.gridiron.core.designsystem.GridironTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -43,6 +62,22 @@ class ProjectionListScreenTest {
         compose.onNodeWithText("9.1–25.4").assertIsDisplayed()
         compose.onNodeWithText("Rest of season").performClick()
         compose.onNodeWithText("180.0").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a week row shows the TD chance`() {
+        val withTd = loaded.copy(weekRows = listOf(loaded.weekRows.first().copy(tdChance = 0.34)))
+        compose.setContent { GridironTheme { ProjectionListScreen(withTd, emptyMap(), onPlayer = {}, onBack = {}) } }
+        compose.onNodeWithText("WR · KC · TD 34%").assertIsDisplayed()
+    }
+
+    @Test
+    fun `the Value tab ranks every position by points over replacement`() {
+        compose.setContent { GridironTheme { ProjectionListScreen(tradeState, emptyMap(), onPlayer = {}, onBack = {}) } }
+        compose.onNodeWithText("Rest of season").performClick()
+        compose.onNodeWithText("Value").performScrollTo().performClick()
+        // Twelve teams on the usual slots: every QB, RB and WR here starts, so each one's replacement is zero.
+        compose.onNodeWithText("QB · KC · +200.0 over replacement").assertExists()
     }
 
     @Test
@@ -100,7 +135,48 @@ class ProjectionListScreenTest {
         compose.waitForIdle()
         assertEquals(1, asked)
         // Mine: QB 21.0 + WR 16.2; theirs: QB 21.0 only.
-        compose.onNodeWithTag("lineup:vs").assertTextEquals("vs Rivals: 21.0 pts · You lead by 16.2")
+        compose.onNodeWithTag("lineup:vs").assertTextEquals("vs Rivals: 21.0 pts · You lead by 16.2 · 94% to win")
+        compose.onNodeWithTag("lineup:range").assertExists()
+        compose.onNodeWithTag("lineup:check").assertTextEquals("Your ESPN lineup is already the best (as of your last sync).")
+    }
+
+    @Test
+    fun `my lineup shows the live win chance while a game is on`() {
+        var calls = 0
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    loaded, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team,
+                    // Live once, then the games are over: the loop stops.
+                    liveFetch = { if (calls++ == 0) LiveWinChance(61.2, 40.0, 101.5, 90.3, 0.72) else null },
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("lineup:live").assertTextEquals("Live: 61.2–40.0 · heading for 101.5–90.3 · 72% to win")
+    }
+
+    @Test
+    fun `my lineup shows game day with a Questionable starter's late replacement`() {
+        val later = java.time.Instant.now().plusSeconds(86_400)
+        val withBench = loaded.copy(weekRows = loaded.weekRows + ProjectionRow("w3", "Late Receiver", "WR", "SF", 9.0, 4.0, 15.0))
+        val roster = team.copy(players = team.players + LeaguePlayer("4", "Late Receiver", "BE", "w3"))
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    withBench, mapOf("w" to "Q"), onPlayer = {}, onBack = {}, myTeam = roster,
+                    kickoffTimes = mapOf("KC" to later, "SF" to later.plusSeconds(3_600)),
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithTag("lineup:list").performScrollToNode(hasTestTag("pivot:w"))
+        compose.onNodeWithTag("pivot:w").assertTextEquals(
+            "Wide Out (WR) is Questionable, kicking off ${kickoffText(later)}. If he's out, Late Receiver (${kickoffText(later.plusSeconds(3_600))}, 9.0) can still go in.",
+        )
+        compose.onNodeWithTag("lineup:list").performScrollToNode(hasTestTag("kickoff:0"))
+        compose.onNodeWithTag("kickoff:0").assertExists()
     }
 
     @Test
@@ -130,6 +206,39 @@ class ProjectionListScreenTest {
         compose.onNodeWithText("+3.8").assertIsDisplayed()
         compose.onNodeWithText("Add Free Agent WR").performClick()
         assertEquals("w2", opened)
+    }
+
+    @Test
+    fun `rest-of-season adds rank free agents by their rest-of-season lift`() {
+        // The team's lineup holds one WR and one QB; w (180) is rostered, so a free WR at 240 lifts it by 60.
+        val withStash = loaded.copy(rosRows = loaded.rosRows + ProjectionRow("w3", "Stash WR", "WR", "SEA", 240.0, 200.0, 280.0))
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(withStash, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team, rostered = setOf("w", "q"))
+            }
+        }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithTag("lineup:list").performScrollToNode(hasTestTag("ros:pickup:w3"))
+        compose.onNodeWithText("Rest-of-season adds").assertIsDisplayed()
+        compose.onNodeWithTag("ros:pickup:w3").assertIsDisplayed()
+    }
+
+    @Test
+    fun `rest-of-season adds suggest a FAAB bid from the gain and what is left`() {
+        val withStash = loaded.copy(rosRows = loaded.rosRows + ProjectionRow("w3", "Stash WR", "WR", "SEA", 240.0, 200.0, 280.0))
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    withStash, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = team.copy(faabLeft = 50, faabBudget = 100), rostered = setOf("w", "q"),
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:lineup").performClick()
+        compose.onNodeWithTag("lineup:list").performScrollToNode(hasTestTag("ros:pickup:w3"))
+        // A 60-point lift is a full-size add: half of the $50 left.
+        compose.onNodeWithTag("ros:bid:w3", useUnmergedTree = true).assertTextEquals("Bid $25")
+        compose.onNodeWithTag("faab").assertTextEquals("$50 of $100 FAAB left. Bids scale with each add's rest-of-season gain, at most half of what's left.")
     }
 
     @Test
@@ -182,5 +291,219 @@ class ProjectionListScreenTest {
             GridironTheme { ProjectionListScreen(ProjectionListState.Unavailable("No upcoming games in 2026."), emptyMap(), onPlayer = {}, onBack = {}) }
         }
         compose.onNodeWithText("No upcoming games in 2026.").assertIsDisplayed()
+    }
+
+    private val tradeState = ProjectionListState.Loaded(
+        week = 4,
+        builtAt = null,
+        weekRows = emptyList(),
+        rosRows = listOf(
+            ProjectionRow("q1", "Mine QB", "QB", "KC", 200.0, 0.0, 0.0),
+            ProjectionRow("r1", "Mine RB One", "RB", "KC", 150.0, 0.0, 0.0),
+            ProjectionRow("r2", "Mine RB Two", "RB", "KC", 140.0, 0.0, 0.0),
+            ProjectionRow("w1", "Mine WR", "WR", "KC", 60.0, 0.0, 0.0),
+            ProjectionRow("q2", "Their QB", "QB", "BUF", 190.0, 0.0, 0.0),
+            ProjectionRow("w2", "Their WR One", "WR", "BUF", 150.0, 0.0, 0.0),
+            ProjectionRow("w3", "Their WR Two", "WR", "BUF", 140.0, 0.0, 0.0),
+            ProjectionRow("r3", "Their RB", "RB", "BUF", 50.0, 0.0, 0.0),
+        ),
+    )
+
+    private fun roster(name: String, vararg ids: String) =
+        MyTeam(name, 2026, ids.map { LeaguePlayer("e$it", "Player $it", "BE", it) }, mapOf("QB" to 1, "RB" to 1, "WR" to 1), slotsAreDefault = false)
+
+    @Test
+    fun `trade weighs ticked players and suggests a trade that helps both`() {
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    tradeState, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = roster("Mine", "q1", "r1", "r2", "w1"),
+                    partners = listOf(roster("Rivals", "q2", "w2", "w3", "r3")),
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:trade").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("give:r2").performClick()
+        compose.onNodeWithTag("get:w3").performClick()
+        compose.onNodeWithTag("trade:verdict").assertTextEquals("Good for both teams")
+        // Each lineup plus a tenth of its best bench player: mine 410 + 14 → 490 + 6, theirs 390 + 14 → 480 + 5.
+        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +72.0 (424.0 → 496.0)")
+        compose.onNodeWithTag("trade:theirs").assertTextEquals("Rivals +81.0 (404.0 → 485.0)")
+        // No weekly projections: no playoff line.
+        compose.onNodeWithTag("trade:playoffs").assertDoesNotExist()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("idea:0").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithTag("idea:0").performClick()
+        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +82.0 (424.0 → 506.0)")
+    }
+
+    @Test
+    fun `with weekly projections a trade also reads over the playoff weeks, and a two-for-one names the cut`() {
+        // Every point falls in weeks 15 and 16, so the playoffs carry the whole trade.
+        val weekly = tradeState.copy(rosWeekly = tradeState.rosRows.associate { it.playerId to mapOf(15 to it.points / 2, 16 to it.points / 2) })
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    weekly, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = roster("Mine", "q1", "r1", "r2", "w1"),
+                    partners = listOf(roster("Rivals", "q2", "w2", "w3", "r3")),
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:trade").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("give:r2").performClick()
+        compose.onNodeWithTag("give:w1").performClick()
+        compose.onNodeWithTag("get:w3").performClick()
+        compose.onNodeWithTag("trade:playoffs").assertTextEquals("Playoffs (weeks 15–17): you +66.0, them +82.0")
+        compose.onNodeWithText("Rivals cuts Their RB to make room.").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a two-for-one lets you pick whom you cut`() {
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    tradeState, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = roster("Mine", "q1", "r1", "r2", "w1"),
+                    partners = listOf(roster("Rivals", "q2", "w2", "w3", "r3")),
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:trade").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithTag("give:w1").performClick()
+        compose.onNodeWithTag("get:w3").performClick()
+        compose.onNodeWithTag("get:r3").performClick()
+        // The lowest goes by default: Their RB (50). Mine 490 plus a tenth of r2 (140) on the bench.
+        compose.onNodeWithText("You cut Their RB to make room.").assertIsDisplayed()
+        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +80.0 (424.0 → 504.0)")
+        compose.onNodeWithTag("cut:w1").assertDoesNotExist()
+        compose.onNodeWithTag("cut:r2").performClick()
+        // Cutting r2 instead leaves Their RB (50) on the bench.
+        compose.onNodeWithText("You cut Mine RB Two to make room.").assertIsDisplayed()
+        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +71.0 (424.0 → 495.0)")
+    }
+
+    @Test
+    fun `playoff odds simulate the games left from each roster's weekly projections`() {
+        // Mine (3-0) is far stronger than Rivals (0-3); one game left between them, and two teams make it.
+        fun team(id: Int, name: String, w: Int, l: Int, vararg ids: String) =
+            LeagueTeam(id, name, null, w, l, 0, 300.0, 300.0, 0, ids.map { LeaguePlayer("e$it", "Player $it", "BE", it) })
+        val league = FantasyLeague(
+            "42", "Sunday League", 2026, 4,
+            listOf(team(1, "Mine", 3, 0, "q1", "r1", "w1"), team(2, "Rivals", 0, 3, "q2", "r3", "w2")),
+            lineupSlots = mapOf("QB" to 1, "RB" to 1, "WR" to 1), playoffTeams = 1,
+        )
+        val picture = PlayoffPicture(league, 1, listOf(ScheduledGame(5, 1, 2, false)))
+        val weekly = tradeState.copy(rosWeekly = tradeState.rosRows.associate { it.playerId to mapOf(5 to it.points / 10) })
+        var asked = 0
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    weekly, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = roster("Mine", "q1", "r1", "w1"), partners = listOf(roster("Rivals", "q2", "r3", "w2")),
+                    playoffs = PlayoffState.Loaded(picture), onPlayoffsOpened = { asked++ },
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:playoffs").performScrollTo().performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithTag("odds:chance:1", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(1, asked)
+        compose.onNodeWithTag("odds:chance:1", useUnmergedTree = true).assertTextEquals("100%")
+        compose.onNodeWithTag("odds:chance:2", useUnmergedTree = true).assertTextEquals("0%")
+        compose.onAllNodesWithText("Mine (you)", useUnmergedTree = true).assertCountEquals(2)
+        // Power rankings: Mine (200 + 150 + 60 over the week) leads Rivals.
+        compose.onNodeWithTag("power:1", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("Power rankings: rest-of-season roster strength").assertExists()
+    }
+
+    @Test
+    fun `the review totals the points left on the bench and names the swap`() {
+        fun mp(id: String, name: String, slot: String, pts: Double) = MatchupPlayer(id, name, slot, pts)
+        val weeks = listOf(
+            WeekReview(3, 98.2, 112.6, listOf(mp("2", "Sam Bench", "BE", 18.4)), listOf(mp("1", "Pat Start", "WR", 4.0))),
+            WeekReview(2, 120.0, 120.0, emptyList(), emptyList()),
+        )
+        var asked = 0
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    loaded, emptyMap(), onPlayer = {}, onBack = {}, myTeam = team,
+                    review = ReviewState.Loaded(
+                        LineupReviewResult(
+                            weeks, null,
+                            LeagueRecap(
+                                WeekRecap(3, emptyList(), "Ace" to 130.2, RecapGame("Ace", 130.2, "Bee", 80.0), RecapGame("Cee", 101.0, "Dee", 100.5)),
+                                listOf(TeamLuck(1, "Ace", 3.0, 3, 2.0)),
+                            ),
+                        ),
+                    ),
+                    onReviewOpened = { asked++ },
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:review").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(1, asked)
+        compose.onNodeWithTag("review:total").assertTextEquals("14.4 points left on your bench")
+        compose.onNodeWithText("Week 3: 98.2 of a possible 112.6 (−14.4)").assertExists()
+        compose.onNodeWithText("Should have started Sam Bench (18.4) over Pat Start (4.0)").assertExists()
+        compose.onNodeWithText("Week 2: 120.0 of a possible 120.0 ✓").assertExists()
+        compose.onNodeWithTag("review").performScrollToNode(hasTestTag("luck:1"))
+        compose.onNodeWithText("Biggest win: Ace over Bee by 50.2", useUnmergedTree = true).assertExists()
+        compose.onNodeWithText("3.0 wins vs 2.0 all-play · +1.0", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun `a pending ESPN offer is graded like any trade and tapping it loads it`() {
+        var asked = 0
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    tradeState, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = roster("Mine", "q1", "r1", "r2", "w1"),
+                    partners = listOf(roster("Rivals", "q2", "w2", "w3", "r3")),
+                    offers = listOf(TradeOffer("t1", "Rivals", give = listOf("r2"), get = listOf("w3"), fromMe = false)),
+                    onTradeOpened = { asked++ },
+                )
+            }
+        }
+        compose.onNodeWithTag("chip:trade").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(1, asked)
+        compose.onNodeWithTag("offer:gain:t1", useUnmergedTree = true).assertTextEquals("+72.0")
+        compose.onNodeWithTag("offer:t1").performClick()
+        compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +72.0 (424.0 → 496.0)")
+    }
+
+    @Test
+    fun `trade needs your team and another team`() {
+        compose.setContent {
+            GridironTheme { ProjectionListScreen(tradeState, emptyMap(), onPlayer = {}, onBack = {}, myTeam = roster("Mine", "q1")) }
+        }
+        compose.onNodeWithTag("chip:trade").assertDoesNotExist()
+    }
+
+    @Test
+    fun `start-sit charts the picked players' weeks through the playoffs, a bye as a gap`() {
+        val weekly = loaded.copy(rosWeekly = mapOf("w" to mapOf(4 to 16.0, 16 to 12.0), "q" to (4..17).associateWith { 20.0 }))
+        compose.setContent { GridironTheme { ProjectionListScreen(weekly, emptyMap(), onPlayer = {}, onBack = {}) } }
+        compose.onNodeWithTag("chip:startsit").performClick()
+        compose.onNodeWithTag("ss:w").performClick()
+        compose.onNodeWithTag("startsit").performScrollToNode(hasTestTag("roschart"))
+        compose.onNodeWithText("  Wide Out: 28.0 total · playoffs 12.0", useUnmergedTree = true).assertExists()
+        compose.onNodeWithTag("roschart:row:5", useUnmergedTree = true).assertExists()
+    }
+
+    @Test
+    fun `start-sit names the pick between two ticked players`() {
+        compose.setContent { GridironTheme { ProjectionListScreen(loaded, emptyMap(), onPlayer = {}, onBack = {}) } }
+        compose.onNodeWithTag("chip:startsit").performClick()
+        compose.onNodeWithTag("ss:w").performClick()
+        compose.onNodeWithTag("sstab:QB").performScrollTo().performClick()
+        compose.onNodeWithTag("ss:q").performClick()
+        compose.onNodeWithTag("startsit:pick").assertTextEquals("Start Quarter Back")
     }
 }

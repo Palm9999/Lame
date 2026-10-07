@@ -2,10 +2,12 @@ package dev.gridiron.app
 
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import dev.gridiron.core.data.PlayerHeader
+import dev.gridiron.core.data.ReturnOutlook
 import dev.gridiron.core.data.live.InjuryNote
 import dev.gridiron.core.data.live.LiveInjury
 import dev.gridiron.core.data.live.LiveStatus
@@ -82,6 +84,21 @@ class LiveScreensTest {
     }
 
     @Test
+    fun anOutPlayerShowsHowSoonHeIsLikelyBack() {
+        val outlook = ReturnOutlook("Out", "hamstring", 97, 0, 0, listOf(6, 8), listOf(0.0, 0.28), 2024, 2026)
+        val page = PlayerPage(
+            PlayerHeader("P1", "Saquon Barkley", "RB", "PHI"), LiveStatus("Out", "O", null, null, t), emptyList(), emptyList(), t,
+            returnOutlook = outlook,
+        )
+        compose.setContent { GridironTheme { PlayerScreen("P1", page, liveAvailable = true, onBack = {}, onOpen = {}) } }
+
+        compose.onNodeWithTag("player:return").assertExists()
+        compose.onNodeWithContentDescription("Played again by: wk 6 0% · wk 8 28%").assertExists()
+        compose.onNodeWithText("28%").assertExists()
+        compose.onNodeWithText("From 97 past hamstring absences", substring = true).assertExists()
+    }
+
+    @Test
     fun aGrowingRoleShowsOnThePlayerPageWithItsReason() {
         val rising = dev.gridiron.core.data.BreakoutRow("P1", "Saquon Barkley", "RB", "PHI", 72.0, 18.0, 12.0, null, null, 0.0, "Kenneth Gainwell")
         val page = PlayerPage(PlayerHeader("P1", "Saquon Barkley", "RB", "PHI"), null, emptyList(), emptyList(), null, risingRole = rising)
@@ -124,10 +141,16 @@ class LiveScreensTest {
         val line = InjuryLine(LiveInjury("e1", "P1", "Max Melton", "ARI", "CB", "Questionable", "Q", "Melton (toe) was limited.", t), "Limited · Wk 3")
         val players = mutableListOf<String>()
         compose.setContent {
-            GridironTheme { LiveInjuriesScreen(listOf(InjuryGroup("ARI", listOf(line))), t, null, onBack = {}, onPlayer = { players += it }) }
+            GridironTheme {
+                LiveInjuriesScreen(
+                    listOf(InjuryGroup("ARI", listOf(line))), t, null, onBack = {}, onPlayer = { players += it },
+                    outlooks = mapOf("P1" to "Played again by: wk 6 40%"),
+                )
+            }
         }
 
         compose.onNodeWithText("ARI").assertExists()
+        compose.onNodeWithText("Played again by: wk 6 40%").assertExists()
         compose.onNodeWithText("CB · Practice: Limited · Wk 3").assertExists()
         compose.onNodeWithText("Max Melton").performClick()
 

@@ -9,6 +9,11 @@ import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.ListedProjection
+import dev.gridiron.core.projections.ProjectionComponent
+import dev.gridiron.core.projections.LineupCandidate
+import dev.gridiron.core.projections.ReplacementLevel
+import dev.gridiron.core.projections.anytimeTd
+import dev.gridiron.core.projections.projectedScore
 import dev.gridiron.core.projections.projectPoints
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
@@ -22,6 +27,8 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlin.math.pow
+import kotlin.math.roundToInt
 
 public data class ProjectionRow(
     val playerId: String,
@@ -33,7 +40,16 @@ public data class ProjectionRow(
     val ceiling: Double,
     /** ESPN lists him Out or on IR: this week's points show as zero. */
     val out: Boolean = false,
+    /** His chance of a rushing or receiving TD this week ([anytimeTd]); null for rest of season, kickers and D/STs. */
+    val tdChance: Double? = null,
+    /** This week's projected usage, for QBs, RBs, WRs and TEs (the handcuff finder); null otherwise. */
+    val usage: Usage? = null,
+    /** The Questionable discount in [points] (what such players score relative to healthy), when he has one. */
+    val questionable: Double? = null,
 )
+
+/** One week's projected carries and targets, and the points (under the active profile) from rushing and from receiving. */
+public data class Usage(val carries: Double, val targets: Double, val rushingPoints: Double, val receivingPoints: Double)
 
 public enum class PositionTab(public val label: String, public val codes: Set<String>) {
     QB("QB", setOf("QB")),
@@ -43,7 +59,24 @@ public enum class PositionTab(public val label: String, public val codes: Set<St
     FLEX("FLEX", setOf("RB", "WR", "TE")),
     K("K", setOf("K")),
     DST("D/ST", setOf("DST")),
+
+    /** Every position together, by points over replacement ([valueRows]). */
+    VALUE("Value", setOf("QB", "RB", "WR", "TE", "K", "DST")),
 }
+
+/**
+ * [rows] by points over their position's replacement level ([ReplacementLevel]) in a league of [teams] teams starting
+ * [slots], best first: one scale across positions, to weigh players against each other in trades.
+ */
+public fun valueRows(rows: List<ProjectionRow>, teams: Int, slots: Map<String, Int>): List<Pair<ProjectionRow, Double>> {
+    val players = rows.map { LineupCandidate(it.playerId, it.position, it.points) }
+    val values = ReplacementLevel.values(players, ReplacementLevel.of(players, teams, slots))
+    return rows.map { it to (values[it.playerId] ?: 0.0) }.sortedByDescending { it.second }
+}
+
+/** "+42.0 over replacement" or "−3.5 under". */
+internal fun valueText(value: Double): String =
+    if (value >= 0) "+${String.format(Locale.US, "%.1f", value)} over replacement" else "−${String.format(Locale.US, "%.1f", -value)} under replacement"
 
 public sealed interface ProjectionListState {
     public data object Loading : ProjectionListState
@@ -55,6 +88,10 @@ public sealed interface ProjectionListState {
         val builtAt: Instant?,
         val weekRows: List<ProjectionRow>,
         val rosRows: List<ProjectionRow>,
+        /** Each player's rest of season week by week under the profile; empty on a database built before schema 12. */
+        val rosWeekly: Map<String, Map<Int, Double>> = emptyMap(),
+        /** Each NFL team's bye weeks this season, for the planner; empty until loaded. */
+        val byes: Map<String, Set<Int>> = emptyMap(),
     ) : ProjectionListState
 }
 
@@ -66,9 +103,30 @@ public fun visibleRows(rows: List<ProjectionRow>, tab: PositionTab, badges: Map<
         .map { row -> if (week) outAdjusted(row, badges) else row }
         .sortedByDescending { it.points }
 
+/**
+ * [row] without its Questionable discount once he is confirmed active: his team's inactives are posted ([inactivesPosted])
+ * and ESPN doesn't list him Out, Doubtful, on IR or suspended. The discount prices the chance he sits, which is gone.
+ * It scaled every stat, so his usage grows back by the same factor and his expected TDs too: 1 - TD chance is
+ * e^-(TDs), so the lifted chance is 1 - (1 - chance)^(1/q).
+ */
+internal fun confirmedActive(row: ProjectionRow, badges: Map<String, String>, inactivesPosted: Set<String>): ProjectionRow {
+    val q = row.questionable ?: return row
+    if (row.team !in inactivesPosted || badges[row.playerId] in SIT || q <= 0.0) return row
+    return row.copy(
+        points = row.points / q, floor = row.floor / q, ceiling = row.ceiling / q, questionable = null,
+        tdChance = row.tdChance?.let { liftedTd(it, q) },
+        usage = row.usage?.let { Usage(it.carries / q, it.targets / q, it.rushingPoints / q, it.receivingPoints / q) },
+    )
+}
+
+private val SIT = setOf("O", "IR", "D", "SUSP")
+
+/** A TD [chance] computed from TDs discounted by [q], with the discount taken out: 1 - (1 - chance)^(1/q). */
+internal fun liftedTd(chance: Double, q: Double): Double = 1.0 - (1.0 - chance).pow(1.0 / q)
+
 /** [row] scored as zero this week when ESPN lists him Out or on IR. */
 internal fun outAdjusted(row: ProjectionRow, badges: Map<String, String>): ProjectionRow =
-    if (badges[row.playerId] in OUT) row.copy(points = 0.0, floor = 0.0, ceiling = 0.0, out = true) else row
+    if (badges[row.playerId] in OUT) row.copy(points = 0.0, floor = 0.0, ceiling = 0.0, out = true, tdChance = 0.0) else row
 
 private val BUILT = DateTimeFormatter.ofPattern("EEE h:mm a", Locale.US)
 
@@ -81,11 +139,33 @@ public fun statusLine(week: Int, builtAt: Instant?, zone: ZoneId = ZoneId.system
 /** A list scores hundreds of players, so it simulates each with fewer draws than the single-player waterfall. */
 private const val LIST_DRAWS = 2_000
 
-internal fun toRows(listed: List<ListedProjection>, profile: ScoringProfile): List<ProjectionRow> = listed.mapNotNull { p ->
+/** Scored rows; [week] rows (one game) also carry each skill player's TD chance. */
+internal fun toRows(
+    listed: List<ListedProjection>,
+    profile: ScoringProfile,
+    week: Boolean = false,
+    questionable: Map<String, Double> = emptyMap(),
+): List<ProjectionRow> = listed.mapNotNull { p ->
     val position = p.position ?: return@mapNotNull null
     val points = projectPoints(p.components, profile, Position.fromCode(position), draws = LIST_DRAWS)
-    ProjectionRow(p.playerId, p.name, position, p.team, points.points, points.floor, points.ceiling)
+    val td = if (week && position in TD_POSITIONS) anytimeTd(p.components) else null
+    val usage = if (week && position in TD_POSITIONS) usage(p.components, profile, Position.fromCode(position)) else null
+    ProjectionRow(p.playerId, p.name, position, p.team, points.points, points.floor, points.ceiling, tdChance = td, usage = usage, questionable = questionable[p.playerId])
 }
+
+private fun usage(components: List<ProjectionComponent>, profile: ScoringProfile, position: Position?): Usage {
+    fun mean(id: String) = components.filter { it.metricId == id }.sumOf { it.mean }
+    fun points(of: (String) -> Boolean) = projectedScore(components.filter { of(it.metricId) }, profile, position)
+    return Usage(
+        mean("carries"), mean("targets"),
+        points { it.startsWith("rushing_") }, points { it.startsWith("receiving_") || it == "receptions" },
+    )
+}
+
+private val TD_POSITIONS = setOf("QB", "RB", "WR", "TE")
+
+/** "TD 34%". */
+internal fun tdText(chance: Double): String = "TD ${(chance * 100).roundToInt()}%"
 
 /** Loads the upcoming week's and rest of season's projections and scores them with the active profile. */
 public class ProjectionListViewModel(
@@ -110,6 +190,26 @@ public class ProjectionListViewModel(
                 ProjectionListState.Unavailable("Couldn't load projections: ${e.message}.")
             }
             if (request == latest) _state.value = next
+            // Weekly rest of season (Trade, rest-of-season adds) is a few hundred milliseconds more: it follows the
+            // list instead of holding it up, and a failure leaves season totals in use.
+            if (next is ProjectionListState.Loaded && request == latest) {
+                val weekly = try {
+                    val rows = repository.rosWeeks(season)
+                    withContext(compute) { rows.associate { it.playerId to it.points(profile) } }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyMap()
+                }
+                val byes = try {
+                    repository.byeWeeks(season)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyMap()
+                }
+                if (request == latest && (weekly.isNotEmpty() || byes.isNotEmpty())) _state.value = next.copy(rosWeekly = weekly, byes = byes)
+            }
         }
     }
 
@@ -123,8 +223,9 @@ public class ProjectionListViewModel(
             else -> {
                 val weekListed = repository.weekAll(season, week)
                 val rosListed = repository.rosAll(season)
+                val questionable = repository.questionable(season, week)
                 withContext(compute) {
-                    ProjectionListState.Loaded(week, status.builtAt, toRows(weekListed, profile), toRows(rosListed, profile))
+                    ProjectionListState.Loaded(week, status.builtAt, toRows(weekListed, profile, week = true, questionable), toRows(rosListed, profile))
                 }
             }
         }

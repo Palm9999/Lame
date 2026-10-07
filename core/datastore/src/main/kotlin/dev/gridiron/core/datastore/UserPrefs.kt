@@ -19,6 +19,7 @@ import dev.gridiron.core.model.ScoringProfile
  * @property espnLeagues The user's ESPN fantasy leagues, in the order added.
  * @property espnActive The id of the league every screen follows; a missing or unknown id reads as the first league.
  * @property espnLogin The one pair of ESPN cookies every league shares. They are sent only to ESPN.
+ * @property alerts Which notifications are on (all unless turned off).
  */
 public data class UserPrefs(
     val profiles: List<ScoringProfile>,
@@ -33,6 +34,7 @@ public data class UserPrefs(
     val espnLeagues: List<EspnLeagueEntry> = emptyList(),
     val espnActive: String? = null,
     val espnLogin: EspnLogin? = null,
+    val alerts: AlertSwitches = AlertSwitches(),
 ) {
     /** The active league with the shared cookies; null when no league is set. */
     public val espnLeague: EspnLeagueConfig?
@@ -48,7 +50,7 @@ public data class UserPrefs(
     /** Like the generated one, but the key shows only as set or not: prefs must be safe to log. */
     override fun toString(): String =
         "UserPrefs(profiles=$profiles, activeProfileId=$activeProfileId, tray=$tray, resetNotice=$resetNotice, " +
-            "seasons=$seasons, rosters=$rosters, oddsApiKey=${if (oddsApiKey == null) "null" else "…"}, espnLeagues=$espnLeagues, espnActive=$espnActive, espnLogin=$espnLogin)"
+            "seasons=$seasons, rosters=$rosters, oddsApiKey=${if (oddsApiKey == null) "null" else "…"}, espnLeagues=$espnLeagues, espnActive=$espnActive, espnLogin=$espnLogin, alerts=$alerts)"
 
     public companion object {
         public val DEFAULT: UserPrefs = UserPrefs(emptyList(), ScoringPresets.PPR.id, emptyList())
@@ -63,12 +65,47 @@ public data class UserPrefs(
  */
 public data class SeasonChoice(val seasons: List<Int>, val chosenIn: Int)
 
+/**
+ * The notifications, each on unless turned off: [injury] status changes and [news] about rostered players (checked about
+ * every two hours), [lineup] checks before each kickoff window, and the Tuesday [summary].
+ */
+public data class AlertSwitches(
+    val injury: Boolean = true,
+    val news: Boolean = true,
+    val lineup: Boolean = true,
+    val summary: Boolean = true,
+    /** Holds injury and news alerts from 10 pm to 8 am; off unless turned on. */
+    val quiet: Boolean = false,
+) {
+    /** True while any alert needs the two-hourly check. */
+    public val any: Boolean get() = injury || news || lineup || summary
+
+    /** True when quiet hours hold alerts at this local hour (0-23). */
+    public fun quietAt(hour: Int): Boolean = quiet && (hour >= 22 || hour < 8)
+}
+
 /** One ESPN league the user added: its id, the user's team in it (null to find it from the SWID) and ESPN's name for it once synced. */
-public data class EspnLeagueEntry(val leagueId: String, val teamId: Int? = null, val name: String? = null) {
+public data class EspnLeagueEntry(
+    val leagueId: String,
+    val teamId: Int? = null,
+    val name: String? = null,
+    val keeperRule: KeeperRule = KeeperRule(),
+) {
     init {
         require(leagueId.isNotBlank() && leagueId.all { it.isDigit() }) { "an ESPN league id is digits" }
     }
 }
+
+/**
+ * How a keeper league prices a keeper: [keepers] per team, [penalty] rounds off a pick that was already a keeper,
+ * [undraftedRound] for a player never drafted (null: the league's last round), and cost-round [overrides] by player id.
+ */
+public data class KeeperRule(
+    val keepers: Int = 2,
+    val penalty: Int = 1,
+    val undraftedRound: Int? = null,
+    val overrides: Map<String, Int> = emptyMap(),
+)
 
 /** The login cookies a private league needs, shared by every league; null reads a public league. Safe to log. */
 public data class EspnLogin(val espnS2: String? = null, val swid: String? = null) {

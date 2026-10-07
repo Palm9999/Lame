@@ -5,14 +5,17 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -24,41 +27,62 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.navigation3.rememberViewModelStoreNavEntryDecorator
+import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import dev.gridiron.core.data.AccuracyRepository
+import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
-import dev.gridiron.core.data.BreakoutRepository
+import dev.gridiron.core.data.DraftRepository
+import dev.gridiron.core.data.GridDisplayRepository
+import dev.gridiron.core.data.GridPresetRepository
+import dev.gridiron.core.data.InjuryReturnRepository
+import dev.gridiron.core.data.Kickoffs
+import dev.gridiron.core.data.DynastyRepository
 import dev.gridiron.core.data.OpportunitiesRepository
+import dev.gridiron.core.data.dynastyFormat
 import dev.gridiron.core.data.OpportunitiesResult
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerStatsRepository
 import dev.gridiron.core.data.ProjectionsRepository
-import dev.gridiron.core.data.GridDisplayRepository
-import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.RosterRepository
-import dev.gridiron.core.model.Roster
+import dev.gridiron.core.data.ScoresRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
-import dev.gridiron.core.data.ScoresRepository
 import dev.gridiron.core.data.TeamsRepository
+import dev.gridiron.core.data.kickoffs
 import dev.gridiron.core.data.live.FantasyLeagueRepository
+import dev.gridiron.core.data.live.LineupReviewResult
 import dev.gridiron.core.data.live.LiveRepository
+import dev.gridiron.core.data.live.WaiverTrendsRepository
+import dev.gridiron.core.data.live.MyMatchup
 import dev.gridiron.core.data.live.OpponentResult
+import dev.gridiron.core.data.live.PlayoffPictureResult
 import dev.gridiron.core.data.live.PropsRepository
+import dev.gridiron.core.data.live.TradeOffersResult
+import dev.gridiron.core.designsystem.GridironIcons
 import dev.gridiron.core.ingest.currentSeason
+import dev.gridiron.core.model.Roster
 import dev.gridiron.feature.compare.CompareRoute
 import dev.gridiron.feature.players.GridRoute
 import dev.gridiron.feature.projections.AccuracyRoute
 import dev.gridiron.feature.projections.BreakoutsRoute
+import dev.gridiron.feature.projections.ActivityRoute
+import dev.gridiron.feature.projections.DifferRoute
+import dev.gridiron.feature.projections.DynastyRoute
+import dev.gridiron.feature.projections.HistoryRoute
 import dev.gridiron.feature.projections.OpportunitiesRoute
+import dev.gridiron.feature.projections.WaiverTrendsRoute
+import dev.gridiron.feature.projections.trendPoints
 import dev.gridiron.feature.projections.ProjectionListRoute
 import dev.gridiron.feature.projections.ProjectionsRoute
 import dev.gridiron.feature.scoring.ScoringEditRoute
@@ -66,6 +90,7 @@ import dev.gridiron.feature.scoring.ScoringListRoute
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
+import java.io.File
 
 /** What the screens need, built by [GridironApplication] or by a test. */
 data class Deps(
@@ -92,12 +117,24 @@ data class Deps(
     val playerStats: PlayerStatsRepository? = null,
     /** The user's ESPN fantasy league. Null where a test doesn't need it. */
     val league: FantasyLeagueRepository? = null,
+    /** Receives My lineup's one-line summary for the home-screen widget. */
+    val onLineupSummary: (String) -> Unit = {},
+    /** The draft board's ADP and last-season points; null hides Draft. */
+    val draft: DraftRepository? = null,
+    /** Where the draft's picks are kept. */
+    val draftDir: File? = null,
     /** Week-by-week NFL scores; null where a test doesn't need them. */
     val scores: ScoresRepository? = null,
     /** Who moves up when a starter is hurt; null where a test doesn't need it. */
     val opportunities: OpportunitiesRepository? = null,
     /** Rising roles; null where a test doesn't need it. */
     val breakouts: BreakoutRepository? = null,
+    /** Past absences, for the Player page's return outlook; null where a test doesn't need it. */
+    val returns: InjuryReturnRepository? = null,
+    /** ESPN's most added and dropped; null where a test doesn't need it. */
+    val waiverTrends: WaiverTrendsRepository? = null,
+    /** FantasyCalc's dynasty values; null where a test doesn't need them. */
+    val dynasty: DynastyRepository? = null,
 )
 
 /**
@@ -155,8 +192,34 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
 
     val backStack = rememberNavBackStack(GridKey)
     val back: () -> Unit = { backStack.removeLastOrNull() }
+    val season = currentSeason()
+    val more = buildList {
+        if (deps.opportunities != null) add(MoreItem("Players", "Opportunities", "Who moves up when a starter is hurt") { backStack.push(OpportunitiesKey(season)) })
+        if (deps.breakouts != null) add(MoreItem("Players", "Rising roles", "Roles growing over the last four games") { backStack.push(BreakoutsKey(season)) })
+        add(MoreItem("Players", "Where we differ", "The app against ESPN this week") { backStack.push(DifferKey(season)) })
+        add(MoreItem("Players", "Injury report", "ESPN's live list and practice") { backStack.push(InjuriesKey(season)) })
+        add(MoreItem("Players", "Team defense", "Each defense's season") { backStack.push(DefenseKey(season)) })
+        if (deps.league != null) add(MoreItem("League", "ESPN leagues", "Sync, teams and matchups") { backStack.push(LeagueKey) })
+        if (deps.waiverTrends != null) add(MoreItem("League", "Waiver trends", "Who ESPN leagues are adding and dropping") { backStack.push(WaiverTrendsKey(season)) })
+        if (deps.dynasty != null) add(MoreItem("League", "Dynasty & keepers", "Long-term values and who to keep") { backStack.push(DynastyKey(season)) })
+        if (deps.league != null) add(MoreItem("League", "League history", "Champions, all-time table and records") { backStack.push(HistoryKey(season)) })
+        if (deps.league != null) add(MoreItem("League", "League activity", "Adds, drops and trades this season") { backStack.push(ActivityKey(season)) })
+        if (deps.rosters != null) add(MoreItem("League", "Rosters", "Your saved rosters") { backStack.push(RostersKey) })
+        if (deps.draft != null) add(MoreItem("League", "Draft", "ADP board and picks") { backStack.push(DraftKey) })
+        add(MoreItem("App", "Projection accuracy", "How the model did, week by week") { backStack.push(AccuracyKey(season)) })
+        if (deps.settings != null) add(MoreItem("App", "Settings", "Seasons, alerts and keys") { backStack.push(SettingsKey) })
+        if (refresher != null) add(MoreItem("App", "Refresh stats", "Rebuild from nflverse, ESPN and ffopportunity") { refresh() })
+    }
+    val tabs = buildList {
+        add(Tab("Grid", GridironIcons.Table, GridKey))
+        add(Tab("Projections", GridironIcons.Trend, ProjectionListKey(season)))
+        if (deps.scores != null) add(Tab("Scores", GridironIcons.Scores, ScoresKey(season)))
+        if (deps.live != null) add(Tab("News", GridironIcons.News, NewsKey))
+        add(Tab("More", GridironIcons.More, MoreKey))
+    }
     Column(Modifier.fillMaxSize()) {
-        Box(Modifier.weight(1f)) {
+        // The bottom bar below takes the navigation bar's inset: screens above it leave it alone.
+        Box(Modifier.weight(1f).consumeWindowInsets(WindowInsets.navigationBars)) {
             NavDisplay(
                 backStack = backStack,
                 onBack = back,
@@ -174,12 +237,19 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 add("Projections" to { s: Int -> backStack.push(ProjectionListKey(s)) })
                                 if (deps.opportunities != null) add("Opportunities" to { s: Int -> backStack.push(OpportunitiesKey(s)) })
                                 if (deps.breakouts != null) add("Rising roles" to { s: Int -> backStack.push(BreakoutsKey(s)) })
+                                add("Where we differ" to { s: Int -> backStack.push(DifferKey(s)) })
                                 add("Projection accuracy" to { s: Int -> backStack.push(AccuracyKey(s)) })
                                 if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
                                 if (deps.scores != null) add("Scores" to { s: Int -> backStack.push(ScoresKey(s)) })
                                 add("Injury report" to { s: Int -> backStack.push(InjuriesKey(s)) })
                                 if (deps.league != null) add("ESPN leagues" to { _: Int -> backStack.push(LeagueKey) })
+                                // ESPN's roster shares are live: always this season's.
+                                if (deps.waiverTrends != null) add("Waiver trends" to { _: Int -> backStack.push(WaiverTrendsKey(season)) })
+                                if (deps.dynasty != null) add("Dynasty & keepers" to { _: Int -> backStack.push(DynastyKey(season)) })
+                                if (deps.league != null) add("League history" to { _: Int -> backStack.push(HistoryKey(season)) })
+                                if (deps.league != null) add("League activity" to { _: Int -> backStack.push(ActivityKey(season)) })
                                 if (deps.rosters != null) add("Rosters" to { _: Int -> backStack.push(RostersKey) })
+                                if (deps.draft != null) add("Draft" to { _: Int -> backStack.push(DraftKey) })
                                 add("Team defense" to { s: Int -> backStack.push(DefenseKey(s)) })
                                 if (deps.settings != null) add("Settings" to { _: Int -> backStack.push(SettingsKey) })
                                 if (refresher != null) add("Refresh stats" to { _: Int -> refresh() })
@@ -220,6 +290,19 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             opportunities = { season, profile ->
                                 deps.opportunities?.find(season, profile) ?: OpportunitiesResult(emptyList(), 0, null)
                             },
+                            otherTeams = deps.league?.otherTeams ?: flowOf(emptyList()),
+                            syncLeague = { s -> deps.league?.sync(s) },
+                            kickoffs = { s, w -> deps.scores?.week(s, w)?.kickoffs(java.time.Instant.now()) ?: Kickoffs(emptySet(), emptySet()) },
+                            playoffPicture = { s, w -> deps.league?.playoffPicture(s, w) ?: PlayoffPictureResult(null, "no league") },
+                            lineupReview = { s, w -> deps.league?.lineupReview(s, w) ?: LineupReviewResult(emptyList(), "no league") },
+                            liveWeek = { s, w -> deps.scores?.week(s, w) },
+                            myMatchup = { s, w, p -> deps.league?.myMatchup(s, w, p) ?: MyMatchup(null, null, "no league") },
+                            onLineupSummary = deps.onLineupSummary,
+                            tradeOffers = { s -> deps.league?.tradeOffers(s) ?: TradeOffersResult(emptyList(), "no league") },
+                            dynastyValues = { p ->
+                                deps.dynasty?.load(dynastyFormat(deps.league?.league?.value, p))?.values
+                                    ?.mapNotNull { v -> v.playerId?.let { it to v.value } }?.toMap().orEmpty()
+                            },
                         )
                     }
                     entry<OpportunitiesKey> { key ->
@@ -230,6 +313,57 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 league = deps.league?.rostered ?: flowOf(null),
                                 myTeam = deps.league?.myTeam ?: flowOf(null),
                                 injuriesChanged = deps.live?.changes ?: flowOf(0L),
+                            )
+                        }
+                    }
+                    entry<WaiverTrendsKey> { key ->
+                        deps.waiverTrends?.let { repository ->
+                            WaiverTrendsRoute(
+                                key.season,
+                                trends = { s -> repository.load(s) },
+                                points = { s, p -> trendPoints(deps.projections, s, p) },
+                                scoring = deps.scoring,
+                                onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
+                                league = deps.league?.rostered ?: flowOf(null),
+                                myTeam = deps.league?.myTeam ?: flowOf(null),
+                            )
+                        }
+                    }
+                    entry<DifferKey> { key ->
+                        DifferRoute(
+                            key.season, deps.projections, deps.scoring,
+                            onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
+                            league = deps.league?.rostered ?: flowOf(null),
+                            myTeam = deps.league?.myTeam ?: flowOf(null),
+                        )
+                    }
+                    entry<ActivityKey> { key ->
+                        deps.league?.let { league ->
+                            ActivityRoute(
+                                key.season,
+                                activity = { s -> league.activity(s) },
+                                ros = { s, p -> trendPoints(deps.projections, s, p).rosPoints },
+                                scoring = deps.scoring,
+                                onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back,
+                            )
+                        }
+                    }
+                    entry<HistoryKey> { key ->
+                        deps.league?.let { league -> HistoryRoute(key.season, history = { s -> league.history(s) }, onBack = back) }
+                    }
+                    entry<DynastyKey> { key ->
+                        deps.dynasty?.let { repository ->
+                            DynastyRoute(
+                                key.season,
+                                dynasty = { p -> repository.load(dynastyFormat(deps.league?.league?.value, p)) },
+                                draft = { s -> deps.league?.draft(s) },
+                                scoring = deps.scoring,
+                                onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back,
+                                league = deps.league?.league ?: flowOf(null),
+                                rostered = deps.league?.rostered ?: flowOf(null),
+                                myTeam = deps.league?.myTeam ?: flowOf(null),
+                                keeperRule = deps.league?.keeperRule ?: flowOf(null),
+                                setKeeperRule = { r -> deps.league?.setKeeperRule(r) },
                             )
                         }
                     }
@@ -248,6 +382,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                         InjuriesRoute(
                             key.season, currentSeason(), deps.teams, deps.live, onBack = back,
                             onPlayer = { backStack.push(PlayerKey(it)) }, dataVersion = deps.stats.dataVersion,
+                            returns = deps.returns,
                         )
                     }
                     entry<ScoresKey> { key ->
@@ -280,9 +415,27 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             onManageRosters = { backStack.push(RostersKey) },
                             playerStats = deps.playerStats,
                             breakouts = deps.breakouts,
+                            league = deps.league,
+                            inactivesPosted = { s, w -> deps.scores?.week(s, w)?.kickoffs(java.time.Instant.now())?.inactivesPosted.orEmpty() },
+                            returns = deps.returns,
+                            dynastyValues = { p -> deps.dynasty?.load(dynastyFormat(deps.league?.league?.value, p))?.values.orEmpty() },
                         )
                     }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }
+                    entry<DraftKey> {
+                        val draft = deps.draft
+                        val dir = deps.draftDir
+                        if (draft != null && dir != null) {
+                            val team by (deps.league?.myTeam ?: flowOf(null)).collectAsState(initial = null)
+                            val others by (deps.league?.otherTeams ?: flowOf(emptyList())).collectAsState(initial = emptyList())
+                            val year = java.time.LocalDate.now().year
+                            DraftScreen(
+                                year, draft::board, deps.scoring.active,
+                                teams = if (team != null && others.isNotEmpty()) others.size + 1 else 12,
+                                slots = team?.slots, file = File(dir, "draft-$year.txt"), onBack = back,
+                            )
+                        }
+                    }
                     entry<RostersKey> {
                         deps.rosters?.let { RostersScreen(it, deps.players, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
                     }
@@ -303,10 +456,34 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                         }
                     }
                     entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back, props = deps.props?.status) } }
+                    entry<MoreKey> { MoreScreen(more) }
                 },
             )
         }
         (refreshState as? RefreshState.Running)?.let { RefreshBar(it.text) }
+        BottomBar(tabs, selected = tabs.firstOrNull { it.key == backStack.getOrNull(1) } ?: tabs.first()) { tab ->
+            // A tab opens over the Grid, so Back from any tab returns there; the open tab again goes to its top.
+            while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
+            if (tab.key != GridKey) backStack.add(tab.key)
+        }
+    }
+}
+
+/** One bottom-bar destination. */
+private data class Tab(val label: String, val icon: ImageVector, val key: NavKey)
+
+@Composable
+private fun BottomBar(tabs: List<Tab>, selected: Tab, onTab: (Tab) -> Unit) {
+    NavigationBar(Modifier.testTag("bottomBar")) {
+        for (tab in tabs) {
+            NavigationBarItem(
+                selected = tab == selected,
+                onClick = { onTab(tab) },
+                icon = { Icon(tab.icon, contentDescription = null) },
+                label = { Text(tab.label, maxLines = 1) },
+                modifier = Modifier.testTag("tab:${tab.label}"),
+            )
+        }
     }
 }
 
@@ -339,7 +516,7 @@ private fun LegacyPrompt(refresher: Refresher?, state: RefreshState, refresh: ()
 @Composable
 private fun RefreshBar(text: String) {
     Surface(color = MaterialTheme.colorScheme.secondaryContainer) {
-        Column(Modifier.fillMaxWidth().windowInsetsPadding(WindowInsets.navigationBars).padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
             Text(text, style = MaterialTheme.typography.labelMedium)
             LinearProgressIndicator(Modifier.fillMaxWidth().padding(top = 4.dp))
         }

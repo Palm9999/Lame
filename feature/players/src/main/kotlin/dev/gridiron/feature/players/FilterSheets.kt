@@ -91,6 +91,7 @@ internal fun FilterSheet(
     onOpenTeams: () -> Unit,
     onExport: () -> Unit,
     exporting: Boolean,
+    onShareImage: () -> Unit,
     onDraftChanged: (List<Filter>) -> Unit,
     onApply: (List<Filter>) -> Unit,
     onDismiss: () -> Unit,
@@ -146,6 +147,7 @@ internal fun FilterSheet(
                 }
             }
             SheetRow("Export CSV", "", "chip:export", enabled = state.page != null && !exporting, onClick = onExport)
+            SheetRow("Share image", "top 10", "chip:shareImage", enabled = !state.page?.rows.isNullOrEmpty(), onClick = onShareImage)
 
             HorizontalDivider(Modifier.padding(vertical = 8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {

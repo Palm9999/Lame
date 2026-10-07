@@ -1,0 +1,422 @@
+[
+ {
+  "value": 11140,
+  "overallRank": 1,
+  "positionRank": 1,
+  "trend30Day": 240,
+  "redraftValue": 10743,
+  "player": {
+   "id": 9821,
+   "name": "Jahmyr Gibbs",
+   "position": "RB",
+   "maybeAge": 24.5,
+   "maybeTeam": "DET",
+   "espnId": "4429795"
+  }
+ },
+ {
+  "value": 10331,
+  "overallRank": 2,
+  "positionRank": 2,
+  "trend30Day": -65,
+  "redraftValue": 10229,
+  "player": {
+   "id": 9833,
+   "name": "Bijan Robinson",
+   "position": "RB",
+   "maybeAge": 24.6,
+   "maybeTeam": "ATL",
+   "espnId": "4430807"
+  }
+ },
+ {
+  "value": 9964,
+  "overallRank": 3,
+  "positionRank": 1,
+  "trend30Day": 1294,
+  "redraftValue": 9799,
+  "player": {
+   "id": 9924,
+   "name": "Jaxon Smith-Njigba",
+   "position": "WR",
+   "maybeAge": 24.6,
+   "maybeTeam": "SEA",
+   "espnId": "4430878"
+  }
+ },
+ {
+  "value": 8297,
+  "overallRank": 4,
+  "positionRank": 2,
+  "trend30Day": -1124,
+  "redraftValue": 8501,
+  "player": {
+   "id": 5856,
+   "name": "Ja'Marr Chase",
+   "position": "WR",
+   "maybeAge": 26.6,
+   "maybeTeam": "CIN",
+   "espnId": "4362628"
+  }
+ },
+ {
+  "value": 7343,
+  "overallRank": 5,
+  "positionRank": 3,
+  "trend30Day": -40,
+  "redraftValue": 8236,
+  "player": {
+   "id": 1527,
+   "name": "Amon-Ra St. Brown",
+   "position": "WR",
+   "maybeAge": 26.9,
+   "maybeTeam": "DET",
+   "espnId": "4374302"
+  }
+ },
+ {
+  "value": 7165,
+  "overallRank": 6,
+  "positionRank": 4,
+  "trend30Day": -789,
+  "redraftValue": 7877,
+  "player": {
+   "id": 9822,
+   "name": "Puka Nacua",
+   "position": "WR",
+   "maybeAge": 25.3,
+   "maybeTeam": "LAR",
+   "espnId": "4426515"
+  }
+ },
+ {
+  "value": 7014,
+  "overallRank": 7,
+  "positionRank": 3,
+  "trend30Day": 298,
+  "redraftValue": 6073,
+  "player": {
+   "id": 12612,
+   "name": "Ashton Jeanty",
+   "position": "RB",
+   "maybeAge": 22.8,
+   "maybeTeam": "LV",
+   "espnId": "4890973"
+  }
+ },
+ {
+  "value": 6890,
+  "overallRank": 8,
+  "positionRank": 1,
+  "trend30Day": 110,
+  "redraftValue": 6266,
+  "player": {
+   "id": 11702,
+   "name": "Brock Bowers",
+   "position": "TE",
+   "maybeAge": 23.8,
+   "maybeTeam": "LV",
+   "espnId": "4432665"
+  }
+ },
+ {
+  "value": 6829,
+  "overallRank": 9,
+  "positionRank": 4,
+  "trend30Day": 120,
+  "redraftValue": 5123,
+  "player": {
+   "id": 13485,
+   "name": "Jeremiyah Love",
+   "position": "RB",
+   "maybeAge": 21.3,
+   "maybeTeam": "ARI",
+   "espnId": "4870808"
+  }
+ },
+ {
+  "value": 6707,
+  "overallRank": 10,
+  "positionRank": 5,
+  "trend30Day": 2013,
+  "redraftValue": 9023,
+  "player": {
+   "id": 1749,
+   "name": "Kenneth Walker",
+   "position": "RB",
+   "maybeAge": 25.9,
+   "maybeTeam": "KC",
+   "espnId": "4567048"
+  }
+ },
+ {
+  "value": 6280,
+  "overallRank": 11,
+  "positionRank": 5,
+  "trend30Day": 166,
+  "redraftValue": 8054,
+  "player": {
+   "id": 4835,
+   "name": "CeeDee Lamb",
+   "position": "WR",
+   "maybeAge": 27.5,
+   "maybeTeam": "DAL",
+   "espnId": "4241389"
+  }
+ },
+ {
+  "value": 6076,
+  "overallRank": 12,
+  "positionRank": 6,
+  "trend30Day": 24,
+  "redraftValue": 8686,
+  "player": {
+   "id": 3046,
+   "name": "Jonathan Taylor",
+   "position": "RB",
+   "maybeAge": 27.7,
+   "maybeTeam": "IND",
+   "espnId": "4242335"
+  }
+ },
+ {
+  "value": 5857,
+  "overallRank": 13,
+  "positionRank": 2,
+  "trend30Day": 71,
+  "redraftValue": 5756,
+  "player": {
+   "id": 7325,
+   "name": "Trey McBride",
+   "position": "TE",
+   "maybeAge": 26.8,
+   "maybeTeam": "ARI",
+   "espnId": "4361307"
+  }
+ },
+ {
+  "value": 5800,
+  "overallRank": 14,
+  "positionRank": 6,
+  "trend30Day": -880,
+  "redraftValue": 6204,
+  "player": {
+   "id": 7569,
+   "name": "Justin Jefferson",
+   "position": "WR",
+   "maybeAge": 27.3,
+   "maybeTeam": "MIN",
+   "espnId": "4262921"
+  }
+ },
+ {
+  "value": 5582,
+  "overallRank": 15,
+  "positionRank": 1,
+  "trend30Day": 157,
+  "redraftValue": 6553,
+  "player": {
+   "id": 6170,
+   "name": "Josh Allen",
+   "position": "QB",
+   "maybeAge": 30.3,
+   "maybeTeam": "BUF",
+   "espnId": "3918298"
+  }
+ },
+ {
+  "value": 5400,
+  "overallRank": 16,
+  "positionRank": 7,
+  "trend30Day": -777,
+  "redraftValue": 7133,
+  "player": {
+   "id": 182,
+   "name": "James Cook",
+   "position": "RB",
+   "maybeAge": 27.0,
+   "maybeTeam": "BUF",
+   "espnId": "4379399"
+  }
+ },
+ {
+  "value": 5369,
+  "overallRank": 17,
+  "positionRank": 7,
+  "trend30Day": 132,
+  "redraftValue": 5238,
+  "player": {
+   "id": 998,
+   "name": "Drake London",
+   "position": "WR",
+   "maybeAge": 25.2,
+   "maybeTeam": "ATL",
+   "espnId": "4426502"
+  }
+ },
+ {
+  "value": 5092,
+  "overallRank": 18,
+  "positionRank": 8,
+  "trend30Day": 805,
+  "redraftValue": 5979,
+  "player": {
+   "id": 2548,
+   "name": "Chris Olave",
+   "position": "WR",
+   "maybeAge": 26.2,
+   "maybeTeam": "NO",
+   "espnId": "4361370"
+  }
+ },
+ {
+  "value": 4933,
+  "overallRank": 19,
+  "positionRank": 9,
+  "trend30Day": -1555,
+  "redraftValue": 3161,
+  "player": {
+   "id": 11737,
+   "name": "Malik Nabers",
+   "position": "WR",
+   "maybeAge": 23.2,
+   "maybeTeam": "NYG",
+   "espnId": "4595348"
+  }
+ },
+ {
+  "value": 4553,
+  "overallRank": 20,
+  "positionRank": 8,
+  "trend30Day": -339,
+  "redraftValue": 7861,
+  "player": {
+   "id": 5494,
+   "name": "Christian McCaffrey",
+   "position": "RB",
+   "maybeAge": 30.3,
+   "maybeTeam": "SF",
+   "espnId": "3117251"
+  }
+ },
+ {
+  "value": 4464,
+  "overallRank": 21,
+  "positionRank": 1,
+  "trend30Day": 155,
+  "redraftValue": 0,
+  "player": {
+   "id": 15351,
+   "name": "2027 1st (Early)",
+   "position": "PICK",
+   "maybeAge": null,
+   "maybeTeam": null,
+   "espnId": null
+  }
+ },
+ {
+  "value": 4425,
+  "overallRank": 21,
+  "positionRank": 10,
+  "trend30Day": 557,
+  "redraftValue": 4749,
+  "player": {
+   "id": 6813,
+   "name": "Garrett Wilson",
+   "position": "WR",
+   "maybeAge": 26.2,
+   "maybeTeam": "NYJ",
+   "espnId": "4569618"
+  }
+ },
+ {
+  "value": 4289,
+  "overallRank": 22,
+  "positionRank": 11,
+  "trend30Day": 342,
+  "redraftValue": 4841,
+  "player": {
+   "id": 9930,
+   "name": "Zay Flowers",
+   "position": "WR",
+   "maybeAge": 26.0,
+   "maybeTeam": "BAL",
+   "espnId": "4429615"
+  }
+ },
+ {
+  "value": 4211,
+  "overallRank": 23,
+  "positionRank": 9,
+  "trend30Day": -2113,
+  "redraftValue": 3060,
+  "player": {
+   "id": 12573,
+   "name": "Omarion Hampton",
+   "position": "RB",
+   "maybeAge": 23.5,
+   "maybeTeam": "LAC",
+   "espnId": "4685382"
+  }
+ },
+ {
+  "value": 4193,
+  "overallRank": 24,
+  "positionRank": 12,
+  "trend30Day": -219,
+  "redraftValue": 5645,
+  "player": {
+   "id": 5030,
+   "name": "Nico Collins",
+   "position": "WR",
+   "maybeAge": 27.5,
+   "maybeTeam": "HOU",
+   "espnId": "4258173"
+  }
+ },
+ {
+  "value": 4464,
+  "overallRank": 21,
+  "positionRank": 1,
+  "trend30Day": 155,
+  "redraftValue": 0,
+  "player": {
+   "id": 15351,
+   "name": "2027 1st (Early)",
+   "position": "PICK",
+   "maybeAge": null,
+   "maybeTeam": null,
+   "espnId": null
+  }
+ },
+ {
+  "value": 2939,
+  "overallRank": 54,
+  "positionRank": 2,
+  "trend30Day": 103,
+  "redraftValue": 0,
+  "player": {
+   "id": 15352,
+   "name": "2027 1st (Mid)",
+   "position": "PICK",
+   "maybeAge": null,
+   "maybeTeam": null,
+   "espnId": null
+  }
+ },
+ {
+  "value": 353,
+  "overallRank": 256,
+  "positionRank": 37,
+  "trend30Day": 46,
+  "redraftValue": 0,
+  "player": {
+   "id": 13542,
+   "name": "Matt Hibner",
+   "position": "TE",
+   "maybeAge": 24.5,
+   "maybeTeam": "BAL",
+   "espnId": null
+  }
+ }
+]

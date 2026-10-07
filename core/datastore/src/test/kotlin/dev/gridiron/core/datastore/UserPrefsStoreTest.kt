@@ -125,6 +125,37 @@ class UserPrefsStoreTest {
     }
 
     @Test
+    fun `each alert has its own switch, and an older file's one switch sets all four`() {
+        file.writeText("""{"formatVersion":4,"injuryAlerts":false}""")
+        assertEquals(AlertSwitches(false, false, false, false), withStore { it.prefs.first() }.alerts)
+        file.writeText("""{"formatVersion":4}""")
+        assertEquals(AlertSwitches(), withStore { it.prefs.first() }.alerts)
+        val mixed = AlertSwitches(injury = true, news = false, lineup = true, summary = false)
+        withStore { store -> store.update { it.copy(alerts = mixed) } }
+        assertEquals(mixed, withStore { it.prefs.first() }.alerts)
+        assertEquals(true, mixed.any)
+        assertEquals(false, AlertSwitches(false, false, false, false).any)
+    }
+
+    @Test
+    fun `quiet hours are off in an older file, survive a reopen and hold 10 pm to 8 am`() {
+        assertEquals(false, withStore { it.prefs.first() }.alerts.quiet)
+        withStore { store -> store.update { it.copy(alerts = it.alerts.copy(quiet = true)) } }
+        val quiet = withStore { it.prefs.first() }.alerts
+        assertEquals(true, quiet.quiet)
+        assertEquals(listOf(true, true, true, false, false, true), listOf(22, 23, 7, 8, 21, 0).map(quiet::quietAt))
+        assertEquals(false, AlertSwitches().quietAt(23))
+    }
+
+    @Test
+    fun `injury alerts are on in an older file, and turning them off survives a reopen`() {
+        file.writeText("""{"formatVersion":4}""")
+        assertEquals(true, withStore { it.prefs.first() }.alerts.injury)
+        withStore { store -> store.update { it.copy(alerts = it.alerts.copy(injury = false)) } }
+        assertEquals(false, withStore { it.prefs.first() }.alerts.injury)
+    }
+
+    @Test
     fun `invalid rosters are dropped and duplicate players collapsed`() {
         file.writeText(
             """
@@ -170,6 +201,18 @@ class UserPrefsStoreTest {
         assertEquals(prefs.espnLeagues, reread.espnLeagues)
         assertEquals(EspnLeagueConfig("77", "s2secret", "{SWID-secret}", null), reread.espnLeague)
         assertFalse("s2secret" in prefs.toString() || "SWID-secret" in prefs.toString(), prefs.toString())
+    }
+
+    @Test
+    fun `the keeper rule round-trips through prefs and an older file reads the defaults`() {
+        val rule = KeeperRule(keepers = 3, penalty = 2, undraftedRound = 14, overrides = mapOf("00-0038542" to 5))
+        val prefs = UserPrefs.DEFAULT.copy(espnLeagues = listOf(EspnLeagueEntry("42", 3, "Work", rule), EspnLeagueEntry("77")))
+        withStore { it.update { _ -> prefs } }
+        val reread = withStore { it.prefs.first() }
+        assertEquals(rule, reread.espnLeagues.first().keeperRule)
+        assertEquals(KeeperRule(), reread.espnLeagues.last().keeperRule)
+        file.writeText("""{"formatVersion": 4, "espnLeagues": [{"leagueId": "5", "keeperRule": {"keepers": -1, "penalty": -2, "undraftedRound": 0}}]}""")
+        assertEquals(KeeperRule(keepers = 0, penalty = 0, undraftedRound = null), withStore { it.prefs.first() }.espnLeagues.single().keeperRule)
     }
 
     @Test

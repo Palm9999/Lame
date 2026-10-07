@@ -441,7 +441,7 @@ class GridScreenTest {
         compose.onNodeWithTag("filter:value:1").performTextInput("abc") // incomplete: shown in error, skipped
         compose.onNodeWithText("57 players match").assertExists()
         captureScreenRoboImage("build/outputs/roborazzi/9_filter_sheet.png")
-        compose.onNodeWithTag("filter:apply").performClick()
+        compose.onNodeWithTag("filter:apply").performScrollTo().performClick()
         assertEquals(GridEvent.FiltersApplied(applied), events.last())
     }
 
@@ -637,6 +637,24 @@ class GridScreenTest {
         val (name, csv) = checkNotNull(shared)
         assertEquals(CsvExport.fileName(state.request), name)
         assertTrue(csv.isNotBlank())
+    }
+
+    @Test
+    fun shareImageFromTheSheetPreviewsTheTopTenAsACard() {
+        val season = catalog.season(2025)
+        val state = ready(GridRequest(season, season.defaultWeeks, StatPack.RECEIVING))
+        val page = checkNotNull(state.page)
+        val card = gridCard(page, catalog)
+        assertEquals(minOf(10, page.rows.size), card.rows.size)
+        assertEquals("1. ${page.rows[0].name}", card.rows[0].first)
+        assertEquals(page.columns.take(4).map { it.header }, card.headers)
+        show(state)
+        compose.onNodeWithTag("chip:filters").performClick()
+        compose.waitForIdle()
+        inSheet("chip:shareImage").performScrollTo().performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText(card.title).assertExists()
+        compose.onNodeWithTag("share:send").assertExists()
     }
 
     @Test

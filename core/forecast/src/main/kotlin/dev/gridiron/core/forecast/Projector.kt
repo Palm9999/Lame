@@ -1,6 +1,7 @@
 package dev.gridiron.core.forecast
 
 import kotlin.math.ln
+import kotlin.math.roundToInt
 
 internal class ProjectionOutcome(val status: String, val upcoming: Map<Int, Int>, val weeks: Int, val props: PropsOutcome?)
 
@@ -52,6 +53,14 @@ internal class Projector(
         inputs.games.groupBy { it.season }.mapValues { (_, games) -> games.flatMap { listOf(it.home, it.away) }.toSet() }
     private val chronological: List<PlayerGame> = inputs.history.values.flatten().sortedBy { it.order }
     private val totals = LeagueTotals()
+    private val playedWeeks: Map<Pair<String, Int>, List<Int>> = inputs.games.filter { it.regular && it.played }
+        .flatMap { g -> listOf((g.home to g.season) to g.week, (g.away to g.season) to g.week) }
+        .groupBy({ it.first }, { it.second }).mapValues { (_, weeks) -> weeks.sorted() }
+    private val returns: DoubleArray? by lazy { returnCurve(inputs.absent, inputs.history, playedWeeks) }
+
+    /** The upcoming week's drafted players, and those of them left off every roster (out for now): see [addStash]. */
+    private var upcomingDrafts: List<Draft> = emptyList()
+    private var stashed: List<Draft> = emptyList()
     private var added = 0
     private var blended = 0
 
@@ -70,7 +79,7 @@ internal class Projector(
 
         var projected = 0
         var upcoming: Pair<WeekState, List<Prepared>>? = null
-        val ros = HashMap<Pair<String, String>, DoubleArray>()
+        val ros = RosSums()
         for ((season, week) in weeks) {
             val kind = when {
                 upcomingWeek == null || season < latest || week < upcomingWeek -> WeekKind.PAST
@@ -81,6 +90,7 @@ internal class Projector(
                 val (state, prepared) = upcoming ?: continue
                 onWeek(season, week)
                 for (p in prepared) addRest(state, p, season, week, ros)
+                for (d in stashed) addStash(d, season, week, ros)
                 units.rest(season, week, ros)
                 continue
             }
@@ -94,10 +104,14 @@ internal class Projector(
             if (kind == WeekKind.UPCOMING) {
                 upcoming = state to prepared
                 for (p in prepared) addRest(state, p, season, week, ros)
+                val kept = prepared.mapTo(HashSet()) { it.player.playerId }
+                stashed = upcomingDrafts.filter { it.player.playerId !in kept }
+                for (d in stashed) addStash(d, season, week, ros)
             }
         }
         if (upcoming != null && upcomingWeek != null) {
-            for ((key, sum) in ros) sink.ros(key.first, latest, upcomingWeek - 1, key.second, sum[0], sum[1])
+            for ((key, sum) in ros.totals) sink.ros(key.first, latest, upcomingWeek - 1, key.second, sum[0], sum[1])
+            for ((key, sum) in ros.weeks) sink.rosWeek(key.first, latest, upcomingWeek - 1, key.second, key.third, sum[0], sum[1])
         }
         val status = if (projected == 0) "no games to project from yet" else FORECAST_OK
         val upcomingMap = if (upcoming != null && upcomingWeek != null) mapOf(latest to upcomingWeek) else emptyMap()
@@ -126,7 +140,20 @@ internal class Projector(
             )
             leagueImplied = averageImplied(inputs.games, season)
         }
+
+        /** The league's typical starting QB this week: no history of his own, a starter's pass share, the league's team. */
+        val typicalQb: Map<String, Double> by lazy {
+            val qb = rates["QB"] ?: return@lazy emptyMap()
+            model.project(
+                PlayerContext("QB", season, week, emptyList(), regimeBreak = false), qb, leagueTeam,
+                Shares(pass = K.STARTER_PASS_SHARE, target = 0.0, carry = qb.carryShare),
+            )
+        }
     }
+
+    /** Layers 1-2c: the model's baseline for [d] with [shares] of [volume]. */
+    private fun baseline(state: WeekState, d: Draft, volume: TeamVolume, shares: Shares): Map<String, Double> =
+        withQbSpread(withSeasonForm(model.project(d.ctx, d.rates, volume, shares), d.ctx), d.ctx, state.typicalQb)
 
     /** Adds every game before [order] to the league totals. */
     private fun advanceTo(order: Int) {
@@ -161,6 +188,7 @@ internal class Projector(
      */
     private fun prepareWeek(state: WeekState, kind: WeekKind): List<Prepared> {
         val drafts = candidates(state.order).mapNotNull { draft(state, it, kind) }
+        if (kind == WeekKind.UPCOMING) upcomingDrafts = drafts
         val market = if (kind == WeekKind.UPCOMING && props != null) {
             MarketMatch(
                 props,
@@ -183,7 +211,7 @@ internal class Projector(
             healthy.kept.map { d ->
                 val id = d.player.playerId
                 Prepared(
-                    d.player, d.team, model.project(d.ctx, d.rates, volume, healthy.shares.getValue(id)), volume.passRate,
+                    d.player, d.team, baseline(state, d, volume, healthy.shares.getValue(id)), volume.passRate,
                     upcoming = projected[id]?.upcoming ?: emptyMap(),
                 )
             }
@@ -192,7 +220,7 @@ internal class Projector(
 
     private fun roster(team: String, onTeam: List<Draft>, state: WeekState, kind: WeekKind, respectAbsent: Boolean): Roster {
         val available = if (respectAbsent) onTeam.filterNot { isAbsent(it, state) } else onTeam
-        val starter = expectedStarter(team, available, state, kind)
+        val starter = expectedStarter(team, available, state, kind, healthy = !respectAbsent)
         val kept = available.filter { d ->
             if (d.player.position == "QB") d.player.playerId == starter else isActive(d, team, state, kind)
         }
@@ -204,6 +232,10 @@ internal class Projector(
 
     /** Whether nflverse lists him Out or Doubtful this week. */
     private fun isAbsent(d: Draft, state: WeekState): Boolean = Triple(d.player.playerId, state.season, state.week) in inputs.absent
+
+    /** ESPN's projection for him this week, in reference points; zero without one. */
+    private fun espnPoints(d: Draft, state: WeekState): Double =
+        inputs.espn[Triple(d.player.playerId, state.season, state.week)]?.let(::referencePoints) ?: 0.0
 
     private fun draft(state: WeekState, player: PlayerInfo, kind: WeekKind): Draft? {
         val rates = state.rates[player.position] ?: return null
@@ -221,25 +253,50 @@ internal class Projector(
      * Whether a non-QB is on the field for [team] as of this week: he played
      * for it in one of its last [K.ACTIVE_WINDOW] games, or, from the upcoming
      * week on, nflverse lists him on [team] and he hasn't played for it yet (a
-     * signing or trade).
+     * signing or trade), or he's back: his last game was for [team] (or nflverse
+     * lists him there) and ESPN projects him for [K.RETURN_MIN_ESPN_POINTS] or more.
      */
     private fun isActive(d: Draft, team: String, state: WeekState, kind: WeekKind): Boolean {
         val recent = teamHistory[team].orEmpty().filter { it.order < state.order }.takeLast(K.ACTIVE_WINDOW).map { it.order }.toSet()
         if (d.ctx.history.any { it.team == team && it.order in recent }) return true
-        return kind != WeekKind.PAST && d.player.team == team && d.ctx.history.lastOrNull()?.team != team
+        val lastTeam = d.ctx.history.lastOrNull()?.team
+        val listed = kind != WeekKind.PAST && d.player.team == team
+        if (listed && lastTeam != team) return true
+        return (lastTeam == team || listed) && espnPoints(d, state) >= K.RETURN_MIN_ESPN_POINTS
     }
 
     /**
-     * The QB who gets [team]'s passing this week. In order: the starter
-     * nflverse lists for the game; else the most recent listed starter who is
-     * still with the team; else the team's QB with the most attempts in its
-     * latest game. Null when the team has no QB candidate.
+     * The QB who gets [team]'s passing this week. Past weeks: the starter
+     * nflverse lists for the game; else the most recent listed starter; else
+     * the team's QB with the most attempts in its latest game. From the
+     * upcoming week on, ESPN decides first: the listed starter, unless ESPN
+     * projects him under [K.STARTER_DOUBT_ESPN_POINTS] while projecting a
+     * teammate for [K.STARTER_ESPN_POINTS] or more; with no listing, the QB
+     * ESPN projects most at [K.STARTER_ESPN_POINTS] or more; else as for past
+     * weeks, the recent starter only if he's still with the team. With
+     * [healthy] (the roster rest of season starts from) a usual starter
+     * nflverse lists Out or Doubtful this week stays the starter: ESPN's doubt
+     * is about this week. Null when the team has no QB candidate.
      */
-    private fun expectedStarter(team: String, onTeam: List<Draft>, state: WeekState, kind: WeekKind): String? {
+    private fun expectedStarter(team: String, onTeam: List<Draft>, state: WeekState, kind: WeekKind, healthy: Boolean = false): String? {
         val qbs = onTeam.filter { it.player.position == "QB" }
         if (qbs.isEmpty()) return null
         val ids = qbs.map { it.player.playerId }.toSet()
-        gameOf[Triple(team, state.season, state.week)]?.qbOf(team)?.takeIf { it in ids }?.let { return it }
+        val listed = gameOf[Triple(team, state.season, state.week)]?.qbOf(team)?.takeIf { it in ids }
+        val usual = listed ?: recentStarter(team, qbs, ids, state, kind)
+        if (kind == WeekKind.PAST) return usual
+        if (healthy && usual != null && qbs.first { it.player.playerId == usual }.let { isAbsent(it, state) }) return usual
+        val espnPick = qbs.map { it to espnPoints(it, state) }.filter { it.second >= K.STARTER_ESPN_POINTS }
+            .maxWithOrNull(compareBy<Pair<Draft, Double>> { it.second }.thenBy { it.first.player.playerId })?.first?.player?.playerId
+        if (listed != null) {
+            val doubted = espnPick != null && espnPick != listed && espnPoints(qbs.first { it.player.playerId == listed }, state) < K.STARTER_DOUBT_ESPN_POINTS
+            return if (doubted) espnPick else listed
+        }
+        return espnPick ?: usual
+    }
+
+    /** The most recent listed starter (from the upcoming week on, only if he's still with the team); else the QB with the most attempts in the team's latest game. */
+    private fun recentStarter(team: String, qbs: List<Draft>, ids: Set<String>, state: WeekState, kind: WeekKind): String? {
         inputs.games
             .filter { it.involves(team) && order(it.season, it.week) < state.order }
             .mapNotNull { it.qbOf(team) }
@@ -250,21 +307,33 @@ internal class Projector(
     }
 
     private fun finish(state: WeekState, d: Draft, shares: Shares, volume: TeamVolume, kind: WeekKind, market: MarketMatch?): Prepared {
-        val prepared = Prepared(d.player, d.team, model.project(d.ctx, d.rates, volume, shares), volume.passRate)
+        val prepared = Prepared(d.player, d.team, baseline(state, d, volume, shares), volume.passRate)
         val game = d.game ?: return prepared
-        val (afterMatchup, final) = finalFor(state, prepared, game)
+        val (afterMatchup, scripted) = finalFor(state, prepared, game)
+        val espn = inputs.espn[Triple(d.player.playerId, state.season, state.week)]
+        val ifPlaying = withEspn(scripted, espn, d.player.position)
+        // Questionable: what he scores if he plays, times how often such a player plays (props price only games played).
+        val practice = inputs.questionable[Triple(d.player.playerId, state.season, state.week)]
+        val questionable = practice?.let { K.QUESTIONABLE_PLAYS.getValue(it) } ?: 1.0
+        val final = scaled(ifPlaying, questionable)
         val cv = K.EMPIRICAL_CV.getValue(d.player.position)
         when (kind) {
             WeekKind.PAST -> if (referencePoints(final) >= K.PAST_WEEK_MIN_POINTS) {
                 emit(d.player.playerId, state.season, state.week, "final", final, cv)
             }
             WeekKind.UPCOMING -> {
-                val withProps = market?.quotes(d.player.playerId)?.let { blend(final, it, d.player.position) }
-                val shown = withProps?.components ?: final
+                val withProps = market?.quotes(d.player.playerId)?.let { blend(ifPlaying, it, d.player.position) }
+                val shown = withProps?.let { scaled(it.components, questionable) } ?: final
                 if (referencePoints(shown) >= K.UPCOMING_MIN_POINTS) {
                     emit(d.player.playerId, state.season, state.week, "baseline", prepared.baseline, cv)
                     emit(d.player.playerId, state.season, state.week, "final", shown, cv)
-                    emitFactors(state, prepared, game, afterMatchup, final, withProps)
+                    emitFactors(state, prepared, game, afterMatchup, scripted, ifPlaying, espn, withProps)
+                    practice?.let {
+                        sink.factor(
+                            d.player.playerId, state.season, state.week, "questionable", ln(questionable),
+                            "Questionable after ${it.label}: such players score about ${(questionable * 100).roundToInt()}% as much",
+                        )
+                    }
                     if (withProps != null) blended++
                 }
                 return Prepared(d.player, d.team, prepared.baseline, prepared.passRate, upcoming = shown)
@@ -321,7 +390,9 @@ internal class Projector(
         p: Prepared,
         game: Game,
         afterMatchup: Map<String, Double>,
+        scripted: Map<String, Double>,
         final: Map<String, Double>,
+        espn: Map<String, Double>?,
         withProps: Blended?,
     ) {
         val baselinePoints = referencePoints(p.baseline)
@@ -332,24 +403,52 @@ internal class Projector(
             state.matchup.note(p.player.position, game.opponentOf(p.team)),
         )
         gameScript(game, p.team, state.leagueImplied, p.passRate)?.let { script ->
-            sink.factor(id, state.season, state.week, "game_script", logRatio(referencePoints(final), matchupPoints), script.note)
+            sink.factor(id, state.season, state.week, "game_script", logRatio(referencePoints(scripted), matchupPoints), script.note)
+        }
+        if (final !== scripted && espn != null) {
+            sink.factor(id, state.season, state.week, "espn", logRatio(referencePoints(final), referencePoints(scripted)), espnNote(espn))
         }
         withProps?.let {
             sink.factor(id, state.season, state.week, "market", logRatio(referencePoints(it.components), referencePoints(final)), it.note)
         }
     }
 
-    private fun addRest(state: WeekState, p: Prepared, season: Int, week: Int, ros: MutableMap<Pair<String, String>, DoubleArray>) {
+    private fun addRest(state: WeekState, p: Prepared, season: Int, week: Int, ros: RosSums) {
         val game = gameOf[Triple(p.team, season, week)] ?: return // a bye
         // The upcoming week itself uses what was stored for it, props included.
-        val final = p.upcoming?.takeIf { week == state.week && season == state.season } ?: finalFor(state, p, game).second
+        val final = p.upcoming?.takeIf { week == state.week && season == state.season }
+            ?: withEspn(finalFor(state, p, game).second, inputs.espn[Triple(p.player.playerId, season, week)], p.player.position)
         if (referencePoints(final) < K.UPCOMING_MIN_POINTS) return
         val cv = K.EMPIRICAL_CV.getValue(p.player.position)
+        val plays = playsChance(state, p, season, week)
         for ((metric, mean) in final) {
             if (mean <= 0.0) continue
-            val sum = ros.getOrPut(p.player.playerId to metric) { DoubleArray(2) }
-            sum[0] += mean
-            sum[1] += varianceFor(mean, cv)
+            // He scores [mean] if he plays, else nothing: the mixture's mean and variance.
+            ros.add(p.player.playerId, week, metric, mean * plays, varianceFor(mean, cv) * plays + plays * (1 - plays) * mean * mean)
+        }
+    }
+
+    /** 1, or for a player listed Out or Doubtful this week, the chance he plays his team's game in [week] ([returns]). */
+    private fun playsChance(state: WeekState, p: Prepared, season: Int, week: Int): Double {
+        if (Triple(p.player.playerId, state.season, state.week) !in inputs.absent) return 1.0
+        val curve = returns ?: return 1.0
+        val k = (state.week..week).count { gameOf[Triple(p.team, season, it)]?.regular == true } - 1
+        return curve[k.coerceIn(0, curve.size - 1)]
+    }
+
+    /**
+     * Rest of season for a player out for now (on no roster as of the upcoming week): ESPN's projection for each of
+     * his team's remaining games once it projects him for [K.RETURN_MIN_ESPN_POINTS] or more, so a stash expected back
+     * keeps his value. His teammates' rest of season doesn't make room for him.
+     */
+    private fun addStash(d: Draft, season: Int, week: Int, ros: RosSums) {
+        gameOf[Triple(d.team, season, week)] ?: return
+        val espn = inputs.espn[Triple(d.player.playerId, season, week)] ?: return
+        if (referencePoints(espn) < K.RETURN_MIN_ESPN_POINTS) return
+        val cv = K.EMPIRICAL_CV.getValue(d.player.position)
+        for ((metric, mean) in espn) {
+            if (mean <= 0.0) continue
+            ros.add(d.player.playerId, week, metric, mean, varianceFor(mean, cv))
         }
     }
 
@@ -359,6 +458,9 @@ internal class Projector(
             if (mean > 0.0) sink.projection(playerId, season, week, metric, stage, mean, varianceFor(mean, cv))
         }
     }
+
+    private fun scaled(components: Map<String, Double>, k: Double): Map<String, Double> =
+        if (k == 1.0) components else components.mapValues { it.value * k }
 
     private fun logRatio(after: Double, before: Double): Double = if (after > 0.0 && before > 0.0) ln(after / before) else 0.0
 }

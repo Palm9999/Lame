@@ -23,6 +23,7 @@ public class HttpFetcher(
         url: String,
         dest: File,
         previous: Validators?,
+        headers: Map<String, String>,
         onBytes: (read: Long, total: Long) -> Unit,
     ): FetchResult = withContext(Dispatchers.IO) {
         var location = URI(url)
@@ -35,6 +36,7 @@ public class HttpFetcher(
                 setRequestProperty("Accept-Encoding", "identity")
                 previous?.etag?.let { setRequestProperty("If-None-Match", it) }
                 previous?.lastModified?.let { setRequestProperty("If-Modified-Since", it) }
+                headers.forEach { (name, value) -> setRequestProperty(name, value) }
             }
             try {
                 val code = conn.responseCode

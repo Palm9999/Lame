@@ -72,7 +72,7 @@ private fun Measured(state: AccuracyState.Loaded, onSeason: (Int) -> Unit) {
     LazyColumn(Modifier.fillMaxSize()) {
         item {
             Text(
-                "Scored with ${state.profile}",
+                "Scored with ${state.profile}" + (state.millis?.let { " in " + String.format(java.util.Locale.US, "%.1f", it / 1000.0) + " s" }.orEmpty()),
                 Modifier.padding(horizontal = 16.dp),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

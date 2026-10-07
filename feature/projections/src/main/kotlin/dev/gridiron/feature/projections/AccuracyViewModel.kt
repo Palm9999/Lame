@@ -31,6 +31,8 @@ public sealed interface AccuracyState {
         val profile: String,
         /** By position. Empty until some player has two games in [season]. */
         val positions: List<PositionAccuracy>,
+        /** How long scoring the season took, for the user to report the phone's speed; null when unmeasured. */
+        val millis: Long? = null,
     ) : AccuracyState
 }
 
@@ -77,8 +79,9 @@ public class AccuracyViewModel(
         val seasons = repository.seasons()
         if (seasons.isEmpty()) return AccuracyState.Unavailable("No finished weeks have been projected yet.")
         val shown = if (season in seasons) season else seasons.last()
+        val started = System.nanoTime()
         val positions = withContext(compute) { repository.backtest(shown, profile) }
-        return AccuracyState.Loaded(shown, seasons, profile.name, positions)
+        return AccuracyState.Loaded(shown, seasons, profile.name, positions, (System.nanoTime() - started) / 1_000_000)
     }
 
     public companion object {

@@ -1,7 +1,15 @@
 package dev.gridiron.core.projections
 
-/** A rostered player who could start: [position] is a `player.position` code (`DST` for a team defense). */
-public data class LineupCandidate(val playerId: String, val position: String, val points: Double)
+/**
+ * A rostered player who could start: [position] is a `player.position` code (`DST` for a team defense). [weekly] is
+ * his rest of season week by week (no entry on a bye), for [Trades.value]; empty when only [points] is known.
+ */
+public data class LineupCandidate(
+    val playerId: String,
+    val position: String,
+    val points: Double,
+    val weekly: Map<Int, Double> = emptyMap(),
+)
 
 /** One starting slot and who fills it; null when nobody on the roster can. */
 public data class LineupSpot(val slot: String, val player: LineupCandidate?)
@@ -44,6 +52,9 @@ public object Lineups {
         "K" to setOf("K"),
     )
 
+    /** Whether a [position] (`player.position` code) may start at ESPN slot [slot]; false for an unknown slot. */
+    public fun fits(slot: String, position: String): Boolean = ELIGIBLE.any { (label, positions) -> label == slot && position in positions }
+
     /**
      * The lineup that scores most. Candidates are taken best first, each kept if every kept player can still be given a
      * slot (an augmenting path moves earlier picks to other slots), which is optimal because the sets of fillable
@@ -82,23 +93,37 @@ public object Lineups {
 
     /**
      * The free agents who would raise the best lineup, best first (the gain, then his points, then id), at most
-     * [limit]. Each is added to [roster] alone, so gains are not additive across pickups.
+     * [limit]. Each is added to [roster] alone, so gains are not additive across pickups. With [value] (a roster's
+     * worth, [Trades.value] for rest of season week by week) the gain is that worth with him in and the drop out, less
+     * the roster's worth now; without it, the best lineup's points with him less without.
      */
-    public fun pickups(slots: Map<String, Int>, roster: List<LineupCandidate>, freeAgents: List<LineupCandidate>, limit: Int = 5): List<Pickup> {
+    public fun pickups(
+        slots: Map<String, Int>,
+        roster: List<LineupCandidate>,
+        freeAgents: List<LineupCandidate>,
+        limit: Int = 5,
+        value: ((List<LineupCandidate>) -> Double)? = null,
+    ): List<Pickup> {
         val base = best(slots, roster)
+        val baseValue = value?.invoke(roster)
         val baseStarters = base.spots.mapNotNull { it.player }.associateBy { it.playerId }
         return freeAgents.mapNotNull { agent ->
             val next = best(slots, roster + agent)
-            val gain = next.total - base.total
-            val spot = next.spots.firstOrNull { it.player?.playerId == agent.playerId }
-            if (gain <= MIN_GAIN || spot == null) return@mapNotNull null
+            val spot = next.spots.firstOrNull { it.player?.playerId == agent.playerId } ?: return@mapNotNull null
+            val drop = next.bench.minWithOrNull(compareBy<LineupCandidate> { it.points }.thenBy { it.playerId })
+            val gain = if (value == null || baseValue == null) {
+                next.total - base.total
+            } else {
+                value(roster.filterNot { it == drop } + agent) - baseValue
+            }
+            if (gain <= MIN_GAIN) return@mapNotNull null
             val staying = next.spots.mapNotNull { it.player?.playerId }.toSet()
             Pickup(
                 add = agent,
                 gain = gain,
                 slot = spot.slot,
                 replaces = baseStarters.values.firstOrNull { it.playerId !in staying },
-                drop = next.bench.minWithOrNull(compareBy<LineupCandidate> { it.points }.thenBy { it.playerId }),
+                drop = drop,
             )
         }.sortedWith(compareByDescending<Pickup> { it.gain }.thenByDescending { it.add.points }.thenBy { it.add.playerId }).take(limit)
     }

@@ -16,6 +16,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,6 +56,7 @@ fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit, props: Flow
                 TextButton(onClick = onBack) { Text("← Back") }
                 Text("Settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
             }
+            AlertsSection(settings)
             PropsSection(settings, props)
             Text(
                 "Seasons",
@@ -92,6 +94,48 @@ fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit, props: Flow
                 }
             }
         }
+    }
+}
+
+/** One switch per alert, each on unless turned off. */
+@Composable
+private fun AlertsSection(settings: SettingsRepository) {
+    val alerts by settings.alerts.collectAsState(initial = null)
+    val scope = rememberCoroutineScope()
+    val now = alerts ?: return
+    Text("Alerts", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+    AlertSwitch("Injury changes", "A player on your rosters changes ESPN status (checked about every two hours).", now.injury, "injury") { on ->
+        scope.launch { settings.setAlerts { it.copy(injury = on) } }
+    }
+    AlertSwitch("Roster news", "ESPN stories about players on your rosters.", now.news, "news") { on ->
+        scope.launch { settings.setAlerts { it.copy(news = on) } }
+    }
+    AlertSwitch("Lineup checks", "About 90 minutes before kickoff, when a starter in your ESPN lineup is out or on bye.", now.lineup, "lineup") { on ->
+        scope.launch { settings.setAlerts { it.copy(lineup = on) } }
+    }
+    AlertSwitch("Tuesday summary", "Last week's result, your report card place and this week's win chance.", now.summary, "summary") { on ->
+        scope.launch { settings.setAlerts { it.copy(summary = on) } }
+    }
+    AlertSwitch("Quiet hours", "Holds injury and news alerts from 10 pm to 8 am and sends them after. Lineup checks still come.", now.quiet, "quiet") { on ->
+        scope.launch { settings.setAlerts { it.copy(quiet = on) } }
+    }
+}
+
+@Composable
+private fun AlertSwitch(title: String, detail: String, checked: Boolean, tag: String, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .toggleable(value = checked, role = Role.Switch, onValueChange = onChange)
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .testTag("alerts:$tag"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = null)
     }
 }
 

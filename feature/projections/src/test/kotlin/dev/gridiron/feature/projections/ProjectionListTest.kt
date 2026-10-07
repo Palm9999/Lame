@@ -8,12 +8,34 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
 import java.time.ZoneOffset
+import kotlin.math.round
 
 class ProjectionListTest {
     private fun row(id: String, position: String, points: Double) =
         ProjectionRow(id, "Player $id", position, "KC", points, points - 5, points + 5)
 
     private val rows = listOf(row("q", "QB", 20.0), row("r", "RB", 14.0), row("w", "WR", 16.0), row("t", "TE", 9.0))
+
+    @Test
+    fun `a Questionable player's discount lifts once his team's inactives are posted and ESPN hasn't ruled him out`() {
+        val q = row("r", "RB", 7.8).copy(questionable = 0.78)
+        val back = confirmedActive(q, mapOf("r" to "Q"), setOf("KC"))
+        assertEquals(10.0, back.points, 1e-9)
+        assertEquals(2.8 / 0.78, back.floor, 1e-9)
+        assertEquals(null, back.questionable)
+        // His TD chance and usage come back from the same discount: 1 - 0.7^(1/0.78), and 7.8 carries to 10.
+        val withTd = q.copy(tdChance = 0.3, usage = Usage(7.8, 3.9, 3.9, 3.12))
+        val td = confirmedActive(withTd, mapOf("r" to "Q"), setOf("KC"))
+        assertEquals(1 - Math.pow(0.7, 1 / 0.78), td.tdChance!!, 1e-12)
+        assertTrue(td.tdChance > 0.3 && td.tdChance < 1.0)
+        assertEquals(Usage(10.0, 5.0, 5.0, 4.0), td.usage!!.let { u -> Usage(round(u.carries), round(u.targets), round(u.rushingPoints), round(u.receivingPoints)) })
+        // Inactives not posted yet, or ruled out: unchanged.
+        assertEquals(q, confirmedActive(q, mapOf("r" to "Q"), setOf("BUF")))
+        assertEquals(q, confirmedActive(q, mapOf("r" to "O"), setOf("KC")))
+        assertEquals(q, confirmedActive(q, mapOf("r" to "D"), setOf("KC")))
+        // No discount: nothing to lift.
+        assertEquals(rows[1], confirmedActive(rows[1], emptyMap(), setOf("KC")))
+    }
 
     @Test
     fun `a tab shows its positions, best first`() {

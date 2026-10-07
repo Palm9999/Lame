@@ -52,6 +52,78 @@ class LineupViewTest {
     }
 
     @Test
+    fun `the lineup's spread combines its starters' and an Out player adds none`() {
+        // Each row's range is 10 points wide, so each starter's SD is 10 / 2.5632.
+        val view = lineupView(team(mapOf("QB" to 1, "RB" to 1), on("q"), on("r1")), 4, rows, emptyMap())
+        val sd = 10 / (2 * 1.2816)
+        assertEquals(kotlin.math.sqrt(2.0) * sd, view.spread, 1e-9)
+        assertEquals(34.0 - 1.2816 * view.spread, view.low, 1e-9)
+        assertEquals(34.0 + 1.2816 * view.spread, view.high, 1e-9)
+        val hurt = lineupView(team(mapOf("RB" to 1), on("r1")), 4, rows, badges = mapOf("r1" to "O"))
+        assertEquals(0.0, hurt.spread, 1e-12)
+        assertEquals(0.0, hurt.low, 1e-12)
+    }
+
+    @Test
+    fun `the chance to win follows the margin and both spreads`() {
+        val mine = lineupView(team(mapOf("QB" to 1, "RB" to 1), on("q"), on("r1")), 4, rows, emptyMap())
+        assertEquals(0.5, winChance(mine, mine), 1e-9)
+        val theirs = lineupView(team(mapOf("QB" to 1, "RB" to 1), on("q"), on("r2")), 4, rows, emptyMap())
+        val chance = winChance(mine, theirs)
+        assertEquals(dev.gridiron.core.model.normalCdf(2.0 / kotlin.math.sqrt(2 * mine.spread * mine.spread)), chance, 1e-9)
+        assertEquals(1 - chance, winChance(theirs, mine), 1e-9)
+        assertEquals("1% to win", winLine(0.0001))
+        assertEquals("99% to win", winLine(0.9999))
+        assertEquals("57% to win", winLine(0.566))
+    }
+
+    @Test
+    fun `the lineup check names who to start and sit against the lineup set in ESPN`() {
+        fun at(id: String?, slot: String, name: String = "Player $id") = LeaguePlayer("e-$name", name, slot, id)
+        // ESPN starts r2 at RB and the TE at FLEX; the best lineup starts r1 at RB and r2 at FLEX.
+        val t = team(mapOf("QB" to 1, "RB" to 1, "WR" to 1, "FLEX" to 1), at("q", "QB"), at("r1", "BE"), at("r2", "RB"), at("w", "WR"), at("t", "FLEX"))
+        val best = lineupView(t, 4, rows, emptyMap())
+        val check = lineupCheck(t, best, rows, emptyMap())!!
+        assertEquals(57.0, check.current, 1e-9)
+        assertEquals(62.0, check.best, 1e-9)
+        assertEquals(5.0, check.gain, 1e-9)
+        assertEquals(listOf("r1"), check.start.map { it.playerId })
+        assertEquals(listOf("t"), check.sit.map { it.playerId })
+    }
+
+    @Test
+    fun `the lineup check flags an Out or unprojected starter, and is quiet when nothing is set`() {
+        fun at(id: String?, slot: String, name: String = "Player $id") = LeaguePlayer("e-$name", name, slot, id)
+        val t = team(mapOf("RB" to 1), at("r1", "RB"), at("r2", "BE"))
+        val check = lineupCheck(t, lineupView(t, 4, rows, mapOf("r1" to "O")), rows, mapOf("r1" to "O"))!!
+        assertEquals(0.0, check.current, 1e-9)
+        assertEquals(listOf("r2"), check.start.map { it.playerId })
+        assertEquals(listOf(CheckPlayer("r1", "Player r1", "RB", 0.0)), check.sit)
+        val bye = team(mapOf("RB" to 1), at("gone", "RB", "On Bye"), at("r2", "BE"))
+        assertEquals(listOf(CheckPlayer("gone", "On Bye", "RB", null)), lineupCheck(bye, lineupView(bye, 4, rows, emptyMap()), rows, emptyMap())!!.sit)
+        val benchOnly = team(mapOf("RB" to 1), on("r1"), on("r2"))
+        assertNull(lineupCheck(benchOnly, lineupView(benchOnly, 4, rows, emptyMap()), rows, emptyMap()))
+    }
+
+    @Test
+    fun `a player whose game has started keeps his ESPN slot, and a benched one stays benched`() {
+        fun at(id: String?, slot: String) = LeaguePlayer("e-$id", "Player $id", slot, id)
+        val teams = rows.map { if (it.playerId == "r2" || it.playerId == "x") it.copy(team = "TNF") else it }
+        // r2 (12) started at RB on Thursday; x (30) sat on the bench on Thursday. r1 (14) can only take the FLEX.
+        val t = team(mapOf("RB" to 1, "FLEX" to 1), at("r2", "RB"), at("x", "BE"), at("r1", "BE"), at("t", "FLEX"))
+        val view = lineupView(t, 4, teams, emptyMap(), started = setOf("TNF"))
+        assertEquals(listOf("r2", "r1"), view.starters.map { it.row?.playerId })
+        assertEquals(listOf(true, false), view.starters.map { it.locked })
+        assertEquals(26.0, view.total, 1e-9)
+        assertTrue(view.bench.any { it.playerId == "x" })
+        // Without locks the Thursday bench player would start.
+        assertEquals(44.0, lineupView(t, 4, teams, emptyMap()).total, 1e-9)
+        val check = lineupCheck(t, view, teams, emptyMap())!!
+        assertEquals(listOf("r1"), check.start.map { it.playerId })
+        assertEquals(listOf("t"), check.sit.map { it.playerId })
+    }
+
+    @Test
     fun `the line says who leads and by how much`() {
         assertEquals("You lead by 6.8", matchupLine(98.0, 91.2))
         assertEquals("You trail by 2.1", matchupLine(88.0, 90.1))

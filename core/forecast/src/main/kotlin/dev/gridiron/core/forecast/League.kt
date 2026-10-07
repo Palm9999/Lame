@@ -7,6 +7,7 @@ private val SUMMED = listOf(
     "attempts", "completions", "passing_yards", "passing_tds", "passing_tds_40", "passing_tds_50",
     "interceptions", "sacks_taken", "passing_first_downs", "rushing_first_downs", "receiving_first_downs",
     "passing_2pt", "rushing_2pt", "receiving_2pt", "fumbles_lost",
+    "offense_snaps", "team_offense_snaps",
 )
 
 /**
@@ -67,6 +68,9 @@ internal class Rates(private val sums: Map<String, Double>) {
     val recFirstDownsPerReception: Double = ratio("receiving_first_downs", "receptions")
     val rushFirstDownsPerCarry: Double = ratio("rushing_first_downs", "carries")
     val passFirstDownsPerCompletion: Double = ratio("passing_first_downs", "completions")
+    /** The position's share of team targets (carries) per unit of snap share: what a snap share implies. */
+    val targetsPerSnapShare: Double = ratio("offense_snaps", "team_offense_snaps").let { if (it > 0.0) targetShare / it else 0.0 }
+    val carriesPerSnapShare: Double = ratio("offense_snaps", "team_offense_snaps").let { if (it > 0.0) carryShare / it else 0.0 }
     val rec2ptPerTarget: Double = ratio("receiving_2pt", "targets")
     val rush2ptPerCarry: Double = ratio("rushing_2pt", "carries")
     val pass2ptPerAttempt: Double = ratio("passing_2pt", "attempts")

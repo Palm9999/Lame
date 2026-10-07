@@ -85,7 +85,7 @@ public class IngestPipeline(
     private val fetcher: Fetcher,
     private val workDir: File,
     private val playersFile: File,
-    private val gamesFile: File = playersFile.resolveSibling("games.csv"),
+    private val gamesFile: File = playersFile.resolveSibling("games.csv.gz"),
     private val now: () -> Instant = Instant::now,
 ) {
     /**
@@ -163,6 +163,7 @@ public class IngestPipeline(
                 check(built.isNotEmpty() || reused.isNotEmpty()) { "none of the seasons $seasons has published play-by-play" }
                 writer.writePlayers(players)
                 writer.writeGames(readSchedule((built + reused).toSet()))
+                espnProjections((built + reused).sorted(), players, writer)
                 ngsLost.forEach { meta.remove(Sources.metaKey(it)) }
                 writer.finish(built + reused, meta, now())
                 onProgress(IngestProgress.Validating)
@@ -205,7 +206,7 @@ public class IngestPipeline(
         }
 
         private suspend fun fetch(input: Input, season: Int?, known: Validators?, dest: File = File(workDir, Sources.fileName(input, season))): FetchResult =
-            fetcher.fetch(Sources.url(input, season), dest, known) { read, total ->
+            fetcher.fetch(Sources.url(input, season), dest, known, Sources.headers(input)) { read, total ->
                 onProgress(IngestProgress.Downloading(season, input.label, read, total))
             }
 
@@ -478,6 +479,35 @@ public class IngestPipeline(
                 ?.let(writer::writeInjuries)
             files.values.forEach { it?.delete() }
             built += season
+        }
+
+        /**
+         * ESPN's weekly projections for each built season, for the forecast to blend in: a finished season's are
+         * copied from the previous database when it has them, the newest is downloaded every build. Never fails the
+         * build: without them the forecast uses the model alone, and a warning says why.
+         */
+        private suspend fun espnProjections(seasons: List<Int>, players: List<PlayerInfo>, writer: StatsDbWriter) {
+            val byEspnId = players.mapNotNull { p -> p.espnId?.let { it to p.playerId } }.toMap()
+            for (season in seasons) {
+                job.ensureActive()
+                if (season != newest && previous != null && writer.copyEspnProjectionsFrom(previous, season)) continue
+                val projections = try {
+                    when (val r = fetch(Input.ESPN_PROJECTIONS, season, known = null)) {
+                        is FetchResult.Downloaded -> r.file.inputStream().use { readEspnProjections(it, season) }.also { r.file.delete() }
+                        else -> null.also { warnings += "$season: ESPN projections aren't available; the model projects alone" }
+                    }
+                } catch (e: IOException) {
+                    null.also { warnings += "$season: couldn't download ESPN projections (${e.message}); the model projects alone" }
+                } catch (e: EspnFormatException) {
+                    null.also { warnings += "$season: ESPN changed its projections format (${e.message}); the model projects alone" }
+                } ?: continue
+                writer.writeEspnProjections(
+                    projections.flatMap { p ->
+                        val id = byEspnId[p.espnId] ?: return@flatMap emptyList()
+                        p.stats.filterValues { it != 0.0 }.map { (metric, value) -> Fact(id, p.season, p.week, null, metric, value) }
+                    },
+                )
+            }
         }
 
         /** FTN's plays, or null, with a warning, when the file is unreadable or has lost a column: the build never fails on FTN. */

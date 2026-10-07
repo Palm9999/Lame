@@ -34,7 +34,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.DefenseRow
+import dev.gridiron.core.data.InjuryReturnRepository
+import dev.gridiron.core.data.InjuryReturns
 import dev.gridiron.core.data.InjuryRow
+import dev.gridiron.core.data.chancesText
 import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.live.LiveRepository
 import kotlinx.coroutines.CancellationException
@@ -74,9 +77,10 @@ fun InjuriesRoute(
     onPlayer: (String) -> Unit,
     /** Bumped when a refresh swaps in new stats: the official rows load again. */
     dataVersion: Flow<Long> = flowOf(0L),
+    returns: InjuryReturnRepository? = null,
 ) {
     if (live != null && season == currentSeason) {
-        LiveInjuriesRoute(season, teams, live, onBack, onPlayer, dataVersion)
+        LiveInjuriesRoute(season, teams, live, onBack, onPlayer, dataVersion, returns)
     } else {
         InjuriesScreen(season, teams, onBack, dataVersion)
     }
@@ -90,12 +94,14 @@ private fun LiveInjuriesRoute(
     onBack: () -> Unit,
     onPlayer: (String) -> Unit,
     dataVersion: Flow<Long>,
+    returns: InjuryReturnRepository?,
 ) {
     val version by live.changes.collectAsState()
     val stats by dataVersion.collectAsState(initial = 0L)
     var groups by remember { mutableStateOf<List<InjuryGroup>?>(null) }
     var asOf by remember { mutableStateOf<Instant?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
+    var outlooks by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(Unit) { error = live.refreshIfStale()?.injuriesError }
     LaunchedEffect(version, stats) {
         // Official practice rows are a bonus: the live list shows without them.
@@ -106,10 +112,27 @@ private fun LiveInjuriesRoute(
         } catch (_: Exception) {
             emptyList()
         }
-        groups = injuryReport(live.injuries(), official)
+        val report = injuryReport(live.injuries(), official)
+        groups = report
         asOf = live.injuriesFetchedAt()
+        // The return outlooks follow the list: a few queries each, so the list shows first.
+        if (returns == null) return@LaunchedEffect
+        val found = mutableMapOf<String, String>()
+        for (i in report.flatMap { it.lines }.map { it.injury }) {
+            val id = i.playerId ?: continue
+            if (InjuryReturns.statusOf(i.abbr) == null) continue
+            val outlook = try {
+                returns.outlook(id, season, i.abbr, stats)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                null
+            } ?: continue
+            found[id] = "Played again by: " + outlook.chancesText()
+        }
+        outlooks = found
     }
-    LiveInjuriesScreen(groups, asOf, error, onBack, onPlayer)
+    LiveInjuriesScreen(groups, asOf, error, onBack, onPlayer, outlooks)
 }
 
 @Composable
@@ -119,6 +142,8 @@ fun LiveInjuriesScreen(
     error: String?,
     onBack: () -> Unit,
     onPlayer: (String) -> Unit,
+    /** "Played again by: wk 7 28% · …" by app player id, for Out, Doubtful and IR players with enough history. */
+    outlooks: Map<String, String> = emptyMap(),
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
@@ -141,7 +166,7 @@ fun LiveInjuriesScreen(
                             )
                         }
                         items(group.lines, key = { it.injury.espnId }) { line ->
-                            InjuryLineRow(line, onPlayer)
+                            InjuryLineRow(line, line.injury.playerId?.let(outlooks::get), onPlayer)
                             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                         }
                     }
@@ -152,7 +177,7 @@ fun LiveInjuriesScreen(
 }
 
 @Composable
-private fun InjuryLineRow(line: InjuryLine, onPlayer: (String) -> Unit) {
+private fun InjuryLineRow(line: InjuryLine, outlook: String?, onPlayer: (String) -> Unit) {
     val i = line.injury
     val id = i.playerId
     Column(
@@ -170,6 +195,7 @@ private fun InjuryLineRow(line: InjuryLine, onPlayer: (String) -> Unit) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         i.shortComment?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+        outlook?.let { Text(it, style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.SemiBold) }
     }
 }
 

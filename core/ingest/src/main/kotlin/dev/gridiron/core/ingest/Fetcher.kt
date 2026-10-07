@@ -24,16 +24,17 @@ public sealed interface FetchResult {
     public data object NotPublished : FetchResult
 }
 
-public fun interface Fetcher {
+public interface Fetcher {
     /**
      * Downloads [url] to [dest] unless [previous] still describes the server's
      * copy. [dest] only ever appears complete: an interrupted download leaves
-     * nothing behind and throws.
+     * nothing behind and throws. [headers] go with every request (ESPN reads its filter from one).
      */
     public suspend fun fetch(
         url: String,
         dest: File,
         previous: Validators?,
+        headers: Map<String, String> = emptyMap(),
         onBytes: (read: Long, total: Long) -> Unit,
     ): FetchResult
 }

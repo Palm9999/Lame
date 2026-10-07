@@ -36,10 +36,12 @@ private val LIVE_SCHEMA = listOf(
         event_id TEXT NOT NULL, book TEXT NOT NULL, market TEXT NOT NULL, player TEXT NOT NULL,
         point REAL NOT NULL, over REAL, under REAL,
         PRIMARY KEY (event_id, book, market, player, point)) WITHOUT ROWID""",
+    """CREATE TABLE IF NOT EXISTS roster_pct (
+        espn_id TEXT NOT NULL, day INTEGER NOT NULL, pct REAL NOT NULL, PRIMARY KEY (espn_id, day)) WITHOUT ROWID""",
 )
 
 /**
- * `live.db`: ESPN news and injuries, updated in place on every live refresh.
+ * `live.db`: ESPN news and injuries, updated in place on every live refresh, and a daily snapshot of ESPN's roster percentages.
  *
  * Unlike `stats.db` it is written on the phone, and it is disposable: a file
  * that can't be read, or has another layout version, is deleted and started

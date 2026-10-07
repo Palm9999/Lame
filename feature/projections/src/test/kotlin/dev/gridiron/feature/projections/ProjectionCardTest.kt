@@ -27,11 +27,22 @@ private class CardExecutor(
     private val status: String = "ok",
     private val bye: Boolean = false,
     private val defense: Boolean = false,
+    private val stash: Boolean = false,
+    private val weeks: Boolean = false,
+    /** W1 carries the forecast's Questionable discount (0.78) this week. */
+    private val questionable: Boolean = false,
 ) : QueryExecutor {
     override suspend fun <T> query(query: SqlQuery, map: (ResultRow) -> T): List<T> {
         val sql = query.sql
         val rows: List<List<Any?>> = when {
+            "factor = 'questionable'" in sql && questionable -> listOf(listOf("W1", kotlin.math.ln(0.78)))
             "schema_meta" in sql -> listOf(listOf("forecast_status", status), listOf("forecast_week:2026", "4"))
+            "FROM player_ros_week" in sql && weeks -> listOf(
+                listOf("W1", "WR", 12L, "receptions", 9.0, 1.0),
+                listOf("W1", "WR", 15L, "receptions", 5.0, 1.0),
+                listOf("W1", "WR", 15L, "receiving_yards", 60.0, 1.0),
+                listOf("W1", "WR", 16L, "receptions", 4.0, 1.0),
+            )
             "player_week_projection_factor" in sql -> emptyList()
             "FROM player_week_projection" in sql && defense -> listOf(
                 listOf("DST_KC", "dst_sacks", "final", 3.0, 3.0, "negbinom"),
@@ -43,7 +54,15 @@ private class CardExecutor(
                 listOf("DST_KC", "points_allowed", 30.0, 0.0, "normal"),
                 listOf("DST_KC", "g", 3.0, 0.0, null),
             )
-            "FROM player_week_projection" in sql && bye -> emptyList()
+            "FROM player_ros_projection" in sql && "JOIN player pl" in sql -> listOf(
+                listOf("W1", "Wide One", "WR", "KC", "receptions", 40.0, 30.0, "binomial"),
+                listOf("W1", "Wide One", "WR", "KC", "receiving_yards", 480.0, 5000.0, "gamma"),
+                listOf("W2", "Wide Two", "WR", "BUF", "receptions", 50.0, 30.0, "binomial"),
+                listOf("W2", "Wide Two", "WR", "BUF", "receiving_yards", 600.0, 5000.0, "gamma"),
+                listOf("W3", "Wide Three", "WR", "MIA", "receptions", 10.0, 30.0, "binomial"),
+                listOf("R1", "Run One", "RB", "MIA", "receptions", 90.0, 30.0, "binomial"),
+            )
+            "FROM player_week_projection" in sql && (bye || stash) -> emptyList()
             "FROM player_week_projection" in sql -> listOf(
                 listOf("W1", "receptions", "final", 5.0, 5.0, "binomial"),
                 listOf("W1", "receiving_yards", "final", 60.0, 900.0, "gamma"),
@@ -63,6 +82,19 @@ private class CardExecutor(
 
 class ProjectionCardTest {
     @Test
+    fun `a Questionable player's card loses his discount once his team's inactives are posted and ESPN hasn't ruled him out`() = runTest {
+        suspend fun card(abbr: String?, posted: Set<String>) = loadProjectionCard(
+            ProjectionsRepository(CardExecutor(questionable = true)), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = abbr,
+            inactivesPosted = { _, _ -> posted },
+        )!!
+        val lifted = card("Q", setOf("KC"))
+        assertEquals(11.0 / 0.78, lifted.points, 1e-9)
+        // Not posted for his team yet, or ruled Doubtful: the discounted projection stands.
+        assertEquals(11.0, card("Q", setOf("BUF")).points, 1e-9)
+        assertEquals(11.0, card("D", setOf("KC")).points, 1e-9)
+    }
+
+    @Test
     fun `the card scores this week and rest of season with the profile`() = runTest {
         val card = loadProjectionCard(ProjectionsRepository(CardExecutor()), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = "Q")!!
 
@@ -75,6 +107,34 @@ class ProjectionCardTest {
         assertEquals(88.0, card.rosPoints!!, 1e-9)
         assertEquals(88.0 / 3, card.rosPerGame!!, 1e-9)
         assertEquals(false, card.out)
+        // W2's 110 beat his 88; W3's 10 and the RB don't count against a WR.
+        assertEquals(2, card.rosPlace)
+        assertEquals(3, card.rosOf)
+        // No TDs projected: no chance of one.
+        assertEquals(0.0, card.tdChance!!, 1e-12)
+    }
+
+    @Test
+    fun `the card adds his points in the playoff weeks when weekly projections exist`() = runTest {
+        val card = loadProjectionCard(ProjectionsRepository(CardExecutor(weeks = true)), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = null)!!
+        // PPR: week 15 is 5 + 6.0, week 16 is 4; week 12 isn't a playoff week.
+        assertEquals(15.0, card.playoffPoints!!, 1e-9)
+        assertEquals(listOf(15, 16, 17), card.playoffWeeks)
+        val shifted = loadProjectionCard(
+            ProjectionsRepository(CardExecutor(weeks = true)), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = null, playoffWeeks = listOf(12),
+        )!!
+        assertEquals(9.0, shifted.playoffPoints!!, 1e-9)
+        // An older database has no weekly rows: no playoff line.
+        assertNull(loadProjectionCard(ProjectionsRepository(CardExecutor()), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = null)!!.playoffPoints)
+    }
+
+    @Test
+    fun `a player out for now with rest of season still gets a card`() = runTest {
+        val card = loadProjectionCard(ProjectionsRepository(CardExecutor(stash = true)), "W1", "KC", ScoringPresets.PPR, Position.WR, injuryAbbr = "IR")!!
+        assertTrue(card.notThisWeek)
+        assertEquals(false, card.bye)
+        assertEquals(88.0, card.rosPoints!!, 1e-9)
+        assertEquals("@ BUF", card.matchup)
     }
 
     @Test

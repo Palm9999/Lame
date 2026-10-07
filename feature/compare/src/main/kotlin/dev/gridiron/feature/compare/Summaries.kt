@@ -1,5 +1,6 @@
 package dev.gridiron.feature.compare
 
+import dev.gridiron.core.data.ComparePage
 import dev.gridiron.core.data.RadarUi
 import dev.gridiron.core.data.ScatterPointUi
 import java.util.Locale
@@ -21,3 +22,13 @@ internal fun scatterSummary(slots: List<ScatterPointUi>, population: Int): Strin
         append("${"%.1f".format(Locale.US, abs(d))} ${if (d >= 0) "above" else "below"} expected.")
     }
 }
+
+/** Compare's shared card: who's compared (the title), the scoring, then the first [top] stats with one cell per player. */
+internal data class CompareCard(val title: String, val subtitle: String, val headers: List<String>, val rows: List<Pair<String, List<String>>>)
+
+internal fun compareCard(page: ComparePage, top: Int = 12): CompareCard = CompareCard(
+    title = page.slots.joinToString(" vs ") { it.name },
+    subtitle = listOfNotNull(page.request.scoring.name, "per game".takeIf { page.request.perGame }).joinToString(" · "),
+    headers = page.slots.map { it.name.substringAfterLast(' ') },
+    rows = page.groups.flatMap { it.rows }.take(top).map { row -> row.label to row.cells.map { it.text } },
+)

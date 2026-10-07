@@ -1,5 +1,6 @@
 package dev.gridiron.core.data
 
+import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.projections.ForecastStatus
 import dev.gridiron.core.projections.PlayerProjection
 import dev.gridiron.core.projections.ProjectionsRequest
@@ -19,7 +20,7 @@ class ProjectionsRepositoryTest {
      * then reopened read-only through [JdbcQueryExecutor] -- the same JDBC
      * fixture [StatsRepositoryTest] uses against the real ETL database.
      */
-    private fun jdbcFixtureWithSchema(insertProjectionRows: List<String>): JdbcQueryExecutor {
+    private fun jdbcFixtureWithSchema(insertProjectionRows: List<String>, withRosWeeks: Boolean = true): JdbcQueryExecutor {
         val file = File.createTempFile("projections-fixture", ".db")
         file.deleteOnExit()
         DriverManager.getConnection("jdbc:sqlite:${file.path}").use { conn ->
@@ -42,6 +43,14 @@ class ProjectionsRepositoryTest {
                          metric_id TEXT NOT NULL, mean REAL NOT NULL, variance REAL NOT NULL,
                          PRIMARY KEY (player_id, season, as_of_week, metric_id)) WITHOUT ROWID""",
                 )
+                if (withRosWeeks) {
+                    st.executeUpdate(
+                        """CREATE TABLE player_ros_week (
+                             player_id TEXT NOT NULL, season INTEGER NOT NULL, as_of_week INTEGER NOT NULL, week INTEGER NOT NULL,
+                             metric_id TEXT NOT NULL, mean REAL NOT NULL, variance REAL NOT NULL,
+                             PRIMARY KEY (player_id, season, as_of_week, week, metric_id)) WITHOUT ROWID""",
+                    )
+                }
                 st.executeUpdate("CREATE TABLE metric (id TEXT PRIMARY KEY, dist_family TEXT)")
                 st.executeUpdate("CREATE TABLE player (player_id TEXT PRIMARY KEY, full_name TEXT NOT NULL, position TEXT, team TEXT)")
                 st.executeUpdate("CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)")
@@ -141,6 +150,32 @@ class ProjectionsRepositoryTest {
     }
 
     @Test
+    fun `rosWeeks reads the latest build's weeks and scores each one`() = runTest {
+        jdbcFixtureWithSchema(
+            listOf(
+                "INSERT INTO player VALUES ('P1', 'Pat One', 'WR', 'KC')",
+                "INSERT INTO player_ros_week VALUES ('P1', 2026, 2, 3, 'receptions', 9.0, 1.0)",
+                "INSERT INTO player_ros_week VALUES ('P1', 2026, 3, 4, 'receptions', 5.0, 1.0)",
+                "INSERT INTO player_ros_week VALUES ('P1', 2026, 3, 4, 'receiving_yards', 60.0, 1.0)",
+                "INSERT INTO player_ros_week VALUES ('P1', 2026, 3, 6, 'receptions', 4.0, 1.0)",
+            ),
+        ).use { executor ->
+            val weeks = ProjectionsRepository(executor).rosWeeks(2026).single()
+            assertEquals("WR", weeks.position)
+            assertEquals(setOf(4, 6), weeks.weeks.keys)
+            // PPR: a catch is a point, ten yards a point.
+            assertEquals(mapOf(4 to 11.0, 6 to 4.0), weeks.points(ScoringPresets.PPR).mapValues { Math.round(it.value * 10) / 10.0 })
+        }
+    }
+
+    @Test
+    fun `rosWeeks is empty on a database built before the table existed`() = runTest {
+        jdbcFixtureWithSchema(emptyList(), withRosWeeks = false).use { executor ->
+            assertEquals(emptyList<Any>(), ProjectionsRepository(executor).rosWeeks(2026))
+        }
+    }
+
+    @Test
     fun `a game's line and the games left are read from the team's side`() = runTest {
         jdbcFixtureWithSchema(
             listOf(
@@ -157,6 +192,30 @@ class ProjectionsRepositoryTest {
             assertEquals(47.5, line.total)
             assertEquals(null, repo.game(2026, 6, "KC"))
             assertEquals(2, repo.remainingGames(2026, 4, "KC"))
+            // KC plays weeks 4 and 5 of the regular season; BUF and DEN miss one each.
+            assertEquals(mapOf("BUF" to setOf(5), "KC" to emptySet<Int>(), "DEN" to setOf(4)), repo.byeWeeks(2026))
+        }
+    }
+
+    @Test
+    fun `ESPN's week reads as listed projections, and an older database without it reads nothing`() = runTest {
+        jdbcFixtureWithSchema(
+            insertProjectionRows = listOf(
+                "CREATE TABLE espn_projection (player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL, metric_id TEXT NOT NULL, value REAL NOT NULL, PRIMARY KEY (player_id, season, week, metric_id))",
+                "INSERT INTO player VALUES ('P1', 'Pat One', 'WR', 'KC')",
+                "INSERT INTO espn_projection VALUES ('P1', 2026, 6, 'receptions', 5.5)",
+                "INSERT INTO espn_projection VALUES ('P1', 2026, 6, 'receiving_yards', 70.0)",
+                "INSERT INTO espn_projection VALUES ('P1', 2026, 5, 'receptions', 9.0)",
+            ),
+        ).use { executor ->
+            val listed = ProjectionsRepository(executor).espnWeek(2026, 6)
+            assertEquals(1, listed.size)
+            assertEquals("Pat One", listed.single().name)
+            assertEquals(mapOf("receptions" to 5.5, "receiving_yards" to 70.0), listed.single().components.associate { it.metricId to it.mean })
+            assertEquals(0.0, listed.single().components.sumOf { it.variance })
+        }
+        jdbcFixtureWithSchema(emptyList()).use { executor ->
+            assertEquals(emptyList<Any>(), ProjectionsRepository(executor).espnWeek(2026, 6))
         }
     }
 }

@@ -126,4 +126,64 @@ class BaselineModelTest {
         assertEquals(fallback, teamVolume(emptyList(), fallback))
         assertEquals(32.0 / 57, volume.passRate, 1e-12)
     }
+
+    @Test
+    fun `a pass catcher's projection moves part of the way to his games this season`() {
+        val history = listOf(
+            game(2024, 17, "targets" to 20.0),
+            game(2025, 1, "targets" to 4.0, "receiving_tds" to 1.0),
+            game(2025, 2, "targets" to 8.0),
+        )
+        val out = withSeasonForm(mapOf("targets" to 10.0, "receiving_tds" to 0.2), PlayerContext("WR", 2025, 3, history, regimeBreak = false))
+
+        val w = K.SEASON_FORM_WEIGHT
+        assertEquals((1 - w) * 10.0 + w * 6.0, out.getValue("targets"), 1e-12) // last season's game doesn't count
+        assertEquals((1 - w) * 0.2 + w * 0.5, out.getValue("receiving_tds"), 1e-12)
+    }
+
+    @Test
+    fun `a quarterback, or anyone without a game this season, keeps the model's projection`() {
+        val projected = mapOf("attempts" to 30.0)
+        val qb = listOf(game(2025, 1, "attempts" to 40.0))
+        assertEquals(projected, withSeasonForm(projected, PlayerContext("QB", 2025, 2, qb, regimeBreak = false)))
+        val lastSeasonOnly = listOf(game(2024, 17, "targets" to 9.0))
+        assertEquals(mapOf("targets" to 3.0), withSeasonForm(mapOf("targets" to 3.0), PlayerContext("TE", 2025, 1, lastSeasonOnly, regimeBreak = false)))
+    }
+
+    @Test
+    fun `a starting QB keeps part of his distance from the league's typical starter`() {
+        val typical = mapOf("attempts" to 33.0, "passing_tds" to 1.4)
+        val ctx = PlayerContext("QB", 2025, 3, emptyList(), regimeBreak = false)
+        val out = withQbSpread(mapOf("attempts" to 39.0, "passing_tds" to 2.4, "rushing_2pt" to 0.1), ctx, typical)
+
+        assertEquals(33.0 + K.QB_SPREAD * 6.0, out.getValue("attempts"), 1e-12)
+        assertEquals(1.4 + K.QB_SPREAD * 1.0, out.getValue("passing_tds"), 1e-12)
+        assertEquals(0.1, out.getValue("rushing_2pt"), 1e-12) // no reference: unchanged
+        val wr = mapOf("targets" to 9.0)
+        assertEquals(wr, withQbSpread(wr, PlayerContext("WR", 2025, 3, emptyList(), regimeBreak = false), typical))
+    }
+
+    @Test
+    fun `a pass catcher's share moves toward what his recent snap share implies`() {
+        // League: WRs take 10% of targets on 50% of snaps, so a snap share implies a fifth of it in targets.
+        val snapRates = Rates(
+            mapOf(
+                "targets" to 10.0, "team_targets" to 100.0, "carries" to 1.0, "team_carries" to 100.0,
+                "offense_snaps" to 50.0, "team_offense_snaps" to 100.0,
+            ),
+        )
+        val history = listOf(
+            game(2025, 1, "targets" to 3.0, "offense_snaps" to 60.0, "team_offense_snaps" to 60.0),
+            game(2025, 2, "targets" to 3.0, "offense_snaps" to 60.0, "team_offense_snaps" to 60.0),
+        )
+        val ctx = PlayerContext("WR", 2025, 3, history, regimeBreak = false)
+        val m = model()
+        val plain = m.share(ctx, snapRates.targetShare * 0.5, { it["targets"] }, { it.targets })
+        val w = K.SNAP_SHARE_WEIGHT
+
+        assertEquals((1 - w) * plain + w * 1.0 * 0.2, m.shares(ctx, snapRates, starter = false).target, 1e-12)
+        // One game of snaps isn't enough: the share stays as it was.
+        val one = PlayerContext("WR", 2025, 2, history.take(1), regimeBreak = false)
+        assertEquals(m.share(one, snapRates.targetShare * 0.5, { it["targets"] }, { it.targets }), m.shares(one, snapRates, starter = false).target, 1e-12)
+    }
 }

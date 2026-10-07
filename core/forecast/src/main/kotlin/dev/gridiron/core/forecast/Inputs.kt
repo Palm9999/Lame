@@ -89,6 +89,10 @@ internal class ForecastInputs(
     val unitHistory: Map<String, List<PlayerGame>> = emptyMap(),
     /** (player id, season, week) for every QB, RB, WR or TE nflverse listed Out or Doubtful: none of them has ever played that week. */
     val absent: Set<Triple<String, Int, Int>> = emptySet(),
+    /** Friday practice level per (player id, season, week) for every QB, RB, WR or TE nflverse listed Questionable. */
+    val questionable: Map<Triple<String, Int, Int>, Practice> = emptyMap(),
+    /** ESPN's projection per (player id, season, week), in our metric ids; empty when the build has none. */
+    val espn: Map<Triple<String, Int, Int>, Map<String, Double>> = emptyMap(),
 )
 
 private val READ_METRICS = listOf(
@@ -99,6 +103,7 @@ private val READ_METRICS = listOf(
     "passing_tds_40", "passing_tds_50", "rushing_tds_40", "rushing_tds_50", "receiving_tds_40", "receiving_tds_50",
     "x_passing_tds", "x_rushing_tds", "x_receiving_tds",
     "x_receptions", "x_receiving_yards", "x_rushing_yards",
+    "offense_snaps", "team_offense_snaps",
 )
 
 private val UNIT_METRICS = listOf(
@@ -125,7 +130,21 @@ internal fun loadInputs(conn: SQLiteConnection): ForecastInputs {
         units = readPlayers(conn, UNIT_POSITIONS),
         unitHistory = readHistory(conn, UNIT_POSITIONS, UNIT_METRICS),
         absent = readAbsent(conn),
+        questionable = readQuestionable(conn),
+        espn = readEspn(conn),
     )
+}
+
+private fun readEspn(conn: SQLiteConnection): Map<Triple<String, Int, Int>, Map<String, Double>> {
+    val exists = conn.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'espn_projection'").use { it.step() }
+    if (!exists) return emptyMap()
+    val out = HashMap<Triple<String, Int, Int>, MutableMap<String, Double>>()
+    conn.prepare("SELECT player_id, season, week, metric_id, value FROM espn_projection").use { st ->
+        while (st.step()) {
+            out.getOrPut(Triple(st.getText(0), st.getLong(1).toInt(), st.getLong(2).toInt())) { HashMap() }[st.getText(3)] = st.getDouble(4)
+        }
+    }
+    return out
 }
 
 private fun readAbsent(conn: SQLiteConnection): Set<Triple<String, Int, Int>> = conn.prepare(
@@ -136,6 +155,35 @@ private fun readAbsent(conn: SQLiteConnection): Set<Triple<String, Int, Int>> = 
     POSITIONS.forEachIndexed { i, p -> st.bindText(i + 1, p) }
     buildSet {
         while (st.step()) add(Triple(st.getText(0), st.getLong(1).toInt(), st.getLong(2).toInt()))
+    }
+}
+
+/** The last practice of an injury-report week, as nflverse words it. */
+internal enum class Practice(val label: String) {
+    FULL("full practice"),
+    LIMITED("limited practice"),
+    NONE("no practice"),
+    ;
+
+    internal companion object {
+        /** "Did Not Participate In Practice", "Limited Participation…", "Full Participation…"; anything else is limited. */
+        fun of(text: String?): Practice = when {
+            text == null -> LIMITED
+            text.contains("did not", ignoreCase = true) -> NONE
+            text.contains("full", ignoreCase = true) -> FULL
+            else -> LIMITED
+        }
+    }
+}
+
+private fun readQuestionable(conn: SQLiteConnection): Map<Triple<String, Int, Int>, Practice> = conn.prepare(
+    """SELECT i.player_id, i.season, i.week, i.practice FROM injury_report i
+       JOIN player p ON p.player_id = i.player_id
+       WHERE i.status = 'Questionable' AND p.position IN (${POSITIONS.joinToString(",") { "?" }})""",
+).use { st ->
+    POSITIONS.forEachIndexed { i, p -> st.bindText(i + 1, p) }
+    buildMap {
+        while (st.step()) put(Triple(st.getText(0), st.getLong(1).toInt(), st.getLong(2).toInt()), Practice.of(if (st.isNull(3)) null else st.getText(3)))
     }
 }
 

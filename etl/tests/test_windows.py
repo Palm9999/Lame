@@ -35,6 +35,19 @@ def test_windows_match_hand_sums(tmp_path):
     assert _sum(conn, 2025, "L8", "g") == 8.0
 
 
+def test_weekly_rates_stay_out_of_the_windows(tmp_path):
+    conn = schema.create(tmp_path / "s.db")
+    conn.executemany(
+        "INSERT INTO player_week_stat VALUES ('p1', 2025, ?, 'AAA', ?, ?)",
+        [(1, "targets", 4.0), (2, "targets", 2.0), (1, "target_share", 0.25), (2, "target_share", 0.5), (1, "g", 1.0), (2, "g", 1.0)],
+    )
+    conn.commit()
+    schema.finalize(conn, [2025])
+    assert _sum(conn, 2025, "S", "targets") == 6.0
+    assert _sum(conn, 2025, "S", "target_share") is None
+    assert conn.execute("SELECT COUNT(*) FROM player_week_stat WHERE metric_id = 'target_share'").fetchone()[0] == 2
+
+
 def test_a_last_window_clips_to_the_weeks_played(tmp_path):
     conn = _build(tmp_path, 2025, [1, 2])
     assert _windows(conn, 2025)["L5"] == (1, 2)

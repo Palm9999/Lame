@@ -24,30 +24,52 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
-import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.GameState
+import dev.gridiron.core.data.Kickoffs
 import dev.gridiron.core.data.OpportunitiesResult
+import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.ScoresWeek
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.live.DEFAULT_PLAYOFF_WEEKS
 import dev.gridiron.core.data.live.LeagueChoice
 import dev.gridiron.core.data.live.LeagueRostered
+import dev.gridiron.core.data.live.LineupReviewResult
+import dev.gridiron.core.data.live.LivePlayer
+import dev.gridiron.core.data.live.LiveWin
+import dev.gridiron.core.data.live.LiveWinChance
+import dev.gridiron.core.data.live.MyMatchup
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.OpponentResult
+import dev.gridiron.core.data.live.PlayoffPictureResult
+import dev.gridiron.core.data.live.TradeOffer
+import dev.gridiron.core.data.live.TradeOffersResult
+import dev.gridiron.core.designsystem.DivergingBar
+import dev.gridiron.core.designsystem.Meter
+import dev.gridiron.core.designsystem.RangeBar
+import dev.gridiron.core.designsystem.SectionHeader
+import dev.gridiron.core.designsystem.SlotTag
+import dev.gridiron.core.designsystem.StatusBadge
+import dev.gridiron.core.designsystem.SummaryCard
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
+import dev.gridiron.core.projections.Lineups
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
@@ -75,6 +97,27 @@ public fun ProjectionListRoute(
     setLeague: suspend (String) -> Unit = {},
     /** Who moves up because a starter is hurt this week; asked when My lineup opens, to mark the pickups. */
     opportunities: suspend (season: Int, profile: ScoringProfile) -> OpportunitiesResult = { _, _ -> OpportunitiesResult(emptyList(), 0, null) },
+    /** The league's other teams, for Trade; empty hides the mode. */
+    otherTeams: Flow<List<MyTeam>> = flowOf(emptyList()),
+    /** Re-reads the league from ESPN; My lineup calls it when the snapshot is older than [LEAGUE_STALE_MILLIS]. */
+    syncLeague: suspend (season: Int) -> Unit = {},
+    now: () -> Long = System::currentTimeMillis,
+    /** NFL teams whose game this week has kicked off (their players are locked) or whose inactives are posted, asked when My lineup opens. */
+    kickoffs: suspend (season: Int, week: Int) -> Kickoffs = { _, _ -> Kickoffs(emptySet(), emptySet()) },
+    /** The league and its games left, asked when Playoff odds opens. */
+    playoffPicture: suspend (season: Int, week: Int) -> PlayoffPictureResult = { _, _ -> PlayoffPictureResult(null, "not available") },
+    /** The user's finished weeks against their best lineups, asked when Review opens. */
+    lineupReview: suspend (season: Int, throughWeek: Int) -> LineupReviewResult = { _, _ -> LineupReviewResult(emptyList(), "not available") },
+    /** The week's games with live clocks (ESPN's scoreboard), for the live win chance; null when unavailable. */
+    liveWeek: suspend (season: Int, week: Int) -> ScoresWeek? = { _, _ -> null },
+    /** Both sides of the user's matchup as ESPN has them now, live points included. */
+    myMatchup: suspend (season: Int, week: Int, profile: ScoringProfile) -> MyMatchup = { _, _, _ -> MyMatchup(null, null, "not available") },
+    /** Receives My lineup's one-line summary for the home-screen widget. */
+    onLineupSummary: (String) -> Unit = {},
+    /** Pending trades involving the user's team, asked when Trade opens. */
+    tradeOffers: suspend (season: Int) -> TradeOffersResult = { TradeOffersResult(emptyList(), null) },
+    /** FantasyCalc's dynasty values by player id under the profile's format, asked when Trade opens. */
+    dynastyValues: suspend (profile: ScoringProfile) -> Map<String, Int> = { emptyMap() },
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -85,16 +128,125 @@ public fun ProjectionListRoute(
     val team by myTeam.collectAsStateWithLifecycle(initialValue = null)
     val taken by leagueRostered.collectAsStateWithLifecycle(initialValue = null)
     val choices by leagues.collectAsStateWithLifecycle(initialValue = emptyList())
+    val others by otherTeams.collectAsStateWithLifecycle(initialValue = emptyList())
     var rival by remember { mutableStateOf<OpponentState>(OpponentState.Idle) }
     var movingUp by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var locked by remember { mutableStateOf(Kickoffs(emptySet(), emptySet())) }
+    var playoffs by remember { mutableStateOf<PlayoffState>(PlayoffState.Idle) }
+    var review by remember { mutableStateOf<ReviewState>(ReviewState.Idle) }
+    var pending by remember { mutableStateOf<List<TradeOffer>>(emptyList()) }
+    var dynasty by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     val scope = rememberCoroutineScope()
+    suspend fun readKickoffs(week: Int) {
+        locked = try {
+            kickoffs(season, week)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Kickoffs(emptySet(), emptySet())
+        }
+    }
+    // The week list, Start/sit and My lineup all lift a confirmed-active Questionable player's discount.
+    val loadedWeek = (state as? ProjectionListState.Loaded)?.week
+    LaunchedEffect(season, loadedWeek) { loadedWeek?.let { readKickoffs(it) } }
     ProjectionListScreen(
         state, injuries, onPlayer, onBack, team?.takeIf { it.season == season }, rival,
         rostered = taken?.takeIf { it.season == season }?.playerIds,
+        owners = taken?.takeIf { it.season == season }?.owners,
         starterOut = movingUp,
         leagues = choices,
         onLeague = { id -> scope.launch { setLeague(id) } },
+        partners = others.filter { it.season == season },
+        started = locked.started,
+        inactivesPosted = locked.inactivesPosted,
+        kickoffTimes = locked.times,
+        playoffs = playoffs,
+        review = review,
+        onLineupSummary = onLineupSummary,
+        offers = pending,
+        dynasty = dynasty,
+        onTradeOpened = {
+            // Dynasty values are a bonus: Trade grades without them.
+            profile?.let { active ->
+                scope.launch {
+                    dynasty = try {
+                        dynastyValues(active)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        emptyMap()
+                    }
+                }
+            }
+            scope.launch {
+                pending = try {
+                    tradeOffers(season).offers
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    emptyList()
+                }
+            }
+        },
+        liveFetch = live@{
+            val loaded = state as? ProjectionListState.Loaded ?: return@live null
+            val active = profile ?: return@live null
+            val week = liveWeek(season, loaded.week) ?: return@live null
+            // Only while a game is on; before kickoff and after the finals the projections say it all.
+            if (week.games.none { it.state == GameState.LIVE }) return@live null
+            val m = myMatchup(season, loaded.week, active)
+            val mine = m.mine ?: return@live null
+            val theirs = m.theirs ?: return@live null
+            val players = loaded.weekRows.associate { it.playerId to LivePlayer(it.team, it.points, spread(it)) }
+            LiveWin.estimate(mine, theirs, week, players)
+        },
+        onReviewOpened = {
+            val week = (state as? ProjectionListState.Loaded)?.week
+            if (week != null && review != ReviewState.Loading) {
+                review = ReviewState.Loading
+                scope.launch {
+                    review = ReviewState.Loaded(
+                        try {
+                            lineupReview(season, week - 1)
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            LineupReviewResult(emptyList(), "couldn't read your weeks")
+                        },
+                    )
+                }
+            }
+        },
+        onPlayoffsOpened = {
+            val week = (state as? ProjectionListState.Loaded)?.week
+            if (week != null && playoffs != PlayoffState.Loading) {
+                playoffs = PlayoffState.Loading
+                scope.launch {
+                    val result = try {
+                        playoffPicture(season, week)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        PlayoffPictureResult(null, "couldn't read the schedule")
+                    }
+                    playoffs = result.picture?.let(PlayoffState::Loaded) ?: PlayoffState.Unavailable(result.message ?: "no schedule")
+                }
+            }
+        },
         onLineupOpened = {
+            (state as? ProjectionListState.Loaded)?.week?.let { week -> scope.launch { readKickoffs(week) } }
+            val fetched = taken?.fetchedAtMillis
+            if (fetched != null && now() - fetched > LEAGUE_STALE_MILLIS) {
+                scope.launch {
+                    try {
+                        syncLeague(season)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // The saved snapshot stays; ESPN leagues shows sync errors.
+                    }
+                }
+            }
             profile?.let { p ->
                 scope.launch {
                     val found = try {
@@ -119,7 +271,13 @@ public fun ProjectionListRoute(
     )
 }
 
-private enum class ListMode { WEEK, ROS, LINEUP }
+private enum class ListMode { WEEK, ROS, LINEUP, TRADE, START_SIT, PLAYOFFS, REVIEW, PLANNER }
+
+/** My lineup re-syncs the league when its snapshot is older than this: lineups, waivers and trades move during the week. */
+internal const val LEAGUE_STALE_MILLIS: Long = 30 * 60 * 1000L
+
+/** The live win chance refreshes this often while a game is on, as Scores does. */
+internal const val LIVE_REFRESH_MILLIS: Long = 60 * 1000L
 
 @Composable
 public fun ProjectionListScreen(
@@ -133,16 +291,67 @@ public fun ProjectionListScreen(
     onLineupOpened: () -> Unit = {},
     /** Everyone on a league team; null when unknown, which hides the waiver pickups. */
     rostered: Set<String>? = null,
+    /** Which league team has each rostered player, for the handcuffs; null when unknown. */
+    owners: Map<String, String>? = null,
     /** Pickups moving up because a starter is hurt, by player id: "RB1 Name is Doubtful". */
     starterOut: Map<String, String> = emptyMap(),
     /** The user's ESPN leagues: with two or more, a chip each switches the league My lineup follows. */
     leagues: List<LeagueChoice> = emptyList(),
     onLeague: (String) -> Unit = {},
+    /** The league's other teams: with your team known, a Trade mode weighs trades with them. */
+    partners: List<MyTeam> = emptyList(),
+    /** NFL teams whose game this week has started: My lineup keeps their players where ESPN has them. */
+    started: Set<String> = emptySet(),
+    /** NFL teams whose inactives are posted: the week's lists drop the Questionable discount of their players ESPN doesn't rule out. */
+    inactivesPosted: Set<String> = emptySet(),
+    /** Each NFL team's kickoff this week (ESPN's scoreboard), for My lineup's game day. */
+    kickoffTimes: Map<String, java.time.Instant> = emptyMap(),
+    playoffs: PlayoffState = PlayoffState.Idle,
+    /** Playoff odds was opened: the route reads the league's schedule. */
+    onPlayoffsOpened: () -> Unit = {},
+    review: ReviewState = ReviewState.Idle,
+    /** Review was opened: the route reads the finished weeks. */
+    onReviewOpened: () -> Unit = {},
+    /** My lineup's live win chance, asked each minute while it is open and a game is on; null when none is. */
+    liveFetch: suspend () -> LiveWinChance? = { null },
+    /** My lineup's one-line summary each time it changes, for the home-screen widget. */
+    onLineupSummary: (String) -> Unit = {},
+    /** Pending trades involving the user's team, shown graded in Trade. */
+    offers: List<TradeOffer> = emptyList(),
+    /** Trade was opened: the route reads the pending offers. */
+    onTradeOpened: () -> Unit = {},
+    /** FantasyCalc's dynasty value by player id, shown in Trade. */
+    dynasty: Map<String, Int> = emptyMap(),
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
     var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
-    val mode = if (chosen == ListMode.LINEUP && myTeam == null) ListMode.WEEK else chosen
-    LaunchedEffect(mode, myTeam?.teamName) { if (mode == ListMode.LINEUP) onLineupOpened() }
+    val canTrade = myTeam != null && partners.isNotEmpty()
+    val mode = when {
+        (chosen == ListMode.LINEUP || chosen == ListMode.REVIEW || chosen == ListMode.PLANNER) && myTeam == null -> ListMode.WEEK
+        (chosen == ListMode.TRADE || chosen == ListMode.PLAYOFFS) && !canTrade -> ListMode.WEEK
+        else -> chosen
+    }
+    var live by remember { mutableStateOf<LiveWinChance?>(null) }
+    LaunchedEffect(mode == ListMode.LINEUP, (state as? ProjectionListState.Loaded)?.week) {
+        live = null
+        while (mode == ListMode.LINEUP) {
+            live = try {
+                liveFetch()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            if (live == null) break
+            delay(LIVE_REFRESH_MILLIS)
+        }
+    }
+    LaunchedEffect(mode, myTeam?.teamName) {
+        if (mode == ListMode.LINEUP) onLineupOpened()
+        if (mode == ListMode.PLAYOFFS) onPlayoffsOpened()
+        if (mode == ListMode.REVIEW) onReviewOpened()
+        if (mode == ListMode.TRADE) onTradeOpened()
+    }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -168,7 +377,7 @@ public fun ProjectionListScreen(
                             }
                         }
                     }
-                    Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(selected = mode == ListMode.WEEK, onClick = { chosen = ListMode.WEEK }, label = { Text("Week ${state.week}") })
                         FilterChip(selected = mode == ListMode.ROS, onClick = { chosen = ListMode.ROS }, label = { Text("Rest of season") })
                         if (myTeam != null) {
@@ -178,12 +387,70 @@ public fun ProjectionListScreen(
                                 label = { Text("My lineup") },
                                 modifier = Modifier.testTag("chip:lineup"),
                             )
+                            FilterChip(
+                                selected = mode == ListMode.PLANNER,
+                                onClick = { chosen = ListMode.PLANNER },
+                                label = { Text("Planner") },
+                                modifier = Modifier.testTag("chip:planner"),
+                            )
+                            FilterChip(
+                                selected = mode == ListMode.REVIEW,
+                                onClick = { chosen = ListMode.REVIEW },
+                                label = { Text("Review") },
+                                modifier = Modifier.testTag("chip:review"),
+                            )
+                        }
+                        FilterChip(
+                            selected = mode == ListMode.START_SIT,
+                            onClick = { chosen = ListMode.START_SIT },
+                            label = { Text("Start/sit") },
+                            modifier = Modifier.testTag("chip:startsit"),
+                        )
+                        if (canTrade) {
+                            FilterChip(
+                                selected = mode == ListMode.TRADE,
+                                onClick = { chosen = ListMode.TRADE },
+                                label = { Text("Trade") },
+                                modifier = Modifier.testTag("chip:trade"),
+                            )
+                            FilterChip(
+                                selected = mode == ListMode.PLAYOFFS,
+                                onClick = { chosen = ListMode.PLAYOFFS },
+                                label = { Text("Playoff odds") },
+                                modifier = Modifier.testTag("chip:playoffs"),
+                            )
                         }
                     }
-                    if (mode == ListMode.LINEUP && myTeam != null) {
-                        val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, state.weekRows, badges) }
-                        val pickups = if (rostered == null) null else remember(myTeam, state, badges, rostered, starterOut) { waiverPickups(myTeam, state.weekRows, badges, rostered, starterOut) }
-                        LineupList(lineupView(myTeam, state.week, state.weekRows, badges), rival, opponent, pickups, badges, onPlayer)
+                    // Once a team's inactives are posted, its Questionable players ESPN hasn't ruled out are playing.
+                    val weekRows = remember(state, badges, inactivesPosted) { state.weekRows.map { confirmedActive(it, badges, inactivesPosted) } }
+                    if (mode == ListMode.START_SIT) {
+                        val playoffs = (myTeam?.playoffWeeks ?: DEFAULT_PLAYOFF_WEEKS).toSet()
+                        StartSitView(weekRows, badges, state.rosWeekly, (state.week..(playoffs.maxOrNull() ?: state.week)).toList(), playoffs)
+                    } else if (mode == ListMode.PLANNER && myTeam != null) {
+                        PlannerView(myTeam, state, rostered, onPlayer)
+                    } else if (mode == ListMode.REVIEW) {
+                        ReviewView(review)
+                    } else if (mode == ListMode.PLAYOFFS) {
+                        PlayoffsView(playoffs, state.rosRows, state.rosWeekly)
+                    } else if (mode == ListMode.TRADE && myTeam != null) {
+                        TradeView(myTeam, partners, state.rosRows, state.rosWeekly, offers, dynasty)
+                    } else if (mode == ListMode.LINEUP && myTeam != null) {
+                        val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, weekRows, badges, started) }
+                        val pickups = if (rostered == null) null else remember(myTeam, weekRows, badges, rostered, starterOut, started) { waiverPickups(myTeam, weekRows, badges, rostered, starterOut, started) }
+                        // Rest of season keeps an injured player's projection, as its list does.
+                        val stashes = if (rostered == null) null else remember(myTeam, state, rostered) { rosAdds(myTeam, state.rosRows, rostered, state.rosWeekly) }
+                        val mine = lineupView(myTeam, state.week, weekRows, badges, started)
+                        val cuffs = remember(myTeam, weekRows, owners) { handcuffs(myTeam, weekRows, owners.orEmpty()) }
+                        val day = remember(mine, kickoffTimes, badges, inactivesPosted) { gameDay(mine, kickoffTimes, badges, java.time.Instant.now(), inactivesPosted) }
+                        val summary = widgetSummary(mine, rival)
+                        LaunchedEffect(summary) { onLineupSummary(summary) }
+                        val plan = remember(stashes, myTeam, partners) {
+                            stashes?.let { s -> myTeam.faabLeft?.let { claimPlan(s, it, partners.map { p -> p.teamName to p.faabLeft }) } }
+                        }
+                        LineupList(
+                            mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, weekRows, badges), faabText(myTeam),
+                            cuffs, ownersKnown = owners != null, live = live, gameDay = day, claims = plan,
+                        )
                     } else {
                         Row(
                             Modifier.padding(horizontal = 12.dp).horizontalScroll(rememberScrollState()),
@@ -191,10 +458,29 @@ public fun ProjectionListScreen(
                         ) {
                             for (t in PositionTab.entries) FilterChip(selected = tab == t, onClick = { tab = t }, label = { Text(t.label) })
                         }
-                        val rows = visibleRows(if (mode == ListMode.WEEK) state.weekRows else state.rosRows, tab, badges, mode == ListMode.WEEK)
-                        LazyColumn(Modifier.fillMaxSize()) {
-                            itemsIndexed(rows, key = { _, row -> row.playerId }) { i, row ->
-                                ProjectionListRow("${i + 1}", row, badges[row.playerId], onPlayer)
+                        val rows = visibleRows(if (mode == ListMode.WEEK) weekRows else state.rosRows, tab, badges, mode == ListMode.WEEK)
+                        // League size and slots from the synced league, else a standard twelve-team league.
+                        val teams = if (myTeam != null && partners.isNotEmpty()) partners.size + 1 else 12
+                        val slots = myTeam?.slots ?: Lineups.DEFAULT_SLOTS
+                        val valued = remember(rows, tab, teams, slots) { if (tab == PositionTab.VALUE) valueRows(rows, teams, slots) else null }
+                        LazyColumn(Modifier.fillMaxSize().testTag("list")) {
+                            if (valued != null) {
+                                item {
+                                    Text(
+                                        "Points over the best player left at his position once $teams teams fill their starting slots.",
+                                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                itemsIndexed(valued, key = { _, (row, _) -> row.playerId }) { i, (row, value) ->
+                                    ProjectionListRow("${i + 1}", row, badges[row.playerId], onPlayer, note = valueText(value))
+                                }
+                            } else {
+                                val rangeMax = rows.maxOfOrNull { it.ceiling } ?: 0.0
+                                itemsIndexed(rows, key = { _, row -> row.playerId }) { i, row ->
+                                    ProjectionListRow("${i + 1}", row, badges[row.playerId], onPlayer, rangeMax = rangeMax)
+                                }
                             }
                         }
                     }
@@ -212,10 +498,27 @@ private fun LineupList(
     pickups: List<PickupLine>?,
     badges: Map<String, String>,
     onPlayer: (String) -> Unit,
+    /** Free agents ranked by how far each lifts the lineup over the rest of the season; null hides them. */
+    stashes: List<PickupLine>? = null,
+    /** The lineup set in ESPN against the best one; null when the snapshot has none set. */
+    check: LineupCheck? = null,
+    /** "$63 of $100 FAAB left…" under the rest-of-season adds; null when the league doesn't bid. */
+    faab: String? = null,
+    handcuffs: List<HandcuffLine> = emptyList(),
+    /** Whether a handcuff's owner is known (the league is synced): otherwise it isn't said. */
+    ownersKnown: Boolean = false,
+    /** The live win chance while a game is on. */
+    live: LiveWinChance? = null,
+    /** The week's kickoffs for the lineup and its Questionable starters' late replacements; null hides it. */
+    gameDay: GameDay? = null,
+    /** The week's ordered FAAB claims; null when the league doesn't bid or what's left isn't known. */
+    claims: ClaimPlan? = null,
 ) {
-    LazyColumn(Modifier.fillMaxSize()) {
+    // One scale for every range bar in the lineup, so rows compare at a glance.
+    val rangeMax = (view.starters.mapNotNull { it.row } + view.bench).maxOfOrNull { it.ceiling } ?: 0.0
+    LazyColumn(Modifier.fillMaxSize().testTag("lineup:list")) {
         item {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            SummaryCard {
                 Text("${view.teamName} · week ${view.week}", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
                     "Projected ${points(view.total)} pts",
@@ -223,14 +526,61 @@ private fun LineupList(
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                 )
+                if (view.spread > 0.0) {
+                    Text(
+                        "Likely ${points(view.low)}–${points(view.high)}",
+                        Modifier.testTag("lineup:range"),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 val versus = when {
-                    rival != null -> "vs ${rival.teamName}: ${points(rival.total)} pts · ${matchupLine(view.total, rival.total)}"
+                    rival != null ->
+                        "vs ${rival.teamName}: ${points(rival.total)} pts · ${matchupLine(view.total, rival.total)} · " +
+                            winLine(winChance(view, rival))
                     opponent == OpponentState.Loading -> "Checking your opponent…"
                     opponent is OpponentState.Unavailable -> "No comparison: ${opponent.message}."
                     else -> null
                 }
                 versus?.let {
-                    Text(it, Modifier.testTag("lineup:vs"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(it, Modifier.padding(top = 6.dp).testTag("lineup:vs"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                }
+                rival?.let { r ->
+                    val chance = winChance(view, r)
+                    Meter(chance, winLine(chance), Modifier.padding(top = 6.dp).testTag("lineup:meter"))
+                }
+                live?.let { l ->
+                    Text(
+                        "Live: ${points(l.myScore)}–${points(l.theirScore)} · heading for ${points(l.myExpected)}–${points(l.theirExpected)} · " +
+                            winLine(l.chance),
+                        Modifier.testTag("lineup:live"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "Points so far are ESPN's, under your league's scoring; what's left is projected under yours. Updates each minute.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                check?.let { c ->
+                    val text = if (c.gain < 0.05) {
+                        "Your ESPN lineup is already the best (as of your last sync)."
+                    } else {
+                        buildString {
+                            append("Your ESPN lineup: ${points(c.current)} pts. Best: +${points(c.gain)}.")
+                            if (c.start.isNotEmpty()) append(" Start ${c.start.joinToString { it.name }}.")
+                            if (c.sit.isNotEmpty()) append(" Sit ${c.sit.joinToString { it.name + if (it.points == null) " (no projection)" else "" }}.")
+                        }
+                    }
+                    Text(
+                        text,
+                        Modifier.testTag("lineup:check"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (c.gain < 0.05) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.tertiary,
+                        fontWeight = if (c.gain < 0.05) FontWeight.Normal else FontWeight.SemiBold,
+                    )
                 }
                 if (view.defaultSlots) {
                     Text(
@@ -243,10 +593,10 @@ private fun LineupList(
         }
         itemsIndexed(view.starters, key = { i, line -> "s:$i:${line.slot}" }) { _, line ->
             if (line.row != null) {
-                ProjectionListRow(line.slot, line.row, badges[line.row.playerId], onPlayer, LeadWidth)
+                ProjectionListRow(if (line.locked) "${line.slot} 🔒" else line.slot, line.row, badges[line.row.playerId], onPlayer, LeadWidth, rangeMax = rangeMax)
             } else {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(line.slot, Modifier.width(LeadWidth), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SlotTag(line.slot, width = LeadWidth)
                     Text("No one can fill this slot", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
@@ -254,7 +604,63 @@ private fun LineupList(
         if (view.bench.isNotEmpty()) {
             item { SectionLabel("Bench") }
             itemsIndexed(view.bench, key = { _, row -> "b:${row.playerId}" }) { _, row ->
-                ProjectionListRow("BE", row, badges[row.playerId], onPlayer, LeadWidth)
+                ProjectionListRow("BE", row, badges[row.playerId], onPlayer, LeadWidth, rangeMax = rangeMax)
+            }
+        }
+        gameDay?.let { day ->
+            item { SectionLabel("Game day") }
+            itemsIndexed(day.windows, key = { _, w -> "k:${w.kickoff}" }) { i, w ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("kickoff:$i"), verticalAlignment = Alignment.Top) {
+                    Text(
+                        kickoffText(w.kickoff),
+                        Modifier.width(96.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = if (i == 0) FontWeight.Bold else FontWeight.Normal,
+                        color = if (i == 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(windowText(w), Modifier.weight(1f), style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            itemsIndexed(day.pivots, key = { _, p -> "pivot:${p.player.playerId}" }) { _, p ->
+                Text(
+                    pivotText(p),
+                    Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("pivot:${p.player.playerId}"),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (p.options.isEmpty()) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
+                )
+            }
+        }
+        if (rival != null) {
+            val preview = matchupPreview(view, rival)
+            item { SectionLabel("Matchup preview vs ${rival.teamName}") }
+            val widest = preview.slots.maxOfOrNull { kotlin.math.abs(it.edge) } ?: 0.0
+            itemsIndexed(preview.slots, key = { i, e -> "edge:$i:${e.slot}" }) { i, e ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).testTag("edge:$i"), verticalAlignment = Alignment.CenterVertically) {
+                    SlotTag(e.slot, width = LeadWidth)
+                    Text(
+                        "${e.mine?.name ?: "—"} ${e.mine?.let { points(it.points) } ?: ""} vs ${e.theirs?.name ?: "—"} ${e.theirs?.let { points(it.points) } ?: ""}",
+                        Modifier.weight(1f),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    DivergingBar(e.edge, widest, Modifier.width(56.dp).padding(horizontal = 4.dp))
+                    Text(
+                        (if (e.edge >= 0) "+" else "−") + points(kotlin.math.abs(e.edge)),
+                        Modifier.width(44.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.End,
+                    )
+                }
+            }
+            if (preview.swing.isNotEmpty()) {
+                item {
+                    Text(
+                        "Swing players (widest ranges): " + preview.swing.joinToString { "${it.name} ${points(it.floor)}–${points(it.ceiling)}" },
+                        Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("lineup:swing"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
         if (pickups != null) {
@@ -272,6 +678,51 @@ private fun LineupList(
                 itemsIndexed(pickups, key = { _, p -> "p:${p.add.playerId}" }) { _, pick -> PickupRow(pick, onPlayer) }
             }
         }
+        if (!stashes.isNullOrEmpty()) {
+            item { SectionLabel("Rest-of-season adds") }
+            faab?.let { text ->
+                item {
+                    Text(
+                        text,
+                        Modifier.padding(horizontal = 16.dp, vertical = 2.dp).testTag("faab"),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            itemsIndexed(stashes, key = { _, p -> "r:${p.add.playerId}" }) { _, pick -> PickupRow(pick, onPlayer, "ros:") }
+        }
+        if (handcuffs.isNotEmpty()) {
+            item { SectionLabel("Handcuffs") }
+            itemsIndexed(handcuffs, key = { _, h -> "h:${h.starter.playerId}" }) { _, h ->
+                Row(
+                    Modifier.fillMaxWidth().clickable { onPlayer(h.backup.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp)
+                        .testTag("handcuff:${h.starter.playerId}"),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("${h.backup.name} backs up ${h.starter.name}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            listOfNotNull(
+                                "${points(h.backup.points)} pts now",
+                                when {
+                                    !ownersKnown -> null
+                                    h.owner == null -> "free agent"
+                                    h.owner == "you" -> "yours"
+                                    else -> "on ${h.owner}"
+                                },
+                            ).joinToString(" · "),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(points(h.ifOut), Modifier.testTag("handcuff:if:${h.starter.playerId}"), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                        Text("if he sits", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
         if (view.unlisted.isNotEmpty()) {
             item { SectionLabel("Not projected") }
             itemsIndexed(view.unlisted, key = { i, u -> "u:$i:${u.name}" }) { _, u ->
@@ -283,13 +734,29 @@ private fun LineupList(
                 )
             }
         }
+        if (claims != null && claims.claims.isNotEmpty()) {
+            item { SectionLabel("Claim plan") }
+            claims.standing?.let { text ->
+                item {
+                    Text(text, Modifier.padding(horizontal = 16.dp, vertical = 2.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            itemsIndexed(claims.claims, key = { _, c -> "claim:${c.line.add.playerId}" }) { _, c ->
+                Text(
+                    claimText(c),
+                    Modifier.fillMaxWidth().clickable { onPlayer(c.line.add.playerId) }.padding(horizontal = 16.dp, vertical = 6.dp).testTag("claim:${c.priority}"),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        }
     }
 }
 
 @Composable
-private fun PickupRow(pick: PickupLine, onPlayer: (String) -> Unit) {
+private fun PickupRow(pick: PickupLine, onPlayer: (String) -> Unit, tagPrefix: String = "") {
     Row(
-        Modifier.fillMaxWidth().clickable { onPlayer(pick.add.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp).testTag("pickup:${pick.add.playerId}"),
+        Modifier.fillMaxWidth().clickable { onPlayer(pick.add.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp)
+            .testTag("${tagPrefix}pickup:${pick.add.playerId}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -306,46 +773,58 @@ private fun PickupRow(pick: PickupLine, onPlayer: (String) -> Unit) {
             pick.drop?.let {
                 Text("Drop ${it.name} (${points(it.points)} pts)", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            pick.playoffPoints?.let {
+                Text("Playoff weeks: ${points(it)} pts", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
-        Text("+${points(pick.gain)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+        Column(horizontalAlignment = Alignment.End) {
+            Text("+${points(pick.gain)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+            pick.bid?.let {
+                Text("Bid $$it", Modifier.testTag("${tagPrefix}bid:${pick.add.playerId}"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+            }
+        }
     }
 }
 
 @Composable
-private fun SectionLabel(text: String) {
-    Text(
-        text,
-        Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-}
+private fun SectionLabel(text: String) = SectionHeader(text)
 
-private val LeadWidth = 64.dp
+private val LeadWidth = 60.dp
 
 @Composable
-private fun ProjectionListRow(lead: String, row: ProjectionRow, badge: String?, onPlayer: (String) -> Unit, leadWidth: Dp = 32.dp) {
+private fun ProjectionListRow(
+    lead: String,
+    row: ProjectionRow,
+    badge: String?,
+    onPlayer: (String) -> Unit,
+    leadWidth: Dp = 32.dp,
+    note: String? = null,
+    /** The scale's top for a range bar under the row; null shows none. */
+    rangeMax: Double? = null,
+) {
     Row(
         Modifier.fillMaxWidth().clickable { onPlayer(row.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(lead, Modifier.width(leadWidth), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // A slot reads as a tag; a rank as a plain number.
+        if (leadWidth > 32.dp) {
+            SlotTag(lead, width = leadWidth)
+        } else {
+            Text(lead, Modifier.width(leadWidth), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                badge?.takeIf { it != "A" }?.let {
-                    Text(
-                        "  $it",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (it in setOf("O", "IR", "D")) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.tertiary,
-                    )
-                }
+                badge?.takeIf { it != "A" }?.let { StatusBadge(it, Modifier.padding(start = 6.dp)) }
             }
             Text(
-                listOfNotNull(Position.label(row.position), row.team).joinToString(" · "),
+                listOfNotNull(Position.label(row.position), row.team, row.tdChance?.takeIf { !row.out }?.let(::tdText), note).joinToString(" · "),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (rangeMax != null && !row.out) {
+                RangeBar(row.floor, row.points, row.ceiling, rangeMax, Modifier.padding(top = 4.dp, end = 24.dp))
+            }
         }
         Column(horizontalAlignment = Alignment.End) {
             Text(if (row.out) "Out" else points(row.points), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)

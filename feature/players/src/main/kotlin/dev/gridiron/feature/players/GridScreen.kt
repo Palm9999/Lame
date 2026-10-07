@@ -1,5 +1,7 @@
 package dev.gridiron.feature.players
 
+import dev.gridiron.core.ui.SharePreview
+import dev.gridiron.core.ui.StatTableCard
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -185,6 +187,14 @@ private fun GridContent(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var exporting by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf(false) }
+    val sharedPage = state.page
+    if (sharing && sharedPage != null) {
+        val card = remember(sharedPage) { gridCard(sharedPage, state.catalog) }
+        SharePreview("gridiron-grid.png", onDismiss = { sharing = false }) {
+            StatTableCard(card.title, sharedPage.threshold, card.headers, card.rows)
+        }
+    }
     fun export() {
         if (exporting) return
         val page = state.page ?: return
@@ -286,6 +296,11 @@ private fun GridContent(
             },
             onExport = ::export,
             exporting = exporting,
+            onShareImage = {
+                onEvent(GridEvent.FilterSheetClosed)
+                showFilters = false
+                sharing = true
+            },
             onDraftChanged = { onEvent(GridEvent.FilterDraftChanged(it)) },
             onApply = {
                 onEvent(GridEvent.FiltersApplied(it))

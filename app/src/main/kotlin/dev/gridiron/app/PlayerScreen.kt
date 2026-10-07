@@ -3,6 +3,8 @@ package dev.gridiron.app
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -12,8 +14,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -37,26 +37,42 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.BreakoutRow
+import dev.gridiron.core.charts.ordinal
+import dev.gridiron.core.data.DynastyValue
+import dev.gridiron.core.data.InjuryReturnRepository
+import dev.gridiron.core.model.ScoringProfile
+import java.util.Locale
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerHeader
 import dev.gridiron.core.data.PlayerStats
 import dev.gridiron.core.data.PlayerStatsRepository
 import dev.gridiron.core.data.ProjectionsRepository
+import dev.gridiron.core.data.ReturnOutlook
 import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.basisText
+import dev.gridiron.core.data.chancesText
+import dev.gridiron.core.data.live.DEFAULT_PLAYOFF_WEEKS
+import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.InjuryNote
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.LiveStatus
 import dev.gridiron.core.data.live.NewsItem
+import dev.gridiron.core.designsystem.ColumnChart
+import dev.gridiron.core.designsystem.StatusBadge
+import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.Roster
+import dev.gridiron.feature.projections.PlayerShareCard
 import dev.gridiron.feature.projections.ProjectionCard
+import dev.gridiron.core.ui.SharePreview
 import dev.gridiron.feature.projections.ThisWeekCard
 import dev.gridiron.feature.projections.loadProjectionCard
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import java.time.Instant
@@ -75,6 +91,10 @@ data class PlayerPage(
     val stats: PlayerStats? = null,
     /** The section failed to load: it says so and the rest of the page stays. */
     val statsUnavailable: Boolean = false,
+    /** How soon he is likely back, while he is Out, Doubtful or on IR; null otherwise or with too little history. */
+    val returnOutlook: ReturnOutlook? = null,
+    /** "5,200 · 34th of 420 · 8th of 95 RBs · redraft 3,100": his FantasyCalc dynasty value; null when unpriced. */
+    val dynasty: String? = null,
 )
 
 private val NO_CHANGES: StateFlow<Long> = MutableStateFlow(0L)
@@ -94,6 +114,14 @@ fun PlayerRoute(
     onManageRosters: () -> Unit = {},
     playerStats: PlayerStatsRepository? = null,
     breakouts: BreakoutRepository? = null,
+    /** The active ESPN league, for its playoff weeks; null uses 15-17. */
+    league: FantasyLeagueRepository? = null,
+    /** NFL teams whose inactives are posted in a week (ESPN's scoreboard): a confirmed-active Questionable player's card loses his discount. */
+    inactivesPosted: suspend (season: Int, week: Int) -> Set<String> = { _, _ -> emptySet() },
+    /** Past absences, for how soon an injured player is likely back. */
+    returns: InjuryReturnRepository? = null,
+    /** FantasyCalc's dynasty values under the profile's format; empty leaves the line out. */
+    dynastyValues: suspend (profile: ScoringProfile) -> List<DynastyValue> = { emptyList() },
 ) {
     val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList<Roster>()) }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -108,7 +136,18 @@ fun PlayerRoute(
         val active = profile
         val card = if (projections != null && active != null) {
             try {
-                loadProjectionCard(projections, playerId, header?.team, active, header?.position?.let(Position::fromCode), status?.abbr)
+                // The league is only for its playoff weeks: failing to read it never costs the card.
+                val playoffWeeks = try {
+                    league?.myTeam?.first()?.playoffWeeks
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    null
+                } ?: DEFAULT_PLAYOFF_WEEKS
+                loadProjectionCard(
+                    projections, playerId, header?.team, active, header?.position?.let(Position::fromCode), status?.abbr,
+                    playoffWeeks = playoffWeeks, inactivesPosted = inactivesPosted,
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -119,6 +158,20 @@ fun PlayerRoute(
         }
         // Only while his role is growing, and only for the season the projection card is about.
         val rising = if (breakouts != null && card != null) breakouts.forPlayer(playerId, card.season)?.takeIf { it.score > 0.0 } else null
+        val outlook = try {
+            returns?.outlook(playerId, card?.season ?: currentSeason(), status?.abbr, stats)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null // never costs the rest of the page
+        }
+        val dynasty = try {
+            active?.let { dynastyLine(playerId, dynastyValues(it)) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null // never costs the rest of the page
+        }
         page = PlayerPage(
             header = header,
             status = status,
@@ -127,6 +180,8 @@ fun PlayerRoute(
             asOf = live?.fetchedAt(),
             projection = card,
             risingRole = rising,
+            returnOutlook = outlook,
+            dynasty = dynasty,
         )
     }
     var season by remember(playerId) { mutableStateOf<Int?>(null) }
@@ -184,6 +239,14 @@ fun PlayerScreen(
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
                 return@Column
             }
+            var sharing by remember { mutableStateOf(false) }
+            val shared = page.projection
+            if (sharing && shared != null) {
+                val name = page.header?.name ?: playerId
+                SharePreview("gridiron-player.png", onDismiss = { sharing = false }) {
+                    PlayerShareCard(name, listOfNotNull(page.header?.position?.let(Position::label), page.header?.team).joinToString(" · "), shared)
+                }
+            }
             LazyColumn(Modifier.testTag("playerPage")) {
                 item {
                     Column(Modifier.padding(horizontal = 16.dp)) {
@@ -200,12 +263,21 @@ fun PlayerScreen(
                     }
                 }
                 page.projection?.let { card ->
-                    item { SectionTitle("This week") }
+                    item {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) { SectionTitle("This week") }
+                            TextButton(onClick = { sharing = true }, modifier = Modifier.testTag("share:player")) { Text("Share") }
+                        }
+                    }
                     item { ThisWeekCard(card, onOpen = { onProjection(card.season, card.week) }) }
                 }
                 page.risingRole?.let { row ->
                     item { SectionTitle("Rising role") }
                     item { RisingRoleLine(row) }
+                }
+                page.dynasty?.let { text ->
+                    item { SectionTitle("Dynasty value") }
+                    item { Text(text, Modifier.padding(horizontal = 16.dp).testTag("dynasty"), style = MaterialTheme.typography.bodyMedium) }
                 }
                 rosters?.let { list ->
                     item { SectionTitle("Rosters") }
@@ -224,13 +296,17 @@ fun PlayerScreen(
                             !liveAvailable -> Text("Live injuries and news aren't available.", style = MaterialTheme.typography.bodySmall)
                             s == null -> Text("No injury designation.", style = MaterialTheme.typography.bodyMedium)
                             else -> {
-                                Text(s.status, color = injuryColor(s.abbr), fontWeight = FontWeight.Bold)
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    StatusBadge(s.abbr)
+                                    Text(s.status, Modifier.padding(start = 8.dp), color = injuryColor(s.abbr), fontWeight = FontWeight.Bold)
+                                }
                                 s.shortComment?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
                                 s.longComment?.let {
                                     Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         }
+                        page.returnOutlook?.let { ReturnOutlookLine(it) }
                     }
                 }
                 if (page.notes.isNotEmpty()) {
@@ -301,6 +377,24 @@ internal fun SectionTitle(text: String) {
     )
 }
 
+/** "Played again by: wk 7 28% · wk 8 53%…" and where the numbers come from. */
+@Composable
+private fun ReturnOutlookLine(outlook: ReturnOutlook) {
+    Column(Modifier.padding(top = 12.dp).testTag("player:return")) {
+        Text("Chance he has played again by", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+        ColumnChart(
+            labels = outlook.weeks.map { "Wk $it" },
+            values = outlook.chances,
+            valueText = { "${Math.round(it * 100).coerceIn(0, 100)}%" },
+            description = "Played again by: ${outlook.chancesText()}",
+            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
+            max = 1.0,
+            height = 56.dp,
+        )
+        Text(outlook.basisText(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
 /** Red for Out, IR and Doubtful; the accent for Questionable. */
 @Composable
 internal fun injuryColor(abbr: String): Color = when (abbr) {
@@ -319,4 +413,16 @@ private fun RisingRoleLine(row: BreakoutRow) {
         }
         Text(String.format(java.util.Locale.US, "%.0f", row.score), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }
+}
+
+/** [playerId]'s line from FantasyCalc's [values] (best first), places among players and at his position; null when unpriced. */
+internal fun dynastyLine(playerId: String, values: List<DynastyValue>): String? {
+    val v = values.firstOrNull { it.playerId == playerId } ?: return null
+    val atPosition = values.count { it.position == v.position }
+    return listOf(
+        String.format(Locale.US, "%,d", v.value),
+        "${ordinal(v.rank)} of ${values.size}",
+        "${ordinal(v.positionRank)} of $atPosition ${v.position}s",
+        "redraft ${String.format(Locale.US, "%,d", v.redraftValue)}",
+    ).joinToString(" · ")
 }

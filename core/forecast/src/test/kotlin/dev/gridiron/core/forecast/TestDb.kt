@@ -54,10 +54,23 @@ internal class TestDb(val file: File) : AutoCloseable {
         if (played) 21 else null, if (played) 17 else null, spread, total, homeQb, awayQb, homeCoach, awayCoach,
     )
 
-    fun injury(id: String, season: Int, week: Int, status: String?) = exec(
-        "INSERT OR REPLACE INTO injury_report (player_id, season, week, status) VALUES (?, ?, ?, ?)",
-        id, season, week, status,
+    fun injury(id: String, season: Int, week: Int, status: String?, practice: String? = null) = exec(
+        "INSERT OR REPLACE INTO injury_report (player_id, season, week, status, practice) VALUES (?, ?, ?, ?, ?)",
+        id, season, week, status, practice,
     )
+
+    /** ESPN's projection for one player-week; the table is created on first use, as a build without ESPN has none. */
+    fun espn(id: String, season: Int, week: Int, vararg values: Pair<String, Double>) {
+        conn.execSQL(
+            """CREATE TABLE IF NOT EXISTS espn_projection (
+                player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
+                metric_id TEXT NOT NULL, value REAL NOT NULL,
+                PRIMARY KEY (player_id, season, week, metric_id)) WITHOUT ROWID""",
+        )
+        for ((metric, value) in values) {
+            exec("INSERT OR REPLACE INTO espn_projection VALUES (?, ?, ?, ?, ?)", id, season, week, metric, value)
+        }
+    }
 
     fun query(sql: String): List<List<String?>> = conn.prepare(sql).use { st ->
         buildList {
@@ -105,6 +118,10 @@ internal class TestDb(val file: File) : AutoCloseable {
                 player_id TEXT NOT NULL, season INTEGER NOT NULL, as_of_week INTEGER NOT NULL,
                 metric_id TEXT NOT NULL, mean REAL NOT NULL, variance REAL NOT NULL,
                 PRIMARY KEY (player_id, season, as_of_week, metric_id)) WITHOUT ROWID""",
+            """CREATE TABLE player_ros_week (
+                player_id TEXT NOT NULL, season INTEGER NOT NULL, as_of_week INTEGER NOT NULL, week INTEGER NOT NULL,
+                metric_id TEXT NOT NULL, mean REAL NOT NULL, variance REAL NOT NULL,
+                PRIMARY KEY (player_id, season, as_of_week, week, metric_id)) WITHOUT ROWID""",
             """CREATE TABLE player_week_signal (
                 player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL,
                 score REAL NOT NULL, usage_recent REAL NOT NULL, usage_base REAL NOT NULL,
