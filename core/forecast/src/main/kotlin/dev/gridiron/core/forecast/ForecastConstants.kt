@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 17
+public const val FORECAST_VERSION: Int = 18
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -56,6 +56,13 @@ internal object K {
     // plays about 87%; it adds 374 played weeks and teammates' PPR MAE falls 0.008 (±0.003). 5 and 8 add fewer
     // and gain less. Treating a player ESPN stops projecting as out was tested and cost 0.019: not used.
     const val RETURN_MIN_ESPN_POINTS = 3.0
+
+    // A player nflverse lists Out or Doubtful this week keeps rest of season from the healthy roster, each of his
+    // team's next games times the chance such a player has played by then (returnCurve, every past listing in the
+    // database; from the 8th game on, the 8th's). On 2022-2025, his next four games' points (missed ones zero)
+    // against his season average: MAE 23.8 undiscounted, 11.0 discounted (-12.8 ±1.5, 553 listings), bias +22.3 to +0.8.
+    const val RETURN_CURVE_GAMES = 8
+    const val RETURN_CURVE_MIN_CASES = 30
 
     // A QB, RB, WR or TE nflverse lists Questionable is projected at what he scores if he plays times how often a
     // Questionable player at his Friday practice level plays and scores, relative to a healthy one: on 2022-2025

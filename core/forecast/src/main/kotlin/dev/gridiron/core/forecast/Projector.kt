@@ -53,6 +53,10 @@ internal class Projector(
         inputs.games.groupBy { it.season }.mapValues { (_, games) -> games.flatMap { listOf(it.home, it.away) }.toSet() }
     private val chronological: List<PlayerGame> = inputs.history.values.flatten().sortedBy { it.order }
     private val totals = LeagueTotals()
+    private val playedWeeks: Map<Pair<String, Int>, List<Int>> = inputs.games.filter { it.regular && it.played }
+        .flatMap { g -> listOf((g.home to g.season) to g.week, (g.away to g.season) to g.week) }
+        .groupBy({ it.first }, { it.second }).mapValues { (_, weeks) -> weeks.sorted() }
+    private val returns: DoubleArray? by lazy { returnCurve(inputs.absent, inputs.history, playedWeeks) }
 
     /** The upcoming week's drafted players, and those of them left off every roster (out for now): see [addStash]. */
     private var upcomingDrafts: List<Draft> = emptyList()
@@ -416,10 +420,20 @@ internal class Projector(
             ?: withEspn(finalFor(state, p, game).second, inputs.espn[Triple(p.player.playerId, season, week)], p.player.position)
         if (referencePoints(final) < K.UPCOMING_MIN_POINTS) return
         val cv = K.EMPIRICAL_CV.getValue(p.player.position)
+        val plays = playsChance(state, p, season, week)
         for ((metric, mean) in final) {
             if (mean <= 0.0) continue
-            ros.add(p.player.playerId, week, metric, mean, varianceFor(mean, cv))
+            // He scores [mean] if he plays, else nothing: the mixture's mean and variance.
+            ros.add(p.player.playerId, week, metric, mean * plays, varianceFor(mean, cv) * plays + plays * (1 - plays) * mean * mean)
         }
+    }
+
+    /** 1, or for a player listed Out or Doubtful this week, the chance he plays his team's game in [week] ([returns]). */
+    private fun playsChance(state: WeekState, p: Prepared, season: Int, week: Int): Double {
+        if (Triple(p.player.playerId, state.season, state.week) !in inputs.absent) return 1.0
+        val curve = returns ?: return 1.0
+        val k = (state.week..week).count { gameOf[Triple(p.team, season, it)]?.regular == true } - 1
+        return curve[k.coerceIn(0, curve.size - 1)]
     }
 
     /**
