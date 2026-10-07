@@ -254,6 +254,12 @@ private val FTN: List<Metric> = listOf(
         "Share of dropbacks with pre-snap motion, as charted by FTN. A scheme profile. Charted from 2022."),
     FtnMetric("ftn_avg_box", "BOX", "Defenders in Box", listOf("QB", "RB", "WR", "TE"), true, 2,
         "Average defenders in the box on his carries, as charted by FTN. A heavy box makes running harder. Charted from 2022."),
+    FtnMetric("ftn_shotgun_rate", "SG%", "Shotgun Rate", listOf("QB"), true, 1,
+        "Share of dropbacks from the shotgun, as charted by FTN (the rest are under center or pistol). A scheme profile. Charted from 2022."),
+    FtnMetric("ftn_first_read_rate", "1RD%", "First-Read Rate", listOf("QB"), true, 1,
+        "Share of throws FTN charted a read for that went to his first read. High is decisive, or a quick-game offense. Charted from 2022."),
+    FtnMetric("ftn_avg_rushers", "RUSH", "Pass Rushers Faced", listOf("QB"), false, 2,
+        "Average pass rushers on his dropbacks where FTN counted them. Charted from 2022."),
 ).map {
     Metric(
         it.id, it.name, it.abbr, "ftn", it.definition, positions = it.positions, tier = "B",
@@ -278,6 +284,11 @@ private val FTN: List<Metric> = listOf(
     Triple("ftn_motion_db", "FTN Motion Dropbacks", "Charted dropbacks with pre-snap motion." to listOf("QB")),
     Triple("ftn_box_carries", "FTN Box-Counted Carries", "Carries on plays FTN counted the box: the denominator of defenders in box." to listOf("QB", "RB", "WR", "TE")),
     Triple("ftn_box_sum", "FTN Box Defenders", "Defenders in the box summed over his box-counted carries." to listOf("QB", "RB", "WR", "TE")),
+    Triple("ftn_shotgun_db", "FTN Shotgun Dropbacks", "Charted dropbacks from the shotgun." to listOf("QB")),
+    Triple("ftn_rushers_db", "FTN Rusher-Counted Dropbacks", "Charted dropbacks where FTN counted the pass rushers: the denominator of pass rushers faced." to listOf("QB")),
+    Triple("ftn_rushers_sum", "FTN Pass Rushers", "Pass rushers summed over his rusher-counted dropbacks." to listOf("QB")),
+    Triple("ftn_read_att", "FTN Read-Charted Attempts", "Charted pass attempts with a read: the denominator of the first-read rate." to listOf("QB")),
+    Triple("ftn_first_read", "FTN First-Read Throws", "Charted pass attempts to his first read." to listOf("QB")),
 ).map { (id, name, text) ->
     Metric(
         id, name, id.uppercase(), "ftn", text.first, positions = text.second, tier = "B",

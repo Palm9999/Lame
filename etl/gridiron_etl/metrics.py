@@ -423,6 +423,12 @@ _M: list[Metric] = [
              "Share of dropbacks with pre-snap motion, as charted by FTN. A scheme profile. Charted from 2022."),
             ("ftn_avg_box", "BOX", "Defenders in Box", ("QB", "RB", "WR", "TE"), True, 2,
              "Average defenders in the box on his carries, as charted by FTN. A heavy box makes running harder. Charted from 2022."),
+            ("ftn_shotgun_rate", "SG%", "Shotgun Rate", ("QB",), True, 1,
+             "Share of dropbacks from the shotgun, as charted by FTN (the rest are under center or pistol). A scheme profile. Charted from 2022."),
+            ("ftn_first_read_rate", "1RD%", "First-Read Rate", ("QB",), True, 1,
+             "Share of throws FTN charted a read for that went to his first read. High is decisive, or a quick-game offense. Charted from 2022."),
+            ("ftn_avg_rushers", "RUSH", "Pass Rushers Faced", ("QB",), False, 2,
+             "Average pass rushers on his dropbacks where FTN counted them. Charted from 2022."),
         ]
     ],
     *[
@@ -447,6 +453,11 @@ _M: list[Metric] = [
             ("ftn_motion_db", "FTN Motion Dropbacks", "Charted dropbacks with pre-snap motion.", ("QB",)),
             ("ftn_box_carries", "FTN Box-Counted Carries", "Carries on plays FTN counted the box: the denominator of defenders in box.", ("QB", "RB", "WR", "TE")),
             ("ftn_box_sum", "FTN Box Defenders", "Defenders in the box summed over his box-counted carries.", ("QB", "RB", "WR", "TE")),
+            ("ftn_shotgun_db", "FTN Shotgun Dropbacks", "Charted dropbacks from the shotgun.", ("QB",)),
+            ("ftn_rushers_db", "FTN Rusher-Counted Dropbacks", "Charted dropbacks where FTN counted the pass rushers: the denominator of pass rushers faced.", ("QB",)),
+            ("ftn_rushers_sum", "FTN Pass Rushers", "Pass rushers summed over his rusher-counted dropbacks.", ("QB",)),
+            ("ftn_read_att", "FTN Read-Charted Attempts", "Charted pass attempts with a read: the denominator of the first-read rate.", ("QB",)),
+            ("ftn_first_read", "FTN First-Read Throws", "Charted pass attempts to his first read.", ("QB",)),
         ]
     ],
 ]

@@ -173,7 +173,8 @@ public enum class StatPack(
         "FTN Passing",
         listOf(
             FTN_PLAY_ACTION_RATE, FTN_BLITZ_RATE, FTN_OUT_OF_POCKET_RATE, FTN_THROWAWAY_RATE, FTN_INT_WORTHY_RATE,
-            StatColumn.FTN_SCREEN_RATE, StatColumn.FTN_RPO_RATE, StatColumn.FTN_MOTION_RATE, StatColumn.FTN_NO_HUDDLE_RATE, DROPBACKS,
+            StatColumn.FTN_SCREEN_RATE, StatColumn.FTN_RPO_RATE, StatColumn.FTN_MOTION_RATE, StatColumn.FTN_NO_HUDDLE_RATE,
+            StatColumn.FTN_SHOTGUN_RATE, StatColumn.FTN_FIRST_READ_RATE, StatColumn.FTN_AVG_RUSHERS, DROPBACKS,
         ),
         FTN_PLAY_ACTION_RATE,
         DROPBACKS,

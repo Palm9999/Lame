@@ -77,6 +77,7 @@ public class StatFormat(private val locale: Locale = Locale.getDefault()) {
                 FTN_OUT_OF_POCKET_RATE, FTN_THROWAWAY_RATE, FTN_INT_WORTHY_RATE,
                 StatColumn.FTN_SCREEN_TARGET_RATE, StatColumn.FTN_MOTION_TARGET_RATE, StatColumn.FTN_SCREEN_RATE,
                 StatColumn.FTN_RPO_RATE, StatColumn.FTN_NO_HUDDLE_RATE, StatColumn.FTN_MOTION_RATE,
+                StatColumn.FTN_SHOTGUN_RATE, StatColumn.FTN_FIRST_READ_RATE,
             )
 
         private val DECIMALS: Map<StatColumn, Int> = mapOf(
@@ -91,6 +92,7 @@ public class StatFormat(private val locale: Locale = Locale.getDefault()) {
             // NGS percentages are already in points, so they stay out of PERCENT.
             NGS_TIME_TO_THROW to 2,
             StatColumn.FTN_AVG_BOX to 2,
+            StatColumn.FTN_AVG_RUSHERS to 2,
             NGS_AGGRESSIVENESS to 1,
             NGS_INTENDED_AIR_YARDS to 1,
             NGS_RYOE to 1,

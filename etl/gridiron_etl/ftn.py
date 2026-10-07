@@ -26,7 +26,10 @@ _FLAGS = {
     "is_throw_away": "throw_away", "is_interception_worthy": "int_worthy",
     "is_screen_pass": "screen", "is_rpo": "rpo", "is_motion": "motion", "is_no_huddle": "no_huddle",
 }
-_REQUIRED = ["nflverse_game_id", "nflverse_play_id", *_FLAGS, "n_blitzers", "n_defense_box"]
+_REQUIRED = [
+    "nflverse_game_id", "nflverse_play_id", *_FLAGS, "n_blitzers", "n_defense_box",
+    "qb_location", "n_pass_rushers", "read_thrown",
+]
 
 COMPONENTS = [
     "ftn_targets", "ftn_catchable", "ftn_contested", "ftn_drops", "ftn_created_rec",
@@ -37,6 +40,8 @@ COMPONENTS = [
     "ftn_screen_db", "ftn_rpo_db", "ftn_no_huddle_db", "ftn_motion_db",
     "ftn_screen_rate", "ftn_rpo_rate", "ftn_no_huddle_rate", "ftn_motion_rate",
     "ftn_box_carries", "ftn_box_sum", "ftn_avg_box",
+    "ftn_shotgun_db", "ftn_shotgun_rate", "ftn_rushers_db", "ftn_rushers_sum", "ftn_avg_rushers",
+    "ftn_read_att", "ftn_first_read", "ftn_first_read_rate",
 ]
 
 _SEASON_TYPES = ["REG", "POST"]
@@ -56,6 +61,9 @@ def flags(raw: pl.DataFrame) -> pl.DataFrame:
               for c, name in _FLAGS.items()],
             pl.col("n_blitzers").cast(pl.Int64, strict=False).fill_null(0).alias("blitzers"),
             pl.col("n_defense_box").cast(pl.Int64, strict=False).fill_null(0).alias("box"),
+            pl.col("qb_location").cast(pl.String).fill_null("").alias("qb_location"),
+            pl.col("n_pass_rushers").cast(pl.Int64, strict=False).fill_null(0).alias("rushers"),
+            pl.col("read_thrown").cast(pl.String).fill_null("").alias("read"),
         )
         .filter(pl.col("game_id").is_not_null() & pl.col("play_id").is_not_null())
         .unique(subset=["game_id", "play_id"], keep="last", maintain_order=True)
@@ -146,6 +154,11 @@ def components(pbp: pl.LazyFrame, charted: pl.DataFrame) -> pl.DataFrame:
             ftn_rpo_db=(pl.col("_weight") * pl.col("rpo")).sum(),
             ftn_no_huddle_db=(pl.col("_weight") * pl.col("no_huddle")).sum(),
             ftn_motion_db=(pl.col("_weight") * pl.col("motion")).sum(),
+            ftn_shotgun_db=(pl.col("_weight") * (pl.col("qb_location") == "S")).sum(),
+            ftn_rushers_db=(pl.col("_weight") * (pl.col("rushers") > 0)).sum(),
+            ftn_rushers_sum=(pl.col("_weight") * pl.col("rushers")).sum(),
+            ftn_read_att=(pl.col("_attempt") * ((pl.col("read") != "") & (pl.col("read") != "0"))).sum(),
+            ftn_first_read=(pl.col("_attempt") * (pl.col("read") == "1")).sum(),
         )
         .rename({"posteam": "team", "passer_player_id": "player_id"})
         .with_columns(
@@ -158,6 +171,9 @@ def components(pbp: pl.LazyFrame, charted: pl.DataFrame) -> pl.DataFrame:
             ftn_rpo_rate=pl.col("ftn_rpo_db") / pl.col("ftn_dropbacks"),
             ftn_no_huddle_rate=pl.col("ftn_no_huddle_db") / pl.col("ftn_dropbacks"),
             ftn_motion_rate=pl.col("ftn_motion_db") / pl.col("ftn_dropbacks"),
+            ftn_shotgun_rate=pl.col("ftn_shotgun_db") / pl.col("ftn_dropbacks"),
+            ftn_avg_rushers=pl.when(pl.col("ftn_rushers_db") > 0).then(pl.col("ftn_rushers_sum") / pl.col("ftn_rushers_db")),
+            ftn_first_read_rate=pl.when(pl.col("ftn_read_att") > 0).then(pl.col("ftn_first_read") / pl.col("ftn_read_att")),
         )
         .collect()
     )

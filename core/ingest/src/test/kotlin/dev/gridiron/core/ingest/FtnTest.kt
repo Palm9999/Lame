@@ -17,6 +17,7 @@ class FtnTest {
         "nflverse_game_id", "nflverse_play_id", "is_play_action", "is_qb_out_of_pocket", "is_interception_worthy",
         "is_throw_away", "is_catchable_ball", "is_contested_ball", "is_created_reception", "is_drop", "n_blitzers",
         "is_screen_pass", "is_rpo", "is_motion", "is_no_huddle", "n_defense_box",
+        "qb_location", "n_pass_rushers", "read_thrown",
     )
 
     private fun stream(header: List<String>, vararg rows: Map<String, Any?>) =
@@ -27,6 +28,7 @@ class FtnTest {
         "is_interception_worthy" to "FALSE", "is_throw_away" to "FALSE", "is_catchable_ball" to "FALSE",
         "is_contested_ball" to "FALSE", "is_created_reception" to "FALSE", "is_drop" to "FALSE", "n_blitzers" to 0,
         "is_screen_pass" to "FALSE", "is_rpo" to "FALSE", "is_motion" to "FALSE", "is_no_huddle" to "FALSE", "n_defense_box" to 0,
+        "qb_location" to "0", "n_pass_rushers" to 0, "read_thrown" to "0",
     ) + overrides
 
     private fun flags(
@@ -34,7 +36,11 @@ class FtnTest {
         playAction: Boolean = false, outOfPocket: Boolean = false, throwAway: Boolean = false,
         intWorthy: Boolean = false, blitzers: Int = 0, screen: Boolean = false, rpo: Boolean = false,
         motion: Boolean = false, noHuddle: Boolean = false, box: Int = 0,
-    ) = FtnFlags(catchable, contested, drop, created, playAction, outOfPocket, throwAway, intWorthy, blitzers, screen, rpo, motion, noHuddle, box)
+        qbLocation: String = "", rushers: Int = 0, read: String = "",
+    ) = FtnFlags(
+        catchable, contested, drop, created, playAction, outOfPocket, throwAway, intWorthy, blitzers, screen, rpo, motion, noHuddle, box,
+        qbLocation, rushers, read,
+    )
 
     /** Runs the aggregator over plays, each with the FTN flags it was charted with (null: FTN has no row for it). */
     private fun run(vararg charted: Pair<Play, FtnFlags?>): List<PlayerWeek> {
@@ -120,6 +126,35 @@ class FtnTest {
         assertEquals(0.25, qb["ftn_rpo_rate"])
         assertEquals(0.25, qb["ftn_no_huddle_rate"])
         assertEquals(0.5, qb["ftn_motion_rate"])
+    }
+
+    @Test
+    fun `shotgun, pass rushers and first reads are credited to the passer over their own denominators`() {
+        val sack = pass(4, receiver = null, attempt = 0.0, sack = 1.0)
+        val rows = run(
+            pass(1) to flags(qbLocation = "S", rushers = 4, read = "1"),
+            pass(2) to flags(qbLocation = "U", rushers = 6, read = "2"),
+            pass(3) to flags(qbLocation = "S", read = "0"),
+            sack to flags(qbLocation = "S", rushers = 5, read = "1"),
+        )
+        val qb = rows.row("QB1")
+        assertEquals(3.0, qb["ftn_shotgun_db"])
+        assertEquals(0.75, qb["ftn_shotgun_rate"])
+        // Rushers average over the dropbacks FTN counted them on (the sack included); reads over attempts only.
+        assertEquals(3.0, qb["ftn_rushers_db"])
+        assertEquals(15.0, qb["ftn_rushers_sum"])
+        assertEquals(5.0, qb["ftn_avg_rushers"])
+        assertEquals(2.0, qb["ftn_read_att"])
+        assertEquals(1.0, qb["ftn_first_read"])
+        assertEquals(0.5, qb["ftn_first_read_rate"])
+    }
+
+    @Test
+    fun `no counted rushers or charted reads leave those rates unset`() {
+        val qb = run(pass(1) to flags()).row("QB1")
+        assertEquals(0.0, qb["ftn_rushers_db"])
+        assertNull(qb["ftn_avg_rushers"])
+        assertNull(qb["ftn_first_read_rate"])
     }
 
     @Test

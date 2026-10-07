@@ -99,6 +99,11 @@ public object Components {
     public val FTN_MOTION_DB: Component = Component("ftn_motion_db")
     public val FTN_BOX_CARRIES: Component = Component("ftn_box_carries")
     public val FTN_BOX_SUM: Component = Component("ftn_box_sum")
+    public val FTN_SHOTGUN_DB: Component = Component("ftn_shotgun_db")
+    public val FTN_RUSHERS_DB: Component = Component("ftn_rushers_db")
+    public val FTN_RUSHERS_SUM: Component = Component("ftn_rushers_sum")
+    public val FTN_READ_ATT: Component = Component("ftn_read_att")
+    public val FTN_FIRST_READ: Component = Component("ftn_first_read")
 
     // Scoring inputs. Internal and sparse (absent means zero); read only by
     // the scoring step, which applies the spec's profile per player-week.
