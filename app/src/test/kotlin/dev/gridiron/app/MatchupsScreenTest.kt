@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import dev.gridiron.core.data.live.LeagueChoice
 import dev.gridiron.core.data.live.LeagueMatchup
 import dev.gridiron.core.data.live.MatchupPlayer
 import dev.gridiron.core.data.live.MatchupSide
@@ -100,5 +101,24 @@ class MatchupsScreenTest {
         show(result.copy(error = "couldn't reach ESPN"))
         compose.onNodeWithText("couldn't reach ESPN").assertExists()
         compose.onNodeWithText("112.4").assertExists()
+    }
+
+    @Test
+    fun twoLeaguesShowAChipEachThatSwitches() {
+        var picked: String? = null
+        val leagues = listOf(LeagueChoice("1", "Work", true), LeagueChoice("2", "Family", false))
+        compose.setContent {
+            GridironTheme { MatchupsScreen(2026, 4, result, names, 2, "PPR", {}, {}, {}, {}, leagues = leagues, onLeague = { picked = it }) }
+        }
+        compose.onNodeWithTag("league:2").performClick()
+        assertEquals("2", picked)
+    }
+
+    @Test
+    fun oneLeagueShowsNoChips() {
+        compose.setContent {
+            GridironTheme { MatchupsScreen(2026, 4, result, names, 2, "PPR", {}, {}, {}, {}, leagues = listOf(LeagueChoice("1", "Work", true))) }
+        }
+        compose.onNodeWithTag("league:1").assertDoesNotExist()
     }
 }

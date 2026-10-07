@@ -2,6 +2,7 @@ package dev.gridiron.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,7 +16,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -28,6 +31,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,11 +41,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.live.FantasyLeagueRepository
+import dev.gridiron.core.data.live.LeagueChoice
 import dev.gridiron.core.data.live.LeagueMatchup
 import dev.gridiron.core.data.live.MatchupSide
 import dev.gridiron.core.data.live.MatchupsResult
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 private val STARTER_WEEKS = (1..18).toList()
@@ -72,12 +78,25 @@ fun MatchupsRoute(
     val profile by scoring.active.collectAsState(initial = null)
     val synced by league.league.collectAsState()
     val config by league.config.collectAsState(initial = null)
+    val choices by league.leagues.collectAsState(initial = emptyList())
+    val scope = rememberCoroutineScope()
     var week by rememberSaveable { mutableIntStateOf(0) }
+    // The league the week belongs to: a switch starts again from the new league's current week.
+    var weekLeague by rememberSaveable { mutableStateOf<String?>(null) }
     var shown by remember { mutableStateOf<Pair<Int, MatchupsResult>?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     LaunchedEffect(Unit) { league.load() }
-    LaunchedEffect(synced?.week) { if (week == 0) week = synced?.week ?: 0 }
-    LaunchedEffect(season, week, profile, stats, reload) {
+    LaunchedEffect(synced?.leagueId, synced?.week) {
+        val id = synced?.leagueId ?: return@LaunchedEffect
+        if (weekLeague != id) {
+            weekLeague = id
+            week = synced?.week ?: 0
+            shown = null
+        } else if (week == 0) {
+            week = synced?.week ?: 0
+        }
+    }
+    LaunchedEffect(season, week, profile, stats, reload, weekLeague) {
         val p = profile ?: return@LaunchedEffect
         if (week == 0) return@LaunchedEffect
         val result = league.matchups(season, week, p)
@@ -95,6 +114,8 @@ fun MatchupsRoute(
         onRefresh = { reload++ },
         onPlayer = onPlayer,
         onBack = onBack,
+        leagues = choices,
+        onLeague = { id -> scope.launch { league.setActive(id) } },
     )
 }
 
@@ -110,6 +131,9 @@ fun MatchupsScreen(
     onRefresh: () -> Unit,
     onPlayer: (String) -> Unit,
     onBack: () -> Unit,
+    /** The user's ESPN leagues: with two or more, a chip each makes one active. */
+    leagues: List<LeagueChoice> = emptyList(),
+    onLeague: (String) -> Unit = {},
 ) {
     var open by rememberSaveable { mutableStateOf<Int?>(null) }
     fun name(id: Int) = teamNames[id] ?: "Team $id"
@@ -120,6 +144,18 @@ fun MatchupsScreen(
                 TextButton(onClick = { if (opened != null) open = null else onBack() }) { Text(if (opened != null) "← Matchups" else "← Back") }
                 Text("Matchups · $season", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 TextButton(onClick = onRefresh) { Text("Refresh") }
+            }
+            if (leagues.size > 1) {
+                Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    for (l in leagues) {
+                        FilterChip(
+                            selected = l.active,
+                            onClick = { open = null; onLeague(l.leagueId) },
+                            label = { Text(l.name) },
+                            modifier = Modifier.testTag("league:${l.leagueId}"),
+                        )
+                    }
+                }
             }
             if (week != 0) WeekPicker(STARTER_WEEKS, week) { open = null; onWeek(it) }
             result?.error?.let {

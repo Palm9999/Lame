@@ -93,6 +93,7 @@ import dev.gridiron.feature.scoring.ScoringListRoute
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import java.io.File
 
 /** What the screens need, built by [GridironApplication] or by a test. */
@@ -368,7 +369,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                         }
                     }
                     entry<HistoryKey> { key ->
-                        deps.league?.let { league -> HistoryRoute(key.season, history = { s -> league.history(s) }, onBack = back) }
+                        deps.league?.let { league -> HistoryRoute(key.season, history = { s -> league.history(s) }, onBack = back, leagueId = league.config.map { it?.leagueId }) }
                     }
                     entry<DynastyKey> { key ->
                         deps.dynasty?.let { repository ->
