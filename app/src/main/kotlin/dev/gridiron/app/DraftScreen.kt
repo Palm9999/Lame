@@ -1,5 +1,6 @@
 package dev.gridiron.app
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,11 +31,13 @@ import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.BoardPlayer
 import dev.gridiron.core.data.DraftAdvice
 import dev.gridiron.core.data.DraftBoardResult
+import dev.gridiron.core.data.MockDraft
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.Lineups
 import kotlinx.coroutines.flow.Flow
 import java.io.File
 import java.util.Locale
+import kotlin.random.Random
 
 /** The picks made so far, by board key: [mine] the user's, [taken] everyone else's. Saved as "m:key" / "t:key" lines. */
 data class DraftPicks(val mine: List<String> = emptyList(), val taken: Set<String> = emptySet()) {
@@ -73,6 +76,7 @@ fun DraftScreen(
     val profile by profiles.collectAsState(initial = null)
     var board by remember { mutableStateOf<DraftBoardResult?>(null) }
     var picks by remember { mutableStateOf(runCatching { DraftPicks.decode(file.readText()) }.getOrDefault(DraftPicks())) }
+    var mockMode by remember { mutableStateOf(false) }
     LaunchedEffect(profile, teams) { profile?.let { board = load(year, teams, it) } }
     fun save(next: DraftPicks) {
         picks = next
@@ -88,13 +92,15 @@ fun DraftScreen(
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onBack) { Text("← Back") }
-                Text("Draft $year", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                TextButton(onClick = { save(DraftPicks()) }, modifier = Modifier.testTag("draft:reset")) { Text("Reset") }
+                Text(if (mockMode) "Mock draft $year" else "Draft $year", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                TextButton(onClick = { mockMode = !mockMode }, modifier = Modifier.testTag("draft:mock")) { Text(if (mockMode) "Real draft" else "Mock") }
+                if (!mockMode) TextButton(onClick = { save(DraftPicks()) }, modifier = Modifier.testTag("draft:reset")) { Text("Reset") }
             }
             val b = board
             when {
                 b == null -> Note("Reading ADP from Fantasy Football Calculator…")
                 b.players.isEmpty() -> Note("No board: ${b.message ?: "no ADP yet"}.")
+                mockMode -> MockDraftView(b.players, teams.coerceAtLeast(2), rounds, slots ?: Lineups.DEFAULT_SLOTS)
                 else -> LazyColumn(Modifier.fillMaxSize().testTag("draft")) {
                     item {
                         Note(
@@ -111,6 +117,71 @@ fun DraftScreen(
                 }
             }
         }
+    }
+}
+
+/**
+ * A mock draft against bots ([MockDraft]): pick a slot, start, and tap a player when it's your turn; the bots pick
+ * until it comes round again. Nothing is saved: leaving the screen ends it.
+ */
+@Composable
+private fun MockDraftView(players: List<BoardPlayer>, teams: Int, rounds: Int, slots: Map<String, Int>) {
+    var slot by remember { mutableStateOf(0) }
+    var picks by remember { mutableStateOf<List<String>?>(null) }
+    val random = remember { Random(System.nanoTime()) }
+    fun advance(next: List<String>) {
+        picks = MockDraft.run(players, next, slot, teams, rounds, slots, random)
+    }
+    val p = picks
+    if (p == null) {
+        Note("Draft against ${teams - 1} bots that pick by ADP and roster need. $rounds rounds, snake order.")
+        Row(Modifier.padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = { slot = (slot - 1).coerceAtLeast(0) }) { Text("‹") }
+            Text("Pick ${slot + 1} of $teams", style = MaterialTheme.typography.bodyMedium)
+            TextButton(onClick = { slot = (slot + 1).coerceAtMost(teams - 1) }) { Text("›") }
+            TextButton(onClick = { advance(emptyList()) }, modifier = Modifier.testTag("mock:start")) { Text("Start") }
+        }
+        return
+    }
+    val byKey = players.associateBy { it.key }
+    val taken = p.toSet()
+    val available = players.filter { it.key !in taken }
+    val done = p.size >= teams * rounds || available.isEmpty()
+    val mine = p.indices.filter { MockDraft.team(it, teams) == slot }
+    val lastMine = mine.lastOrNull() ?: -1
+    val since = (lastMine + 1 until p.size).toList()
+    val suggested = if (done) emptyList() else DraftAdvice.suggestions(available, mine.mapNotNull { byKey[p[it]] }, slots, p.size / teams + 1, rounds)
+    val draft = { b: BoardPlayer -> if (!done) advance(p + b.key) }
+    LazyColumn(Modifier.fillMaxSize().testTag("mock")) {
+        item {
+            Note(if (done) "Done: your ${mine.size} picks below." else "Your pick: ${MockDraft.label(p.size, teams)}. Tap a player to take him.")
+        }
+        item {
+            TextButton(onClick = { picks = null }, modifier = Modifier.padding(horizontal = 8.dp).testTag("mock:restart")) { Text("Restart") }
+        }
+        if (!done) {
+            item { Label("Taken since your last pick (${since.size})") }
+            items(since, key = { "t:$it" }) { n -> byKey[p[n]]?.let { MockRow(it, "${MockDraft.label(n, teams)} · ${draftLine(it)}", "t", null) } }
+            item { Label("Suggested") }
+            items(suggested, key = { "s:${it.key}" }) { b -> MockRow(b, draftLine(b), "s") { draft(b) } }
+        }
+        item { Label("Your team (${mine.size})") }
+        items(mine, key = { "m:$it" }) { n -> byKey[p[n]]?.let { MockRow(it, "${MockDraft.label(n, teams)} · ${draftLine(it)}", "m", null) } }
+        if (!done) {
+            item { Label("Available") }
+            items(available, key = { "a:${it.key}" }) { b -> MockRow(b, draftLine(b), "a") { draft(b) } }
+        }
+    }
+}
+
+@Composable
+private fun MockRow(p: BoardPlayer, line: String, section: String, onTap: (() -> Unit)?) {
+    Column(
+        Modifier.fillMaxWidth().then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
+            .padding(horizontal = 16.dp, vertical = 6.dp).testTag("mock:$section:${p.key}"),
+    ) {
+        Text(p.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+        Text(line, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 

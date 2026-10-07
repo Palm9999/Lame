@@ -42,4 +42,10 @@ class LiveFormatTest {
         assertEquals("7,200 · 2nd of 3 · 1st of 2 RBs · redraft 3,600", dynastyLine("b", values))
         assertEquals(null, dynastyLine("z", values))
     }
+
+    @Test
+    fun aSimilarSeasonReadsItsFirstThreeRatesAGame() {
+        val c = dev.gridiron.core.data.CompSeason("x", "X", 2024, "KC", 16, listOf(6.13, 4.2, 61.4, 80.0, 0.5, 0.1))
+        assertEquals("6.1 TGT · 4.2 REC · 61 REC YDS a game", compLine("WR", c))
+    }
 }

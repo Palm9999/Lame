@@ -2,7 +2,9 @@ package dev.gridiron.core.data
 
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.statquery.StatColumn
+import dev.gridiron.core.statquery.StatColumn.AIR_YARDS_SHARE
 import dev.gridiron.core.statquery.StatColumn.CARRIES
+import dev.gridiron.core.statquery.StatColumn.CARRY_SHARE
 import dev.gridiron.core.statquery.StatColumn.DST_INTERCEPTIONS
 import dev.gridiron.core.statquery.StatColumn.DST_SACKS
 import dev.gridiron.core.statquery.StatColumn.FANTASY_POINTS
@@ -17,6 +19,8 @@ import dev.gridiron.core.statquery.StatColumn.RECEIVING_TDS
 import dev.gridiron.core.statquery.StatColumn.RECEIVING_YARDS
 import dev.gridiron.core.statquery.StatColumn.RECEPTIONS
 import dev.gridiron.core.statquery.StatColumn.RUSHING_YARDS
+import dev.gridiron.core.statquery.StatColumn.SNAP_SHARE
+import dev.gridiron.core.statquery.StatColumn.TARGET_SHARE
 import dev.gridiron.core.statquery.StatColumn.TARGETS
 import dev.gridiron.core.statquery.StatColumn.XP_MADE
 import dev.gridiron.core.statquery.StatColumn.YARDS_ALLOWED
@@ -40,5 +44,13 @@ public object PlayerStatSets {
         Position.K -> K
         Position.DST -> DST
         else -> WR_TE
+    }
+
+    /** The Player page's usage-by-week charts: the shares that show a role growing or shrinking. None for K or D/ST. */
+    public fun usageColumns(position: Position?): List<StatColumn> = when (position) {
+        Position.QB -> listOf(SNAP_SHARE)
+        Position.RB, Position.FB -> listOf(SNAP_SHARE, CARRY_SHARE, TARGET_SHARE)
+        Position.K, Position.DST -> emptyList()
+        else -> listOf(SNAP_SHARE, TARGET_SHARE, AIR_YARDS_SHARE)
     }
 }

@@ -11,6 +11,7 @@ import org.junit.jupiter.api.assertThrows
 import org.junit.jupiter.api.io.TempDir
 import java.io.File
 import java.sql.DriverManager
+import kotlin.random.Random
 
 class DraftTest {
     @TempDir
@@ -68,5 +69,30 @@ class DraftTest {
         val mine = listOf(p("a", "WR", 1.0), p("b", "WR", 2.0))
         assertEquals(listOf("QB1", "RB1", "WR1", "TE1"), DraftAdvice.suggestions(board, mine, slots, round = 3, rounds = 15).map { it.name })
         assertEquals("K1", DraftAdvice.suggestions(board, mine, slots, round = 14, rounds = 15).first().name)
+    }
+
+    @Test
+    fun `a mock draft snakes, stops on the user's turn and bots draft by need without repeats`() {
+        assertEquals(listOf(0, 1, 2, 2, 1, 0, 0), (0..6).map { MockDraft.team(it, 3) })
+        assertEquals("2.03", MockDraft.label(5, 3))
+        val positions = listOf("QB", "RB", "RB", "WR", "WR", "TE", "K", "DST")
+        val board = (1..60).map { p("P$it", positions[it % positions.size], it.toDouble()) }
+        val slots = mapOf("QB" to 1, "RB" to 2, "WR" to 2, "TE" to 1, "K" to 1, "D/ST" to 1)
+        // The middle slot of 3: one bot pick, then the user.
+        val first = MockDraft.run(board, emptyList(), 1, 3, 5, slots, Random(1))
+        assertEquals(1, first.size)
+        // The user takes one; the bots take 1.03 and 2.01, stopping at the user's 2.02.
+        val second = MockDraft.run(board, first + "P60", 1, 3, 5, slots, Random(1))
+        assertEquals(4, second.size)
+        // The last slot picks twice at the turn: no bot pick between 1.03 and 2.01.
+        assertEquals(listOf("P1", "P2", "P60"), MockDraft.run(board, listOf("P1", "P2", "P60"), 2, 3, 5, slots, Random(1)))
+        // Played out with the user always taking the worst player: every pick unique, no bot K or D/ST before round 4.
+        var picks = first
+        while (picks.size < 15) picks = MockDraft.run(board, picks + board.last { it.key !in picks }.key, 1, 3, 5, slots, Random(7))
+        assertEquals(15, picks.toSet().size)
+        val byKey = board.associateBy { it.key }
+        picks.forEachIndexed { n, k ->
+            if (MockDraft.team(n, 3) != 1 && n / 3 + 1 < 4) assertTrue(byKey.getValue(k).position !in setOf("K", "DST"), "$n $k")
+        }
     }
 }

@@ -94,6 +94,18 @@ class PlayerStatsRepositoryTest {
     }
 
     @Test
+    fun `a backs game log carries his weekly snap, carry and target shares, and a kicker has none`() = runTest {
+        val s = repo.stats(topId(StatPack.RUSHING, PositionFilter.RB), Position.RB, ppr, season = 2025)
+        assertEquals(listOf("Snap Share", "Carry Share", "Target Share"), s.usageHeaders)
+        assertTrue(s.log.all { it.usage.size == 3 }, s.log.toString())
+        val shares = s.log.flatMap { it.usage }.filterNotNull()
+        assertTrue(shares.all { it in 0.0..1.0 }, shares.toString())
+        // The season's top rusher takes a real share of his team's carries most weeks.
+        assertTrue(s.log.count { (it.usage[1] ?: 0.0) > 0.3 } > s.log.size / 2, s.log.map { it.usage }.toString())
+        assertTrue(repo.stats(topId(StatPack.KICKING, PositionFilter.K), Position.K, ppr, season = 2025).usageHeaders.isEmpty())
+    }
+
+    @Test
     fun `a kickers line has no expected points, and his game log adds up`() = runTest {
         val id = topId(StatPack.KICKING, PositionFilter.K)
         assertLogAddsUp(id, Position.K, StatColumn.FG_ATT)

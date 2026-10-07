@@ -47,7 +47,13 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** the 2026-10-07 second round: the user asked for the pick-list (1 Ask Gridiron with the user's own Anthropic key, 2 game-day refresh, 3 TD regression board, 4 player comps, 5 mock draft simulator, 6 usage trend charts, 7 matchup preview) and said start where I want; (2) game-day refresh is built (below). (1) Ask Gridiron was written (Claude Opus 5.5 through the Java SDK `com.anthropic:anthropic-java`, a `run_sql` tool over the read-only `stats.db`, the key entered on its own screen) but never compiled: Maven Central answered Gradle's SDK downloads with 429 for over an hour in the container (curl got 200), and the user chose to leave it out of the build (2026-10-07); the code is not in the repo. (3) TD regression board is built (below). Next: (4) player comps, then the rest in list order unless the user redirects.
+**Next:** the 2026-10-07 second round: the user asked for the pick-list (1 Ask Gridiron with the user's own Anthropic key, 2 game-day refresh, 3 TD regression board, 4 player comps, 5 mock draft simulator, 6 usage trend charts, 7 matchup preview) and said start where I want; (2) game-day refresh is built (below). (1) Ask Gridiron was written (Claude Opus 5.5 through the Java SDK `com.anthropic:anthropic-java`, a `run_sql` tool over the read-only `stats.db`, the key entered on its own screen) but never compiled: Maven Central answered Gradle's SDK downloads with 429 for over an hour in the container (curl got 200), and the user chose to leave it out of the build (2026-10-07); the code is not in the repo. (3) TD regression board, (4) player comps (Similar seasons), (5) mock draft and (6) usage trend charts are built (below). (7) matchup preview already existed (My lineup's "Matchup preview", commit 345fd67), so nothing was built for it; the user then asked for (8) owner tags and the Free agents chip on TD regression (Where we differ already had them), built. Nothing is pending: offer the next round as a short pick-list.
+
+**Just built: Usage by week** (Player page, under Points by week): a column chart per share, 0-100% scale, from the game log's weekly query (`PlayerStatSets.usageColumns`: QB snap share; RB snap, carry, target share; WR/TE snap, target, air yards share; none for K or D/ST).
+
+**Just built: Mock draft** (☰ → Draft → Mock): a snake draft against bots on the same FFC board, the user's slot chosen first; each bot takes one of `DraftAdvice`'s top three for its own roster, weighted 0.6/0.25/0.15 (`MockDraft.BOT_WEIGHTS`, judgment). Nothing saved; the real draft's picks are untouched.
+
+**Just built: Similar seasons** (Player page): the five nearest player-seasons by other players at his position, per-game counting stats standardized within the position, every season in `stats.db`.
 
 **Just built: TD regression** (More → Players, or ☰): touchdowns against ffopportunity's expected touchdowns through its last processed week, Running hot and Running cold, 25 each, by position.
 
@@ -103,7 +109,9 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Deferred minors
 
-**Deferred minors (TD regression):** no owner tags or Free agents chip (Rising roles has them); the 2-touchdown floor is a judgment; it isn't wired to the Player page or Trade; passing touchdowns count with rushing and receiving for a QB, so a QB's gap is mostly passing.
+**Deferred minors (similar seasons):** per-game stats only, no age, team context, efficiency or shares (rates aren't averaged); the pool is whatever seasons the phone built (2-3), so comps rarely reach far back; metrics weigh equally; the same player's own other seasons are left out; K and D/ST get none; the pool is re-read on every page open.
+
+**Deferred minors (TD regression):** the 2-touchdown floor is a judgment; it isn't wired to the Player page or Trade; passing touchdowns count with rushing and receiving for a QB, so a QB's gap is mostly passing.
 
 **Deferred minors (game-day refresh):** fixed times (no picker), every week of the year (offseason runs too); no notification when it finishes (the Finished toast shows only if the app is open); a Thursday or Monday game gets no refresh of its own; it lives under Alerts though it isn't one.
 
@@ -171,6 +179,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Open checks on the phone
 
+- **Similar seasons:** a Player page lists five similar seasons with three per-game numbers each; tapping one opens that player.
 - **TD regression:** More → TD regression: Running hot lists players with more touchdowns than expected (+ gaps), Running cold the reverse; the note's week should be a week or so behind the current one.
 - **Game-day refresh:** don't refresh by hand after Friday; Sunday morning, a player nflverse listed Out on Friday should have no projection on Projections' week list (the app has no build-time display, so this is the tell).
 - **Quiet hours:** Settings → Alerts → Quiet hours on: nothing from injuries or news between 10 pm and 8 am, then the overnight changes arrive after 8.

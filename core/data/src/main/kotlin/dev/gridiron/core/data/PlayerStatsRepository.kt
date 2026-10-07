@@ -71,19 +71,21 @@ public class PlayerStatsRepository(
         }
 
         val logColumns = PlayerStatSets.logColumns(position)
+        val usageColumns = PlayerStatSets.usageColumns(position)
         val played = executor.query(PlayerStatsQueries.weekTeams(playerId, chosen)) { it.long(0).toInt() to it.textOrNull(1) }
             .filter { (week, _) -> week in weeks.first..weeks.last }
         val schedule = executor.query(PlayerStatsQueries.games(chosen)) {
             ScheduleGame(it.long(0).toInt(), it.text(1), it.text(2), it.intOrNull(3), it.intOrNull(4))
         }
         val log = played.map { (week, team) ->
-            val values = weekValues(playerId, position, chosen, week, logColumns, scoring)
+            val values = weekValues(playerId, position, chosen, week, (logColumns + usageColumns).distinct(), scoring)
             val m = matchup(team, week, schedule)
             GameLogRow(
                 week = week,
                 opponent = m.opponent,
                 result = m.result,
                 cells = logColumns.map { c -> format.format(c, zeroFilled(c, values[c]), perGame = false) }.toImmutableList(),
+                usage = usageColumns.map { values[it] }.toImmutableList(),
             )
         }
 
@@ -96,6 +98,7 @@ public class PlayerStatsRepository(
             line = line.toImmutableList(),
             logHeaders = logColumns.map { names[it.metricId]?.abbr ?: it.metricId }.toImmutableList(),
             log = log.toImmutableList(),
+            usageHeaders = usageColumns.map { names[it.metricId]?.name ?: it.metricId }.toImmutableList(),
         )
     }
 

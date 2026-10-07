@@ -74,4 +74,26 @@ class DraftScreenTest {
         compose.onNodeWithText("Your team (1)").assertExists()
         assertEquals(DraftPicks(listOf("2"), setOf("1")), DraftPicks.decode(file.readText()))
     }
+
+    @Test
+    fun `a mock draft takes the user's pick, the bot picks after, and the real draft is untouched`() {
+        val file = File(tmp.root, "draft.txt")
+        compose.setContent {
+            GridironTheme {
+                DraftScreen(2026, { _, _, _ -> board }, flowOf(ScoringPresets.PPR), teams = 2, slots = null, file = file, onBack = {}, rounds = 1)
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithTag("draft:mock").performClick()
+        compose.onNodeWithTag("mock:start").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Your pick: 1.01. Tap a player to take him.").assertExists()
+        compose.onNodeWithTag("mock:a:3").performClick()
+        compose.waitForIdle()
+        // The bot took 1.02 and the one round is over.
+        compose.onNodeWithText("Done: your 1 picks below.").assertExists()
+        compose.onNodeWithTag("mock:m:3").assertExists()
+        // The real draft's picks are untouched.
+        assertEquals(false, file.exists())
+    }
 }

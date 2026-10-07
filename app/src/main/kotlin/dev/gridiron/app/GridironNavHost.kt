@@ -47,6 +47,7 @@ import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.InjuryReturnRepository
 import dev.gridiron.core.data.Kickoffs
 import dev.gridiron.core.data.DynastyRepository
+import dev.gridiron.core.data.CompsRepository
 import dev.gridiron.core.data.TdRegressionRepository
 import dev.gridiron.core.data.OpportunitiesRepository
 import dev.gridiron.core.data.dynastyFormat
@@ -139,6 +140,8 @@ data class Deps(
     val dynasty: DynastyRepository? = null,
     /** The TD regression board; null where a test doesn't need it. */
     val tdRegression: TdRegressionRepository? = null,
+    /** Similar seasons on the Player page; null where a test doesn't need them. */
+    val comps: CompsRepository? = null,
 )
 
 /**
@@ -337,7 +340,11 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                     }
                     entry<TdRegressionKey> { key ->
                         deps.tdRegression?.let { repo ->
-                            TdRegressionRoute(key.season, repo, onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion)
+                            TdRegressionRoute(
+                                key.season, repo, onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
+                                league = deps.league?.rostered ?: flowOf(null),
+                                myTeam = deps.league?.myTeam ?: flowOf(null),
+                            )
                         }
                     }
                     entry<DifferKey> { key ->
@@ -430,6 +437,8 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             inactivesPosted = { s, w -> deps.scores?.week(s, w)?.kickoffs(java.time.Instant.now())?.inactivesPosted.orEmpty() },
                             returns = deps.returns,
                             dynastyValues = { p -> deps.dynasty?.load(dynastyFormat(deps.league?.league?.value, p))?.values.orEmpty() },
+                            comps = deps.comps,
+                            onPlayer = { backStack.push(PlayerKey(it)) },
                         )
                     }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }
