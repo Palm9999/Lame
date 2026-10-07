@@ -1,6 +1,8 @@
 package dev.gridiron.app
 
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertCountEquals
@@ -86,6 +88,16 @@ class PlayerStatsSectionTest {
         // The best week reads in the log and above its bar in the points chart.
         compose.onAllNodesWithText("18.4").assertCountEquals(2)
         compose.onNodeWithTag("pointsByWeek").assertExists()
+    }
+
+    @Test
+    fun tappingABarReadsItsWeekAndTappingAgainClears() {
+        show(page(stats()))
+        val bar = compose.onNode(hasTestTag("bar:0") and hasAnyAncestor(hasTestTag("pointsByWeek")), useUnmergedTree = true)
+        bar.performClick()
+        compose.onNodeWithText("Week 1: 18.4 pts").assertExists()
+        bar.performClick()
+        compose.onNodeWithText("Week 1: 18.4 pts").assertDoesNotExist()
     }
 
     @Test

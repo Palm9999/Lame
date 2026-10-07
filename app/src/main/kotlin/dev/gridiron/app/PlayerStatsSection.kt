@@ -151,6 +151,7 @@ private fun PointsByWeek(log: List<GameLogRow>) {
             description = "Fantasy points by week: " + log.zip(points).joinToString { (r, p) -> "week ${r.week} ${p ?: "none"}" },
             modifier = Modifier.padding(top = 6.dp),
             labelled = setOfNotNull(best, points.indices.last),
+            detail = { i -> "Week ${log[i].week}: ${points[i]?.let { String.format(java.util.Locale.US, "%.1f pts", it) } ?: "no points"}" },
         )
     }
 }
@@ -176,6 +177,7 @@ private fun UsageByWeek(name: String, log: List<GameLogRow>, index: Int) {
             max = 1.0,
             labelled = setOfNotNull(shares.indexOfFirst { it != null }, best, shares.indexOfLast { it != null }),
             height = 48.dp,
+            detail = { i -> "Week ${log[i].week}: ${shares[i]?.let(pct) ?: "none"} ${name.lowercase()}" },
         )
     }
 }
