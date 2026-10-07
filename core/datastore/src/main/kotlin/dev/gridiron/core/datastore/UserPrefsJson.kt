@@ -2,6 +2,8 @@ package dev.gridiron.core.datastore
 
 import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
+import java.time.DayOfWeek
+import java.time.LocalTime
 import dev.gridiron.core.model.BonusStat
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.ESPN_POINTS_ALLOWED
@@ -55,6 +57,8 @@ internal data class UserPrefsDto(
     val summaryAlert: Boolean? = null,
     val quietAlerts: Boolean = false,
     val gameDayRefresh: Boolean = true,
+    /** Missing in a file from before the time picker: the defaults. A day or time that doesn't parse is its default. */
+    val gameDayTimes: Map<String, String> = emptyMap(),
 )
 
 @Serializable
@@ -220,7 +224,10 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
         espnLeagues = leagues,
         espnActive = espnActive?.takeIf { id -> leagues.any { it.leagueId == id } } ?: leagues.firstOrNull()?.leagueId,
         espnLogin = login,
-        alerts = AlertSwitches(injuryAlerts, newsAlerts ?: injuryAlerts, lineupAlerts ?: injuryAlerts, summaryAlert ?: injuryAlerts, quietAlerts, gameDayRefresh),
+        alerts = AlertSwitches(
+            injuryAlerts, newsAlerts ?: injuryAlerts, lineupAlerts ?: injuryAlerts, summaryAlert ?: injuryAlerts, quietAlerts, gameDayRefresh,
+            refreshTimes(gameDayTimes),
+        ),
     )
 }
 
@@ -306,7 +313,15 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     summaryAlert = alerts.summary,
     quietAlerts = alerts.quiet,
     gameDayRefresh = alerts.refresh,
+    gameDayTimes = alerts.refreshTimes.takeIf { it != AlertSwitches.DEFAULT_REFRESH_TIMES }
+        ?.entries?.associate { (day, time) -> day.name to time.toString() }.orEmpty(),
 )
+
+/** The stored times over the defaults: only the four game days, and only times that parse. */
+private fun refreshTimes(stored: Map<String, String>): Map<DayOfWeek, LocalTime> =
+    AlertSwitches.DEFAULT_REFRESH_TIMES.mapValuesTo(LinkedHashMap()) { (day, default) ->
+        stored[day.name]?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: default
+    }
 
 internal object UserPrefsSerializer : Serializer<UserPrefs> {
     override val defaultValue: UserPrefs get() = UserPrefs.DEFAULT

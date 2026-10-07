@@ -1,6 +1,9 @@
 package dev.gridiron.app
 
+import android.app.TimePickerDialog
+import android.text.format.DateFormat
 import android.widget.Toast
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -38,7 +41,11 @@ import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.live.PropsStatus
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import java.time.LocalTime
 import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
+import java.time.format.TextStyle
 import java.util.Locale
 
 /**
@@ -116,8 +123,23 @@ private fun AlertsSection(settings: SettingsRepository) {
     AlertSwitch("Tuesday summary", "Last week's result, your report card place and this week's win chance.", now.summary, "summary") { on ->
         scope.launch { settings.setAlerts { it.copy(summary = on) } }
     }
-    AlertSwitch("Game-day refresh", "Rebuilds the stats Thursday and Monday at 3 pm, Saturday at 10 pm and Sunday at 9 am, then notifies you.", now.refresh, "refresh") { on ->
+    AlertSwitch("Game-day refresh", "Rebuilds the stats before each game day, September to February, then notifies you. Tap a day to change its time.", now.refresh, "refresh") { on ->
         scope.launch { settings.setAlerts { it.copy(refresh = on) } }
+    }
+    if (now.refresh) {
+        val context = LocalContext.current
+        for ((day, time) in now.refreshTimes) {
+            Row(
+                Modifier.fillMaxWidth().clickable {
+                    TimePickerDialog(context, { _, h, m ->
+                        scope.launch { settings.setAlerts { it.copy(refreshTimes = it.refreshTimes + (day to LocalTime.of(h, m))) } }
+                    }, time.hour, time.minute, DateFormat.is24HourFormat(context)).show()
+                }.padding(start = 32.dp, end = 16.dp, top = 4.dp, bottom = 4.dp).testTag("refresh:${day.name}"),
+            ) {
+                Text(day.getDisplayName(TextStyle.FULL, Locale.getDefault()), Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium)
+                Text(time.format(DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+            }
+        }
     }
     AlertSwitch("Quiet hours", "Holds injury and news alerts from 10 pm to 8 am and sends them after. Lineup checks still come.", now.quiet, "quiet") { on ->
         scope.launch { settings.setAlerts { it.copy(quiet = on) } }

@@ -151,6 +151,16 @@ class UserPrefsStoreTest {
     }
 
     @Test
+    fun `refresh times default, survive a reopen, and a bad stored time falls back to its day's default`() {
+        assertEquals(AlertSwitches.DEFAULT_REFRESH_TIMES, withStore { it.prefs.first() }.alerts.refreshTimes)
+        val picked = AlertSwitches.DEFAULT_REFRESH_TIMES + (java.time.DayOfWeek.SUNDAY to java.time.LocalTime.of(11, 30))
+        withStore { store -> store.update { it.copy(alerts = it.alerts.copy(refreshTimes = picked)) } }
+        assertEquals(picked, withStore { it.prefs.first() }.alerts.refreshTimes)
+        file.writeText("""{"formatVersion":4,"gameDayTimes":{"SUNDAY":"noon","TUESDAY":"10:00"}}""")
+        assertEquals(AlertSwitches.DEFAULT_REFRESH_TIMES, withStore { it.prefs.first() }.alerts.refreshTimes)
+    }
+
+    @Test
     fun `injury alerts are on in an older file, and turning them off survives a reopen`() {
         file.writeText("""{"formatVersion":4}""")
         assertEquals(true, withStore { it.prefs.first() }.alerts.injury)
