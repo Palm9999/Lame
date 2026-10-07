@@ -167,7 +167,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Open checks on the phone
 
-- **Game-day refresh:** leave the app closed Saturday evening; Sunday morning, open it: Settings' last refresh time (or the Grid's newest data) should read Saturday 10 pm or Sunday 9 am.
+- **Game-day refresh:** don't refresh by hand after Friday; Sunday morning, a player nflverse listed Out on Friday should have no projection on Projections' week list (the app has no build-time display, so this is the tell).
 - **Quiet hours:** Settings → Alerts → Quiet hours on: nothing from injuries or news between 10 pm and 8 am, then the overnight changes arrive after 8.
 - **Daily waiver snapshot:** with alerts on, don't open Waiver trends for a week; then open it: the note should read "over the last week".
 - **Injury report outlook:** More → Injury report: Out, Doubtful and IR rows show "Played again by: wk N …" a moment after the list.
