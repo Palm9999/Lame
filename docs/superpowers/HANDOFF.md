@@ -47,6 +47,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 **Next:** the 2026-10-07 round (the user took all eight, order mine): (1) quiet hours, (2) daily waiver snapshot, (3) return outlook on the Injury report, (4) dynasty values in Trade and on the Player page, (5) Grid and Compare share cards are built (below); the three accuracy leads (6) rest-of-season injury discount, (7) TE handcuff, (8) ESPN QB rushing TDs are logged under "Tried and rejected" or shipped as their backtests say. Nothing else is pending: offer the next round as a short pick-list.
 
+**Fixed: schedule download** (2026-10-07): nflverse dropped `schedules/games.csv` (404) and serves only `games.csv.gz`; every refresh had ended "no schedule" with no projections. `Sources` and the kept copy now use the gzip name (the Python ETL never reads the schedule).
+
 **Just built: Quiet hours** (Settings → Alerts, off by default, prefs `quietAlerts`): 10 pm–8 am local the injury and news checks wait, so the first run after 8 sends what changed overnight; lineup checks and the summary still come.
 
 **Just built: Daily waiver snapshot**: the two-hourly alert job calls `WaiverTrendsRepository.snapshotDaily` (one fetch a UTC day, skipped once today has rows), so Waiver trends' weekly change no longer needs the screen opened daily.

@@ -140,7 +140,7 @@ class IngestPipelineTest {
                 "spread_line" to 2.5, "total_line" to 41.5,
             )
         }
-        fetcher.serve(Sources.url(Input.GAMES), Fixtures.csv(gamesHeader, rows).toByteArray(), version)
+        fetcher.serve(Sources.url(Input.GAMES), Fixtures.gzip(Fixtures.csv(gamesHeader, rows)), version)
     }
 
     private fun ep(season: Int, id: String, vararg values: Pair<String, Any?>): Map<String, Any?> =
