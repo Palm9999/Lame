@@ -1,5 +1,6 @@
 package dev.gridiron.feature.projections
 
+import dev.gridiron.core.ui.SharePreview
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -108,6 +109,19 @@ internal fun partnerText(fit: PartnerFit, names: Map<String, String>): String {
     ).joinToString(" · ")
 }
 
+/**
+ * "Dynasty value (FantasyCalc): send 5,200 · get 6,100 · +900", the trade at market value; null when neither side
+ * has a value (no FantasyCalc list, or players it doesn't price).
+ */
+internal fun dynastyText(give: List<String>, get: List<String>, values: Map<String, Int>): String? {
+    if ((give + get).none { it in values }) return null
+    val sent = give.sumOf { values[it] ?: 0 }
+    val got = get.sumOf { values[it] ?: 0 }
+    val diff = got - sent
+    val sign = if (diff >= 0) "+" else "−"
+    return "Dynasty value (FantasyCalc): send ${String.format(Locale.US, "%,d", sent)} · get ${String.format(Locale.US, "%,d", got)} · $sign${String.format(Locale.US, "%,d", kotlin.math.abs(diff))}"
+}
+
 internal fun gainText(value: Double): String =
     if (value >= 0) "+" + String.format(Locale.US, "%.1f", value) else "−" + String.format(Locale.US, "%.1f", -value)
 
@@ -123,6 +137,8 @@ internal fun TradeView(
     rosWeekly: Map<String, Map<Int, Double>> = emptyMap(),
     /** Pending trades involving the user's team, from ESPN; graded like any trade. */
     offers: List<TradeOffer> = emptyList(),
+    /** FantasyCalc's dynasty value by player id; empty leaves dynasty out. */
+    dynasty: Map<String, Int> = emptyMap(),
 ) {
     val byId = remember(rosRows) { rosRows.associateBy { it.playerId } }
     val mine = remember(myTeam, byId, rosWeekly) { tradePlayers(myTeam, byId, rosWeekly) }
@@ -217,6 +233,7 @@ internal fun TradeView(
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
+                    dynastyText(give, get, dynasty)?.let { Text(it, Modifier.testTag("trade:dynasty"), style = MaterialTheme.typography.bodyMedium) }
                     if (outcome.myDrops.isNotEmpty()) {
                         Text("You cut ${outcome.myDrops.joinToString { names[it.playerId] ?: it.playerId }} to make room.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         // Anyone staying on your roster can be the cut instead: a tap swaps him in for the oldest choice.
@@ -312,11 +329,11 @@ internal fun TradeView(
         searchMillis?.let { ms -> item { Note("Searched every team in ${String.format(Locale.US, "%.1f", ms / 1000.0)} s.") } }
         item { Label("You send") }
         itemsIndexed(mine, key = { _, p -> "give:${p.playerId}" }) { _, p ->
-            PickRow(p, p.playerId in give, "give", playoffs) { on -> give = if (on) give + p.playerId else give - p.playerId }
+            PickRow(p, p.playerId in give, "give", playoffs, dynasty[p.playerId]) { on -> give = if (on) give + p.playerId else give - p.playerId }
         }
         item { Label("You receive from ${partner.teamName}") }
         itemsIndexed(theirs, key = { _, p -> "get:${p.playerId}" }) { _, p ->
-            PickRow(p, p.playerId in get, "get", playoffs) { on -> get = if (on) get + p.playerId else get - p.playerId }
+            PickRow(p, p.playerId in get, "get", playoffs, dynasty[p.playerId]) { on -> get = if (on) get + p.playerId else get - p.playerId }
         }
         item {
             Note(
@@ -345,7 +362,7 @@ internal fun TradeView(
 }
 
 @Composable
-private fun PickRow(p: TradePlayer, checked: Boolean, side: String, playoffs: List<Int>, onCheck: (Boolean) -> Unit) {
+private fun PickRow(p: TradePlayer, checked: Boolean, side: String, playoffs: List<Int>, dynasty: Int?, onCheck: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().toggleable(checked, role = Role.Checkbox, onValueChange = onCheck)
             .padding(start = 4.dp, end = 16.dp).testTag("$side:${p.playerId}"),
@@ -359,6 +376,7 @@ private fun PickRow(p: TradePlayer, checked: Boolean, side: String, playoffs: Li
                     p.position?.let(Position::label),
                     p.team,
                     p.weekly.takeIf { it.isNotEmpty() }?.let { w -> "playoffs ${pts(playoffs.sumOf { w[it] ?: 0.0 })}" },
+                    dynasty?.let { "dynasty ${String.format(Locale.US, "%,d", it)}" },
                 ).joinToString(" · ").ifEmpty { "No projection" },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -74,9 +74,14 @@ public data class AlertSwitches(
     val news: Boolean = true,
     val lineup: Boolean = true,
     val summary: Boolean = true,
+    /** Holds injury and news alerts from 10 pm to 8 am; off unless turned on. */
+    val quiet: Boolean = false,
 ) {
     /** True while any alert needs the two-hourly check. */
     public val any: Boolean get() = injury || news || lineup || summary
+
+    /** True when quiet hours hold alerts at this local hour (0-23). */
+    public fun quietAt(hour: Int): Boolean = quiet && (hour >= 22 || hour < 8)
 }
 
 /** One ESPN league the user added: its id, the user's team in it (null to find it from the SWID) and ESPN's name for it once synced. */

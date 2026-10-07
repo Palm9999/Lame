@@ -53,6 +53,7 @@ internal data class UserPrefsDto(
     val newsAlerts: Boolean? = null,
     val lineupAlerts: Boolean? = null,
     val summaryAlert: Boolean? = null,
+    val quietAlerts: Boolean = false,
 )
 
 @Serializable
@@ -212,7 +213,7 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
         espnLeagues = leagues,
         espnActive = espnActive?.takeIf { id -> leagues.any { it.leagueId == id } } ?: leagues.firstOrNull()?.leagueId,
         espnLogin = login,
-        alerts = AlertSwitches(injuryAlerts, newsAlerts ?: injuryAlerts, lineupAlerts ?: injuryAlerts, summaryAlert ?: injuryAlerts),
+        alerts = AlertSwitches(injuryAlerts, newsAlerts ?: injuryAlerts, lineupAlerts ?: injuryAlerts, summaryAlert ?: injuryAlerts, quietAlerts),
     )
 }
 
@@ -296,6 +297,7 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     newsAlerts = alerts.news,
     lineupAlerts = alerts.lineup,
     summaryAlert = alerts.summary,
+    quietAlerts = alerts.quiet,
 )
 
 internal object UserPrefsSerializer : Serializer<UserPrefs> {

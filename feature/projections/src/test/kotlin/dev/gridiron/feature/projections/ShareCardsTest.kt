@@ -1,5 +1,7 @@
 package dev.gridiron.feature.projections
 
+import dev.gridiron.core.ui.ShareCardFrame
+import dev.gridiron.core.ui.ImageShare
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.ui.test.assertIsDisplayed

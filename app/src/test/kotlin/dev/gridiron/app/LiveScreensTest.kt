@@ -141,10 +141,16 @@ class LiveScreensTest {
         val line = InjuryLine(LiveInjury("e1", "P1", "Max Melton", "ARI", "CB", "Questionable", "Q", "Melton (toe) was limited.", t), "Limited · Wk 3")
         val players = mutableListOf<String>()
         compose.setContent {
-            GridironTheme { LiveInjuriesScreen(listOf(InjuryGroup("ARI", listOf(line))), t, null, onBack = {}, onPlayer = { players += it }) }
+            GridironTheme {
+                LiveInjuriesScreen(
+                    listOf(InjuryGroup("ARI", listOf(line))), t, null, onBack = {}, onPlayer = { players += it },
+                    outlooks = mapOf("P1" to "Played again by: wk 6 40%"),
+                )
+            }
         }
 
         compose.onNodeWithText("ARI").assertExists()
+        compose.onNodeWithText("Played again by: wk 6 40%").assertExists()
         compose.onNodeWithText("CB · Practice: Limited · Wk 3").assertExists()
         compose.onNodeWithText("Max Melton").performClick()
 

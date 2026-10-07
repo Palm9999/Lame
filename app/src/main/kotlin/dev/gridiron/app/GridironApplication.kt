@@ -183,6 +183,8 @@ class GridironApplication : Application() {
     }
 
     /** ESPN stories about rostered players since [InjuryAlertWorker]'s last run. */
+    /** Shared by Waiver trends and the two-hourly job's daily roster % snapshot. */
+    internal val waiverTrends by lazy { WaiverTrendsRepository(liveDb, UrlConnectionHttpGet(), players) }
     internal val newsAlerts by lazy { NewsAlertChecker(live, rosters.rosters, File(noBackupFilesDir, "news-alerts.txt")) }
 
     /** What [InjuryAlertWorker] checks: rostered players' ESPN status against the last list seen. */
@@ -242,7 +244,7 @@ class GridironApplication : Application() {
             opportunities = OpportunitiesRepository(executor, projectionsRepo, { live.injuries() }),
             breakouts = BreakoutRepository(executor),
             returns = InjuryReturnRepository(executor),
-            waiverTrends = WaiverTrendsRepository(liveDb, UrlConnectionHttpGet(), players),
+            waiverTrends = waiverTrends,
             dynasty = DynastyRepository(UrlConnectionHttpGet(), players),
         )
     }

@@ -45,7 +45,17 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** the user picked the 2026-10-05 round: (1) waiver trends, (2) dynasty & keepers, (3) the manager report card, (4) league history and (5) shareable cards are all built (below). The 2026-10-06 round (features only; the user skipped ESPN shape verification, all three of their leagues are private and they chose not to share cookies): (1) alert switches and (3) the waiver claim planner are built (below); (2) strength of schedule was dropped by the user (projections move only 2-5% by opponent). Nothing is pending: offer the next round as a short pick-list. Untried accuracy leads stay as listed. Untried accuracy leads (not picked this round): rest of season discounting an injured player's coming weeks by the return outlook (a backtest needs rest-of-season accuracy, not weekly); a TE handcuff rule giving the backup TE part of the starter's targets (about 1.9 under; only 43 cases); ESPN's QB rushing TDs (noisy, 0.85-1.08 of ESPN's).
+**Next:** the 2026-10-07 round (the user took all eight, order mine): (1) quiet hours, (2) daily waiver snapshot, (3) return outlook on the Injury report, (4) dynasty values in Trade and on the Player page, (5) Grid and Compare share cards are built (below); the three accuracy leads (6) rest-of-season injury discount, (7) TE handcuff, (8) ESPN QB rushing TDs are logged under "Tried and rejected" or shipped as their backtests say. Nothing else is pending: offer the next round as a short pick-list.
+
+**Just built: Quiet hours** (Settings → Alerts, off by default, prefs `quietAlerts`): 10 pm–8 am local the injury and news checks wait, so the first run after 8 sends what changed overnight; lineup checks and the summary still come.
+
+**Just built: Daily waiver snapshot**: the two-hourly alert job calls `WaiverTrendsRepository.snapshotDaily` (one fetch a UTC day, skipped once today has rows), so Waiver trends' weekly change no longer needs the screen opened daily.
+
+**Just built: Return outlook on the Injury report**: each Out, Doubtful or IR row gets the Player page's "Played again by" line, filled in after the list shows.
+
+**Just built: Dynasty values in Trade and on the Player page**: FantasyCalc's value (league format, active profile) beside each Trade player, the trade's send/get totals under the verdict, and a "Dynasty value" section on the Player page (value, place overall and at position, redraft value). Shown in every league, not only dynasty ones.
+
+**Just built: Grid and Compare share cards**: View & filters → Share image (top 10, first four columns) and Compare's Share (first 12 stats, a column per player), both through `StatTableCard`; `SharePreview`, `ImageShare` and `ShareCardFrame` moved to `core/ui/.../ShareImage.kt`.
 
 **Just built: Claim plan** (My lineup, bottom): up to five FAAB claims in priority order with bids that never overspend what could all win, shared drops marked conditional, and where your FAAB ranks in the league.
 
@@ -93,19 +103,19 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 **Deferred minors (league activity):** a trade is graded with today's projections, not the rosters or projections at the time; every week is read on each open past the 15-minute hold (one request a week); lineup moves and failed claims are hidden; a player `player_xref` can't match shows as "a player".
 
-**Deferred minors (shareable cards):** cards use the phone's theme (a dark phone shares a dark card); the image is the preview's size on screen, not a fixed pixel size; the Grid and Compare have no card; Robolectric doesn't test the capture itself (the PNG writer and each card's text are tested).
+**Deferred minors (shareable cards):** cards use the phone's theme (a dark phone shares a dark card); the image is the preview's size on screen, not a fixed pixel size; Robolectric doesn't test the capture itself (the PNG writer and each card's text are tested).
 
 **Deferred minors (league history):** the screen doesn't reload on a league switch until reopened; seasons are read one after another on first open (one request each); a cached season with a wrong guess stays cached until the files are deleted; co-owners count under the primary owner only; consolation games are dropped entirely.
 
 **Deferred minors (report card):** points count only in starting lineups and by ESPN's scores; a traded player's points before the trade count as the other team's move; Draft credits the drafting team even for weeks another team started him (by design); the categories are equally weighted; Luck is in the overall although it isn't skill (the user approved).
 
-**Deferred minors (dynasty & keepers):** the draft is read every time the screen opens (no cache); keeper costs ignore how many years a player was kept; a negative-surplus player is still marked Keep when he is in the top N; the 6-hour value cache is a judgment; K and D/ST have no worth; a pick ESPN makes for a player later released and re-added still prices at that pick; the Grid, Player page and Trade don't use dynasty values.
+**Deferred minors (dynasty & keepers):** the draft is read every time the screen opens (no cache); keeper costs ignore how many years a player was kept; a negative-surplus player is still marked Keep when he is in the top N; the 6-hour value cache is a judgment; K and D/ST have no worth; a pick ESPN makes for a player later released and re-added still prices at that pick; the Grid doesn't use dynasty values; Trade and the Player page show them in every league (no dynasty-league check) and Trade's totals add values without FantasyCalc's package adjustment.
 
-**Deferred minors (waiver trends):** snapshots are kept only when the screen is opened (no background fetch), so the weekly change needs an open 7-10 days earlier; days are UTC; the 25-row cut and the 15-minute memory cache are judgments; a player `player_xref` can't match isn't tappable and has no points; the snapshot is ESPN's public leagues, not the user's league; ESPN's `percentChange` is shown as is.
+**Deferred minors (waiver trends):** the background snapshot runs only while an alert is on (it rides the alert job); days are UTC; the 25-row cut and the 15-minute memory cache are judgments; a player `player_xref` can't match isn't tappable and has no points; the snapshot is ESPN's public leagues, not the user's league; ESPN's `percentChange` is shown as is.
 
 **Deferred minors (lineup alerts, Questionable):** before inactives post, a Questionable starter still projects at his discount (ESPN's badge can't tell an active Q from an undecided one), so an early-Sunday My lineup may suggest sitting him; the pre-game lineup alert itself doesn't lift the discount; Projections reads kickoffs when it loads and when My lineup opens, so a week list or Start/sit left open across the cutoff lifts only after reopening; the Player page card reads them each time the page loads; the waterfall and the Grid's projection columns read the stored final, so they keep the discount (a confirmed-active player's card can read above the waterfall it opens). Review's last week is the later of the stats build's and ESPN's.
 
-**Deferred minors (injury returns):** the body part is nflverse's latest named one this season, so an ESPN-only Out with no nflverse listing reads every injury; a suspension isn't covered; positions are pooled; an IR player is assumed to have the 4-game minimum still to serve when he's missed fewer; a game in progress counts as not yet played; the outlook doesn't feed projections; the Injury report screen doesn't show it.
+**Deferred minors (injury returns):** the body part is nflverse's latest named one this season, so an ESPN-only Out with no nflverse listing reads every injury; a suspension isn't covered; positions are pooled; an IR player is assumed to have the 4-game minimum still to serve when he's missed fewer; a game in progress counts as not yet played; the outlook doesn't feed projections; the Injury report computes each row's outlook in turn on every open (a few queries each).
 
 **Deferred minors (look):** the Grid itself wasn't restyled (its heat cells are the visual); the other Projections modes (Trade, Playoff odds, Review, Planner) keep their old rows apart from section headers; charts have direct labels but no tap-for-detail; the Questionable badge uses Material's default tertiary (pink), the theme sets no tertiary.
 
@@ -113,7 +123,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 **Deferred minors (game day):** a pivot must fit the Questionable starter's own slot (a FLEX reshuffle that frees a slot isn't found); a bye or a team ESPN gives no kickoff is left out; kickoffs are read when My lineup opens, so a window that starts while it is open stays until it reloads; times show in the phone's zone.
 
-**Deferred minors (injury alerts):** ESPN's news feed is fetched with the injuries every run (one extra request); a player ESPN doesn't match to an app id is never alerted; no quiet hours; Robolectric doesn't run the worker (the diff and the checker are unit-tested; the scheduling isn't).
+**Deferred minors (injury alerts):** ESPN's news feed is fetched with the injuries every run (one extra request); a player ESPN doesn't match to an app id is never alerted; quiet hours are fixed at 10 pm–8 am (no picker) and a status that changes twice overnight sends only the latest; Robolectric doesn't run the worker (the diff and the checker are unit-tested; the scheduling isn't).
 
 **Deferred minors (trades):** cuts go by rest-of-season total unless the user picks one (their side only; the other team's cut and the ideas' cuts are the lowest); `BENCH_WEIGHT` and the FAAB curve are judgments; a player with no projection still counts against roster size (so is cut first); IR slots count as roster spots; two teams with the same name collide; the playoff line uses the user's league's weeks for both sides.
 
@@ -145,6 +155,11 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Open checks on the phone
 
+- **Quiet hours:** Settings → Alerts → Quiet hours on: nothing from injuries or news between 10 pm and 8 am, then the overnight changes arrive after 8.
+- **Daily waiver snapshot:** with alerts on, don't open Waiver trends for a week; then open it: the note should read "over the last week".
+- **Injury report outlook:** More → Injury report: Out, Doubtful and IR rows show "Played again by: wk N …" a moment after the list.
+- **Dynasty values:** Projections → Trade: each player shows "dynasty N", and a picked trade reads "Dynasty value (FantasyCalc): send … · get …"; a Player page shows a Dynasty value section.
+- **Grid and Compare cards:** Grid → View & filters → Share image, and Compare → Share: a preview of the table, then the share sheet.
 - **Claim plan:** in a FAAB league, My lineup's bottom lists claims #1-#5 with bids and drops; the bids together never exceed what's left, and "You have $N, Xth most of 12" should match ESPN's FAAB standings.
 - **Alert switches:** Settings → Alerts: four switches; turn one off and its notifications stop while the others continue.
 - **Tuesday summary:** with alerts on and a league synced, a "Your week" notification should arrive Tuesday morning (the first two-hourly run after 9) with last week's score, your report card place and this week's win chance, once.

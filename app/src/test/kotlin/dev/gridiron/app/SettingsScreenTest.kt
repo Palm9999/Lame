@@ -62,8 +62,9 @@ class SettingsScreenTest {
         show(prefs)
         compose.onNodeWithTag("alerts:summary").performClick()
         compose.onNodeWithTag("alerts:news").performClick()
+        compose.onNodeWithTag("alerts:quiet").performClick()
         compose.waitForIdle()
-        assertEquals(dev.gridiron.core.datastore.AlertSwitches(injury = true, news = false, lineup = true, summary = false), prefs.current.alerts)
+        assertEquals(dev.gridiron.core.datastore.AlertSwitches(injury = true, news = false, lineup = true, summary = false, quiet = true), prefs.current.alerts)
     }
 
     @Test

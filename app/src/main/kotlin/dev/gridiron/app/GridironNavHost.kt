@@ -299,6 +299,10 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             myMatchup = { s, w, p -> deps.league?.myMatchup(s, w, p) ?: MyMatchup(null, null, "no league") },
                             onLineupSummary = deps.onLineupSummary,
                             tradeOffers = { s -> deps.league?.tradeOffers(s) ?: TradeOffersResult(emptyList(), "no league") },
+                            dynastyValues = { p ->
+                                deps.dynasty?.load(dynastyFormat(deps.league?.league?.value, p))?.values
+                                    ?.mapNotNull { v -> v.playerId?.let { it to v.value } }?.toMap().orEmpty()
+                            },
                         )
                     }
                     entry<OpportunitiesKey> { key ->
@@ -378,6 +382,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                         InjuriesRoute(
                             key.season, currentSeason(), deps.teams, deps.live, onBack = back,
                             onPlayer = { backStack.push(PlayerKey(it)) }, dataVersion = deps.stats.dataVersion,
+                            returns = deps.returns,
                         )
                     }
                     entry<ScoresKey> { key ->
@@ -413,6 +418,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             league = deps.league,
                             inactivesPosted = { s, w -> deps.scores?.week(s, w)?.kickoffs(java.time.Instant.now())?.inactivesPosted.orEmpty() },
                             returns = deps.returns,
+                            dynastyValues = { p -> deps.dynasty?.load(dynastyFormat(deps.league?.league?.value, p))?.values.orEmpty() },
                         )
                     }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }

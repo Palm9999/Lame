@@ -20,8 +20,10 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import dev.gridiron.core.data.live.InjuryAlert
 import dev.gridiron.core.data.live.NewsAlert
+import dev.gridiron.core.ingest.currentSeason
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import java.time.LocalTime
 import java.util.concurrent.TimeUnit
 
 /**
@@ -33,12 +35,14 @@ class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
         val app = applicationContext as GridironApplication
         val alerts = app.settings.alerts.first()
         if (!alerts.any) return Result.success()
+        // In quiet hours the checks wait: the first run after 8 am finds every change since against the last seen.
+        val quiet = alerts.quietAt(LocalTime.now().hour)
         // The injury check refreshes ESPN's feeds, which the news check reads, so it runs whenever either is on.
-        if (alerts.injury || alerts.news) {
+        if (!quiet && (alerts.injury || alerts.news)) {
             val injuries = app.injuryAlerts.check()
             if (alerts.injury) notify(applicationContext, injuries)
         }
-        if (alerts.news) notifyNews(applicationContext, app.newsAlerts.check())
+        if (!quiet && alerts.news) notifyNews(applicationContext, app.newsAlerts.check())
         // Tuesday from 9: last week, the report card's place and this week's win chance, once.
         try {
             if (alerts.summary) app.weeklySummaryIfDue()?.let { notifySummary(applicationContext, it) }
@@ -46,6 +50,14 @@ class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
             throw e
         } catch (e: Exception) {
             // Not sent, so the next run tries again.
+        }
+        // Waiver trends' daily roster % snapshot, so its weekly change doesn't need the screen opened every day.
+        try {
+            app.waiverTrends.snapshotDaily(currentSeason())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Next run tries again.
         }
         // The week's kickoff windows each get a lineup check shortly before; a missing scoreboard just skips them.
         try {

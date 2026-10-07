@@ -10,4 +10,5 @@ android {
 dependencies {
     api(projects.core.data)
     api(projects.core.designsystem)
+    implementation(libs.androidx.core.ktx)
 }

@@ -120,6 +120,12 @@ internal fun SQLiteConnection.weekAgoRosterPct(day: Long): Map<String, Double> {
     }
 }
 
+internal fun SQLiteConnection.hasRosterPct(day: Long): Boolean =
+    prepare("SELECT 1 FROM roster_pct WHERE day = ? LIMIT 1").use {
+        it.bindLong(1, day)
+        it.step()
+    }
+
 private const val SNAPSHOT_DAYS = 30L
 private const val WEEK_DAYS = 7L
 private const val WEEK_MAX_DAYS = 10L
@@ -178,6 +184,16 @@ public class WaiverTrendsRepository(
         val result = WaiverTrendsResult(trends(fetched, weekAgo, ids), weekAgo.isNotEmpty(), null)
         last = Triple(season, now, result)
         result
+    }
+
+    /**
+     * The background job's daily snapshot: fetches (and so saves today's roster percentages) only when today has none,
+     * so the weekly change doesn't wait on the screen being opened. A failure throws; the next run tries again.
+     */
+    public suspend fun snapshotDaily(season: Int) {
+        val day = clock().atOffset(ZoneOffset.UTC).toLocalDate().toEpochDay()
+        if (db.read { it.hasRosterPct(day) }) return
+        load(season).error?.let { throw IOException(it) }
     }
 
     private fun describe(e: Throwable): String = when (e) {

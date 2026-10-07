@@ -116,6 +116,9 @@ private fun AlertsSection(settings: SettingsRepository) {
     AlertSwitch("Tuesday summary", "Last week's result, your report card place and this week's win chance.", now.summary, "summary") { on ->
         scope.launch { settings.setAlerts { it.copy(summary = on) } }
     }
+    AlertSwitch("Quiet hours", "Holds injury and news alerts from 10 pm to 8 am and sends them after. Lineup checks still come.", now.quiet, "quiet") { on ->
+        scope.launch { settings.setAlerts { it.copy(quiet = on) } }
+    }
 }
 
 @Composable

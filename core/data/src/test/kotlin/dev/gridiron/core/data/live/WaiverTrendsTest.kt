@@ -118,6 +118,17 @@ class WaiverTrendsTest {
     }
 
     @Test
+    fun `the daily snapshot fetches once a day, so a week of them turns on the weekly change`() = runTest {
+        repeat(3) { repository.snapshotDaily(2026) }
+        assertEquals(1, calls)
+        now += Duration.ofDays(1)
+        repository.snapshotDaily(2026)
+        assertEquals(2, calls)
+        now += Duration.ofDays(6)
+        assertTrue(repository.load(2026).weekly)
+    }
+
+    @Test
     fun `a snapshot more than ten days old is too stale to compare`() = runTest {
         repository.load(2026)
         now += Duration.ofDays(11)

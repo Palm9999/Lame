@@ -50,6 +50,7 @@ dependencies {
     implementation(projects.core.ingest)
     implementation(projects.core.designsystem)
     implementation(projects.core.charts)
+    implementation(projects.core.ui)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.work.runtime)

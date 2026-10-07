@@ -1,5 +1,7 @@
 package dev.gridiron.feature.compare
 
+import dev.gridiron.core.ui.SharePreview
+import dev.gridiron.core.ui.StatTableCard
 import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -32,7 +34,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -127,6 +131,13 @@ private fun CompareContent(
             onEvent(CompareEvent.MessageShown)
         }
     }
+    var sharing by remember { mutableStateOf(false) }
+    if (sharing) {
+        val card = remember(state.page) { compareCard(state.page) }
+        SharePreview("gridiron-compare.png", onDismiss = { sharing = false }) {
+            StatTableCard(card.title, card.subtitle, card.headers, card.rows)
+        }
+    }
 
     val landscape = LocalConfiguration.current.orientation == Configuration.ORIENTATION_LANDSCAPE
     // Kickers and defenses have no expected points, so a page without a scatter has no Scatter tab.
@@ -139,7 +150,7 @@ private fun CompareContent(
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            TopBar(state, onEvent, onBack, onEditProfiles)
+            TopBar(state, onEvent, onBack, onEditProfiles, onShare = { sharing = true })
             SlotHeaderRow(state.page.slots, onRemove = { onEvent(CompareEvent.RemoveSlot(it)) })
 
             PrimaryTabRow(selectedTabIndex = selectedIndex) {
@@ -201,7 +212,7 @@ private fun TablePane(state: CompareUiState.Ready, onEvent: (CompareEvent) -> Un
 }
 
 @Composable
-private fun TopBar(state: CompareUiState.Ready, onEvent: (CompareEvent) -> Unit, onBack: () -> Unit, onEditProfiles: () -> Unit) {
+private fun TopBar(state: CompareUiState.Ready, onEvent: (CompareEvent) -> Unit, onBack: () -> Unit, onEditProfiles: () -> Unit, onShare: () -> Unit) {
     Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         TextButton(onClick = onBack) { Text("← Back") }
         Text(
@@ -210,6 +221,7 @@ private fun TopBar(state: CompareUiState.Ready, onEvent: (CompareEvent) -> Unit,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
         )
+        TextButton(onClick = onShare, modifier = Modifier.testTag("share:compare")) { Text("Share") }
         ProfileChip(
             active = state.page.request.scoring,
             profiles = state.profiles,

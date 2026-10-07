@@ -33,4 +33,13 @@ class LiveFormatTest {
         assertEquals(listOf("Full · Wk 3", null), groups[1].lines.map { it.practice })
         assertEquals(listOf<String?>(null), groups[0].lines.map { it.practice })
     }
+
+    @Test
+    fun aDynastyLinePlacesHimOverallAndAtHisPosition() {
+        fun v(id: String?, pos: String, value: Int, rank: Int, posRank: Int) =
+            dev.gridiron.core.data.DynastyValue(null, id, id ?: "?", pos, null, null, value, value / 2, rank, posRank, 0)
+        val values = listOf(v("a", "WR", 9000, 1, 1), v("b", "RB", 7200, 2, 1), v(null, "RB", 5200, 3, 2))
+        assertEquals("7,200 · 2nd of 3 · 1st of 2 RBs · redraft 3,600", dynastyLine("b", values))
+        assertEquals(null, dynastyLine("z", values))
+    }
 }

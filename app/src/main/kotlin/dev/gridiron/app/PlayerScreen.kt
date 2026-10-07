@@ -37,7 +37,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.BreakoutRow
+import dev.gridiron.core.charts.ordinal
+import dev.gridiron.core.data.DynastyValue
 import dev.gridiron.core.data.InjuryReturnRepository
+import dev.gridiron.core.model.ScoringProfile
+import java.util.Locale
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerHeader
 import dev.gridiron.core.data.PlayerStats
@@ -61,7 +65,7 @@ import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.Roster
 import dev.gridiron.feature.projections.PlayerShareCard
 import dev.gridiron.feature.projections.ProjectionCard
-import dev.gridiron.feature.projections.SharePreview
+import dev.gridiron.core.ui.SharePreview
 import dev.gridiron.feature.projections.ThisWeekCard
 import dev.gridiron.feature.projections.loadProjectionCard
 import kotlinx.coroutines.CancellationException
@@ -89,6 +93,8 @@ data class PlayerPage(
     val statsUnavailable: Boolean = false,
     /** How soon he is likely back, while he is Out, Doubtful or on IR; null otherwise or with too little history. */
     val returnOutlook: ReturnOutlook? = null,
+    /** "5,200 · 34th of 420 · 8th of 95 RBs · redraft 3,100": his FantasyCalc dynasty value; null when unpriced. */
+    val dynasty: String? = null,
 )
 
 private val NO_CHANGES: StateFlow<Long> = MutableStateFlow(0L)
@@ -114,6 +120,8 @@ fun PlayerRoute(
     inactivesPosted: suspend (season: Int, week: Int) -> Set<String> = { _, _ -> emptySet() },
     /** Past absences, for how soon an injured player is likely back. */
     returns: InjuryReturnRepository? = null,
+    /** FantasyCalc's dynasty values under the profile's format; empty leaves the line out. */
+    dynastyValues: suspend (profile: ScoringProfile) -> List<DynastyValue> = { emptyList() },
 ) {
     val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList<Roster>()) }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
@@ -157,6 +165,13 @@ fun PlayerRoute(
         } catch (e: Exception) {
             null // never costs the rest of the page
         }
+        val dynasty = try {
+            active?.let { dynastyLine(playerId, dynastyValues(it)) }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            null // never costs the rest of the page
+        }
         page = PlayerPage(
             header = header,
             status = status,
@@ -166,6 +181,7 @@ fun PlayerRoute(
             projection = card,
             risingRole = rising,
             returnOutlook = outlook,
+            dynasty = dynasty,
         )
     }
     var season by remember(playerId) { mutableStateOf<Int?>(null) }
@@ -258,6 +274,10 @@ fun PlayerScreen(
                 page.risingRole?.let { row ->
                     item { SectionTitle("Rising role") }
                     item { RisingRoleLine(row) }
+                }
+                page.dynasty?.let { text ->
+                    item { SectionTitle("Dynasty value") }
+                    item { Text(text, Modifier.padding(horizontal = 16.dp).testTag("dynasty"), style = MaterialTheme.typography.bodyMedium) }
                 }
                 rosters?.let { list ->
                     item { SectionTitle("Rosters") }
@@ -393,4 +413,16 @@ private fun RisingRoleLine(row: BreakoutRow) {
         }
         Text(String.format(java.util.Locale.US, "%.0f", row.score), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
     }
+}
+
+/** [playerId]'s line from FantasyCalc's [values] (best first), places among players and at his position; null when unpriced. */
+internal fun dynastyLine(playerId: String, values: List<DynastyValue>): String? {
+    val v = values.firstOrNull { it.playerId == playerId } ?: return null
+    val atPosition = values.count { it.position == v.position }
+    return listOf(
+        String.format(Locale.US, "%,d", v.value),
+        "${ordinal(v.rank)} of ${values.size}",
+        "${ordinal(v.positionRank)} of $atPosition ${v.position}s",
+        "redraft ${String.format(Locale.US, "%,d", v.redraftValue)}",
+    ).joinToString(" · ")
 }

@@ -35,6 +35,14 @@ class TradeViewTest {
     }
 
     @Test
+    fun `a trade reads at dynasty value, unpriced players counting nothing`() {
+        val values = mapOf("a" to 5200, "b" to 6100, "c" to 300)
+        assertEquals("Dynasty value (FantasyCalc): send 5,200 · get 6,400 · +1,200", dynastyText(listOf("a", "x"), listOf("b", "c"), values))
+        assertEquals("Dynasty value (FantasyCalc): send 6,100 · get 0 · −6,100", dynastyText(listOf("b"), listOf("x"), values))
+        assertEquals(null, dynastyText(listOf("x"), listOf("y"), values))
+    }
+
+    @Test
     fun `a partner reads what they have and what you can offer`() {
         val fit = dev.gridiron.core.projections.PartnerFit(
             "Rivals", 150.0,
