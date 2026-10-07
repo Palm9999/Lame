@@ -12,7 +12,8 @@ class FtnPacksTest {
             listOf(
                 StatColumn.FTN_PLAY_ACTION_RATE, StatColumn.FTN_BLITZ_RATE, StatColumn.FTN_OUT_OF_POCKET_RATE,
                 StatColumn.FTN_THROWAWAY_RATE, StatColumn.FTN_INT_WORTHY_RATE, StatColumn.FTN_SCREEN_RATE,
-                StatColumn.FTN_RPO_RATE, StatColumn.FTN_MOTION_RATE, StatColumn.FTN_NO_HUDDLE_RATE, StatColumn.DROPBACKS,
+                StatColumn.FTN_RPO_RATE, StatColumn.FTN_MOTION_RATE, StatColumn.FTN_NO_HUDDLE_RATE,
+                StatColumn.FTN_SHOTGUN_RATE, StatColumn.FTN_FIRST_READ_RATE, StatColumn.FTN_AVG_RUSHERS, StatColumn.DROPBACKS,
             ),
             StatPack.FTN_PASSING.columns,
         )
