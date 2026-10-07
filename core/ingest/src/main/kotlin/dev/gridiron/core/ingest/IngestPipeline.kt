@@ -85,7 +85,7 @@ public class IngestPipeline(
     private val fetcher: Fetcher,
     private val workDir: File,
     private val playersFile: File,
-    private val gamesFile: File = playersFile.resolveSibling("games.csv"),
+    private val gamesFile: File = playersFile.resolveSibling("games.csv.gz"),
     private val now: () -> Instant = Instant::now,
 ) {
     /**

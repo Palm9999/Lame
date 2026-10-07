@@ -40,8 +40,8 @@ public object Sources {
             // FTN publishes 2022 onward, one uncompressed csv per season.
             Input.FTN -> "$NFLVERSE/ftn_charting/ftn_charting_$season.csv"
             Input.PLAYERS -> "$NFLVERSE/players/players.csv.gz"
-            // Every season since 1999 in one file: opponents, results, lines, starting QBs, coaches.
-            Input.GAMES -> "$NFLVERSE/schedules/games.csv"
+            // Every season since 1999 in one file (gzip only since October 2026): opponents, results, lines, starting QBs, coaches.
+            Input.GAMES -> "$NFLVERSE/schedules/games.csv.gz"
             // Next Gen Stats: every season in one file, so no season in the name.
             Input.NGS_PASSING -> "$NFLVERSE/nextgen_stats/ngs_passing.csv.gz"
             Input.NGS_RUSHING -> "$NFLVERSE/nextgen_stats/ngs_rushing.csv.gz"
