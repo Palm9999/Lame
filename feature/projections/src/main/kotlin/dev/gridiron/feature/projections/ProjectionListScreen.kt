@@ -461,7 +461,11 @@ public fun ProjectionListScreen(
                         val summary = widgetSummary(mine, rival)
                         LaunchedEffect(summary) { onLineupSummary(summary) }
                         val plan = remember(stashes, myTeam, partners) {
-                            stashes?.let { s -> myTeam.faabLeft?.let { claimPlan(s, it, partners.map { p -> p.teamName to p.faabLeft }) } }
+                            stashes?.let { s ->
+                                myTeam.faabLeft?.let {
+                                    claimPlan(s, it, partners.map { p -> p.teamName to p.faabLeft }, rosterValue(myTeam, state.rosRows, state.rosWeekly))
+                                }
+                            }
                         }
                         LineupList(
                             mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, weekRows, badges), faabText(myTeam),

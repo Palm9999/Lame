@@ -48,4 +48,24 @@ class ClaimPlanTest {
         val plan = claimPlan(listOf(add("a", 60.0, "x"), add("b", 60.0, "x"), add("c", 60.0, null)), left = 100, others = emptyList())
         assertEquals(listOf("#1 Add Pa ($50), drop Px", "#2 Add Pb ($50), drop Px · only if #1 fails", "#3 Add Pc ($25)"), plan.claims.map(::claimText))
     }
+
+    @Test
+    fun `a claim is valued on top of the claims above it, so a second back for one open spot bids less or not at all`() {
+        // One FLEX: Pa fills it for 60, Pb would too alone, but behind Pa he only adds bench depth.
+        val team = dev.gridiron.core.data.live.MyTeam(
+            "Mine", 2026, listOf(dev.gridiron.core.data.live.LeaguePlayer("1", "Px", "RB", "x"), dev.gridiron.core.data.live.LeaguePlayer("2", "Py", "RB", "y")),
+            mapOf("RB" to 1), slotsAreDefault = false,
+        )
+        fun r(id: String, pts: Double) = ProjectionRow(id, "P$id", "RB", "KC", pts, 0.0, 0.0)
+        val rows = listOf(r("x", 0.0), r("y", 0.0), r("a", 60.0), r("b", 60.0))
+        val value = rosterValue(team, rows, emptyMap())
+        val lines = listOf(PickupLine(r("a", 60.0), 60.0, "RB", null, r("x", 0.0)), PickupLine(r("b", 60.0), 60.0, "RB", null, r("y", 0.0)))
+        val plan = claimPlan(lines, left = 100, others = emptyList(), value = value)
+        assertEquals(60.0, plan.claims[0].gain, 1e-9)
+        // Behind Pa, Pb is only the best bench back: BENCH_WEIGHT (0.1) of his 60 points, so a small bid.
+        assertEquals(6.0, plan.claims[1].gain, 1e-9)
+        assertEquals(listOf(50, 5), plan.claims.map { it.bid })
+        // Alone, each looks like a full 60 points.
+        assertEquals(listOf(60.0, 60.0), claimPlan(lines, left = 100, others = emptyList()).claims.map { it.gain })
+    }
 }
