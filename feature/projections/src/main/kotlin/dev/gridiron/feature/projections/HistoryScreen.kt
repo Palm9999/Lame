@@ -39,6 +39,8 @@ import dev.gridiron.core.data.live.HistoryRecord
 import dev.gridiron.core.data.live.HistoryResult
 import dev.gridiron.core.data.live.HistoryTables
 import dev.gridiron.core.data.live.LeagueHistory
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -64,16 +66,24 @@ public class HistoryViewModel(private val history: suspend (Int) -> HistoryResul
     public val state: StateFlow<HistoryState> = _state.asStateFlow()
 
     public fun load(season: Int) {
+        _state.value = HistoryState.Loading
         viewModelScope.launch { _state.value = historyState(history(season)) }
     }
 }
 
 /** More → League history: the active ESPN league's seasons, all-time table, your head-to-head and records. */
 @Composable
-public fun HistoryRoute(season: Int, history: suspend (Int) -> HistoryResult, onBack: () -> Unit) {
+public fun HistoryRoute(
+    season: Int,
+    history: suspend (Int) -> HistoryResult,
+    onBack: () -> Unit,
+    /** The active league's id: switching leagues elsewhere reloads the screen. */
+    leagueId: Flow<String?> = flowOf(null),
+) {
     val vm: HistoryViewModel = viewModel(factory = viewModelFactory { initializer { HistoryViewModel(history) } })
     val state by vm.state.collectAsStateWithLifecycle()
-    LaunchedEffect(season) { vm.load(season) }
+    val active by leagueId.collectAsStateWithLifecycle(initialValue = null)
+    LaunchedEffect(season, active) { vm.load(season) }
     HistoryScreen(state, onBack)
 }
 

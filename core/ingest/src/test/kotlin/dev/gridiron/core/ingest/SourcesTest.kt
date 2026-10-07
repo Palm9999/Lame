@@ -52,5 +52,9 @@ class SourcesTest {
         val filter = Sources.headers(Input.ESPN_PROJECTIONS).getValue("X-Fantasy-Filter")
         assert("\"limit\":700" in filter && "\"filterStatsForSourceIds\":{\"value\":[1]}" in filter) { filter }
         assertEquals(emptyMap<String, String>(), Sources.headers(Input.PBP))
+        // Kickers and D/STs: their own URL and file, so they're fetched and kept apart.
+        assertEquals("espn_kd_projections_2026.json", Sources.fileName(Input.ESPN_KICKERS_DEFENSE, 2026))
+        assert(Sources.url(Input.ESPN_KICKERS_DEFENSE, 2026) != Sources.url(Input.ESPN_PROJECTIONS, 2026))
+        assert("\"filterSlotIds\":{\"value\":[16,17]}" in Sources.headers(Input.ESPN_KICKERS_DEFENSE).getValue("X-Fantasy-Filter"))
     }
 }

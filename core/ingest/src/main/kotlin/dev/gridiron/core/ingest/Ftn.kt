@@ -38,12 +38,19 @@ internal class FtnFlags(
     val noHuddle: Boolean = false,
     /** Defenders in the box; 0 where FTN didn't count them. */
     val box: Int = 0,
+    /** Where the quarterback lined up: "S" shotgun, "U" under center, "P" pistol, "0" or blank uncharted. */
+    val qbLocation: String = "",
+    /** Pass rushers; 0 where FTN didn't count them. */
+    val rushers: Int = 0,
+    /** The read the pass went to: "1" first, "2" second, "CHK", "DES", "SD"; "0" or blank uncharted. */
+    val read: String = "",
 )
 
 private val FLAG_COLUMNS = listOf(
     "is_catchable_ball", "is_contested_ball", "is_drop", "is_created_reception", "is_play_action",
     "is_qb_out_of_pocket", "is_throw_away", "is_interception_worthy", "n_blitzers",
     "is_screen_pass", "is_rpo", "is_motion", "is_no_huddle", "n_defense_box",
+    "qb_location", "n_pass_rushers", "read_thrown",
 )
 
 /** Every play FTN charted, keyed like play-by-play. Any column missing from the file throws. */
@@ -61,6 +68,9 @@ internal fun readFtn(input: InputStream, source: String): Map<FtnKey, FtnFlags> 
             screen = row.flag("is_screen_pass"), rpo = row.flag("is_rpo"),
             motion = row.flag("is_motion"), noHuddle = row.flag("is_no_huddle"),
             box = row.int("n_defense_box") ?: 0,
+            qbLocation = row.text("qb_location").orEmpty(),
+            rushers = row.int("n_pass_rushers") ?: 0,
+            read = row.text("read_thrown").orEmpty(),
         )
     }
     return index
@@ -97,6 +107,11 @@ internal class FtnAggregator(private val index: Map<FtnKey, FtnFlags>) {
         var motion = 0.0
         var boxCarries = 0.0
         var boxSum = 0.0
+        var shotgun = 0.0
+        var rushersDb = 0.0
+        var rushersSum = 0.0
+        var readAttempts = 0.0
+        var firstRead = 0.0
 
         fun columns(): MutableMap<String, Double?> {
             val values = LinkedHashMap<String, Double?>()
@@ -135,6 +150,14 @@ internal class FtnAggregator(private val index: Map<FtnKey, FtnFlags>) {
                 values["ftn_rpo_rate"] = rpo / dropbacks
                 values["ftn_no_huddle_rate"] = noHuddle / dropbacks
                 values["ftn_motion_rate"] = motion / dropbacks
+                values["ftn_shotgun_db"] = shotgun
+                values["ftn_shotgun_rate"] = shotgun / dropbacks
+                values["ftn_rushers_db"] = rushersDb
+                values["ftn_rushers_sum"] = rushersSum
+                if (rushersDb > 0) values["ftn_avg_rushers"] = rushersSum / rushersDb
+                values["ftn_read_att"] = readAttempts
+                values["ftn_first_read"] = firstRead
+                if (readAttempts > 0) values["ftn_first_read_rate"] = firstRead / readAttempts
             }
             if (boxCarries > 0) {
                 values["ftn_box_carries"] = boxCarries
@@ -190,6 +213,15 @@ internal class FtnAggregator(private val index: Map<FtnKey, FtnFlags>) {
             if (flags.rpo) a.rpo += weight
             if (flags.noHuddle) a.noHuddle += weight
             if (flags.motion) a.motion += weight
+            if (flags.qbLocation == "S") a.shotgun += weight
+            if (flags.rushers > 0) {
+                a.rushersDb += weight
+                a.rushersSum += weight * flags.rushers
+            }
+            if (attempt > 0.0 && flags.read.isNotEmpty() && flags.read != "0") {
+                a.readAttempts += attempt
+                if (flags.read == "1") a.firstRead += attempt
+            }
         }
         p.rusher?.let { rusher ->
             if (flags.box <= 0) return@let

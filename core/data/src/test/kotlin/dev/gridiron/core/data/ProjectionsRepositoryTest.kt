@@ -218,4 +218,22 @@ class ProjectionsRepositoryTest {
             assertEquals(emptyList<Any>(), ProjectionsRepository(executor).espnWeek(2026, 6))
         }
     }
+
+    @Test
+    fun `rosDiscounted names who nflverse lists Out or Doubtful that week, and nothing on failure`() = runTest {
+        jdbcFixtureWithSchema(
+            insertProjectionRows = listOf(
+                "CREATE TABLE injury_report (player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL, status TEXT)",
+                "INSERT INTO injury_report VALUES ('P1', 2026, 6, 'Out')",
+                "INSERT INTO injury_report VALUES ('P2', 2026, 6, 'Doubtful')",
+                "INSERT INTO injury_report VALUES ('P3', 2026, 6, 'Questionable')",
+                "INSERT INTO injury_report VALUES ('P4', 2026, 5, 'Out')",
+            ),
+        ).use { executor ->
+            assertEquals(mapOf("P1" to "Out", "P2" to "Doubtful"), ProjectionsRepository(executor).rosDiscounted(2026, 6))
+        }
+        jdbcFixtureWithSchema(emptyList()).use { executor ->
+            assertEquals(emptyMap<String, String>(), ProjectionsRepository(executor).rosDiscounted(2026, 6))
+        }
+    }
 }

@@ -2,6 +2,7 @@ package dev.gridiron.core.statquery
 
 import dev.gridiron.core.statquery.Aggregate.ClampedWeightedSum
 import dev.gridiron.core.statquery.Aggregate.ClampedWeightedSum.Term
+import dev.gridiron.core.statquery.Aggregate.External
 import dev.gridiron.core.statquery.Aggregate.Ratio
 import dev.gridiron.core.statquery.Aggregate.RisingRole
 import dev.gridiron.core.statquery.Aggregate.Scored
@@ -108,6 +109,9 @@ public enum class StatColumn(
     FTN_NO_HUDDLE_RATE("ftn_no_huddle_rate", Ratio(C.FTN_NO_HUDDLE_DB, C.FTN_DROPBACKS)),
     FTN_MOTION_RATE("ftn_motion_rate", Ratio(C.FTN_MOTION_DB, C.FTN_DROPBACKS)),
     FTN_AVG_BOX("ftn_avg_box", Ratio(C.FTN_BOX_SUM, C.FTN_BOX_CARRIES)),
+    FTN_SHOTGUN_RATE("ftn_shotgun_rate", Ratio(C.FTN_SHOTGUN_DB, C.FTN_DROPBACKS)),
+    FTN_FIRST_READ_RATE("ftn_first_read_rate", Ratio(C.FTN_FIRST_READ, C.FTN_READ_ATT)),
+    FTN_AVG_RUSHERS("ftn_avg_rushers", Ratio(C.FTN_RUSHERS_SUM, C.FTN_RUSHERS_DB), higherIsBetter = false),
 
     // Kicking (the Grid's K chip)
     FG_MADE("fg_made", Total(C.FG_MADE)),
@@ -133,6 +137,9 @@ public enum class StatColumn(
 
     // Rising roles: the forecast's signal for the week after the range, not a sum of weekly facts.
     RISING_ROLES("rising_roles", RisingRole),
+
+    // FantasyCalc's dynasty value under the active format, bound in from the spec (blank without it).
+    DYNASTY_VALUE("dynasty_value", External),
     ;
 
     /**
@@ -150,7 +157,8 @@ public enum class StatColumn(
             NGS_SEPARATION, NGS_CUSHION, NGS_YAC_OVER_EXPECTED -> TARGETS
             FTN_CATCHABLE_RATE, FTN_DROP_RATE, FTN_CONTESTED_RATE, FTN_SCREEN_TARGET_RATE, FTN_MOTION_TARGET_RATE -> TARGETS
             FTN_PLAY_ACTION_RATE, FTN_BLITZ_RATE, FTN_OUT_OF_POCKET_RATE, FTN_THROWAWAY_RATE,
-            FTN_SCREEN_RATE, FTN_RPO_RATE, FTN_NO_HUDDLE_RATE, FTN_MOTION_RATE -> DROPBACKS
+            FTN_SCREEN_RATE, FTN_RPO_RATE, FTN_NO_HUDDLE_RATE, FTN_MOTION_RATE, FTN_SHOTGUN_RATE, FTN_AVG_RUSHERS -> DROPBACKS
+            FTN_FIRST_READ_RATE -> ATTEMPTS
             FTN_AVG_BOX -> CARRIES
             FTN_INT_WORTHY_RATE -> ATTEMPTS
             SNAP_SHARE -> OFFENSE_SNAPS
@@ -163,6 +171,9 @@ public enum class StatColumn(
     /** Read from the forecast's `player_week_signal`, not computed from facts. */
     public val isSignal: Boolean get() = aggregate === RisingRole
 
-    /** Has no stored weekly facts: scored on the device or written by the forecast. */
-    public val isComputed: Boolean get() = isFantasy || isSignal
+    /** Not in `stats.db` at all: [StatQuerySpec.external] carries its values. */
+    public val isExternal: Boolean get() = aggregate === External
+
+    /** Has no stored weekly facts: scored on the device, written by the forecast or bound in from outside. */
+    public val isComputed: Boolean get() = isFantasy || isSignal || isExternal
 }

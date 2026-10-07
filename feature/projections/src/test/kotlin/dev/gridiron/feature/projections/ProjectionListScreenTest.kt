@@ -9,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.hasTestTag
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToNode
@@ -325,16 +326,23 @@ class ProjectionListScreenTest {
         }
         compose.onNodeWithTag("chip:trade").performScrollTo().performClick()
         compose.waitForIdle()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("give:r2"))
         compose.onNodeWithTag("give:r2").performClick()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("get:w3"))
         compose.onNodeWithTag("get:w3").performClick()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("trade:verdict"))
         compose.onNodeWithTag("trade:verdict").assertTextEquals("Good for both teams")
         // Each lineup plus a tenth of its best bench player: mine 410 + 14 → 490 + 6, theirs 390 + 14 → 480 + 5.
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("trade:mine"))
         compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +72.0 (424.0 → 496.0)")
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("trade:theirs"))
         compose.onNodeWithTag("trade:theirs").assertTextEquals("Rivals +81.0 (404.0 → 485.0)")
         // No weekly projections: no playoff line.
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("trade:verdict"))
         compose.onNodeWithTag("trade:playoffs").assertDoesNotExist()
         compose.waitUntil(5_000) { compose.onAllNodesWithTag("idea:0").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("idea:0").performClick()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("trade:mine"))
         compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +82.0 (424.0 → 506.0)")
     }
 
@@ -353,10 +361,15 @@ class ProjectionListScreenTest {
         }
         compose.onNodeWithTag("chip:trade").performScrollTo().performClick()
         compose.waitForIdle()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("give:r2"))
         compose.onNodeWithTag("give:r2").performClick()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("give:w1"))
         compose.onNodeWithTag("give:w1").performClick()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("get:w3"))
         compose.onNodeWithTag("get:w3").performClick()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("trade:playoffs"))
         compose.onNodeWithTag("trade:playoffs").assertTextEquals("Playoffs (weeks 15–17): you +66.0, them +82.0")
+        compose.onNodeWithTag("trade").performScrollToNode(hasText("Rivals cuts Their RB to make room.", substring = true))
         compose.onNodeWithText("Rivals cuts Their RB to make room.").assertIsDisplayed()
     }
 
@@ -373,16 +386,23 @@ class ProjectionListScreenTest {
         }
         compose.onNodeWithTag("chip:trade").performScrollTo().performClick()
         compose.waitForIdle()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("give:w1"))
         compose.onNodeWithTag("give:w1").performClick()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("get:w3"))
         compose.onNodeWithTag("get:w3").performClick()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("get:r3"))
         compose.onNodeWithTag("get:r3").performClick()
         // The lowest goes by default: Their RB (50). Mine 490 plus a tenth of r2 (140) on the bench.
+        compose.onNodeWithTag("trade").performScrollToNode(hasText("You cut Their RB to make room.", substring = true))
         compose.onNodeWithText("You cut Their RB to make room.").assertIsDisplayed()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("trade:mine"))
         compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +80.0 (424.0 → 504.0)")
         compose.onNodeWithTag("cut:w1").assertDoesNotExist()
         compose.onNodeWithTag("cut:r2").performClick()
         // Cutting r2 instead leaves Their RB (50) on the bench.
+        compose.onNodeWithTag("trade").performScrollToNode(hasText("You cut Mine RB Two to make room.", substring = true))
         compose.onNodeWithText("You cut Mine RB Two to make room.").assertIsDisplayed()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("trade:mine"))
         compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +71.0 (424.0 → 495.0)")
     }
 
@@ -475,6 +495,7 @@ class ProjectionListScreenTest {
         assertEquals(1, asked)
         compose.onNodeWithTag("offer:gain:t1", useUnmergedTree = true).assertTextEquals("+72.0")
         compose.onNodeWithTag("offer:t1").performClick()
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("trade:mine"))
         compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +72.0 (424.0 → 496.0)")
     }
 

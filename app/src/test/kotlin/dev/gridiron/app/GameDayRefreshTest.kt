@@ -20,4 +20,18 @@ class GameDayRefreshTest {
         // Monday 15:00 exactly → Thursday.
         assertEquals("2026-10-15T15:00-04:00[America/New_York]", next("2026-10-12T15:00-04:00[America/New_York]"))
     }
+
+    @Test
+    fun `picked times replace the defaults`() {
+        val times = mapOf(java.time.DayOfWeek.SUNDAY to java.time.LocalTime.of(11, 30))
+        // Tuesday → Sunday 11:30, the only time left.
+        assertEquals("2026-10-11T11:30-04:00[America/New_York]", nextGameDayRefresh(ZonedDateTime.parse("2026-10-06T12:00-04:00[America/New_York]"), times).toString())
+    }
+
+    @Test
+    fun `the offseason waits for September`() {
+        // Mid-February still runs; a March date waits for the first Thursday from September 1 (2027-09-02).
+        assertEquals("2027-02-14T09:00-05:00[America/New_York]", next("2027-02-13T23:00-05:00[America/New_York]"))
+        assertEquals("2027-09-02T15:00-04:00[America/New_York]", next("2027-03-02T12:00-05:00[America/New_York]"))
+    }
 }

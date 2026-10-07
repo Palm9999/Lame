@@ -60,9 +60,12 @@ public data class DifferRow(val playerId: String, val name: String, val position
     val gap: Double get() = app - espn
 }
 
-private val DIFFER_POSITIONS = listOf("QB", "RB", "WR", "TE")
+private val DIFFER_POSITIONS = listOf("QB", "RB", "WR", "TE", "K", "DST")
 
-/** The [limit] biggest gaps one way ([above]: the app higher), at [position] or all four offensive positions. */
+/** Positions the forecast never blends with ESPN: their final projection is already the model alone. */
+private val MODEL_ONLY = setOf("K", "DST")
+
+/** The [limit] biggest gaps one way ([above]: the app higher), at [position] or every position ESPN projects. */
 public fun differRows(app: List<ListedProjection>, espn: List<ListedProjection>, profile: ScoringProfile, above: Boolean, position: String?, limit: Int = 15): List<DifferRow> {
     val theirs = espn.associateBy { it.playerId }
     return app.mapNotNull { a ->
@@ -174,7 +177,7 @@ public fun DifferScreen(
                         if (alone) {
                             "Week ${state.week}, your scoring. The model alone, before ESPN, props and the Questionable discount."
                         } else {
-                            "Week ${state.week}, your scoring. The app's number already leans 50–65% on ESPN's, so a gap is where its own model disagrees."
+                            "Week ${state.week}, your scoring. The app's number already leans 50–65% on ESPN's, so a gap is where its own model disagrees. K and D/ST are the model alone."
                         },
                         Modifier.padding(horizontal = 16.dp),
                         style = MaterialTheme.typography.labelSmall,
@@ -192,10 +195,10 @@ public fun DifferScreen(
                     }
                     Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         for (p in listOf(null) + DIFFER_POSITIONS) {
-                            FilterChip(selected = position == p, onClick = { position = p }, label = { Text(p ?: "All") }, modifier = Modifier.testTag("pos:${p ?: "all"}"))
+                            FilterChip(selected = position == p, onClick = { position = p }, label = { Text(p?.let(Position::label) ?: "All") }, modifier = Modifier.testTag("pos:${p ?: "all"}"))
                         }
                     }
-                    val rows = differRows(if (alone) state.model else state.app, state.espn, profile, above, position, limit = if (freeOnly) Int.MAX_VALUE else 15)
+                    val rows = differRows(if (alone) state.model + state.app.filter { it.position in MODEL_ONLY } else state.app, state.espn, profile, above, position, limit = if (freeOnly) Int.MAX_VALUE else 15)
                         .map { it to ownerOf(it.playerId, league, mine) }
                         .filter { (_, owner) -> !freeOnly || owner == Owner.FreeAgent }
                         .take(15)
@@ -209,7 +212,7 @@ public fun DifferScreen(
                                 Column(Modifier.weight(1f)) {
                                     Text(r.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                     Text(
-                                        listOfNotNull(r.position, r.team).joinToString(" · "),
+                                        listOfNotNull(Position.label(r.position), r.team).joinToString(" · "),
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )

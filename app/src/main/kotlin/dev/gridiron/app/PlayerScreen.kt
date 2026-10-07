@@ -438,6 +438,7 @@ private fun ReturnOutlookLine(outlook: ReturnOutlook) {
             modifier = Modifier.padding(top = 4.dp, bottom = 4.dp),
             max = 1.0,
             height = 56.dp,
+            detail = { i -> "By week ${outlook.weeks[i]}: ${Math.round(outlook.chances[i] * 100).coerceIn(0, 100)}% chance he has played" },
         )
         Text(outlook.basisText(), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }

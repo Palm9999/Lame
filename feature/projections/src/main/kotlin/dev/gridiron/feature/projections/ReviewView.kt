@@ -1,6 +1,5 @@
 package dev.gridiron.feature.projections
 
-import dev.gridiron.core.ui.SharePreview
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,9 +27,11 @@ import dev.gridiron.core.data.live.LineupReviewResult
 import dev.gridiron.core.data.live.MatchupPlayer
 import dev.gridiron.core.data.live.ReportCard
 import dev.gridiron.core.data.live.WeekReview
-import java.util.Locale
+import dev.gridiron.core.designsystem.SectionHeader
+import dev.gridiron.core.ui.SharePreview
 import kotlin.math.abs
 import kotlin.math.roundToInt
+import java.util.Locale
 
 /** The lineup review: asked for when the mode opens, being fetched, or read. */
 public sealed interface ReviewState {
@@ -123,7 +124,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.recapItems(recap: Lea
         }
     }
     if (recap.luck.isNotEmpty()) {
-        item { Label("Luck: record against scores") }
+        item { SectionHeader("Luck: record against scores") }
         item {
             Text(
                 "All-play wins: the games each team would have won playing every other team each week. Above zero, a better record than its scores earned.",
@@ -200,14 +201,9 @@ private fun Line(text: String) {
 @Composable
 private fun LabelWithShare(text: String, tag: String, onShare: () -> Unit) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-        Box(Modifier.weight(1f)) { Label(text) }
+        Box(Modifier.weight(1f)) { SectionHeader(text) }
         TextButton(onClick = onShare, modifier = Modifier.padding(top = 8.dp).testTag(tag)) { Text("Share") }
     }
-}
-
-@Composable
-private fun Label(text: String) {
-    Text(text, Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 private fun pts(value: Double): String = String.format(Locale.US, "%.1f", value)

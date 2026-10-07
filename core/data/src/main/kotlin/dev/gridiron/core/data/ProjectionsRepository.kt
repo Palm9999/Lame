@@ -92,7 +92,7 @@ public class ProjectionsRepository(private val executor: QueryExecutor) {
 
     public suspend fun rosAll(season: Int): List<ListedProjection> = listed(ProjectionQueries.rosAll(season))
 
-    /** ESPN's projection for [week] (QB, RB, WR and TE); empty when the database predates `espn_projection` or has none. */
+    /** ESPN's projection for [week] (QB, RB, WR, TE, and K and D/ST from builds since they were stored); empty when the database predates `espn_projection` or has none. */
     /** The model's own projection before ESPN, props and the Questionable discount; only players ESPN projects. Empty on failure. */
     public suspend fun modelWeek(season: Int, week: Int): List<ListedProjection> = try {
         listed(ProjectionQueries.weekAll(season, week, stage = "model"))
@@ -113,6 +113,15 @@ public class ProjectionsRepository(private val executor: QueryExecutor) {
     /** Each Questionable player's discount that week (what such players score, relative to healthy: 0.52-0.87); empty on failure. */
     public suspend fun questionable(season: Int, week: Int): Map<String, Double> = try {
         executor.query(ProjectionQueries.questionable(season, week)) { it.text(0) to kotlin.math.exp(it.double(1)) }.toMap()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyMap()
+    }
+
+    /** Players whose rest of season carries the injury discount, with their status ("Out", "Doubtful"); empty on failure. */
+    public suspend fun rosDiscounted(season: Int, week: Int): Map<String, String> = try {
+        executor.query(ProjectionQueries.rosDiscounted(season, week)) { it.text(0) to it.text(1) }.toMap()
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {

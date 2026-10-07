@@ -7,8 +7,10 @@ from gridiron_etl import ftn
 
 FLAG_COLS = ["is_play_action", "is_qb_out_of_pocket", "is_interception_worthy", "is_throw_away", "is_catchable_ball",
              "is_contested_ball", "is_created_reception", "is_drop", "n_blitzers",
-             "is_screen_pass", "is_rpo", "is_motion", "is_no_huddle", "n_defense_box"]
-COUNT_COLS = ("n_blitzers", "n_defense_box")
+             "is_screen_pass", "is_rpo", "is_motion", "is_no_huddle", "n_defense_box",
+             "qb_location", "n_pass_rushers", "read_thrown"]
+COUNT_COLS = ("n_blitzers", "n_defense_box", "n_pass_rushers")
+TEXT_COLS = ("qb_location", "read_thrown")
 
 
 def play(play_id: int, **kw) -> dict:
@@ -30,6 +32,9 @@ def flags(**kw) -> dict:
     row = {c: "FALSE" for c in FLAG_COLS}
     row["n_blitzers"] = kw.pop("blitzers", 0)
     row["n_defense_box"] = kw.pop("box", 0)
+    row["qb_location"] = kw.pop("qb_location", "0")
+    row["n_pass_rushers"] = kw.pop("rushers", 0)
+    row["read_thrown"] = kw.pop("read", "0")
     row.update({COLUMN_OF[k]: ("TRUE" if v else "FALSE") for k, v in kw.items()})
     return row
 
@@ -55,8 +60,9 @@ def row(df: pl.DataFrame, player: str, week: int = 1) -> dict:
 
 def test_flags_read_true_false_and_a_blank_as_false():
     raw = pl.DataFrame({"nflverse_game_id": ["g1", "g1"], "nflverse_play_id": [1, 2],
-                        **{c: ["TRUE", ""] for c in FLAG_COLS if c not in COUNT_COLS}, "n_blitzers": ["2", ""],
-                        "n_defense_box": ["7", ""]})
+                        **{c: ["TRUE", ""] for c in FLAG_COLS if c not in COUNT_COLS + TEXT_COLS}, "n_blitzers": ["2", ""],
+                        "n_defense_box": ["7", ""], "qb_location": ["S", ""], "n_pass_rushers": ["4", ""],
+                        "read_thrown": ["1", ""]})
     out = ftn.flags(raw).sort("play_id")
     assert out["drop"].to_list() == [True, False]
     assert out["blitzers"].to_list() == [2, 0]
@@ -89,6 +95,23 @@ def test_screens_and_motion_go_to_the_target_and_the_passer_rpo_and_no_huddle_to
     assert (wr["ftn_screen_targets"], wr["ftn_screen_target_rate"], wr["ftn_motion_target_rate"]) == (1.0, 0.25, 0.5)
     qb = row(df, "QB1")
     assert (qb["ftn_screen_rate"], qb["ftn_rpo_rate"], qb["ftn_no_huddle_rate"], qb["ftn_motion_rate"]) == (0.25, 0.25, 0.25, 0.5)
+
+
+def test_shotgun_pass_rushers_and_first_reads_are_credited_to_the_passer_over_their_own_denominators():
+    sack = play(4, receiver_player_id=None, pass_attempt=0, sack=1)
+    df = run((play(1), flags(qb_location="S", rushers=4, read="1")), (play(2), flags(qb_location="U", rushers=6, read="2")),
+             (play(3), flags(qb_location="S", read="0")), (sack, flags(qb_location="S", rushers=5, read="1")))
+    qb = row(df, "QB1")
+    assert (qb["ftn_shotgun_db"], qb["ftn_shotgun_rate"]) == (3.0, 0.75)
+    assert (qb["ftn_rushers_db"], qb["ftn_rushers_sum"], qb["ftn_avg_rushers"]) == (3.0, 15.0, 5.0)
+    assert (qb["ftn_read_att"], qb["ftn_first_read"], qb["ftn_first_read_rate"]) == (2.0, 1.0, 0.5)
+
+
+def test_no_counted_rushers_or_charted_reads_leave_those_rates_unset():
+    qb = row(run((play(1), flags())), "QB1")
+    assert qb["ftn_rushers_db"] == 0.0
+    assert qb["ftn_avg_rushers"] is None
+    assert qb["ftn_first_read_rate"] is None
 
 
 def test_the_box_count_averages_over_the_rushers_carries_ftn_counted_it_on():

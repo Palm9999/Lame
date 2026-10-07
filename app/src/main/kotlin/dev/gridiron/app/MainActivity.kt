@@ -22,10 +22,13 @@ class MainActivity : ComponentActivity() {
         // Injury alerts follow the Settings switch; turned on, they need Android's leave to notify (asked once here,
         // and Android stops asking after the user declines twice).
         lifecycleScope.launch {
+            var times: Any? = null
             app.settings.alerts.collect { alerts ->
                 val on = alerts.any
                 InjuryAlertWorker.schedule(this@MainActivity, on)
-                GameDayRefreshWorker.schedule(this@MainActivity, alerts.refresh)
+                // New times rebook the waiting run; anything else keeps it.
+                GameDayRefreshWorker.schedule(this@MainActivity, alerts.refresh, rebook = times != null && times != alerts.refreshTimes)
+                times = alerts.refreshTimes
                 // Off forgets what was seen, so turning an alert back on doesn't replay every change since.
                 if (!alerts.injury) app.injuryAlerts.forget()
                 if (!alerts.news) app.newsAlerts.forget()

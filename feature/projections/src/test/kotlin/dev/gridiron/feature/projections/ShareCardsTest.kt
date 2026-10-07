@@ -99,4 +99,12 @@ class ShareCardsTest {
         assertEquals(40, back.width)
         assertEquals(20, back.height)
     }
+
+    @Test
+    fun `a shared card is scaled to 1080 pixels wide whatever the screen`() {
+        val small = android.graphics.Bitmap.createBitmap(360, 200, android.graphics.Bitmap.Config.ARGB_8888)
+        val out = dev.gridiron.core.ui.ImageShare.fixedWidth(small)
+        assertEquals(1080, out.width)
+        assertEquals(600, out.height)
+    }
 }

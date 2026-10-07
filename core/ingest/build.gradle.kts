@@ -6,6 +6,7 @@ plugins {
 // stats.db from nflverse, and CI runs it on the JVM against the Python ETL.
 dependencies {
     api(projects.core.forecast)
+    implementation(projects.core.model)
     implementation(projects.core.statquery)
     implementation(libs.androidx.sqlite)
     implementation(libs.androidx.sqlite.bundled)

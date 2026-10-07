@@ -46,6 +46,8 @@ public data class ProjectionRow(
     val usage: Usage? = null,
     /** The Questionable discount in [points] (what such players score relative to healthy), when he has one. */
     val questionable: Double? = null,
+    /** "Out" or "Doubtful" this week (nflverse): rest-of-season [points] count his chance of missing each coming game. */
+    val rosDiscount: String? = null,
 )
 
 /** One week's projected carries and targets, and the points (under the active profile) from rushing and from receiving. */
@@ -145,12 +147,15 @@ internal fun toRows(
     profile: ScoringProfile,
     week: Boolean = false,
     questionable: Map<String, Double> = emptyMap(),
+    discounted: Map<String, String> = emptyMap(),
 ): List<ProjectionRow> = listed.mapNotNull { p ->
     val position = p.position ?: return@mapNotNull null
     val points = projectPoints(p.components, profile, Position.fromCode(position), draws = LIST_DRAWS)
     val td = if (week && position in TD_POSITIONS) anytimeTd(p.components) else null
     val usage = if (week && position in TD_POSITIONS) usage(p.components, profile, Position.fromCode(position)) else null
-    ProjectionRow(p.playerId, p.name, position, p.team, points.points, points.floor, points.ceiling, tdChance = td, usage = usage, questionable = questionable[p.playerId])
+    ProjectionRow(p.playerId, p.name, position, p.team, points.points, points.floor, points.ceiling, tdChance = td, usage = usage, questionable = questionable[p.playerId],
+        rosDiscount = if (week) null else discounted[p.playerId],
+    )
 }
 
 private fun usage(components: List<ProjectionComponent>, profile: ScoringProfile, position: Position?): Usage {
@@ -224,8 +229,9 @@ public class ProjectionListViewModel(
                 val weekListed = repository.weekAll(season, week)
                 val rosListed = repository.rosAll(season)
                 val questionable = repository.questionable(season, week)
+                val discounted = repository.rosDiscounted(season, week)
                 withContext(compute) {
-                    ProjectionListState.Loaded(week, status.builtAt, toRows(weekListed, profile, week = true, questionable), toRows(rosListed, profile))
+                    ProjectionListState.Loaded(week, status.builtAt, toRows(weekListed, profile, week = true, questionable), toRows(rosListed, profile, discounted = discounted))
                 }
             }
         }

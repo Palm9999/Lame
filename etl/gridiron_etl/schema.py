@@ -208,6 +208,7 @@ UNWINDOWED_METRICS = (
     "ftn_blitz_rate", "ftn_catchable_rate", "ftn_contested_rate", "ftn_drop_rate", "ftn_int_worthy_rate",
     "ftn_out_of_pocket_rate", "ftn_play_action_rate", "ftn_throwaway_rate", "ftn_screen_target_rate", "ftn_motion_target_rate",
     "ftn_screen_rate", "ftn_rpo_rate", "ftn_no_huddle_rate", "ftn_motion_rate", "ftn_avg_box",
+    "ftn_shotgun_rate", "ftn_avg_rushers", "ftn_first_read_rate",
     "ngs_aggressiveness", "ngs_cushion", "ngs_intended_air_yards", "ngs_rush_efficiency", "ngs_ryoe_per_att",
     "ngs_separation", "ngs_stacked_box_pct", "ngs_time_to_throw", "ngs_yac_over_expected",
     "fg_att_0_39", "fg_att_40_49", "fg_att_50", "rec_epa",

@@ -22,6 +22,14 @@ class TradeViewTest {
     }
 
     @Test
+    fun `a discounted rest of season is tagged`() {
+        val team = MyTeam("Mine", 2026, listOf(LeaguePlayer("2", "Star", "RB", "s")), mapOf("RB" to 1), slotsAreDefault = false)
+        val rows = mapOf("s" to ProjectionRow("s", "Star Back", "RB", "KC", 80.0, 0.0, 0.0, rosDiscount = "Doubtful"))
+        assertEquals("Doubtful", tradePlayers(team, rows).single().discount)
+        assertEquals("Doubtful: misses counted", discountTag("Doubtful"))
+    }
+
+    @Test
     fun `the verdict reads the trade from your side`() {
         fun v(mine: Double, theirs: Double) = verdict(TradeOutcome(100.0, 100.0 + mine, 100.0, 100.0 + theirs))
         assertEquals("Good for both teams", v(10.0, 5.0))

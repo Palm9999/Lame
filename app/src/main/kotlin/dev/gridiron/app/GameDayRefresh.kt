@@ -17,6 +17,8 @@ import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import dev.gridiron.core.datastore.AlertSwitches
+import kotlinx.coroutines.flow.first
 import java.time.DayOfWeek
 import java.time.Duration
 import java.time.LocalTime
@@ -24,19 +26,19 @@ import java.time.ZonedDateTime
 import java.time.temporal.TemporalAdjusters
 import java.util.concurrent.TimeUnit
 
-/** The next game-day refresh after [now]: Thursday 3 pm, Saturday 10 pm, Sunday 9 am or Monday 3 pm, in [now]'s zone. */
-internal fun nextGameDayRefresh(now: ZonedDateTime): ZonedDateTime =
-    listOf(
-        DayOfWeek.THURSDAY to LocalTime.of(15, 0),
-        DayOfWeek.SATURDAY to LocalTime.of(22, 0),
-        DayOfWeek.SUNDAY to LocalTime.of(9, 0),
-        DayOfWeek.MONDAY to LocalTime.of(15, 0),
-    )
-        .map { (day, time) ->
-            val at = now.with(TemporalAdjusters.nextOrSame(day)).with(time)
-            if (at.isAfter(now)) at else at.plusWeeks(1)
-        }
-        .min()
+/**
+ * The next game-day refresh after [now], in [now]'s zone: the first of [times] (by default Thursday 3 pm, Saturday
+ * 10 pm, Sunday 9 am, Monday 3 pm) that falls in the season. From March through August there are no games, so the
+ * next one is the first after September 1.
+ */
+internal fun nextGameDayRefresh(now: ZonedDateTime, times: Map<DayOfWeek, LocalTime> = AlertSwitches.DEFAULT_REFRESH_TIMES): ZonedDateTime {
+    // ponytail: calendar months, not the schedule; the Super Bowl ends by mid-February and week 1 starts after Labor Day.
+    val from = if (now.monthValue in 3..8) now.withMonth(9).withDayOfMonth(1).with(LocalTime.MIDNIGHT) else now
+    return times.map { (day, time) ->
+        val at = from.with(TemporalAdjusters.nextOrSame(day)).with(time)
+        if (at.isAfter(from)) at else at.plusWeeks(1)
+    }.min()
+}
 
 /**
  * Rebuilds the stats at [nextGameDayRefresh], with a network, then books the next one. Running inside WorkManager,
@@ -77,15 +79,20 @@ class GameDayRefreshWorker(context: Context, params: WorkerParameters) : Corouti
             NotificationManagerCompat.from(context).notify(CHANNEL.hashCode(), notification)
         }
 
-        /** Books the next refresh, keeping one already booked, or cancels it. */
-        fun schedule(context: Context, on: Boolean) {
-            if (on) enqueue(context, ExistingWorkPolicy.KEEP) else WorkManager.getInstance(context).cancelUniqueWork(WORK)
+        /** Books the next refresh, keeping one already booked unless [rebook] (the times changed), or cancels it. */
+        suspend fun schedule(context: Context, on: Boolean, rebook: Boolean = false) {
+            when {
+                !on -> WorkManager.getInstance(context).cancelUniqueWork(WORK)
+                rebook -> enqueue(context, ExistingWorkPolicy.REPLACE)
+                else -> enqueue(context, ExistingWorkPolicy.KEEP)
+            }
         }
 
-        private fun enqueue(context: Context, policy: ExistingWorkPolicy) {
+        private suspend fun enqueue(context: Context, policy: ExistingWorkPolicy) {
+            val times = (context.applicationContext as GridironApplication).settings.alerts.first().refreshTimes
             val now = ZonedDateTime.now()
             val request = OneTimeWorkRequestBuilder<GameDayRefreshWorker>()
-                .setInitialDelay(Duration.between(now, nextGameDayRefresh(now)).toMillis(), TimeUnit.MILLISECONDS)
+                .setInitialDelay(Duration.between(now, nextGameDayRefresh(now, times)).toMillis(), TimeUnit.MILLISECONDS)
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(WORK, policy, request)

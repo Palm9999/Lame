@@ -16,6 +16,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.live.MyTeam
+import dev.gridiron.core.designsystem.SectionHeader
 import dev.gridiron.core.projections.LineupCandidate
 import dev.gridiron.core.projections.Lineups
 import java.util.Locale
@@ -105,7 +106,8 @@ internal fun PlannerView(
             return@LazyColumn
         }
         if (rostered == null) item { Note("Sync your league to see free agents; suggestions below may be rostered.") }
-        item { Label("Lineup holes, weeks ${weeks.first()}–${weeks.last()}") }
+        discountNote(team, state.rosRows)?.let { item { Note(it) } }
+        item { SectionHeader("Lineup holes, weeks ${weeks.first()}–${weeks.last()}") }
         if (gaps.isEmpty()) {
             item { Note("Your roster fills every starting slot every week through the fantasy playoffs.") }
         } else {
@@ -123,7 +125,7 @@ internal fun PlannerView(
                 }
             }
         }
-        item { Label("Streamers: best free-agent D/ST and K") }
+        item { SectionHeader("Streamers: best free-agent D/ST and K") }
         if (streamers.isEmpty()) item { Note("No free-agent D/ST or kicker projected in the next $STREAM_WEEKS weeks.") }
         itemsIndexed(streamers, key = { _, s -> "stream:${s.week}:${s.position}" }) { _, s ->
             Column(
@@ -145,17 +147,15 @@ internal fun PlannerView(
     }
 }
 
-private fun pts(value: Double): String = String.format(Locale.US, "%.1f", value)
-
-@Composable
-private fun Label(text: String) {
-    Text(
-        text,
-        Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp),
-        style = MaterialTheme.typography.labelMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+/** Which of [team]'s players have each coming week cut to the chance they're back by then, or null when none do. */
+internal fun discountNote(team: MyTeam, rosRows: List<ProjectionRow>): String? {
+    val ids = team.players.mapNotNull { it.playerId }.toSet()
+    val hurt = rosRows.filter { it.playerId in ids && it.rosDiscount != null }.sortedBy { it.name }
+    if (hurt.isEmpty()) return null
+    return "Injured: each week counts the chance he's back by then (${hurt.joinToString { "${it.name}, ${it.rosDiscount}" }})."
 }
+
+private fun pts(value: Double): String = String.format(Locale.US, "%.1f", value)
 
 @Composable
 private fun Note(text: String) {

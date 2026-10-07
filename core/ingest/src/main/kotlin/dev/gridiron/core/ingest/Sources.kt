@@ -13,6 +13,7 @@ public enum class Input(public val perSeason: Boolean, public val label: String)
     NGS_RUSHING(false, "NGS rushing"),
     NGS_RECEIVING(false, "NGS receiving"),
     ESPN_PROJECTIONS(true, "ESPN projections"),
+    ESPN_KICKERS_DEFENSE(true, "ESPN K and D/ST projections"),
 }
 
 /** Where each input lives: public nflverse and ffopportunity release assets, never this app's repository. */
@@ -27,6 +28,10 @@ public object Sources {
      */
     private const val ESPN_FILTER = """{"players":{"limit":700,"sortPercOwned":{"sortPriority":1,"sortAsc":false},""" +
         """"filterSlotIds":{"value":[0,2,4,6]},"filterStatsForSourceIds":{"value":[1]},"filterStatsForSplitTypeIds":{"value":[1]}}}"""
+
+    /** The same for every kicker and D/ST ESPN lists (about 90; read only by Where we differ, never blended). */
+    private const val ESPN_KD_FILTER = """{"players":{"limit":150,"sortPercOwned":{"sortPriority":1,"sortAsc":false},""" +
+        """"filterSlotIds":{"value":[16,17]},"filterStatsForSourceIds":{"value":[1]},"filterStatsForSplitTypeIds":{"value":[1]}}}"""
 
     public fun url(input: Input, season: Int? = null): String {
         require(input.perSeason == (season != null)) { "$input: season must be given exactly when the input is per season" }
@@ -48,15 +53,23 @@ public object Sources {
             Input.NGS_RECEIVING -> "$NFLVERSE/nextgen_stats/ngs_receiving.csv.gz"
             // ESPN's unofficial, keyless fantasy API; its default league scores PPR.
             Input.ESPN_PROJECTIONS -> "$ESPN/$season/segments/0/leaguedefaults/3?view=kona_player_info"
+            // The view repeated (ESPN reads it once) only so the URL differs from the request above.
+            Input.ESPN_KICKERS_DEFENSE -> "$ESPN/$season/segments/0/leaguedefaults/3?view=kona_player_info&view=kona_player_info"
         }
     }
 
     /** Request headers [input] needs. */
-    public fun headers(input: Input): Map<String, String> =
-        if (input == Input.ESPN_PROJECTIONS) mapOf("X-Fantasy-Filter" to ESPN_FILTER) else emptyMap()
+    public fun headers(input: Input): Map<String, String> = when (input) {
+        Input.ESPN_PROJECTIONS -> mapOf("X-Fantasy-Filter" to ESPN_FILTER)
+        Input.ESPN_KICKERS_DEFENSE -> mapOf("X-Fantasy-Filter" to ESPN_KD_FILTER)
+        else -> emptyMap()
+    }
 
-    public fun fileName(input: Input, season: Int? = null): String =
-        if (input == Input.ESPN_PROJECTIONS) "espn_projections_$season.json" else url(input, season).substringAfterLast('/')
+    public fun fileName(input: Input, season: Int? = null): String = when (input) {
+        Input.ESPN_PROJECTIONS -> "espn_projections_$season.json"
+        Input.ESPN_KICKERS_DEFENSE -> "espn_kd_projections_$season.json"
+        else -> url(input, season).substringAfterLast('/')
+    }
 
     /** The `schema_meta` key under which a build records which version of this file it read. */
     public fun metaKey(input: Input, season: Int? = null): String = "source:${fileName(input, season)}"

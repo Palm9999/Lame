@@ -27,7 +27,14 @@ private val ESPN_STATS: Map<String, String> = mapOf(
     "23" to "carries", "24" to "rushing_yards", "25" to "rushing_tds", "26" to "rushing_2pt", "212" to "rushing_first_downs",
     "58" to "targets", "53" to "receptions", "42" to "receiving_yards", "43" to "receiving_tds", "44" to "receiving_2pt",
     "213" to "receiving_first_downs", "72" to "fumbles_lost",
+    // Kickers and D/STs (checked against nflverse 2025 the same way); Where we differ reads them, the blend doesn't.
+    "74" to "fg_made_50", "77" to "fg_made_40_49", "80" to "fg_made_0_39", "85" to "fg_missed", "86" to "xp_made", "88" to "xp_missed",
+    "99" to "dst_sacks", "95" to "dst_interceptions", "96" to "dst_fumble_recoveries", "98" to "dst_safeties",
+    "120" to "points_allowed", "127" to "yards_allowed",
 )
+
+/** ESPN splits a D/ST's touchdowns four ways (interception, fumble, kickoff and punt returns); ours is one count. */
+private val ESPN_DST_TDS = listOf("93", "94", "101", "102")
 
 /** ESPN's pass attempts leave sacks out; ours count them. */
 private const val ESPN_ATTEMPTS = "0"
@@ -56,7 +63,8 @@ internal fun readEspnProjections(input: InputStream, season: Int): List<EspnProj
             val week = o.int("scoringPeriodId") ?: return@mapNotNull null
             val raw = (o["stats"] as? JsonObject).orEmpty().mapValues { it.value.jsonPrimitive.doubleOrNull ?: 0.0 }
             val ours = ESPN_STATS.entries.associate { (code, metric) -> metric to (raw[code] ?: 0.0) } +
-                ("attempts" to (raw[ESPN_ATTEMPTS] ?: 0.0) + (raw[ESPN_SACKS] ?: 0.0))
+                ("attempts" to (raw[ESPN_ATTEMPTS] ?: 0.0) + (raw[ESPN_SACKS] ?: 0.0)) +
+                ("dst_tds" to ESPN_DST_TDS.sumOf { raw[it] ?: 0.0 })
             EspnProjection(id, season, week, ours)
         }
     }

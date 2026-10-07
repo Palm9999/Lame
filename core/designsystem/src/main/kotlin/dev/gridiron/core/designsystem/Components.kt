@@ -2,6 +2,7 @@ package dev.gridiron.core.designsystem
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -24,6 +29,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -167,6 +173,8 @@ public fun DivergingBar(value: Double, maxAbs: Double, modifier: Modifier = Modi
 /**
  * A small column chart: one bar per [labels] entry with its [values] (null: nothing to draw, e.g. a missed game) over
  * the highest value or [max]; [valueText] labels the bars named in [labelled] (all when null), above them in ink.
+ * Tapping a bar selects it: its value is labelled, the others fade, and [detail] (the bar's label and value by
+ * default) reads under the chart; tapping it again clears.
  */
 @Composable
 public fun ColumnChart(
@@ -178,30 +186,39 @@ public fun ColumnChart(
     max: Double? = null,
     labelled: Set<Int>? = null,
     height: Dp = 64.dp,
+    detail: (Int) -> String = { i -> "${labels[i]}: ${values[i]?.let(valueText) ?: "none"}" },
 ) {
     val color = ChartColors.series()
     val top = max ?: values.filterNotNull().maxOrNull() ?: 0.0
+    var selected by remember(values) { mutableStateOf<Int?>(null) }
+    val shown = selected?.let { (labelled ?: values.indices.toSet()) + it } ?: labelled
     Column(modifier.fillMaxWidth().semantics { contentDescription = description }) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
             values.forEachIndexed { i, v ->
                 Text(
-                    if (v != null && (labelled == null || i in labelled)) valueText(v) else "",
+                    if (v != null && (shown == null || i in shown)) valueText(v) else "",
                     Modifier.weight(1f),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontWeight = if (i == selected) FontWeight.Bold else null,
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                 )
             }
         }
         Row(Modifier.fillMaxWidth().height(height), horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.Bottom) {
-            values.forEach { v ->
-                Box(Modifier.weight(1f).height(height), contentAlignment = Alignment.BottomCenter) {
+            values.forEachIndexed { i, v ->
+                Box(
+                    Modifier.weight(1f).height(height).testTag("bar:$i")
+                        .clickable(enabled = v != null) { selected = if (selected == i) null else i },
+                    contentAlignment = Alignment.BottomCenter,
+                ) {
                     if (v != null && top > 0.0 && v > 0.0) {
                         val share = (v / top).coerceIn(0.0, 1.0).toFloat()
+                        val faded = selected != null && selected != i
                         Box(
                             Modifier.fillMaxWidth(0.7f).fillMaxHeight(share)
-                                .background(color, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)),
+                                .background(if (faded) color.copy(alpha = 0.35f) else color, RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp)),
                         )
                     }
                 }
@@ -215,6 +232,15 @@ public fun ColumnChart(
                     textAlign = TextAlign.Center, maxLines = 1,
                 )
             }
+        }
+        selected?.let {
+            Text(
+                detail(it),
+                Modifier.padding(top = 4.dp).testTag("bar:detail"),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
         }
     }
 }

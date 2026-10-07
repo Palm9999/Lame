@@ -75,6 +75,7 @@ import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.describeFilter
 import dev.gridiron.core.data.weeksLabel
 import dev.gridiron.core.data.live.LeagueRostered
+import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.datastore.RowDensity
 import dev.gridiron.core.designsystem.HeaderStyle
 import dev.gridiron.core.designsystem.NumberStyle
@@ -115,8 +116,9 @@ fun GridRoute(
     presets: GridPresetRepository? = null,
     display: GridDisplayRepository? = null,
     leagueRostered: Flow<LeagueRostered?> = flowOf(null),
+    dynasty: (suspend (ScoringProfile) -> Map<String, Double>)? = null,
 ) {
-    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges, rosters, presets, display, leagueRostered))
+    val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges, rosters, presets, display, leagueRostered, dynasty))
     val state by vm.state.collectAsStateWithLifecycle()
     GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu, recovery)
 }

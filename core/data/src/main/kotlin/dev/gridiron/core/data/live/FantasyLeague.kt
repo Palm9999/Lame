@@ -1,5 +1,6 @@
 package dev.gridiron.core.data.live
 
+import dev.gridiron.core.model.EspnTeams
 import dev.gridiron.core.projections.Lineups
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
@@ -212,22 +213,11 @@ internal object EspnFantasyParser {
         20 to "BE", 21 to "IR", 7 to "OP", 3 to "RB/WR", 5 to "WR/TE", 25 to "RB/WR/TE",
     )
 
-    /** ESPN's pro team ids, as nflverse writes the teams; a D/ST's player id is -16000 minus its team's. */
-    private val PRO_TEAMS = mapOf(
-        1 to "ATL", 2 to "BUF", 3 to "CHI", 4 to "CIN", 5 to "CLE", 6 to "DAL", 7 to "DEN", 8 to "DET",
-        9 to "GB", 10 to "TEN", 11 to "IND", 12 to "KC", 13 to "LV", 14 to "LA", 15 to "MIA", 16 to "MIN",
-        17 to "NE", 18 to "NO", 19 to "NYG", 20 to "NYJ", 21 to "PHI", 22 to "ARI", 23 to "PIT", 24 to "LAC",
-        25 to "SF", 26 to "SEA", 27 to "TB", 28 to "WAS", 29 to "CAR", 30 to "JAX", 33 to "BAL", 34 to "HOU",
-    )
-
     /** nflverse's team code for ESPN's pro team id. */
-    fun proTeam(id: Int): String? = PRO_TEAMS[id]
+    fun proTeam(id: Int): String? = EspnTeams.proTeam(id)
 
     /** The app's id for a D/ST, from its ESPN player id. */
-    fun dstPlayerId(espnId: String): String? {
-        val n = espnId.toIntOrNull() ?: return null
-        return if (n < -16000) PRO_TEAMS[-16000 - n]?.let { "DST_$it" } else null
-    }
+    fun dstPlayerId(espnId: String): String? = EspnTeams.dstPlayerId(espnId)
 
     fun parse(text: String, leagueId: String, fetchedAtMillis: Long): FantasyLeague {
         val root = try {

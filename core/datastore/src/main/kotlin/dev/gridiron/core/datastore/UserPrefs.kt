@@ -4,6 +4,8 @@ import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.ScoringProfile
+import java.time.DayOfWeek
+import java.time.LocalTime
 
 /**
  * Everything the user sets up, in one small document.
@@ -78,12 +80,24 @@ public data class AlertSwitches(
     val quiet: Boolean = false,
     /** Rebuilds the stats before each game day (Thursday, Saturday night, Sunday morning, Monday); on unless turned off. */
     val refresh: Boolean = true,
+    /** When each game-day refresh runs, local time: [DEFAULT_REFRESH_TIMES] unless the user picked others. */
+    val refreshTimes: Map<DayOfWeek, LocalTime> = DEFAULT_REFRESH_TIMES,
 ) {
     /** True while any alert needs the two-hourly check. */
     public val any: Boolean get() = injury || news || lineup || summary
 
     /** True when quiet hours hold alerts at this local hour (0-23). */
     public fun quietAt(hour: Int): Boolean = quiet && (hour >= 22 || hour < 8)
+
+    public companion object {
+        /** Thursday and Monday 3 pm, Saturday 10 pm, Sunday 9 am: before each slate's inactives and after the last game. */
+        public val DEFAULT_REFRESH_TIMES: Map<DayOfWeek, LocalTime> = linkedMapOf(
+            DayOfWeek.THURSDAY to LocalTime.of(15, 0),
+            DayOfWeek.SATURDAY to LocalTime.of(22, 0),
+            DayOfWeek.SUNDAY to LocalTime.of(9, 0),
+            DayOfWeek.MONDAY to LocalTime.of(15, 0),
+        )
+    }
 }
 
 /** One ESPN league the user added: its id, the user's team in it (null to find it from the SWID) and ESPN's name for it once synced. */

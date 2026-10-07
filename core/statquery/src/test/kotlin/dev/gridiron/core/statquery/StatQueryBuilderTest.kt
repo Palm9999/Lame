@@ -39,6 +39,47 @@ class StatQueryBuilderTest {
         StatQuerySpec(season = 2025, weeks = weeks, columns = columns.toList())
 
     @Nested
+    inner class DynastyValue {
+        private fun seed() {
+            for (id in listOf("a", "b", "c")) {
+                db.player(id, "Player $id")
+                db.week(id, 1, C.TARGETS to 5)
+                db.week(id, 2, C.TARGETS to 5)
+            }
+        }
+
+        @Test
+        fun `bound values read per player, sort, filter, rank and never scale per game`() {
+            seed()
+            val spec = spec(TARGETS, StatColumn.DYNASTY_VALUE).copy(
+                mode = ValueMode.PER_GAME, percentiles = true, sort = listOf(Sort(StatColumn.DYNASTY_VALUE)),
+                filters = listOf(Filter(StatColumn.DYNASTY_VALUE, Condition.AtLeast(1000.0))),
+                external = mapOf("a" to 4200.0, "b" to 6100.0, "zz" to 9000.0),
+            )
+            val rows = db.grid(spec)
+            assertEquals(listOf("b", "a"), rows.map { it.playerId })
+            assertEquals(6100.0, rows.first().value(StatColumn.DYNASTY_VALUE)!!, EPS)
+            assertEquals(1.0, rows.first().percentile(StatColumn.DYNASTY_VALUE)!!, EPS)
+            assertEquals(2, db.count(spec))
+        }
+
+        @Test
+        fun `without values the column is blank and every player still lists`() {
+            seed()
+            val rows = db.grid(spec(TARGETS, StatColumn.DYNASTY_VALUE))
+            assertEquals(setOf("a", "b", "c"), rows.map { it.playerId }.toSet())
+            assertTrue(rows.all { it.value(StatColumn.DYNASTY_VALUE) == null })
+        }
+
+        @Test
+        fun `equal maps give identical SQL whatever their order`() {
+            val one = StatQueryBuilder.grid(spec(StatColumn.DYNASTY_VALUE).copy(external = linkedMapOf("a" to 1.0, "b" to 2.0))).query
+            val two = StatQueryBuilder.grid(spec(StatColumn.DYNASTY_VALUE).copy(external = linkedMapOf("b" to 2.0, "a" to 1.0))).query
+            assertEquals(one, two)
+        }
+    }
+
+    @Nested
     inner class RisingRoles {
         private fun seed() {
             for (id in listOf("a", "b", "c")) {
