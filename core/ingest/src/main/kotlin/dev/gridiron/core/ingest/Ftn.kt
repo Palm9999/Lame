@@ -13,7 +13,7 @@ import java.io.InputStream
  * FTN charting: nflverse's play-level flags (2022 on), one row per play. Twin of `etl/gridiron_etl/ftn.py`.
  *
  * FTN has no player ids, so a flag is credited through play-by-play: receiver flags to the target's
- * receiver, quarterback flags to the passer. Every count sits beside FTN's own denominator (the plays
+ * receiver, quarterback flags to the passer, the box count to the rusher. Every count sits beside FTN's own denominator (the plays
  * FTN charted), so a week play-by-play has but FTN lacks never drags a rate toward zero, and a range
  * recomputes as sum(count) / sum(denominator). Nothing is sparse: a week with no drops stores a 0.
  */
@@ -32,11 +32,18 @@ internal class FtnFlags(
     val throwAway: Boolean,
     val intWorthy: Boolean,
     val blitzers: Int,
+    val screen: Boolean = false,
+    val rpo: Boolean = false,
+    val motion: Boolean = false,
+    val noHuddle: Boolean = false,
+    /** Defenders in the box; 0 where FTN didn't count them. */
+    val box: Int = 0,
 )
 
 private val FLAG_COLUMNS = listOf(
     "is_catchable_ball", "is_contested_ball", "is_drop", "is_created_reception", "is_play_action",
     "is_qb_out_of_pocket", "is_throw_away", "is_interception_worthy", "n_blitzers",
+    "is_screen_pass", "is_rpo", "is_motion", "is_no_huddle", "n_defense_box",
 )
 
 /** Every play FTN charted, keyed like play-by-play. Any column missing from the file throws. */
@@ -51,6 +58,9 @@ internal fun readFtn(input: InputStream, source: String): Map<FtnKey, FtnFlags> 
             playAction = row.flag("is_play_action"), outOfPocket = row.flag("is_qb_out_of_pocket"),
             throwAway = row.flag("is_throw_away"), intWorthy = row.flag("is_interception_worthy"),
             blitzers = row.int("n_blitzers") ?: 0,
+            screen = row.flag("is_screen_pass"), rpo = row.flag("is_rpo"),
+            motion = row.flag("is_motion"), noHuddle = row.flag("is_no_huddle"),
+            box = row.int("n_defense_box") ?: 0,
         )
     }
     return index
@@ -79,6 +89,14 @@ internal class FtnAggregator(private val index: Map<FtnKey, FtnFlags>) {
         var outOfPocket = 0.0
         var throwAway = 0.0
         var intWorthy = 0.0
+        var screenTargets = 0.0
+        var motionTargets = 0.0
+        var screen = 0.0
+        var rpo = 0.0
+        var noHuddle = 0.0
+        var motion = 0.0
+        var boxCarries = 0.0
+        var boxSum = 0.0
 
         fun columns(): MutableMap<String, Double?> {
             val values = LinkedHashMap<String, Double?>()
@@ -91,6 +109,10 @@ internal class FtnAggregator(private val index: Map<FtnKey, FtnFlags>) {
                 values["ftn_catchable_rate"] = catchable / targets
                 values["ftn_drop_rate"] = drops / targets
                 values["ftn_contested_rate"] = contested / targets
+                values["ftn_screen_targets"] = screenTargets
+                values["ftn_motion_targets"] = motionTargets
+                values["ftn_screen_target_rate"] = screenTargets / targets
+                values["ftn_motion_target_rate"] = motionTargets / targets
             }
             if (dropbacks > 0) {
                 values["ftn_dropbacks"] = dropbacks
@@ -105,6 +127,19 @@ internal class FtnAggregator(private val index: Map<FtnKey, FtnFlags>) {
                 values["ftn_out_of_pocket_rate"] = outOfPocket / dropbacks
                 values["ftn_throwaway_rate"] = throwAway / dropbacks
                 if (attempts > 0) values["ftn_int_worthy_rate"] = intWorthy / attempts
+                values["ftn_screen_db"] = screen
+                values["ftn_rpo_db"] = rpo
+                values["ftn_no_huddle_db"] = noHuddle
+                values["ftn_motion_db"] = motion
+                values["ftn_screen_rate"] = screen / dropbacks
+                values["ftn_rpo_rate"] = rpo / dropbacks
+                values["ftn_no_huddle_rate"] = noHuddle / dropbacks
+                values["ftn_motion_rate"] = motion / dropbacks
+            }
+            if (boxCarries > 0) {
+                values["ftn_box_carries"] = boxCarries
+                values["ftn_box_sum"] = boxSum
+                values["ftn_avg_box"] = boxSum / boxCarries
             }
             return values
         }
@@ -136,6 +171,8 @@ internal class FtnAggregator(private val index: Map<FtnKey, FtnFlags>) {
             if (flags.contested) a.contested++
             if (flags.drop) a.drops++
             if (flags.created) a.created++
+            if (flags.screen) a.screenTargets++
+            if (flags.motion) a.motionTargets++
         }
         p.passer?.let { passer ->
             val scramble = if ((p.qbScramble ?: 0.0) == 1.0) 1.0 else 0.0
@@ -149,6 +186,16 @@ internal class FtnAggregator(private val index: Map<FtnKey, FtnFlags>) {
             if (flags.outOfPocket) a.outOfPocket += weight
             if (flags.throwAway) a.throwAway += weight
             if (flags.intWorthy && attempt > 0.0) a.intWorthy += attempt
+            if (flags.screen) a.screen += weight
+            if (flags.rpo) a.rpo += weight
+            if (flags.noHuddle) a.noHuddle += weight
+            if (flags.motion) a.motion += weight
+        }
+        p.rusher?.let { rusher ->
+            if (flags.box <= 0) return@let
+            val a = acc(p, team, rusher)
+            a.boxCarries++
+            a.boxSum += flags.box
         }
     }
 

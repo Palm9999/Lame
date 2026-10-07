@@ -1,6 +1,7 @@
 package dev.gridiron.core.forecast
 
 import org.junit.jupiter.api.Assertions.assertArrayEquals
+import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Test
 
@@ -26,5 +27,12 @@ class ReturnCurveTest {
         assertArrayEquals(doubleArrayOf(0.5, 0.5, 1.0), returnCurve(listed, many, weeks, games = 3), 1e-9)
         // A window running past the played weeks isn't counted.
         assertNull(returnCurve(listed, many, mapOf(("KC" to 2024) to (1..4).toList()), games = 3))
+    }
+
+    @Test
+    fun `a listing's body part is its first named injury, title-cased`() {
+        assertEquals("Knee", bodyPart("knee, ankle"))
+        assertEquals("Right Ankle", bodyPart("RIGHT ANKLE"))
+        assertEquals("", bodyPart(""))
     }
 }

@@ -5,6 +5,20 @@ import org.junit.jupiter.api.Test
 
 class TeamDefenseTest {
     @Test
+    fun `a blocked punt, field goal or extra point is the defense's`() {
+        val agg = TeamDefenseAggregator()
+        listOf(
+            play(posteam = "BUF", defteam = "KC", playType = "punt", puntBlocked = 1.0, homeTeam = "KC", awayTeam = "BUF"),
+            play(posteam = "BUF", defteam = "KC", playType = "field_goal", fieldGoalResult = "blocked", homeTeam = "KC", awayTeam = "BUF"),
+            play(posteam = "KC", defteam = "BUF", playType = "extra_point", extraPointResult = "blocked", homeTeam = "KC", awayTeam = "BUF"),
+            play(posteam = "KC", defteam = "BUF", playType = "field_goal", fieldGoalResult = "missed", homeTeam = "KC", awayTeam = "BUF"),
+        ).forEach(agg::add)
+        val out = agg.rows().associateBy { it.team }
+        assertEquals(2.0, out.getValue("KC").blockedKicks)
+        assertEquals(1.0, out.getValue("BUF").blockedKicks)
+    }
+
+    @Test
     fun `counts what each defense allowed and took away`() {
         val agg = TeamDefenseAggregator()
         listOf(

@@ -125,6 +125,7 @@ private val DEFENSE: List<Metric> = listOf(
     Triple("dst_fumble_recoveries", "FR", "D/ST Fumble Recoveries" to "Opponent fumbles the team recovered."),
     Triple("dst_tds", "DTD", "D/ST TDs" to "Touchdowns by the defense or on a return: interceptions, fumbles, punts, kickoffs and blocked kicks."),
     Triple("dst_safeties", "SAF", "D/ST Safeties" to "Safeties the team's defense scored."),
+    Triple("dst_blocked_kicks", "BLK", "D/ST Blocked Kicks" to "Punts, field goals and extra points the team blocked."),
 ).map { (id, abbr, text) ->
     Metric(id, text.first, abbr, "defense", text.second, positions = TEAM_DEFENSE, decimals = 0, sparse = true)
 } + listOf(
@@ -239,6 +240,20 @@ private val FTN: List<Metric> = listOf(
         "Share of dropbacks ended with an intentional throwaway, as charted by FTN. Charted from 2022."),
     FtnMetric("ftn_int_worthy_rate", "IW%", "Interception-Worthy Rate", listOf("QB"), false, 1,
         "Share of pass attempts FTN charted as interception-worthy, whether or not the defense caught them. Charted from 2022."),
+    FtnMetric("ftn_screen_target_rate", "SCR%", "Screen Target Rate", listOf("RB", "WR", "TE"), true, 1,
+        "Share of targets on screen passes, as charted by FTN. A role profile. Charted from 2022."),
+    FtnMetric("ftn_motion_target_rate", "MOT%", "Motion Target Rate", listOf("RB", "WR", "TE"), true, 1,
+        "Share of targets on plays with pre-snap motion, as charted by FTN. A scheme profile. Charted from 2022."),
+    FtnMetric("ftn_screen_rate", "SCRN%", "Screen Rate", listOf("QB"), true, 1,
+        "Share of dropbacks that were screen passes, as charted by FTN. A scheme profile. Charted from 2022."),
+    FtnMetric("ftn_rpo_rate", "RPO%", "RPO Rate", listOf("QB"), true, 1,
+        "Share of dropbacks that were run-pass options, as charted by FTN. A scheme profile. Charted from 2022."),
+    FtnMetric("ftn_no_huddle_rate", "NH%", "No-Huddle Rate", listOf("QB"), true, 1,
+        "Share of dropbacks run without a huddle, as charted by FTN. A tempo profile. Charted from 2022."),
+    FtnMetric("ftn_motion_rate", "MTN%", "Motion Rate", listOf("QB"), true, 1,
+        "Share of dropbacks with pre-snap motion, as charted by FTN. A scheme profile. Charted from 2022."),
+    FtnMetric("ftn_avg_box", "BOX", "Defenders in Box", listOf("QB", "RB", "WR", "TE"), true, 2,
+        "Average defenders in the box on his carries, as charted by FTN. A heavy box makes running harder. Charted from 2022."),
 ).map {
     Metric(
         it.id, it.name, it.abbr, "ftn", it.definition, positions = it.positions, tier = "B",
@@ -255,6 +270,14 @@ private val FTN: List<Metric> = listOf(
     Triple("ftn_oop_db", "FTN Out-of-Pocket Dropbacks", "Charted dropbacks where the quarterback left the pocket." to listOf("QB")),
     Triple("ftn_throwaway", "FTN Throwaways", "Charted dropbacks ended with a throwaway." to listOf("QB")),
     Triple("ftn_int_worthy", "FTN Interception-Worthy Throws", "Charted pass attempts FTN marked interception-worthy." to listOf("QB")),
+    Triple("ftn_screen_targets", "FTN Screen Targets", "Charted targets on screen passes." to listOf("RB", "WR", "TE")),
+    Triple("ftn_motion_targets", "FTN Motion Targets", "Charted targets on plays with pre-snap motion." to listOf("RB", "WR", "TE")),
+    Triple("ftn_screen_db", "FTN Screen Dropbacks", "Charted dropbacks that were screen passes." to listOf("QB")),
+    Triple("ftn_rpo_db", "FTN RPO Dropbacks", "Charted dropbacks that were run-pass options." to listOf("QB")),
+    Triple("ftn_no_huddle_db", "FTN No-Huddle Dropbacks", "Charted dropbacks run without a huddle." to listOf("QB")),
+    Triple("ftn_motion_db", "FTN Motion Dropbacks", "Charted dropbacks with pre-snap motion." to listOf("QB")),
+    Triple("ftn_box_carries", "FTN Box-Counted Carries", "Carries on plays FTN counted the box: the denominator of defenders in box." to listOf("QB", "RB", "WR", "TE")),
+    Triple("ftn_box_sum", "FTN Box Defenders", "Defenders in the box summed over his box-counted carries." to listOf("QB", "RB", "WR", "TE")),
 ).map { (id, name, text) ->
     Metric(
         id, name, id.uppercase(), "ftn", text.first, positions = text.second, tier = "B",
@@ -448,7 +471,7 @@ internal val DIST_FAMILIES: Map<String, String> = buildMap {
         "fg_missed", "xp_att", "xp_made", "xp_missed",
     )) put(id, "poisson")
     put("dst_sacks", "negbinom")
-    for (id in listOf("dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties")) put(id, "poisson")
+    for (id in listOf("dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "dst_blocked_kicks")) put(id, "poisson")
     // One game's points and yards allowed: the simulation draws them from a joint normal and scores their tiers.
     put("points_allowed", "normal")
     put("yards_allowed", "normal")

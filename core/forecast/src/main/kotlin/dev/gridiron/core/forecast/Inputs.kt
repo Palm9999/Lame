@@ -89,6 +89,8 @@ internal class ForecastInputs(
     val unitHistory: Map<String, List<PlayerGame>> = emptyMap(),
     /** (player id, season, week) for every QB, RB, WR or TE nflverse listed Out or Doubtful: none of them has ever played that week. */
     val absent: Set<Triple<String, Int, Int>> = emptySet(),
+    /** Each [absent] listing's status and body part ("Out|Knee"): its own return curve when it has enough past cases. */
+    val listing: Map<Triple<String, Int, Int>, String> = emptyMap(),
     /** Friday practice level per (player id, season, week) for every QB, RB, WR or TE nflverse listed Questionable. */
     val questionable: Map<Triple<String, Int, Int>, Practice> = emptyMap(),
     /** ESPN's projection per (player id, season, week), in our metric ids; empty when the build has none. */
@@ -109,7 +111,7 @@ private val READ_METRICS = listOf(
 private val UNIT_METRICS = listOf(
     "g", "fg_att_0_39", "fg_att_40_49", "fg_att_50", "fg_made_0_39", "fg_made_40_49", "fg_made_50",
     "fg_missed", "xp_att", "xp_made", "xp_missed",
-    "dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "points_allowed", "yards_allowed",
+    "dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "dst_blocked_kicks", "points_allowed", "yards_allowed",
 )
 
 internal fun loadInputs(conn: SQLiteConnection): ForecastInputs {
@@ -130,6 +132,7 @@ internal fun loadInputs(conn: SQLiteConnection): ForecastInputs {
         units = readPlayers(conn, UNIT_POSITIONS),
         unitHistory = readHistory(conn, UNIT_POSITIONS, UNIT_METRICS),
         absent = readAbsent(conn),
+        listing = readListings(conn),
         questionable = readQuestionable(conn),
         espn = readEspn(conn),
     )
@@ -146,6 +149,21 @@ private fun readEspn(conn: SQLiteConnection): Map<Triple<String, Int, Int>, Map<
     }
     return out
 }
+
+private fun readListings(conn: SQLiteConnection): Map<Triple<String, Int, Int>, String> = conn.prepare(
+    "SELECT player_id, season, week, status, injury FROM injury_report WHERE status IN ('Out', 'Doubtful')",
+).use { st ->
+    buildMap {
+        while (st.step()) {
+            val injury = if (st.isNull(4)) "" else st.getText(4)
+            put(Triple(st.getText(0), st.getLong(1).toInt(), st.getLong(2).toInt()), "${st.getText(3)}|${bodyPart(injury)}")
+        }
+    }
+}
+
+/** nflverse's first named injury, title-cased: "knee, ankle" and "Knee" both read "Knee". */
+internal fun bodyPart(injury: String): String =
+    injury.substringBefore(',').trim().split(' ').joinToString(" ") { w -> w.lowercase().replaceFirstChar { it.titlecase() } }
 
 private fun readAbsent(conn: SQLiteConnection): Set<Triple<String, Int, Int>> = conn.prepare(
     """SELECT i.player_id, i.season, i.week FROM injury_report i

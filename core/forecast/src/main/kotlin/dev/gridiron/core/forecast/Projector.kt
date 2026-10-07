@@ -58,6 +58,13 @@ internal class Projector(
         .groupBy({ it.first }, { it.second }).mapValues { (_, weeks) -> weeks.sorted() }
     private val returns: DoubleArray? by lazy { returnCurve(inputs.absent, inputs.history, playedWeeks) }
 
+    // Each status and body part's own curve, where it has enough past cases (beat the pooled one on 2022-2025).
+    private val returnsByListing: Map<String, DoubleArray> by lazy {
+        inputs.absent.groupBy { inputs.listing[it] }.mapNotNull { (group, cases) ->
+            group?.let { g -> returnCurve(cases.toSet(), inputs.history, playedWeeks)?.let { g to it } }
+        }.toMap()
+    }
+
     /** The upcoming week's drafted players, and those of them left off every roster (out for now): see [addStash]. */
     private var upcomingDrafts: List<Draft> = emptyList()
     private var stashed: List<Draft> = emptyList()
@@ -327,6 +334,8 @@ internal class Projector(
                 if (referencePoints(shown) >= K.UPCOMING_MIN_POINTS) {
                     emit(d.player.playerId, state.season, state.week, "baseline", prepared.baseline, cv)
                     emit(d.player.playerId, state.season, state.week, "final", shown, cv)
+                    // The model alone (no ESPN, props or Questionable discount), for Where we differ.
+                    if (espn != null) emit(d.player.playerId, state.season, state.week, "model", scripted, cv)
                     emitFactors(state, prepared, game, afterMatchup, scripted, ifPlaying, espn, withProps)
                     practice?.let {
                         sink.factor(
@@ -430,8 +439,9 @@ internal class Projector(
 
     /** 1, or for a player listed Out or Doubtful this week, the chance he plays his team's game in [week] ([returns]). */
     private fun playsChance(state: WeekState, p: Prepared, season: Int, week: Int): Double {
-        if (Triple(p.player.playerId, state.season, state.week) !in inputs.absent) return 1.0
-        val curve = returns ?: return 1.0
+        val key = Triple(p.player.playerId, state.season, state.week)
+        if (key !in inputs.absent) return 1.0
+        val curve = inputs.listing[key]?.let { returnsByListing[it] } ?: returns ?: return 1.0
         val k = (state.week..week).count { gameOf[Triple(p.team, season, it)]?.regular == true } - 1
         return curve[k.coerceIn(0, curve.size - 1)]
     }

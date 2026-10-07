@@ -48,6 +48,7 @@ public enum class ScoringRule(public val group: ScoringGroup, public val label: 
     DST_FUMBLE_RECOVERY(ScoringGroup.DEFENSE, "Fumble recovery"),
     DST_TD(ScoringGroup.DEFENSE, "Defensive or return TD"),
     DST_SAFETY(ScoringGroup.DEFENSE, "Safety"),
+    DST_BLOCKED_KICK(ScoringGroup.DEFENSE, "Blocked kick"),
 }
 
 public enum class BonusStat(public val label: String) {
@@ -154,6 +155,7 @@ public object ScoringPresets {
         ScoringRule.DST_FUMBLE_RECOVERY to 2.0,
         ScoringRule.DST_TD to 6.0,
         ScoringRule.DST_SAFETY to 2.0,
+        ScoringRule.DST_BLOCKED_KICK to 2.0,
     )
 
     private fun espn(id: String, name: String, reception: Double) = ScoringProfile(

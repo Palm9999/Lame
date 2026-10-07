@@ -139,8 +139,9 @@ internal data class PresetWeeksDto(val kind: String = "WHOLE_SEASON", val n: Int
  * 2: profiles carry points-allowed tiers, and version-1 profiles gain the kicking and team-defense defaults once.
  * 3: profiles carry yards-allowed tiers, and older profiles gain ESPN's once.
  * 4: several ESPN leagues share one login; a version-3 single league becomes the only one, active.
+ * 5: D/ST blocked kicks are scored; older profiles gain ESPN's 2 points once.
  */
-internal const val FORMAT_VERSION = 4
+internal const val FORMAT_VERSION = 5
 
 private val json = Json {
     ignoreUnknownKeys = true
@@ -157,6 +158,7 @@ private inline fun <T> orNull(block: () -> T): T? = try {
 internal fun UserPrefsDto.toDomain(): UserPrefs {
     val migrating = formatVersion < 2
     val migratingYards = formatVersion < 3
+    val migratingBlocks = formatVersion < 5
     val profiles = profiles.mapNotNull { p ->
         orNull {
             val weights = p.weights.mapNotNull { (k, v) -> ScoringRule.entries.firstOrNull { it.name == k }?.let { it to v } }.toMap()
@@ -164,7 +166,11 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
                 id = p.id,
                 name = p.name,
                 // Version 1 predates kicking and team defense: give them the presets' values, once.
-                weights = if (migrating) ScoringPresets.KICKING_AND_DEFENSE + weights else weights,
+                weights = when {
+                    migrating -> ScoringPresets.KICKING_AND_DEFENSE + weights
+                    migratingBlocks -> mapOf(ScoringRule.DST_BLOCKED_KICK to 2.0) + weights
+                    else -> weights
+                },
                 receptionByPosition = p.receptionByPosition
                     .mapNotNull { (k, v) -> Position.fromCode(k)?.takeIf { it in ScoringProfile.RECEPTION_POSITIONS }?.let { it to v } }
                     .toMap(),

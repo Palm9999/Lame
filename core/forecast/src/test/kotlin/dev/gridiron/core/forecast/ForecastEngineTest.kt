@@ -266,6 +266,22 @@ class ForecastEngineTest {
         }
     }
 
+    @Test
+    fun `a player ESPN projects keeps the model's own number beside the blend`() {
+        league("model.db").use { db ->
+            db.espn("WR_A", 2025, 3, "receiving_yards" to 200.0)
+            run(db)
+            fun mean(stage: String) = db.query(
+                "SELECT mean FROM player_week_projection WHERE player_id = 'WR_A' AND season = 2025 AND week = 3 AND stage = '$stage' AND metric_id = 'receiving_yards'",
+            ).single()[0]!!.toDouble()
+            val model = mean("model")
+            val w = K.ESPN_WEIGHT.getValue("WR")
+            assertEquals((1 - w) * model + w * 200.0, mean("final"), 1e-6)
+            // No ESPN row, no model stage.
+            assertEquals(0, db.query("SELECT 1 FROM player_week_projection WHERE player_id = 'WR_B' AND stage = 'model'").size)
+        }
+    }
+
     private fun factors(db: TestDb, player: String) = db.query(
         "SELECT factor FROM player_week_projection_factor WHERE player_id = '$player' AND season = 2025 AND week = 3 ORDER BY factor",
     ).map { it[0] }

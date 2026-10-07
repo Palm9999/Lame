@@ -217,6 +217,7 @@ class GridironApplication : Application() {
                 }
             },
             workDir = workDir,
+            onStart = { RefreshWorker.enqueue(this) },
         )
     }
 

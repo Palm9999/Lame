@@ -119,7 +119,7 @@ public object CompareMetricSets {
     )
     private val DST_SET = mapOf(
         CompareGroup.EFFICIENCY to listOf(POINTS_ALLOWED, YARDS_ALLOWED),
-        CompareGroup.SCORING to listOf(FANTASY_POINTS, DST_TDS, DST_SAFETIES),
+        CompareGroup.SCORING to listOf(FANTASY_POINTS, DST_TDS, DST_SAFETIES, StatColumn.DST_BLOCKED_KICKS),
         CompareGroup.CONTEXT to listOf(DST_SACKS, DST_INTERCEPTIONS, DST_FUMBLE_RECOVERIES),
     )
 

@@ -96,7 +96,7 @@ class UserPrefsStoreTest {
         val prefs = withStore { it.prefs.first() }
         val keeper = prefs.profiles.single()
         assertEquals("u2", keeper.id)
-        assertEquals(mapOf(ScoringRule.PASS_TD to 6.0), keeper.weights)
+        assertEquals(mapOf(ScoringRule.PASS_TD to 6.0, ScoringRule.DST_BLOCKED_KICK to 2.0), keeper.weights)
         assertEquals(mapOf(Position.TE to 1.5), keeper.receptionByPosition)
         assertEquals(listOf(YardageBonus(BonusStat.PASSING_YARDS, 300, null, 3.0)), keeper.yardageBonuses)
         assertEquals(listOf(CompareSlot("p1", 2025, WeekRange(1, 8))), prefs.tray)
@@ -249,6 +249,16 @@ class UserPrefsStoreTest {
     }
 
     @Test
+    fun `a version-4 profile gains blocked kicks at 2 once, and keeps a zeroed one after`() {
+        file.writeText("""{"formatVersion": 4, "profiles": [{"id": "u1", "name": "Old league", "weights": {"DST_SAFETY": 2.0}}], "activeProfileId": "u1"}""")
+        assertEquals(2.0, withStore { it.prefs.first() }.profiles.single().weight(ScoringRule.DST_BLOCKED_KICK))
+        withStore { store ->
+            store.update { p -> p.copy(profiles = p.profiles.map { it.copy(weights = it.weights + (ScoringRule.DST_BLOCKED_KICK to 0.0)) }) }
+        }
+        assertEquals(0.0, withStore { it.prefs.first() }.profiles.single().weight(ScoringRule.DST_BLOCKED_KICK))
+    }
+
+    @Test
     fun `after the migration, a zeroed rule and no tiers stay that way`() {
         file.writeText("""{"formatVersion": 1, "profiles": [{"id": "u1", "name": "Old league"}], "activeProfileId": "u1"}""")
         withStore { store ->
@@ -262,7 +272,7 @@ class UserPrefsStoreTest {
         assertEquals(0.0, reread.weight(ScoringRule.FG_MISSED))
         assertEquals(0.0, reread.weight(ScoringRule.DST_SAFETY))
         assertEquals(emptyList<PointsAllowedTier>(), reread.pointsAllowedTiers)
-        assertTrue(file.readText().contains("\"formatVersion\":4"), file.readText())
+        assertTrue(file.readText().contains("\"formatVersion\":5"), file.readText())
     }
 
     @Test
@@ -289,7 +299,7 @@ class UserPrefsStoreTest {
         assertEquals(listOf(ScoringTier(0, 8.0)), migrated.pointsAllowedTiers) // points tiers untouched
 
         withStore { store -> store.update { p -> p.copy(profiles = listOf(migrated.copy(yardsAllowedTiers = emptyList()))) } }
-        assertTrue(file.readText().contains("\"formatVersion\":4"), file.readText())
+        assertTrue(file.readText().contains("\"formatVersion\":5"), file.readText())
         assertEquals(emptyList<ScoringTier>(), withStore { it.prefs.first() }.profiles.single().yardsAllowedTiers)
     }
 
@@ -338,7 +348,7 @@ class UserPrefsStoreTest {
         val all = listOf(wrView, wrView.copy(id = "g2", name = "Season", weeks = PresetWeeks.WholeSeason, filters = emptyList(), teams = emptySet(), minSnapShare = null))
         withStore { store -> store.update { it.copy(gridPresets = all) } }
         assertEquals(all, withStore { it.prefs.first() }.gridPresets)
-        assertTrue(file.readText().contains("\"formatVersion\":4"), file.readText())
+        assertTrue(file.readText().contains("\"formatVersion\":5"), file.readText())
     }
 
     @Test

@@ -24,7 +24,7 @@ class MetricsTest {
     @Test
     fun `ids are unique and every Python metric is here`() {
         assertEquals(METRICS.size, byId.size)
-        assertEquals(144, METRICS.size)
+        assertEquals(160, METRICS.size)
     }
 
     @Test
@@ -161,7 +161,7 @@ class MetricsTest {
             "receiving_first_downs", "receiving_2pt", "fumbles_lost",
             "fg_att", "fg_made", "fg_att_0_39", "fg_att_40_49", "fg_att_50", "fg_made_0_39", "fg_made_40_49", "fg_made_50",
             "fg_missed", "xp_att", "xp_made", "xp_missed",
-            "dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "points_allowed", "yards_allowed",
+            "dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "dst_blocked_kicks", "points_allowed", "yards_allowed",
         )
         for (id in projected) {
             assertTrue(byId.getValue(id).distFamily in setOf("negbinom", "binomial", "gamma", "poisson", "normal"), id)
@@ -192,7 +192,7 @@ class MetricsTest {
 
     @Test
     fun `team defense metrics are visible, and only points and yards allowed keep their zeros`() {
-        val defense = listOf("dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties")
+        val defense = listOf("dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "dst_blocked_kicks")
         val allowed = listOf("points_allowed", "yards_allowed")
         for (id in defense + allowed) {
             val m = byId.getValue(id)

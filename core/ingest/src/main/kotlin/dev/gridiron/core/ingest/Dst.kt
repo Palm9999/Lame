@@ -25,6 +25,7 @@ internal fun dstWeeks(rows: List<TeamDefenseRow>): List<PlayerWeek> = rows.map {
         "dst_fumble_recoveries" to r.fumblesRecovered,
         "dst_tds" to r.defensiveTds + r.kickReturnTds,
         "dst_safeties" to r.safeties,
+        "dst_blocked_kicks" to r.blockedKicks,
         "points_allowed" to r.pointsAllowed,
         "yards_allowed" to r.yardsAllowed,
     )

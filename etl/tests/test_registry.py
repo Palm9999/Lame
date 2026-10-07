@@ -64,7 +64,7 @@ def test_projected_stats_have_distribution_families():
 KICKING_VISIBLE = ["fg_made", "fg_att", "fg_made_50", "xp_made", "xp_att"]
 KICKING = KICKING_VISIBLE + ["fg_att_0_39", "fg_att_40_49", "fg_att_50", "fg_made_0_39", "fg_made_40_49",
                              "fg_missed", "xp_missed"]
-DEFENSE = ["dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties"]
+DEFENSE = ["dst_sacks", "dst_interceptions", "dst_fumble_recoveries", "dst_tds", "dst_safeties", "dst_blocked_kicks"]
 
 
 def test_kicking_and_defense_metrics_are_sparse_theirs_alone_and_visible_where_the_grid_shows_them():
@@ -83,7 +83,7 @@ def test_kicking_and_defense_metrics_are_sparse_theirs_alone_and_visible_where_t
     assert METRICS["yards_allowed"].dist_family == "normal"
     assert not METRICS["yards_allowed"].higher_is_better
     assert not any(mid.startswith("pa_") for mid in METRICS)
-    assert len(METRICS) == 144
+    assert len(METRICS) == 160
 
 
 NGS_VISIBLE = {

@@ -105,6 +105,27 @@ class RefreshCoordinatorTest {
     }
 
     @Test
+    fun aRefreshTheProcessNeverFinishedIsStillPendingSoTheWorkerRestartsIt() = runTest {
+        db.writeText("old")
+        val stuck = CompletableDeferred<Unit>()
+        val first = coordinator(build = { _, _ ->
+            stuck.await()
+            report
+        })
+        assertFalse(first.pending)
+        first.refresh()
+        runCurrent()
+        assertTrue(first.pending)
+
+        // A new process: the old one's job is gone, the marker isn't.
+        val second = coordinator()
+        assertTrue(second.pending)
+        second.refreshAndWait()
+        assertFalse(second.pending)
+        stuck.complete(Unit)
+    }
+
+    @Test
     fun aFailedBuildKeepsTheCurrentDatabase() = runTest {
         db.writeText("old")
         val refresher = coordinator(build = { out, _ ->

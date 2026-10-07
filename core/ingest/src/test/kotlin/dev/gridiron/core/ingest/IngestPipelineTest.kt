@@ -108,12 +108,14 @@ class IngestPipelineTest {
     private val ftnHeader = listOf(
         "nflverse_game_id", "nflverse_play_id", "is_play_action", "is_qb_out_of_pocket", "is_interception_worthy",
         "is_throw_away", "is_catchable_ball", "is_contested_ball", "is_created_reception", "is_drop", "n_blitzers",
+        "is_screen_pass", "is_rpo", "is_motion", "is_no_huddle", "n_defense_box",
     )
 
     private fun ftnRow(playId: Int, vararg overrides: Pair<String, Any?>): Map<String, Any?> = mapOf(
         "nflverse_game_id" to "g1", "nflverse_play_id" to playId, "is_play_action" to "FALSE", "is_qb_out_of_pocket" to "FALSE",
         "is_interception_worthy" to "FALSE", "is_throw_away" to "FALSE", "is_catchable_ball" to "FALSE",
         "is_contested_ball" to "FALSE", "is_created_reception" to "FALSE", "is_drop" to "FALSE", "n_blitzers" to 0,
+        "is_screen_pass" to "FALSE", "is_rpo" to "FALSE", "is_motion" to "FALSE", "is_no_huddle" to "FALSE", "n_defense_box" to 0,
     ) + overrides
 
     /** FTN's file for [season]: WR1's catch was play-action and catchable; WR2's target was a catchable drop against a blitz. */
@@ -211,7 +213,7 @@ class IngestPipelineTest {
         assertEquals(emptyList<Int>(), report.reused)
         val meta = readMeta(out)!!
         assertEquals("12", meta["schema_version"])
-        assertEquals("8", meta["ingest_version"])
+        assertEquals("9", meta["ingest_version"])
         assertEquals("2024,2025", meta["seasons"])
         assertEquals("1", meta["expected_through_week:2025"])
         assertNotNull(meta[Sources.metaKey(Input.PBP, 2025)])

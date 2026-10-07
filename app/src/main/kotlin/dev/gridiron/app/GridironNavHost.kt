@@ -312,6 +312,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 deps.dynasty?.load(dynastyFormat(deps.league?.league?.value, p))?.values
                                     ?.mapNotNull { v -> v.playerId?.let { it to v.value } }?.toMap().orEmpty()
                             },
+                            tdGaps = { s -> deps.tdRegression?.board(s)?.gaps.orEmpty() },
                         )
                     }
                     entry<OpportunitiesKey> { key ->
@@ -439,6 +440,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             dynastyValues = { p -> deps.dynasty?.load(dynastyFormat(deps.league?.league?.value, p))?.values.orEmpty() },
                             comps = deps.comps,
                             onPlayer = { backStack.push(PlayerKey(it)) },
+                            tdRegression = deps.tdRegression,
                         )
                     }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }

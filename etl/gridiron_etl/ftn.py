@@ -3,8 +3,8 @@
 Twin of core/ingest's Ftn.kt; the parity job holds the two to identical facts.
 
 FTN has no player ids, so a flag is credited through play-by-play: receiver
-flags to the target's receiver, quarterback flags to the passer. Every count
-sits beside FTN's own denominator (the plays FTN charted), so a week
+flags to the target's receiver, quarterback flags to the passer, the box count
+to the rusher. Every count sits beside FTN's own denominator (the plays FTN charted), so a week
 play-by-play has but FTN lacks never drags a rate toward zero, and a range
 recomputes as sum(count) / sum(denominator). Nothing is sparse: a week with no
 drops stores a 0.
@@ -24,14 +24,19 @@ _FLAGS = {
     "is_catchable_ball": "catchable", "is_contested_ball": "contested", "is_drop": "drop",
     "is_created_reception": "created", "is_play_action": "play_action", "is_qb_out_of_pocket": "out_of_pocket",
     "is_throw_away": "throw_away", "is_interception_worthy": "int_worthy",
+    "is_screen_pass": "screen", "is_rpo": "rpo", "is_motion": "motion", "is_no_huddle": "no_huddle",
 }
-_REQUIRED = ["nflverse_game_id", "nflverse_play_id", *_FLAGS, "n_blitzers"]
+_REQUIRED = ["nflverse_game_id", "nflverse_play_id", *_FLAGS, "n_blitzers", "n_defense_box"]
 
 COMPONENTS = [
     "ftn_targets", "ftn_catchable", "ftn_contested", "ftn_drops", "ftn_created_rec",
     "ftn_catchable_rate", "ftn_drop_rate", "ftn_contested_rate",
     "ftn_dropbacks", "ftn_attempts", "ftn_pa_db", "ftn_blitz_db", "ftn_oop_db", "ftn_throwaway", "ftn_int_worthy",
     "ftn_play_action_rate", "ftn_blitz_rate", "ftn_out_of_pocket_rate", "ftn_throwaway_rate", "ftn_int_worthy_rate",
+    "ftn_screen_targets", "ftn_motion_targets", "ftn_screen_target_rate", "ftn_motion_target_rate",
+    "ftn_screen_db", "ftn_rpo_db", "ftn_no_huddle_db", "ftn_motion_db",
+    "ftn_screen_rate", "ftn_rpo_rate", "ftn_no_huddle_rate", "ftn_motion_rate",
+    "ftn_box_carries", "ftn_box_sum", "ftn_avg_box",
 ]
 
 _SEASON_TYPES = ["REG", "POST"]
@@ -50,6 +55,7 @@ def flags(raw: pl.DataFrame) -> pl.DataFrame:
             *[(pl.col(c).cast(pl.String).str.to_uppercase() == "TRUE").fill_null(False).alias(name)
               for c, name in _FLAGS.items()],
             pl.col("n_blitzers").cast(pl.Int64, strict=False).fill_null(0).alias("blitzers"),
+            pl.col("n_defense_box").cast(pl.Int64, strict=False).fill_null(0).alias("box"),
         )
         .filter(pl.col("game_id").is_not_null() & pl.col("play_id").is_not_null())
         .unique(subset=["game_id", "play_id"], keep="last", maintain_order=True)
@@ -107,12 +113,16 @@ def components(pbp: pl.LazyFrame, charted: pl.DataFrame) -> pl.DataFrame:
             ftn_contested=pl.col("contested").sum().cast(pl.Float64),
             ftn_drops=pl.col("drop").sum().cast(pl.Float64),
             ftn_created_rec=pl.col("created").sum().cast(pl.Float64),
+            ftn_screen_targets=pl.col("screen").sum().cast(pl.Float64),
+            ftn_motion_targets=pl.col("motion").sum().cast(pl.Float64),
         )
         .rename({"posteam": "team", "receiver_player_id": "player_id"})
         .with_columns(
             ftn_catchable_rate=pl.col("ftn_catchable") / pl.col("ftn_targets"),
             ftn_drop_rate=pl.col("ftn_drops") / pl.col("ftn_targets"),
             ftn_contested_rate=pl.col("ftn_contested") / pl.col("ftn_targets"),
+            ftn_screen_target_rate=pl.col("ftn_screen_targets") / pl.col("ftn_targets"),
+            ftn_motion_target_rate=pl.col("ftn_motion_targets") / pl.col("ftn_targets"),
         )
         .collect()
     )
@@ -132,6 +142,10 @@ def components(pbp: pl.LazyFrame, charted: pl.DataFrame) -> pl.DataFrame:
             ftn_oop_db=(pl.col("_weight") * pl.col("out_of_pocket")).sum(),
             ftn_throwaway=(pl.col("_weight") * pl.col("throw_away")).sum(),
             ftn_int_worthy=(pl.col("_attempt") * pl.col("int_worthy")).sum(),
+            ftn_screen_db=(pl.col("_weight") * pl.col("screen")).sum(),
+            ftn_rpo_db=(pl.col("_weight") * pl.col("rpo")).sum(),
+            ftn_no_huddle_db=(pl.col("_weight") * pl.col("no_huddle")).sum(),
+            ftn_motion_db=(pl.col("_weight") * pl.col("motion")).sum(),
         )
         .rename({"posteam": "team", "passer_player_id": "player_id"})
         .with_columns(
@@ -140,12 +154,29 @@ def components(pbp: pl.LazyFrame, charted: pl.DataFrame) -> pl.DataFrame:
             ftn_out_of_pocket_rate=pl.col("ftn_oop_db") / pl.col("ftn_dropbacks"),
             ftn_throwaway_rate=pl.col("ftn_throwaway") / pl.col("ftn_dropbacks"),
             ftn_int_worthy_rate=pl.when(pl.col("ftn_attempts") > 0).then(pl.col("ftn_int_worthy") / pl.col("ftn_attempts")),
+            ftn_screen_rate=pl.col("ftn_screen_db") / pl.col("ftn_dropbacks"),
+            ftn_rpo_rate=pl.col("ftn_rpo_db") / pl.col("ftn_dropbacks"),
+            ftn_no_huddle_rate=pl.col("ftn_no_huddle_db") / pl.col("ftn_dropbacks"),
+            ftn_motion_rate=pl.col("ftn_motion_db") / pl.col("ftn_dropbacks"),
         )
+        .collect()
+    )
+
+    rushers = (
+        plays.filter(pl.col("rusher_player_id").is_not_null() & (pl.col("box") > 0))
+        .group_by(["season", "week", "posteam", "rusher_player_id"])
+        .agg(
+            ftn_box_carries=pl.len().cast(pl.Float64),
+            ftn_box_sum=pl.col("box").sum().cast(pl.Float64),
+        )
+        .rename({"posteam": "team", "rusher_player_id": "player_id"})
+        .with_columns(ftn_avg_box=pl.col("ftn_box_sum") / pl.col("ftn_box_carries"))
         .collect()
     )
 
     return (
         receivers.join(passers, on=_KEY, how="full", coalesce=True)
+        .join(rushers, on=_KEY, how="full", coalesce=True)
         .select(["player_id", "season", "week", "team", *COMPONENTS])
         .with_columns(pl.col("season").cast(pl.Int64), pl.col("week").cast(pl.Int64))
         .sort(["season", "week", "team", "player_id"])

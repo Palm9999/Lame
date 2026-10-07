@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Test
 
 class DstTest {
     private fun row(pointsAllowed: Double) =
-        TeamDefenseRow("KC", 2025, 1, pointsAllowed, 300.0, 3.0, 1.0, 2.0, 1.0, 1.0, 1.0)
+        TeamDefenseRow("KC", 2025, 1, pointsAllowed, 300.0, 3.0, 1.0, 2.0, 1.0, 1.0, 1.0, blockedKicks = 1.0)
 
     @Test
     fun `a team-week becomes its team defense's week`() {
@@ -17,7 +17,7 @@ class DstTest {
             mapOf(
                 "g" to 1.0, "dst_sacks" to 3.0, "dst_interceptions" to 1.0, "dst_fumble_recoveries" to 2.0,
                 // One defensive TD and one kickoff return TD.
-                "dst_tds" to 2.0, "dst_safeties" to 1.0, "points_allowed" to 17.0, "yards_allowed" to 300.0,
+                "dst_tds" to 2.0, "dst_safeties" to 1.0, "dst_blocked_kicks" to 1.0, "points_allowed" to 17.0, "yards_allowed" to 300.0,
             ),
             week.values,
         )

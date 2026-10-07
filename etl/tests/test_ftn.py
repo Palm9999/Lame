@@ -6,7 +6,9 @@ import pytest
 from gridiron_etl import ftn
 
 FLAG_COLS = ["is_play_action", "is_qb_out_of_pocket", "is_interception_worthy", "is_throw_away", "is_catchable_ball",
-             "is_contested_ball", "is_created_reception", "is_drop", "n_blitzers"]
+             "is_contested_ball", "is_created_reception", "is_drop", "n_blitzers",
+             "is_screen_pass", "is_rpo", "is_motion", "is_no_huddle", "n_defense_box"]
+COUNT_COLS = ("n_blitzers", "n_defense_box")
 
 
 def play(play_id: int, **kw) -> dict:
@@ -19,13 +21,15 @@ def play(play_id: int, **kw) -> dict:
 
 COLUMN_OF = {"catchable": "is_catchable_ball", "contested": "is_contested_ball", "drop": "is_drop",
              "created": "is_created_reception", "play_action": "is_play_action", "qb_out_of_pocket": "is_qb_out_of_pocket",
-             "throw_away": "is_throw_away", "interception_worthy": "is_interception_worthy"}
+             "throw_away": "is_throw_away", "interception_worthy": "is_interception_worthy",
+             "screen": "is_screen_pass", "rpo": "is_rpo", "motion": "is_motion", "no_huddle": "is_no_huddle"}
 
 
 def flags(**kw) -> dict:
     """Which of FTN's flags this play was charted with; anything unnamed is FALSE (or 0 blitzers)."""
     row = {c: "FALSE" for c in FLAG_COLS}
     row["n_blitzers"] = kw.pop("blitzers", 0)
+    row["n_defense_box"] = kw.pop("box", 0)
     row.update({COLUMN_OF[k]: ("TRUE" if v else "FALSE") for k, v in kw.items()})
     return row
 
@@ -41,7 +45,7 @@ def run(*charted):
     plays = [p for p, _ in charted]
     rows = [{"nflverse_game_id": p["game_id"], "nflverse_play_id": p["play_id"], **f} for p, f in charted if f is not None]
     raw = pl.DataFrame(rows, schema={"nflverse_game_id": pl.Utf8, "nflverse_play_id": pl.Int64,
-                                     **{c: (pl.Int64 if c == "n_blitzers" else pl.Utf8) for c in FLAG_COLS}})
+                                     **{c: (pl.Int64 if c in COUNT_COLS else pl.Utf8) for c in FLAG_COLS}})
     return ftn.components(pl.LazyFrame(plays, schema=PBP_SCHEMA), ftn.flags(raw))
 
 
@@ -51,7 +55,8 @@ def row(df: pl.DataFrame, player: str, week: int = 1) -> dict:
 
 def test_flags_read_true_false_and_a_blank_as_false():
     raw = pl.DataFrame({"nflverse_game_id": ["g1", "g1"], "nflverse_play_id": [1, 2],
-                        **{c: ["TRUE", ""] for c in FLAG_COLS if c != "n_blitzers"}, "n_blitzers": ["2", ""]})
+                        **{c: ["TRUE", ""] for c in FLAG_COLS if c not in COUNT_COLS}, "n_blitzers": ["2", ""],
+                        "n_defense_box": ["7", ""]})
     out = ftn.flags(raw).sort("play_id")
     assert out["drop"].to_list() == [True, False]
     assert out["blitzers"].to_list() == [2, 0]
@@ -75,6 +80,23 @@ def test_the_target_receiver_is_credited_catchable_contested_drop_and_created():
     assert (wr["ftn_targets"], wr["ftn_catchable"], wr["ftn_contested"]) == (2.0, 1.0, 1.0)
     assert (wr["ftn_drops"], wr["ftn_created_rec"]) == (1.0, 1.0)
     assert (wr["ftn_catchable_rate"], wr["ftn_contested_rate"], wr["ftn_drop_rate"]) == (0.5, 0.5, 0.5)
+
+
+def test_screens_and_motion_go_to_the_target_and_the_passer_rpo_and_no_huddle_to_the_passer():
+    df = run((play(1), flags(screen=True, motion=True, rpo=True)), (play(2), flags(no_huddle=True, motion=True)),
+             (play(3), flags()), (play(4), flags()))
+    wr = row(df, "WR1")
+    assert (wr["ftn_screen_targets"], wr["ftn_screen_target_rate"], wr["ftn_motion_target_rate"]) == (1.0, 0.25, 0.5)
+    qb = row(df, "QB1")
+    assert (qb["ftn_screen_rate"], qb["ftn_rpo_rate"], qb["ftn_no_huddle_rate"], qb["ftn_motion_rate"]) == (0.25, 0.25, 0.25, 0.5)
+
+
+def test_the_box_count_averages_over_the_rushers_carries_ftn_counted_it_on():
+    def carry(play_id):
+        return play(play_id, play_type="run", receiver_player_id=None, passer_player_id=None, rusher_player_id="RB1")
+    df = run((carry(1), flags(box=8)), (carry(2), flags(box=6)), (carry(3), flags(box=0)))
+    rb = row(df, "RB1")
+    assert (rb["ftn_box_carries"], rb["ftn_box_sum"], rb["ftn_avg_box"]) == (2.0, 14.0, 7.0)
 
 
 def test_the_passer_is_credited_with_the_dropback_weight_attempt_plus_sack_plus_scramble():

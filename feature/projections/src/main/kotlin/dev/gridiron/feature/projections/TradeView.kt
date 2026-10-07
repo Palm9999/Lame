@@ -42,6 +42,7 @@ import dev.gridiron.core.projections.TradePartners
 import dev.gridiron.core.projections.Trades
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import dev.gridiron.core.data.tdGapTag
 import java.util.Locale
 
 /**
@@ -139,6 +140,8 @@ internal fun TradeView(
     offers: List<TradeOffer> = emptyList(),
     /** FantasyCalc's dynasty value by player id; empty leaves dynasty out. */
     dynasty: Map<String, Int> = emptyMap(),
+    /** Touchdowns above expected by player id; a player off the TD regression board shows none. */
+    tdGaps: Map<String, Double> = emptyMap(),
 ) {
     val byId = remember(rosRows) { rosRows.associateBy { it.playerId } }
     val mine = remember(myTeam, byId, rosWeekly) { tradePlayers(myTeam, byId, rosWeekly) }
@@ -329,11 +332,11 @@ internal fun TradeView(
         searchMillis?.let { ms -> item { Note("Searched every team in ${String.format(Locale.US, "%.1f", ms / 1000.0)} s.") } }
         item { Label("You send") }
         itemsIndexed(mine, key = { _, p -> "give:${p.playerId}" }) { _, p ->
-            PickRow(p, p.playerId in give, "give", playoffs, dynasty[p.playerId]) { on -> give = if (on) give + p.playerId else give - p.playerId }
+            PickRow(p, p.playerId in give, "give", playoffs, dynasty[p.playerId], tdGaps[p.playerId]) { on -> give = if (on) give + p.playerId else give - p.playerId }
         }
         item { Label("You receive from ${partner.teamName}") }
         itemsIndexed(theirs, key = { _, p -> "get:${p.playerId}" }) { _, p ->
-            PickRow(p, p.playerId in get, "get", playoffs, dynasty[p.playerId]) { on -> get = if (on) get + p.playerId else get - p.playerId }
+            PickRow(p, p.playerId in get, "get", playoffs, dynasty[p.playerId], tdGaps[p.playerId]) { on -> get = if (on) get + p.playerId else get - p.playerId }
         }
         item {
             Note(
@@ -362,7 +365,7 @@ internal fun TradeView(
 }
 
 @Composable
-private fun PickRow(p: TradePlayer, checked: Boolean, side: String, playoffs: List<Int>, dynasty: Int?, onCheck: (Boolean) -> Unit) {
+private fun PickRow(p: TradePlayer, checked: Boolean, side: String, playoffs: List<Int>, dynasty: Int?, tdGap: Double?, onCheck: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().toggleable(checked, role = Role.Checkbox, onValueChange = onCheck)
             .padding(start = 4.dp, end = 16.dp).testTag("$side:${p.playerId}"),
@@ -377,6 +380,7 @@ private fun PickRow(p: TradePlayer, checked: Boolean, side: String, playoffs: Li
                     p.team,
                     p.weekly.takeIf { it.isNotEmpty() }?.let { w -> "playoffs ${pts(playoffs.sumOf { w[it] ?: 0.0 })}" },
                     dynasty?.let { "dynasty ${String.format(Locale.US, "%,d", it)}" },
+                    tdGap?.let(::tdGapTag),
                 ).joinToString(" · ").ifEmpty { "No projection" },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

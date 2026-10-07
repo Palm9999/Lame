@@ -5,7 +5,7 @@ package dev.gridiron.core.forecast
  * changes: a refresh only copies a season's projections out of a previous
  * database built with the same version.
  */
-public const val FORECAST_VERSION: Int = 18
+public const val FORECAST_VERSION: Int = 20
 
 /**
  * Every tuning number the model uses. Sources: the Python ETL's
@@ -130,7 +130,7 @@ internal object K {
     const val DST_HALF_LIFE = 6.0
     val DST_K: Map<String, Double> = mapOf(
         "dst_sacks" to 6.0, "dst_interceptions" to 12.0, "dst_fumble_recoveries" to 20.0,
-        "dst_tds" to 30.0, "dst_safeties" to 60.0,
+        "dst_tds" to 30.0, "dst_safeties" to 60.0, "dst_blocked_kicks" to 60.0,
     )
     const val DST_PA_K = 6.0
     // What defenses got against an offense, shrunk this many games, and capped to 1 ± DST_CAP of the league's.

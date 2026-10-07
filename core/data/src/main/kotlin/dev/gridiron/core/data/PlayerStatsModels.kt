@@ -23,6 +23,8 @@ public data class GameLogRow(
     val cells: ImmutableList<String>,
     /** The week's shares, one per [PlayerStats.usageHeaders], as fractions; null where the week has none. */
     val usage: ImmutableList<Double?> = persistentListOf(),
+    /** The week's Next Gen Stats and FTN charting, one per [PlayerStats.chartedHeaders]; a dash where it has none. */
+    val charted: ImmutableList<String> = persistentListOf(),
 )
 
 /** Everything the Player page's "Season stats" section shows for one player and season. */
@@ -41,6 +43,8 @@ public data class PlayerStats(
     val log: ImmutableList<GameLogRow>,
     /** The usage charts' names, one per [GameLogRow.usage] value ([PlayerStatSets.usageColumns]). */
     val usageHeaders: ImmutableList<String> = persistentListOf(),
+    /** The "Charted by week" headers, one per [GameLogRow.charted] value; empty when no week has any charted stat. */
+    val chartedHeaders: ImmutableList<String> = persistentListOf(),
 ) {
     public companion object {
         /** A player with no games in any built season. */
