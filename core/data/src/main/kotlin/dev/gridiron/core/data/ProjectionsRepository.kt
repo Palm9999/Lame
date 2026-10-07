@@ -119,6 +119,15 @@ public class ProjectionsRepository(private val executor: QueryExecutor) {
         emptyMap()
     }
 
+    /** Players whose rest of season carries the injury discount, with their status ("Out", "Doubtful"); empty on failure. */
+    public suspend fun rosDiscounted(season: Int, week: Int): Map<String, String> = try {
+        executor.query(ProjectionQueries.rosDiscounted(season, week)) { it.text(0) to it.text(1) }.toMap()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        emptyMap()
+    }
+
     /**
      * Every player's rest of season week by week (or only [playerId]'s); empty when the database predates `player_ros_week` (built before
      * schema 12) or anything fails, so callers fall back to season totals.

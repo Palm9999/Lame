@@ -40,6 +40,15 @@ public object ProjectionQueries {
         listOf(Bind.Integer(season.toLong()), Bind.Integer(week.toLong())),
     )
 
+    /**
+     * Who nflverse lists Out or Doubtful for [week] (the forecast's upcoming week), with the status: their rest of season
+     * counts each coming game times the chance they're back by then.
+     */
+    public fun rosDiscounted(season: Int, week: Int): SqlQuery = SqlQuery(
+        "SELECT player_id, status FROM injury_report WHERE season = ? AND week = ? AND status IN ('Out', 'Doubtful')",
+        listOf(Bind.Integer(season.toLong()), Bind.Integer(week.toLong())),
+    )
+
     public fun factors(playerIds: Set<String>, season: Int, week: Int): SqlQuery {
         if (playerIds.isEmpty()) {
             return SqlQuery(

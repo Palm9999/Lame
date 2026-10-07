@@ -105,6 +105,7 @@ internal fun PlannerView(
             return@LazyColumn
         }
         if (rostered == null) item { Note("Sync your league to see free agents; suggestions below may be rostered.") }
+        discountNote(team, state.rosRows)?.let { item { Note(it) } }
         item { Label("Lineup holes, weeks ${weeks.first()}–${weeks.last()}") }
         if (gaps.isEmpty()) {
             item { Note("Your roster fills every starting slot every week through the fantasy playoffs.") }
@@ -143,6 +144,14 @@ internal fun PlannerView(
             }
         }
     }
+}
+
+/** Which of [team]'s players have each coming week cut to the chance they're back by then, or null when none do. */
+internal fun discountNote(team: MyTeam, rosRows: List<ProjectionRow>): String? {
+    val ids = team.players.mapNotNull { it.playerId }.toSet()
+    val hurt = rosRows.filter { it.playerId in ids && it.rosDiscount != null }.sortedBy { it.name }
+    if (hurt.isEmpty()) return null
+    return "Injured: each week counts the chance he's back by then (${hurt.joinToString { "${it.name}, ${it.rosDiscount}" }})."
 }
 
 private fun pts(value: Double): String = String.format(Locale.US, "%.1f", value)

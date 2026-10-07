@@ -54,6 +54,8 @@ public data class ProjectionCard(
     val playoffWeeks: List<Int> = DEFAULT_PLAYOFF_WEEKS,
     /** His chance of a rushing or receiving TD this week; null for a kicker, a D/ST or without a game. */
     val tdChance: Double? = null,
+    /** "Out" or "Doubtful" (nflverse, this week): [rosPoints] counts each coming game times his chance of being back. */
+    val rosDiscount: String? = null,
 )
 
 private val OUT_ABBRS = setOf("O", "IR")
@@ -87,6 +89,7 @@ public suspend fun loadProjectionCard(
     val rosPoints = ros?.let { r -> withContext(compute) { projectedScore(r.components, profile, position) } }
     val gamesLeft = team?.let { repository.remainingGames(season, week, it) } ?: 0
     val rosPerGame = rosPoints?.takeIf { gamesLeft > 0 }?.let { it / gamesLeft }
+    val rosDiscount = rosPoints?.let { repository.rosDiscounted(season, week)[playerId] }
     // Empty on a database built before weekly rest of season, or when he has no game in those weeks.
     val playoffPoints = repository.rosWeeks(season, playerId).firstOrNull()?.let { r ->
         withContext(compute) { r.points(profile).filterKeys { it in playoffWeeks }.values.takeIf { it.isNotEmpty() }?.sum() }
@@ -112,7 +115,7 @@ public suspend fun loadProjectionCard(
         return ProjectionCard(
             season, week, game?.let(::matchupText), game?.let(::lineText), 0.0, 0.0, 0.0, rosPoints, rosPerGame,
             out = false, bye = game == null, notThisWeek = game != null, rosPlace = place, rosOf = of,
-            playoffPoints = playoffPoints, playoffWeeks = playoffWeeks,
+            playoffPoints = playoffPoints, playoffWeeks = playoffWeeks, rosDiscount = rosDiscount,
         )
     }
     val out = injuryAbbr in OUT_ABBRS
@@ -145,6 +148,7 @@ public suspend fun loadProjectionCard(
         playoffPoints = playoffPoints,
         playoffWeeks = playoffWeeks,
         tdChance = if (lift) td?.let { liftedTd(it, q) } else td,
+        rosDiscount = rosDiscount,
     )
 }
 
@@ -197,6 +201,14 @@ public fun ThisWeekCard(card: ProjectionCard, onOpen: () -> Unit, modifier: Modi
         card.rosPoints?.let { ros ->
             val perGame = card.rosPerGame?.let { " (${onePlace(it)} per game)" }.orEmpty()
             Text("Rest of season ${onePlace(ros)} pts$perGame", style = MaterialTheme.typography.bodySmall)
+            card.rosDiscount?.let {
+                Text(
+                    "$it this week: counts each game times his chance of being back by then",
+                    Modifier.testTag("card:rosDiscount"),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         if (card.rosPlace != null && card.rosOf != null) {
             Text(

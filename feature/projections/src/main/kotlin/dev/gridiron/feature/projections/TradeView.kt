@@ -56,6 +56,8 @@ internal data class TradePlayer(
     val team: String?,
     val points: Double,
     val weekly: Map<Int, Double> = emptyMap(),
+    /** [ProjectionRow.rosDiscount]: his [points] already count the games he may miss. */
+    val discount: String? = null,
 )
 
 /** [team]'s matched players with their rest-of-season points from [rosRows] (zero without a projection), best first. */
@@ -63,7 +65,7 @@ internal fun tradePlayers(team: MyTeam, rosRows: Map<String, ProjectionRow>, ros
     team.players.mapNotNull { p ->
         val id = p.playerId ?: return@mapNotNull null
         val row = rosRows[id]
-        TradePlayer(id, row?.name ?: p.name, row?.position, row?.team, row?.points ?: 0.0, rosWeekly[id].orEmpty())
+        TradePlayer(id, row?.name ?: p.name, row?.position, row?.team, row?.points ?: 0.0, rosWeekly[id].orEmpty(), row?.rosDiscount)
     }.sortedWith(compareByDescending<TradePlayer> { it.points }.thenBy { it.name })
 
 /**
@@ -122,6 +124,9 @@ internal fun dynastyText(give: List<String>, get: List<String>, values: Map<Stri
     val sign = if (diff >= 0) "+" else "−"
     return "Dynasty value (FantasyCalc): send ${String.format(Locale.US, "%,d", sent)} · get ${String.format(Locale.US, "%,d", got)} · $sign${String.format(Locale.US, "%,d", kotlin.math.abs(diff))}"
 }
+
+/** "Out: misses counted": the rest-of-season points already price in the games he may miss. */
+internal fun discountTag(status: String): String = "$status: misses counted"
 
 internal fun gainText(value: Double): String =
     if (value >= 0) "+" + String.format(Locale.US, "%.1f", value) else "−" + String.format(Locale.US, "%.1f", -value)
@@ -381,6 +386,7 @@ private fun PickRow(p: TradePlayer, checked: Boolean, side: String, playoffs: Li
                     p.weekly.takeIf { it.isNotEmpty() }?.let { w -> "playoffs ${pts(playoffs.sumOf { w[it] ?: 0.0 })}" },
                     dynasty?.let { "dynasty ${String.format(Locale.US, "%,d", it)}" },
                     tdGap?.let(::tdGapTag),
+                    p.discount?.let(::discountTag),
                 ).joinToString(" · ").ifEmpty { "No projection" },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,

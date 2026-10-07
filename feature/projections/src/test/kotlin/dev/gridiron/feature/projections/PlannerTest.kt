@@ -48,4 +48,11 @@ class PlannerTest {
         // Week 9: d1 projects nothing.
         assertEquals(null, s[1].yours)
     }
+
+    @Test
+    fun `the discount note names your injured players only`() {
+        val hurt = rows.map { if (it.playerId in setOf("t1", "t2")) it.copy(rosDiscount = "Out") else it }
+        assertEquals("Injured: each week counts the chance he's back by then (P t1, Out).", discountNote(team, hurt))
+        assertEquals(null, discountNote(team, rows))
+    }
 }
