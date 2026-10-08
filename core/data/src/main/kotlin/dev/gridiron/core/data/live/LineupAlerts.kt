@@ -20,6 +20,13 @@ public data class LineupAlert(val starter: WeekPlayer, val slot: String, val rea
             ?: "No one on your bench can take his $slot slot."
 }
 
+/**
+ * [points] without a Questionable discount ([discount], 0.52-0.87) once his team's inactives are [posted] and ESPN
+ * doesn't list him Out, IR, Doubtful or suspended ([status]): the chance he sits that the discount priced is gone.
+ */
+public fun liftQuestionable(points: Double, discount: Double?, posted: Boolean, status: String?): Double =
+    if (discount == null || discount <= 0.0 || !posted || status in setOf("O", "IR", "D", "SUSP")) points else points / discount
+
 public object LineupAlerts {
     private val NOT_STARTING = setOf("BE", "IR")
     private val SITS = mapOf("O" to "is Out", "IR" to "is on IR", "D" to "is Doubtful", "SUSP" to "is suspended")
