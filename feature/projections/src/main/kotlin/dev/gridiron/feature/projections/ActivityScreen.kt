@@ -41,6 +41,7 @@ import dev.gridiron.core.data.live.ActivityKind
 import dev.gridiron.core.data.live.ActivityResult
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.model.ScoringProfile
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
@@ -224,7 +225,7 @@ private fun ActivityRow(item: ActivityItem, result: ActivityResult, ros: Map<Str
             val id = m.playerId!!
             Text(
                 "${m.name ?: id}" + (ros[id]?.let { " · ${String.format(Locale.US, "%.1f", it)} rest of season" } ?: ""),
-                Modifier.clickable { onPlayer(id) }.padding(vertical = 2.dp),
+                Modifier.playerClick(id, onPlayer).padding(vertical = 2.dp),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.primary,
             )

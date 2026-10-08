@@ -79,6 +79,8 @@ import dev.gridiron.core.designsystem.HeaderStyle
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.NumberStyle
 import dev.gridiron.core.designsystem.PullToRefresh
+import dev.gridiron.core.designsystem.Sparkline
+import dev.gridiron.core.designsystem.TeamStripe
 import dev.gridiron.core.designsystem.heatColor
 import dev.gridiron.core.model.Roster
 import dev.gridiron.core.model.ScoringProfile
@@ -125,7 +127,13 @@ fun GridRoute(
 ) {
     val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges, rosters, presets, display, leagueRostered, dynasty))
     val state by vm.state.collectAsStateWithLifecycle()
-    GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu, recovery, onRefresh = onRefresh)
+    GridScreen(
+        state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu, recovery, onRefresh = onRefresh,
+        trends = { page ->
+            val r = page.request
+            repository.recentPoints(r.season.season, minOf(r.weeks.last, r.season.lastWeek), page.rows.map { it.playerId }.toSet(), r.scoring)
+        },
+    )
 }
 
 @Composable
@@ -142,6 +150,8 @@ fun GridScreen(
     /** Hands the exported CSV to the share sheet; a seam so tests needn't declare a FileProvider. */
     share: suspend (Context, fileName: String, csv: String) -> Boolean = CsvShare::share,
     onRefresh: (() -> Unit)? = null,
+    /** Each row's fantasy points over the range's last six weeks, for its trend line; null draws none. */
+    trends: (suspend (GridPage) -> Map<String, List<Double?>>)? = null,
 ) {
     // A Surface, not a Box with a background: it also sets the content color
     // that every Text inherits. Without it, text defaults to black, which is
@@ -164,7 +174,7 @@ fun GridScreen(
                 Text(state.message, color = MaterialTheme.colorScheme.error)
                 recovery.forEach { (label, action) -> TextButton(onClick = action) { Text(label) } }
             }
-            is GridUiState.Ready -> GridContent(state, onEvent, onCompare, onEditProfiles, onPlayer, menu, share, onRefresh)
+            is GridUiState.Ready -> GridContent(state, onEvent, onCompare, onEditProfiles, onPlayer, menu, share, onRefresh, trends)
         }
       }
     }
@@ -180,8 +190,21 @@ private fun GridContent(
     menu: List<Pair<String, (season: Int) -> Unit>>,
     share: suspend (Context, fileName: String, csv: String) -> Boolean,
     onRefresh: (() -> Unit)?,
+    trends: (suspend (GridPage) -> Map<String, List<Double?>>)?,
 ) {
     val r = state.request
+    var trendLines by remember { mutableStateOf<Map<String, List<Double?>>>(emptyMap()) }
+    LaunchedEffect(state.page, trends) {
+        val page = state.page ?: return@LaunchedEffect
+        // A bonus: a failed read leaves the rows without lines.
+        trendLines = try {
+            trends?.invoke(page).orEmpty()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
     var showWeeks by remember { mutableStateOf(false) }
     var showTeams by remember { mutableStateOf(false) }
     var showFilters by remember { mutableStateOf(false) }
@@ -255,6 +278,7 @@ private fun GridContent(
                             state.badges,
                             state.rostered,
                             chrome,
+                            trendLines,
                             onSort = { onEvent(GridEvent.SortBy(it.column)) },
                             onInfo = { info = it.info },
                             onRowLongClick = { row ->
@@ -396,6 +420,7 @@ private fun PlayerTable(
     badges: ImmutableMap<String, String>,
     rostered: ImmutableSet<String>,
     chrome: ChromeScrollState,
+    trends: Map<String, List<Double?>>,
     onSort: (ColumnUi) -> Unit,
     onInfo: (ColumnUi) -> Unit,
     onRowLongClick: (GridRowUi) -> Unit,
@@ -465,9 +490,10 @@ private fun PlayerTable(
         },
         frozenCell = { index, row ->
             Row(
-                Modifier.fillMaxWidth().align(Alignment.CenterStart).padding(start = 8.dp, end = 6.dp),
+                Modifier.fillMaxWidth().align(Alignment.CenterStart).padding(start = 4.dp, end = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                TeamStripe(row.team, Modifier.padding(end = 5.dp))
                 Text(
                     "${index + 1}",
                     Modifier.width(20.dp),
@@ -489,13 +515,19 @@ private fun PlayerTable(
                             overflow = TextOverflow.Ellipsis,
                         )
                     }
-                    Text(
-                        row.detail,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            row.detail,
+                            Modifier.weight(1f, fill = false),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        trends[row.playerId]?.let {
+                            Sparkline(it, Modifier.padding(start = 4.dp).testTag("trend:${row.playerId}"), width = 30.dp, height = 12.dp, description = "Last ${it.size} weeks")
+                        }
+                    }
                 }
                 badges[row.playerId]?.let { InjuryBadge(it, Modifier.padding(start = 4.dp).testTag("injuryPill:${row.playerId}")) }
             }

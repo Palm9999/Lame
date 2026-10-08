@@ -37,6 +37,7 @@ public data class UserPrefs(
     val espnActive: String? = null,
     val espnLogin: EspnLogin? = null,
     val alerts: AlertSwitches = AlertSwitches(),
+    val look: Look = Look(),
 ) {
     /** The active league with the shared cookies; null when no league is set. */
     public val espnLeague: EspnLeagueConfig?
@@ -150,3 +151,6 @@ public data class EspnLeagueConfig(
         "EspnLeagueConfig(leagueId=$leagueId, espnS2=${if (espnS2 == null) "null" else "…"}, " +
             "swid=${if (swid == null) "null" else "…"}, teamId=$teamId)"
 }
+
+/** How the app looks: [wallpaper] takes Android's colors from the wallpaper (Android 12+), [trueBlack] makes dark mode black. */
+public data class Look(val wallpaper: Boolean = false, val trueBlack: Boolean = false)

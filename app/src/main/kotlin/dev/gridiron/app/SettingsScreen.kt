@@ -1,6 +1,7 @@
 package dev.gridiron.app
 
 import android.app.TimePickerDialog
+import android.os.Build
 import android.text.format.DateFormat
 import android.widget.Toast
 import androidx.compose.foundation.clickable
@@ -14,7 +15,9 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -61,6 +64,9 @@ fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit, props: Flow
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             ScreenBar("Settings", onBack)
+          // One scrolling page: the sections grew past a phone's height.
+          Column(Modifier.verticalScroll(rememberScrollState())) {
+            LookSection(settings)
             AlertsSection(settings)
             PropsSection(settings, props)
             Text(
@@ -76,8 +82,8 @@ fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit, props: Flow
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             val chosen = selected ?: return@Column
-            LazyColumn {
-                items(settings.choices.asReversed()) { season ->
+            Column {
+                for (season in settings.choices.asReversed()) {
                     val checked = season in chosen
                     Row(
                         Modifier
@@ -98,11 +104,28 @@ fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit, props: Flow
                     }
                 }
             }
+          }
         }
     }
 }
 
 /** One switch per alert, each on unless turned off. */
+@Composable
+private fun LookSection(settings: SettingsRepository) {
+    val look by settings.look.collectAsState(initial = null)
+    val scope = rememberCoroutineScope()
+    val now = look ?: return
+    Text("Look", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        AlertSwitch("Wallpaper colors", "Take the app's colors from your wallpaper (Material You). The stat heat colors stay the same.", now.wallpaper, "wallpaper") { on ->
+            scope.launch { settings.setLook { it.copy(wallpaper = on) } }
+        }
+    }
+    AlertSwitch("True black", "Black backgrounds in dark mode, for OLED screens.", now.trueBlack, "trueBlack") { on ->
+        scope.launch { settings.setLook { it.copy(trueBlack = on) } }
+    }
+}
+
 @Composable
 private fun AlertsSection(settings: SettingsRepository) {
     val alerts by settings.alerts.collectAsState(initial = null)

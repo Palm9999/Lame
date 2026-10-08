@@ -44,6 +44,7 @@ import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.datastore.KeeperRule
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.model.ScoringProfile
 import java.util.Locale
 import kotlinx.coroutines.flow.Flow
@@ -160,7 +161,7 @@ private fun DynastyTab(result: DynastyResult, league: LeagueRostered?, mine: Set
 private fun DynastyRow(v: DynastyValue, owner: Owner?, onPlayer: (String) -> Unit) {
     val id = v.playerId
     Row(
-        Modifier.fillMaxWidth().then(if (id != null) Modifier.clickable { onPlayer(id) } else Modifier)
+        Modifier.fillMaxWidth().then(if (id != null) Modifier.playerClick(id, onPlayer) else Modifier)
             .padding(horizontal = 16.dp, vertical = 8.dp).testTag("dyn:${v.rank}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -256,7 +257,7 @@ private fun KeeperListItem(
     val row = r.row
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("keeper:${row.playerId}")) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f).clickable { onPlayer(row.playerId) }) {
+            Column(Modifier.weight(1f).playerClick(row.playerId, onPlayer)) {
                 Text(
                     if (row.keep) "${r.name} · Keep" else r.name,
                     style = MaterialTheme.typography.bodyMedium,

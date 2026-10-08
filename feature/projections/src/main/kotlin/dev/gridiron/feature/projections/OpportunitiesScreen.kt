@@ -39,6 +39,7 @@ import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.designsystem.EmptyState
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import java.util.Locale
@@ -133,7 +134,7 @@ private fun OpportunityListRow(row: OpportunityRow, owner: Owner?, onPlayer: (St
     val b = row.beneficiary
     val player = b.player
     Row(
-        Modifier.fillMaxWidth().clickable { onPlayer(player.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp).testTag("opp:${player.playerId}"),
+        Modifier.fillMaxWidth().playerClick(player.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 8.dp).testTag("opp:${player.playerId}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {

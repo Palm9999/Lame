@@ -1,6 +1,7 @@
 package dev.gridiron.core.data
 
 import dev.gridiron.core.datastore.AlertSwitches
+import dev.gridiron.core.datastore.Look
 import dev.gridiron.core.datastore.PrefsSource
 import dev.gridiron.core.datastore.SeasonChoice
 import kotlinx.coroutines.flow.Flow
@@ -52,6 +53,12 @@ public class SettingsRepository(
 
     /** Which alerts are on (each is unless turned off). */
     public val alerts: Flow<AlertSwitches> = prefs.prefs.map { it.alerts }.distinctUntilChanged()
+
+    public val look: Flow<Look> = prefs.prefs.map { it.look }.distinctUntilChanged()
+
+    public suspend fun setLook(change: (Look) -> Look) {
+        prefs.update { it.copy(look = change(it.look)) }
+    }
 
     public suspend fun setAlerts(change: (AlertSwitches) -> AlertSwitches) {
         prefs.update { it.copy(alerts = change(it.alerts)) }

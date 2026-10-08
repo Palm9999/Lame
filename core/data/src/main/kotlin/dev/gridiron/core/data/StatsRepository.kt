@@ -16,12 +16,12 @@ import dev.gridiron.core.statquery.StatColumn
 import dev.gridiron.core.statquery.StatQueryBuilder
 import dev.gridiron.core.statquery.StatQuerySpec
 import dev.gridiron.core.statquery.ValueMode
+import java.util.Locale
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
-import java.util.Locale
 
 /** Kickers and team defenses: listed only under their own chips (or their own packs), never among the offense. */
 private val UNITS: Set<Position> = setOf(Position.K, Position.DST)
@@ -57,6 +57,36 @@ public class StatsRepository(
     }
 
     /** [external]: the dynasty column's values by player id, for a request that shows, sorts or filters by it. */
+    /**
+     * Each of [playerIds]' fantasy points under [scoring] in the [count] weeks up to [lastWeek] of [season], oldest
+     * first, for a trend line; null for a week he has no row (a bye, a missed game). One query a week.
+     */
+    public suspend fun recentPoints(
+        season: Int,
+        lastWeek: Int,
+        playerIds: Set<String>,
+        scoring: dev.gridiron.core.model.ScoringProfile,
+        count: Int = 6,
+    ): Map<String, List<Double?>> {
+        if (playerIds.isEmpty() || lastWeek < 1) return emptyMap()
+        val byWeek = (maxOf(1, lastWeek - count + 1)..lastWeek).map { week ->
+            playerIds.chunked(StatQuerySpec.MAX_LIMIT).flatMap { chunk ->
+                val spec = StatQuerySpec(
+                    season = season,
+                    weeks = WeekRange.single(week),
+                    columns = listOf(StatColumn.FANTASY_POINTS),
+                    includeUnqualified = true,
+                    playerIds = chunk.toSet(),
+                    limit = chunk.size,
+                    scoring = scoring,
+                )
+                val q = StatQueryBuilder.grid(spec)
+                executor.query(q.query) { r -> r.text(GridLayout.PLAYER_ID) to r.doubleOrNull(q.layout.valueIndex(StatColumn.FANTASY_POINTS)) }
+            }.toMap()
+        }
+        return playerIds.associateWith { id -> byWeek.map { it[id] } }
+    }
+
     public suspend fun grid(request: GridRequest, catalog: Catalog, external: Map<String, Double> = emptyMap()): GridPage {
         val threshold = threshold(request)
         val spec = spec(request, threshold).copy(rollups = request.season.rollups, external = external)

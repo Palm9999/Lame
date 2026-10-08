@@ -44,6 +44,13 @@ public class PlayerDirectory(private val executor: QueryExecutor) {
                 ) { PlayerHeader(it.text(0), it.text(1), it.textOrNull(2), it.textOrNull(3)) }.firstOrNull()
             }
 
+    /** [playerId]'s ESPN id (for his headshot), or null when nflverse lists none. */
+    public suspend fun espnId(playerId: String): String? = bestEffort(null) {
+        executor.query(
+            SqlQuery("SELECT espn_id FROM player_xref WHERE player_id = ? LIMIT 1", listOf(Bind.Text(playerId))),
+        ) { it.textOrNull(0) }.firstOrNull()
+    }
+
     private suspend fun <T> bestEffort(fallback: T, block: suspend () -> T): T =
         try {
             block()

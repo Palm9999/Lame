@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.live.PropsStatus
@@ -13,6 +14,9 @@ import dev.gridiron.core.datastore.SeasonChoice
 import dev.gridiron.core.datastore.UserPrefs
 import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.core.testing.FakePrefsSource
+import java.time.Instant
+import java.time.ZoneOffset
+import java.util.Locale
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -22,9 +26,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 import org.robolectric.shadows.ShadowToast
-import java.time.Instant
-import java.time.ZoneOffset
-import java.util.Locale
 
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -72,7 +73,7 @@ class SettingsScreenTest {
         val prefs = FakePrefsSource()
         show(prefs)
 
-        compose.onNodeWithTag("season:2023").performClick()
+        compose.onNodeWithTag("season:2023").performScrollTo().performClick()
         compose.waitForIdle()
 
         assertEquals(SeasonChoice(listOf(2023, 2024, 2025, 2026), 2026), prefs.current.seasons)
@@ -84,7 +85,7 @@ class SettingsScreenTest {
         val prefs = FakePrefsSource(UserPrefs.DEFAULT.copy(seasons = SeasonChoice(listOf(2026), 2026)))
         show(prefs)
 
-        compose.onNodeWithTag("season:2026").performClick()
+        compose.onNodeWithTag("season:2026").performScrollTo().performClick()
         compose.waitForIdle()
 
         compose.onNodeWithTag("season:2026").assertIsOn()

@@ -26,6 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -78,6 +79,7 @@ import dev.gridiron.core.data.live.PropsRepository
 import dev.gridiron.core.data.live.TradeOffersResult
 import dev.gridiron.core.data.live.WaiverTrendsRepository
 import dev.gridiron.core.designsystem.GridironIcons
+import dev.gridiron.core.designsystem.LocalPlayerPeek
 import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.core.model.Roster
 import dev.gridiron.feature.compare.CompareRoute
@@ -88,6 +90,7 @@ import dev.gridiron.feature.projections.BreakoutsRoute
 import dev.gridiron.feature.projections.DifferRoute
 import dev.gridiron.feature.projections.DynastyRoute
 import dev.gridiron.feature.projections.HistoryRoute
+import dev.gridiron.feature.projections.HomeRoute
 import dev.gridiron.feature.projections.OpportunitiesRoute
 import dev.gridiron.feature.projections.ProjectionListRoute
 import dev.gridiron.feature.projections.ProjectionsRoute
@@ -129,6 +132,10 @@ data class Deps(
     val league: FantasyLeagueRepository? = null,
     /** Receives My lineup's one-line summary for the home-screen widget. */
     val onLineupSummary: (String) -> Unit = {},
+    /** Receives Home's summary, win chance and players to watch for the home-screen widget. */
+    val onHome: (summary: String, chance: Double?, watch: String?) -> Unit = { _, _, _ -> },
+    /** The week's win chances as Home saw them; null keeps them for the screen's life only. */
+    val winLine: WinLineStore? = null,
     /** The draft board's ADP and last-season points; null hides Draft. */
     val draft: DraftRepository? = null,
     /** Where the draft's picks are kept. */
@@ -206,7 +213,8 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
     }
     LegacyPrompt(refresher, refreshState, refresh)
 
-    val backStack = rememberNavBackStack(GridKey)
+    // With a league to show, the app opens on Home and the Grid is a tab over it; without one (and in tests), the Grid.
+    val backStack = rememberNavBackStack(if (deps.league != null) HomeKey else GridKey)
     val back: () -> Unit = { backStack.removeLastOrNull() }
     val season = currentSeason()
     val more = buildList {
@@ -214,6 +222,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
         if (deps.breakouts != null) add(MoreItem("Players", "Rising roles", "Roles growing over the last four games") { backStack.push(BreakoutsKey(season)) })
         add(MoreItem("Players", "Where we differ", "The app against ESPN this week") { backStack.push(DifferKey(season)) })
         if (deps.tdRegression != null) add(MoreItem("Players", "TD regression", "Touchdowns above or below expected: sell high, buy low") { backStack.push(TdRegressionKey(season)) })
+        if (deps.live != null && deps.league != null) add(MoreItem("Players", "News", "ESPN's latest stories") { backStack.push(NewsKey) })
         add(MoreItem("Players", "Injury report", "ESPN's live list and practice") { backStack.push(InjuriesKey(season)) })
         add(MoreItem("Players", "Team defense", "Each defense's season") { backStack.push(DefenseKey(season)) })
         if (deps.league != null) add(MoreItem("League", "ESPN leagues", "Sync, teams and matchups") { backStack.push(LeagueKey) })
@@ -228,17 +237,25 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
         if (refresher != null) add(MoreItem("App", "Refresh stats", "Rebuild from nflverse, ESPN and ffopportunity") { refresh() })
     }
     val tabs = buildList {
+        if (deps.league != null) add(Tab("Home", GridironIcons.Home, HomeKey))
         add(Tab("Grid", GridironIcons.Table, GridKey))
         add(Tab("Projections", GridironIcons.Trend, ProjectionListKey(season)))
         if (deps.scores != null) add(Tab("Scores", GridironIcons.Scores, ScoresKey(season)))
-        if (deps.live != null) add(Tab("News", GridironIcons.News, NewsKey))
+        // Five tabs at most: with Home (which leads with your players' news), News moves to More.
+        if (deps.live != null && deps.league == null) add(Tab("News", GridironIcons.News, NewsKey))
         add(Tab("More", GridironIcons.More, MoreKey))
     }
     // A tab open straight over the Grid has no back arrow: the bottom bar is the way around (system back still works).
     val tabBack: (NavKey) -> (() -> Unit)? = { key -> if (backStack.size == 2 && backStack[1] == key && tabs.any { it.key == key }) null else back }
     Column(Modifier.fillMaxSize()) {
         // The bottom bar below takes the navigation bar's inset: screens above it leave it alone.
+        // A long press on a player row anywhere opens his quick look over the screen.
+        var peeking by rememberSaveable { mutableStateOf<String?>(null) }
+        peeking?.let { id ->
+            PlayerPeekSheet(id, deps, onOpen = { open -> peeking = null; backStack.push(PlayerKey(open)) }, onDismiss = { peeking = null })
+        }
         Box(Modifier.weight(1f).consumeWindowInsets(WindowInsets.navigationBars)) {
+          CompositionLocalProvider(LocalPlayerPeek provides { peeking = it }) {
             NavDisplay(
                 backStack = backStack,
                 onBack = back,
@@ -334,6 +351,8 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                     ?.mapNotNull { v -> v.playerId?.let { it to v.value } }?.toMap().orEmpty()
                             },
                             tdGaps = { s -> deps.tdRegression?.board(s)?.gaps.orEmpty() },
+                            recentPoints = { s, w, ids, p -> deps.stats.recentPoints(s, w, ids, p) },
+                            startOnLineup = key.lineup,
                         )
                     }
                     entry<OpportunitiesKey> { key ->
@@ -502,15 +521,44 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                     }
                     entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back, props = deps.props?.status) } }
                     entry<MoreKey> { MoreScreen(more) }
+                    entry<HomeKey> {
+                        val league = deps.league
+                        if (league != null) {
+                            // Without a store, the line lasts while the screen does.
+                            val memory = androidx.compose.runtime.remember { mutableMapOf<Pair<Int, Int>, MutableList<Double>>() }
+                            HomeRoute(
+                                season, deps.projections, deps.scoring, deps.live?.badges ?: flowOf(emptyMap()),
+                                myTeam = league.myTeam,
+                                leagueRostered = league.rostered,
+                                opponent = { s, w -> league.opponent(s, w) },
+                                kickoffs = { s, w -> deps.scores?.week(s, w)?.kickoffs(java.time.Instant.now()) ?: Kickoffs(emptySet(), emptySet()) },
+                                liveWeek = { s, w -> deps.scores?.week(s, w) },
+                                myMatchup = { s, w, p -> league.myMatchup(s, w, p) },
+                                news = { deps.live?.news().orEmpty() },
+                                winLine = { s, w, c ->
+                                    deps.winLine?.record(s, w, c)
+                                        ?: memory.getOrPut(s to w) { mutableListOf() }.also { l -> if (c != null && l.lastOrNull() != c) l += c }.toList()
+                                },
+                                onPlayer = { backStack.push(PlayerKey(it)) },
+                                onLineup = { backStack.push(ProjectionListKey(season, lineup = true)) },
+                                onMatchups = { backStack.push(MatchupsKey(season)) },
+                                onLeague = { backStack.push(LeagueKey) },
+                                dataVersion = deps.stats.dataVersion,
+                                onSummary = deps.onHome,
+                            )
+                        }
+                    }
                 },
             )
+          }
         }
         (refreshState as? RefreshState.Running)?.let { RefreshBar(it.text) }
         // Only the screen on top lights its tab: a Player page opened from Projections lights none.
         BottomBar(tabs, selected = tabs.firstOrNull { it.key == backStack.lastOrNull() }) { tab ->
-            // A tab opens over the Grid, so Back from any tab returns there; the open tab again goes to its top.
+            // A tab opens over the first screen (Home or the Grid), so Back from any tab returns there; the open tab again
+            // goes to its top.
             while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
-            if (tab.key != GridKey) backStack.add(tab.key)
+            if (tab.key != backStack.first()) backStack.add(tab.key)
         }
     }
 }

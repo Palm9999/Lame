@@ -91,4 +91,22 @@ class ProjectedPointsTest {
         assertEquals(1 - kotlin.math.exp(-0.5), anytimeTd(c), 1e-12)
         assertEquals(0.0, anytimeTd(emptyList()), 1e-12)
     }
+
+    @Test
+    fun `the spread chart's outcomes are widened like the range, so about 80 percent sit between floor and ceiling`() {
+        val components = listOf(
+            ProjectionComponent("receptions", 5.0, 5.0, "poisson"),
+            ProjectionComponent("receiving_yards", 60.0, 900.0),
+            ProjectionComponent("receiving_tds", 0.4, 0.4, "poisson"),
+        )
+        val range = projectPoints(components, ScoringPresets.PPR, Position.WR)
+        val spread = projectedSpread(components, ScoringPresets.PPR, Position.WR, bins = 40, draws = 10_000)
+
+        assertTrue(spread.shares.sum() in 0.985..1.0, "${spread.shares.sum()}")
+        assertTrue(spread.low <= range.floor && spread.high >= range.ceiling, "$spread vs $range")
+        val inside = spread.shares.withIndex().filter { (i, _) ->
+            spread.low + (spread.high - spread.low) * (i + 0.5) / spread.shares.size in range.floor..range.ceiling
+        }.sumOf { it.value }
+        assertTrue(inside in 0.7..0.9, "$inside")
+    }
 }

@@ -44,6 +44,7 @@ import dev.gridiron.core.designsystem.EmptyState
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.PullToRefresh
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.playerClick
 import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -198,7 +199,7 @@ private fun InjuryLineRow(line: InjuryLine, outlook: String?, onPlayer: (String)
     val id = i.playerId
     Column(
         Modifier.fillMaxWidth()
-            .then(if (id != null) Modifier.clickable { onPlayer(id) } else Modifier)
+            .then(if (id != null) Modifier.playerClick(id, onPlayer) else Modifier)
             .padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Row {

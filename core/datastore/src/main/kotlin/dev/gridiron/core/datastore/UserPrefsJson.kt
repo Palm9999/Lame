@@ -2,8 +2,6 @@ package dev.gridiron.core.datastore
 
 import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.Serializer
-import java.time.DayOfWeek
-import java.time.LocalTime
 import dev.gridiron.core.model.BonusStat
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.model.ESPN_POINTS_ALLOWED
@@ -16,12 +14,14 @@ import dev.gridiron.core.model.ScoringRule
 import dev.gridiron.core.model.ScoringTier
 import dev.gridiron.core.model.WeekRange
 import dev.gridiron.core.model.YardageBonus
+import java.io.InputStream
+import java.io.OutputStream
+import java.time.DayOfWeek
+import java.time.LocalTime
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import java.io.InputStream
-import java.io.OutputStream
 
 /*
  * The stored shape. Deliberately separate from the domain types: names are
@@ -59,6 +59,9 @@ internal data class UserPrefsDto(
     val gameDayRefresh: Boolean = true,
     /** Missing in a file from before the time picker: the defaults. A day or time that doesn't parse is its default. */
     val gameDayTimes: Map<String, String> = emptyMap(),
+    /** Missing in a file from before the look switches: off, the app's own palette. */
+    val wallpaperColors: Boolean = false,
+    val trueBlack: Boolean = false,
 )
 
 @Serializable
@@ -228,6 +231,7 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
             injuryAlerts, newsAlerts ?: injuryAlerts, lineupAlerts ?: injuryAlerts, summaryAlert ?: injuryAlerts, quietAlerts, gameDayRefresh,
             refreshTimes(gameDayTimes),
         ),
+        look = Look(wallpaperColors, trueBlack),
     )
 }
 
@@ -315,6 +319,8 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     gameDayRefresh = alerts.refresh,
     gameDayTimes = alerts.refreshTimes.takeIf { it != AlertSwitches.DEFAULT_REFRESH_TIMES }
         ?.entries?.associate { (day, time) -> day.name to time.toString() }.orEmpty(),
+    wallpaperColors = look.wallpaper,
+    trueBlack = look.trueBlack,
 )
 
 /** The stored times over the defaults: only the four game days, and only times that parse. */

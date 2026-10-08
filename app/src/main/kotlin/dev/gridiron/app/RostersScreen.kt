@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.model.Roster
 import kotlinx.coroutines.launch
 
@@ -82,7 +83,7 @@ fun RostersScreen(repo: RosterRepository, players: PlayerDirectory?, onBack: () 
                         Row(Modifier.fillMaxWidth().padding(start = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 names[id] ?: id,
-                                Modifier.weight(1f).clickable { onPlayer(id) }.padding(vertical = 8.dp),
+                                Modifier.weight(1f).playerClick(id, onPlayer).padding(vertical = 8.dp),
                                 style = MaterialTheme.typography.bodyMedium,
                             )
                             TextButton(onClick = { scope.launch { repo.remove(roster.id, id) } }) { Text("Remove") }

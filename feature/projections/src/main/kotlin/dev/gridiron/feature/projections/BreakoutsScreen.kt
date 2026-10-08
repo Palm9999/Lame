@@ -45,6 +45,7 @@ import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.designsystem.EmptyState
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.model.Position
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
@@ -172,7 +173,7 @@ public fun BreakoutsScreen(
 @Composable
 private fun BreakoutListRow(row: BreakoutRow, owner: Owner?, onPlayer: (String) -> Unit) {
     Row(
-        Modifier.fillMaxWidth().clickable { onPlayer(row.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp).testTag("rise:${row.playerId}"),
+        Modifier.fillMaxWidth().playerClick(row.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 8.dp).testTag("rise:${row.playerId}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {

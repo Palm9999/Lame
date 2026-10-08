@@ -90,3 +90,32 @@ public fun projectPoints(
     val (floor, ceiling) = calibratedRange(points, simulated.p10, simulated.p90, position, widening)
     return ProjectedPoints(points, floor, ceiling)
 }
+
+/**
+ * Where a projection's outcomes fall, for a chart: the share of [draws] simulated outcomes in each of [bins] equal bins
+ * from the lowest to the 99th percentile, each outcome widened as [calibratedRange] widens the floor and ceiling (so the
+ * chart and the range agree), and that span's ends.
+ */
+public fun projectedSpread(
+    components: List<ProjectionComponent>,
+    profile: ScoringProfile,
+    position: Position?,
+    bins: Int = 24,
+    draws: Int = 4_000,
+): ProjectedSpread {
+    val specs = components.map { DistributionSpec(Component(it.metricId), familyOf(it.family), it.mean, it.variance) }
+    val raw = drawPoints(specs, profile, position, draws)
+    val points = projectedScore(components, profile, position)
+    val k = position?.let { RANGE_WIDENING[it] } ?: 1.0
+    // The same rule as the floor and ceiling: away from the projection by k, a low outcome stopping at zero.
+    val widened = raw.map { s -> if (s < points) maxOf(points - k * (points - s), minOf(s, 0.0)) else points + k * (s - points) }
+    val low = widened.first()
+    val high = widened[(0.99 * (widened.size - 1)).toInt()]
+    if (high <= low) return ProjectedSpread(List(bins) { if (it == 0) 1.0 else 0.0 }, low, low + 1.0)
+    val counts = IntArray(bins)
+    for (v in widened) if (v <= high) counts[((v - low) / (high - low) * bins).toInt().coerceIn(0, bins - 1)]++
+    return ProjectedSpread(counts.map { it.toDouble() / widened.size }, low, high)
+}
+
+/** [shares] of outcomes per bin over [low]..[high] ([projectedSpread]). */
+public data class ProjectedSpread(val shares: List<Double>, val low: Double, val high: Double)
