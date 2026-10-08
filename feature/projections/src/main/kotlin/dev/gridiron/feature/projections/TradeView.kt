@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.TradeOffer
 import dev.gridiron.core.data.tdGapTag
+import dev.gridiron.core.designsystem.FoldHeader
 import dev.gridiron.core.designsystem.SectionHeader
 import dev.gridiron.core.designsystem.SummaryCard
 import dev.gridiron.core.model.Position
@@ -43,9 +44,9 @@ import dev.gridiron.core.projections.TradeOutcome
 import dev.gridiron.core.projections.TradePartners
 import dev.gridiron.core.projections.Trades
 import dev.gridiron.core.ui.SharePreview
+import java.util.Locale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.Locale
 
 /**
  * One rostered player in the trade view: his rest-of-season row, or a bare name when he has no projection. [weekly]
@@ -155,6 +156,7 @@ internal fun TradeView(
     val others = remember(partners, byId, rosWeekly) { partners.associate { it.teamName to tradePlayers(it, byId, rosWeekly) } }
     val playoffs = myTeam.playoffWeeks
     var partnerName by rememberSaveable { mutableStateOf(partners.firstOrNull()?.teamName) }
+    var fitsOpen by rememberSaveable { mutableStateOf(false) }
     val partner = partners.firstOrNull { it.teamName == partnerName } ?: partners.first()
     var give by rememberSaveable { mutableStateOf(listOf<String>()) }
     var get by rememberSaveable { mutableStateOf(listOf<String>()) }
@@ -302,6 +304,20 @@ internal fun TradeView(
                 }
             }
         }
+        // Above the trades, folded so they stay where they were.
+        if (fits.isNotEmpty()) {
+            item(key = "fits") { FoldHeader("Best partners: deep where you're thin, short where you're deep", fitsOpen, onToggle = { fitsOpen = !fitsOpen }) }
+            if (fitsOpen) {
+                itemsIndexed(fits, key = { _, f -> "fit:${f.partner}" }) { _, f ->
+                    Text(
+                        partnerText(f, names),
+                        Modifier.fillMaxWidth().clickable { partnerName = f.partner; get = emptyList(); cuts = emptyList() }
+                            .padding(horizontal = 16.dp, vertical = 6.dp).testTag("fit:${f.partner}"),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+            }
+        }
         item { SectionHeader("Suggested trades") }
         when (val found = ideas) {
             null -> item { Note("Looking for trades that help both sides…") }
@@ -356,17 +372,6 @@ internal fun TradeView(
                         "projection (on IR, say) counts as nothing."
                 },
             )
-        }
-        if (fits.isNotEmpty()) {
-            item { SectionHeader("Best partners: deep where you're thin, short where you're deep") }
-            itemsIndexed(fits, key = { _, f -> "fit:${f.partner}" }) { _, f ->
-                Text(
-                    partnerText(f, names),
-                    Modifier.fillMaxWidth().clickable { partnerName = f.partner; get = emptyList(); cuts = emptyList() }
-                        .padding(horizontal = 16.dp, vertical = 6.dp).testTag("fit:${f.partner}"),
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
         }
     }
 }

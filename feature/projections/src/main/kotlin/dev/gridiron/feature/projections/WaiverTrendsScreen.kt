@@ -13,13 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.runtime.remember
-import dev.gridiron.core.data.live.ActivityResult
-import dev.gridiron.core.data.live.LeagueTrend
-import dev.gridiron.core.data.live.leagueTrends
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -29,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -39,14 +35,19 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.live.ActivityResult
 import dev.gridiron.core.data.live.LeagueRostered
+import dev.gridiron.core.data.live.LeagueTrend
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.WaiverTrendsResult
+import dev.gridiron.core.data.live.leagueTrends
+import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
-import java.util.Locale
 
 /** More → Waiver trends: who ESPN's public leagues are adding and dropping, with the app's points beside them. */
 @Composable
@@ -110,12 +111,9 @@ public fun WaiverTrendsScreen(
     var freeOnly by rememberSaveable { mutableStateOf(false) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("Waiver trends", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("Waiver trends", onBack)
             when (state) {
-                WaiverTrendsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                WaiverTrendsState.Loading -> LoadingRows()
                 is WaiverTrendsState.Loaded -> {
                     val result = state.result
                     Text(

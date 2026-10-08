@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,18 +34,14 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.gridiron.core.charts.ordinal
 import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.BreakoutRow
-import dev.gridiron.core.charts.ordinal
 import dev.gridiron.core.data.COMP_METRICS
 import dev.gridiron.core.data.CompSeason
 import dev.gridiron.core.data.CompsRepository
 import dev.gridiron.core.data.DynastyValue
 import dev.gridiron.core.data.InjuryReturnRepository
-import dev.gridiron.core.data.TdRegressionRepository
-import dev.gridiron.core.data.tdRegressionLine
-import dev.gridiron.core.model.ScoringProfile
-import java.util.Locale
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerHeader
 import dev.gridiron.core.data.PlayerStats
@@ -55,6 +50,7 @@ import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ReturnOutlook
 import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.TdRegressionRepository
 import dev.gridiron.core.data.basisText
 import dev.gridiron.core.data.chancesText
 import dev.gridiron.core.data.live.DEFAULT_PLAYOFF_WEEKS
@@ -63,16 +59,22 @@ import dev.gridiron.core.data.live.InjuryNote
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.LiveStatus
 import dev.gridiron.core.data.live.NewsItem
+import dev.gridiron.core.data.tdRegressionLine
 import dev.gridiron.core.designsystem.ColumnChart
+import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.designsystem.StatusBadge
 import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.Roster
+import dev.gridiron.core.model.ScoringProfile
+import dev.gridiron.core.ui.SharePreview
 import dev.gridiron.feature.projections.PlayerShareCard
 import dev.gridiron.feature.projections.ProjectionCard
-import dev.gridiron.core.ui.SharePreview
 import dev.gridiron.feature.projections.ThisWeekCard
 import dev.gridiron.feature.projections.loadProjectionCard
+import java.time.Instant
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,7 +82,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import java.time.Instant
 
 /** Everything the Player page shows. */
 data class PlayerPage(
@@ -267,11 +268,9 @@ fun PlayerScreen(
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-            }
+            ScreenBar(null, onBack)
             if (page == null) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                LoadingRows()
                 return@Column
             }
             var sharing by remember { mutableStateOf(false) }

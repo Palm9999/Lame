@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.model.BonusStat
 import dev.gridiron.core.model.ScoringGroup
 import dev.gridiron.core.model.ScoringProfile
@@ -81,19 +82,12 @@ private fun EditingContent(state: EditState.Editing, onEvent: (EditEvent) -> Uni
     var confirmDiscard by remember { mutableStateOf(false) }
 
     LaunchedEffect(state.saved) { if (state.saved) onBack() }
-    // The back gesture asks too, exactly like "← Back"; with nothing unsaved it
+    // The back gesture asks too, exactly like the back arrow; with nothing unsaved it
     // stays disabled and back goes straight to the previous screen.
     BackHandler(enabled = state.dirty && !state.saved) { confirmDiscard = true }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = { if (state.dirty && !state.saved) confirmDiscard = true else onBack() }) { Text("← Back") }
-            Text(
-                "Edit scoring",
-                Modifier.weight(1f).padding(start = 4.dp),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
+        ScreenBar("Edit scoring", onBack = { if (state.dirty && !state.saved) confirmDiscard = true else onBack() }) {
             Button(onClick = { onEvent(EditEvent.Save) }, enabled = state.profile != null && state.dirty && !state.readOnly) {
                 Text("Save")
             }

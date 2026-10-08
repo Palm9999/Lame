@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -38,10 +37,13 @@ import dev.gridiron.core.data.TdRegressionRepository
 import dev.gridiron.core.data.TdRegressionRow
 import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.data.live.MyTeam
+import dev.gridiron.core.designsystem.EmptyState
+import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.ScreenBar
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
-import java.util.Locale
 
 /** "8 TDs on 4.6 expected (+3.4)". */
 internal fun tdLine(row: TdRegressionRow): String =
@@ -94,15 +96,12 @@ public fun TdRegressionScreen(
     var position by rememberSaveable { mutableStateOf<String?>(null) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("TD regression", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("TD regression", onBack)
             val loaded = board?.getOrNull()
             when {
-                board == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                loaded == null -> Text("Couldn't read touchdowns. Refresh stats and try again.", Modifier.padding(16.dp))
-                loaded.throughWeek == 0 -> Text("No expected touchdowns for this season yet.", Modifier.padding(16.dp))
+                board == null -> LoadingRows()
+                loaded == null -> EmptyState("Couldn't read touchdowns. Refresh stats and try again.")
+                loaded.throughWeek == 0 -> EmptyState("No expected touchdowns for this season yet.")
                 else -> {
                     Text(
                         "Through week ${loaded.throughWeek}: touchdowns against those expected from where and how often each player " +

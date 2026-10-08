@@ -1,6 +1,5 @@
 package dev.gridiron.feature.projections
 
-import dev.gridiron.core.data.live.playoffOddsCheck
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -40,13 +38,16 @@ import dev.gridiron.core.data.live.HistoryRecord
 import dev.gridiron.core.data.live.HistoryResult
 import dev.gridiron.core.data.live.HistoryTables
 import dev.gridiron.core.data.live.LeagueHistory
-import kotlinx.coroutines.flow.flowOf
+import dev.gridiron.core.data.live.playoffOddsCheck
+import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.ScreenBar
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 public sealed interface HistoryState {
     public data object Loading : HistoryState
@@ -100,12 +101,9 @@ public fun HistoryScreen(state: HistoryState, onBack: () -> Unit) {
     var tab by rememberSaveable { mutableStateOf(HistoryTab.SEASONS) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("League history", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("League history", onBack)
             when (state) {
-                HistoryState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                HistoryState.Loading -> LoadingRows()
                 is HistoryState.Loaded -> {
                     Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         for (t in HistoryTab.entries) {

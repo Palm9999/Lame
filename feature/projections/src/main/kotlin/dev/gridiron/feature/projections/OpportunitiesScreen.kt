@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -37,11 +36,14 @@ import dev.gridiron.core.data.OpportunityRow
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.data.live.MyTeam
+import dev.gridiron.core.designsystem.EmptyState
+import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
-import java.util.Locale
 
 /** ☰ → Opportunities: healthy players moving up a depth chart because a top-two starter is hurt. */
 @Composable
@@ -87,15 +89,10 @@ public fun OpportunitiesScreen(
     var freeOnly by rememberSaveable { mutableStateOf(false) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("Opportunities", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("Opportunities", onBack)
             when (state) {
-                OpportunitiesState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                is OpportunitiesState.Unavailable -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text(state.message, style = MaterialTheme.typography.bodyMedium)
-                }
+                OpportunitiesState.Loading -> LoadingRows()
+                is OpportunitiesState.Unavailable -> EmptyState(state.message)
                 is OpportunitiesState.Loaded -> {
                     Text(
                         "Week ${state.week}: a top-two RB, WR or TE, or a QB1, is Doubtful, Out or IR (or newly Questionable). " +

@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,7 +42,11 @@ import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.BreakoutRow
 import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.data.live.MyTeam
+import dev.gridiron.core.designsystem.EmptyState
+import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.model.Position
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -51,7 +54,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 public sealed interface BreakoutsState {
     public data object Loading : BreakoutsState
@@ -134,15 +136,10 @@ public fun BreakoutsScreen(
     var freeOnly by rememberSaveable { mutableStateOf(false) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("Rising roles", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("Rising roles", onBack)
             when (state) {
-                BreakoutsState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                is BreakoutsState.Unavailable -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text(state.message, style = MaterialTheme.typography.bodyMedium)
-                }
+                BreakoutsState.Loading -> LoadingRows()
+                is BreakoutsState.Unavailable -> EmptyState(state.message)
                 is BreakoutsState.Loaded -> {
                     Text(
                         "Entering week ${state.week}: usage and expected points over the last four games against the eight before, " +

@@ -1,5 +1,6 @@
 package dev.gridiron.feature.scoring
 
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,7 +11,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -35,6 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.model.ScoringPresets
 import dev.gridiron.core.model.ScoringProfile
 
@@ -58,10 +59,7 @@ internal fun ScoringListScreen(
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 16.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    TextButton(onClick = onBack) { Text("← Back") }
-                    Text("Scoring profiles", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                }
+                ScreenBar("Scoring profiles", onBack)
                 HorizontalDivider()
                 LazyColumn(Modifier.weight(1f)) {
                     items(state.profiles, key = { it.id }) { profile ->

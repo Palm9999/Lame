@@ -11,6 +11,8 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.espresso.Espresso
@@ -266,5 +268,21 @@ class NavigationTest {
         settle()
         compose.onNodeWithTag("more").assertDoesNotExist()
         compose.onNodeWithTag("menu").assertExists()
+    }
+
+    @Test
+    fun aTabHasNoBackArrowAndLightsOnlyWhileOnTop() {
+        compose.setContent { GridironTheme { GridironNavHost(deps) } }
+        settle()
+
+        compose.onNodeWithTag("tab:More").performClick()
+        settle()
+        compose.onNodeWithTag("back").assertDoesNotExist()
+        compose.onNodeWithTag("tab:More").assertIsSelected()
+        compose.onNodeWithTag("more:Team defense").performClick()
+        settle()
+        compose.onNodeWithTag("back").assertExists()
+        compose.onNodeWithTag("tab:More").assertIsNotSelected()
+        compose.onNodeWithTag("tab:Grid").assertIsNotSelected()
     }
 }

@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -27,6 +26,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -37,13 +37,18 @@ import dev.gridiron.core.data.DefenseRow
 import dev.gridiron.core.data.InjuryReturnRepository
 import dev.gridiron.core.data.InjuryReturns
 import dev.gridiron.core.data.InjuryRow
-import dev.gridiron.core.data.chancesText
 import dev.gridiron.core.data.TeamsRepository
+import dev.gridiron.core.data.chancesText
 import dev.gridiron.core.data.live.LiveRepository
+import dev.gridiron.core.designsystem.EmptyState
+import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.PullToRefresh
+import dev.gridiron.core.designsystem.ScreenBar
+import java.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
-import java.time.Instant
+import kotlinx.coroutines.launch
 
 @Composable
 fun InjuriesScreen(season: Int, teams: TeamsRepository, onBack: () -> Unit, dataVersion: Flow<Long> = flowOf(0L)) {
@@ -132,7 +137,16 @@ private fun LiveInjuriesRoute(
         }
         outlooks = found
     }
-    LiveInjuriesScreen(groups, asOf, error, onBack, onPlayer, outlooks)
+    val scope = rememberCoroutineScope()
+    var refreshing by remember { mutableStateOf(false) }
+    val reload: () -> Unit = {
+        scope.launch {
+            refreshing = true
+            error = live.refresh().injuriesError
+            refreshing = false
+        }
+    }
+    LiveInjuriesScreen(groups, asOf, error, onBack, onPlayer, outlooks, refreshing, reload)
 }
 
 @Composable
@@ -144,30 +158,32 @@ fun LiveInjuriesScreen(
     onPlayer: (String) -> Unit,
     /** "Played again by: wk 7 28% · …" by app player id, for Out, Doubtful and IR players with enough history. */
     outlooks: Map<String, String> = emptyMap(),
+    refreshing: Boolean = false,
+    /** Fetches ESPN's list again; null: no pull to refresh. */
+    onRefresh: (() -> Unit)? = null,
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("Injury report", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("Injury report", onBack)
             LiveCaption(asOf, error)
             when {
-                groups == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                groups.isEmpty() -> Message(if (error != null) "Couldn't reach ESPN. Try again later." else "No injuries reported.")
-                else -> LazyColumn {
-                    for (group in groups) {
-                        item(key = "team:${group.team}") {
-                            Text(
-                                group.team,
-                                Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 16.dp, vertical = 6.dp),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                            )
-                        }
-                        items(group.lines, key = { it.injury.espnId }) { line ->
-                            InjuryLineRow(line, line.injury.playerId?.let(outlooks::get), onPlayer)
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                groups == null -> LoadingRows()
+                groups.isEmpty() -> Message(if (error != null) "Couldn't reach ESPN. Try again later." else "No injuries reported.", onRefresh)
+                else -> PullToRefresh(refreshing, onRefresh ?: {}) {
+                    LazyColumn {
+                        for (group in groups) {
+                            item(key = "team:${group.team}") {
+                                Text(
+                                    group.team,
+                                    Modifier.fillMaxWidth().background(MaterialTheme.colorScheme.surfaceVariant).padding(horizontal = 16.dp, vertical = 6.dp),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                            items(group.lines, key = { it.injury.espnId }) { line ->
+                                InjuryLineRow(line, line.injury.playerId?.let(outlooks::get), onPlayer)
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                            }
                         }
                     }
                 }
@@ -267,14 +283,11 @@ private fun <T> ListScreen(
     }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar(title, onBack)
             val r = rows
             when {
                 error != null -> Message(error!!)
-                r == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                r == null -> LoadingRows()
                 r.isEmpty() -> Message("No data for this season yet. Try Refresh stats.")
                 else -> {
                     header?.invoke()
@@ -291,6 +304,6 @@ private fun <T> ListScreen(
 }
 
 @Composable
-internal fun Message(text: String) {
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Text(text, textAlign = TextAlign.Center) }
+internal fun Message(text: String, onRetry: (() -> Unit)? = null) {
+    EmptyState(text, onRetry = onRetry)
 }

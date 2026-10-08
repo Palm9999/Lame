@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -41,15 +40,18 @@ import dev.gridiron.core.data.ScoreGame
 import dev.gridiron.core.data.ScoresRepository
 import dev.gridiron.core.data.ScoresWeek
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.PullToRefresh
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.model.Position
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
 /** A week's name: "Week 4", and the four playoff rounds nflverse numbers 19 to 22. */
 internal fun weekLabel(week: Int): String = when (week) {
@@ -78,7 +80,7 @@ fun ScoresRoute(
     season: Int,
     scores: ScoresRepository,
     onGame: (week: Int, home: String, away: String) -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     /** Bumped when a refresh swaps in new stats: the week loads again. */
     dataVersion: Flow<Long> = flowOf(0L),
 ) {
@@ -127,35 +129,36 @@ fun ScoresScreen(
     onWeek: (Int) -> Unit,
     onRefresh: () -> Unit,
     onGame: (week: Int, home: String, away: String) -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("Scores · $season", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            ScreenBar("Scores · $season", onBack) {
                 TextButton(onClick = onRefresh) { Text("Refresh") }
             }
             if (weeks != null && weeks.isNotEmpty() && week != 0) WeekPicker(weeks, week, onWeek)
             page?.liveError?.let { LiveCaption(null, it) }
             when {
-                failed -> Message("Couldn't load this week.")
+                failed -> Message("Couldn't load this week.", onRefresh)
                 weeks != null && weeks.isEmpty() -> Message("No games for $season in the stats yet.")
-                page == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                page == null -> LoadingRows()
                 page.games.isEmpty() -> Message("No games this week.")
-                else -> LazyColumn(Modifier.testTag("scores-list")) {
-                    items(page.games, key = { "${it.home}-${it.away}" }) { game ->
-                        GameRow(game) { onGame(page.week, game.home, game.away) }
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                    }
-                    if (page.byes.isNotEmpty()) {
-                        item(key = "byes") {
-                            Text(
-                                "Bye: ${page.byes.joinToString(", ")}",
-                                Modifier.fillMaxWidth().padding(16.dp),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                // The week reloads to its skeleton, so the pull's own spinner needn't stay.
+                else -> PullToRefresh(refreshing = false, onRefresh) {
+                    LazyColumn(Modifier.testTag("scores-list")) {
+                        items(page.games, key = { "${it.home}-${it.away}" }) { game ->
+                            GameRow(game) { onGame(page.week, game.home, game.away) }
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
+                        if (page.byes.isNotEmpty()) {
+                            item(key = "byes") {
+                                Text(
+                                    "Bye: ${page.byes.joinToString(", ")}",
+                                    Modifier.fillMaxWidth().padding(16.dp),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
                         }
                     }
                 }
@@ -259,10 +262,7 @@ fun GameScreen(
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("$away @ $home · ${weekLabel(week)} $season", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("$away @ $home · ${weekLabel(week)} $season", onBack)
             if (game != null) {
                 Text(
                     listOfNotNull(
@@ -276,7 +276,7 @@ fun GameScreen(
             }
             when {
                 failed -> Message("Couldn't load this game.")
-                detail == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                detail == null -> LoadingRows()
                 detail.home.isEmpty() && detail.away.isEmpty() -> Message("No player stats for this game yet.")
                 else -> LazyColumn(Modifier.testTag("game-players")) {
                     teamSection(away, detail.away, profileName, onPlayer)

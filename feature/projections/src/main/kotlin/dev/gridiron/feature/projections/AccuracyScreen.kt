@@ -28,6 +28,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.gridiron.core.designsystem.EmptyState
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.projections.ACCURACY_MIN_POINTS
 import dev.gridiron.core.projections.ACCURACY_POSITIONS
@@ -42,15 +44,7 @@ import dev.gridiron.core.projections.PositionAccuracy
 public fun AccuracyScreen(state: AccuracyState, onSeason: (Int) -> Unit, onBack: () -> Unit) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text(
-                    "Projection accuracy",
-                    Modifier.testTag("accuracyTitle"),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+            ScreenBar("Projection accuracy", onBack, titleModifier = Modifier.testTag("accuracyTitle"))
             when (state) {
                 AccuracyState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -58,9 +52,7 @@ public fun AccuracyScreen(state: AccuracyState, onSeason: (Int) -> Unit, onBack:
                         Text("Scoring every projected week…", Modifier.padding(top = 12.dp), style = MaterialTheme.typography.bodySmall)
                     }
                 }
-                is AccuracyState.Unavailable -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text(state.message, style = MaterialTheme.typography.bodyMedium)
-                }
+                is AccuracyState.Unavailable -> EmptyState(state.message)
                 is AccuracyState.Loaded -> Measured(state, onSeason)
             }
         }
