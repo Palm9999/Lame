@@ -479,10 +479,12 @@ internal fun dynastyLine(playerId: String, values: List<DynastyValue>): String? 
 /** "6.1 TGT · 4.2 REC · 61 REC YDS a game": the first three of his position's comp metrics. */
 internal fun compLine(position: String?, c: CompSeason): String {
     val names = COMP_METRICS[position].orEmpty().take(3).map { COMP_LABELS[it] ?: it }
-    return names.zip(c.perGame).joinToString(" · ") { (n, v) -> String.format(Locale.US, if (v >= 20) "%.0f %s" else "%.1f %s", v, n) } + " a game"
+    val line = names.zip(c.perGame).joinToString(" · ") { (n, v) -> String.format(Locale.US, if (v >= 20) "%.0f %s" else "%.1f %s", v, n) } + " a game"
+    return c.age?.let { String.format(Locale.US, "Age %.0f · %s", Math.floor(it), line) } ?: line
 }
 
 private val COMP_LABELS = mapOf(
     "attempts" to "ATT", "passing_yards" to "PASS YDS", "passing_tds" to "PASS TD", "carries" to "CAR",
     "rushing_yards" to "RUSH YDS", "rushing_tds" to "RUSH TD", "targets" to "TGT", "receptions" to "REC", "receiving_yards" to "REC YDS",
+    "fg_att" to "FGA", "fg_made" to "FGM", "fg_made_50" to "50+", "points_allowed" to "PA", "yards_allowed" to "YA", "dst_sacks" to "SACK",
 )

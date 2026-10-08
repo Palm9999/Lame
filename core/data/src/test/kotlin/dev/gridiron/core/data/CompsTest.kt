@@ -19,6 +19,16 @@ class CompsTest {
     }
 
     @Test
+    fun `age and rates count, and a season without an age sits at the pool's average`() {
+        fun c(id: String, age: Double?, vararg rates: Double) = CompSeason(id, id, 2025, null, 10, listOf(5.0), rates.toList(), age)
+        val target = c("me", 24.0, 0.25)
+        val pool = listOf(target, c("young", 23.0, 0.25), c("old", 33.0, 0.25), c("share", 24.0, 0.10), c("unknown", null, 0.25))
+        assertEquals("young", nearestSeasons(target, pool, k = 1).single().playerId)
+        assertEquals(26.0, ageOn("2000-09-01", 2026)!!, 0.01)
+        assertEquals(null, ageOn("unknown", 2026))
+    }
+
+    @Test
     fun `a real receiver's comps are five other wide receivers' seasons`() = runTest {
         val path = StatsDb.path ?: return@runTest
         JdbcQueryExecutor(path).use { executor ->
@@ -31,7 +41,8 @@ class CompsTest {
             val comps = CompsRepository(executor).comps(top, 2025, "WR")
             assertEquals(5, comps.size)
             assertTrue(comps.none { it.playerId == top })
-            assertTrue(comps.all { it.games >= 4 && it.perGame.size == COMP_METRICS.getValue("WR").size })
+            assertTrue(comps.all { it.games >= 4 && it.perGame.size == COMP_METRICS.getValue("WR").size && it.rates.size == 3 })
+            assertTrue(comps.count { it.age != null } >= 4, comps.toString())
         }
     }
 }

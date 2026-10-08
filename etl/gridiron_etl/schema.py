@@ -21,7 +21,7 @@ import polars as pl
 
 log = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 DDL = """
 PRAGMA journal_mode = OFF;
@@ -66,7 +66,8 @@ CREATE TABLE player (
     search_name  TEXT NOT NULL,
     position     TEXT,
     team         TEXT,
-    pfr_player_id TEXT
+    pfr_player_id TEXT,
+    birth_date   TEXT
 );
 
 -- The long/narrow fact table. Adding a metric is an INSERT, not a migration.
@@ -264,10 +265,10 @@ def load_metrics(conn: sqlite3.Connection, rows: list[dict]) -> None:
 def load_players(conn: sqlite3.Connection, df: pl.DataFrame) -> None:
     conn.executemany(
         """INSERT OR REPLACE INTO player
-           (player_id, full_name, search_name, position, team, pfr_player_id)
-           VALUES (?, ?, ?, ?, ?, ?)""",
+           (player_id, full_name, search_name, position, team, pfr_player_id, birth_date)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
         df.select(["player_id", "full_name", "search_name",
-                   "position", "team", "pfr_player_id"]).rows(),
+                   "position", "team", "pfr_player_id", "birth_date"]).rows(),
     )
     conn.commit()
 

@@ -7,7 +7,7 @@ package dev.gridiron.core.ingest.db
  * pre-aggregated `player_window_stat` and `window_def` (9), plus `player_week_signal` (10),
  * plus `espn_projection` (11), plus `player_ros_week` (12).
  */
-public const val SCHEMA_VERSION: Int = 12
+public const val SCHEMA_VERSION: Int = 13
 
 /**
  * Bump whenever a transform, the schema or an input's meaning changes: a build
@@ -31,7 +31,7 @@ internal val SCHEMA: List<String> = listOf(
         dist_family TEXT, zero_inflated INTEGER NOT NULL DEFAULT 0)""",
     """CREATE TABLE player (
         player_id TEXT PRIMARY KEY, full_name TEXT NOT NULL, search_name TEXT NOT NULL,
-        position TEXT, team TEXT, pfr_player_id TEXT)""",
+        position TEXT, team TEXT, pfr_player_id TEXT, birth_date TEXT)""",
     """CREATE TABLE player_week_stat (
         player_id TEXT NOT NULL, season INTEGER NOT NULL, week INTEGER NOT NULL, team TEXT,
         metric_id TEXT NOT NULL, value REAL NOT NULL,

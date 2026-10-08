@@ -102,5 +102,5 @@ def test_a_team_week_carries_its_yards_allowed_and_a_shutout_keeps_its_zero():
 
 def test_a_team_defense_is_named_for_its_team():
     assert teams.dst_players(["KC"]).to_dicts() == [
-        {"player_id": "DST_KC", "full_name": "KC D/ST", "position": "DST", "team": "KC", "pfr_player_id": None},
+        {"player_id": "DST_KC", "full_name": "KC D/ST", "position": "DST", "team": "KC", "pfr_player_id": None, "birth_date": None},
     ]
