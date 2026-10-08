@@ -34,6 +34,8 @@ public data class HistoryTables(
     val allTime: List<ManagerRow>,
     val headToHead: List<RivalRow>,
     val records: List<HistoryRecord>,
+    /** The playoff simulator checked on finished seasons ([playoffOddsCheck]); empty when none can be. */
+    val oddsChecks: List<OddsCheck> = emptyList(),
 )
 
 public object LeagueHistory {
