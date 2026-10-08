@@ -91,6 +91,7 @@ import dev.gridiron.feature.projections.DifferRoute
 import dev.gridiron.feature.projections.DynastyRoute
 import dev.gridiron.feature.projections.HistoryRoute
 import dev.gridiron.feature.projections.HomeRoute
+import dev.gridiron.feature.projections.LinesRoute
 import dev.gridiron.feature.projections.OpportunitiesRoute
 import dev.gridiron.feature.projections.ProjectionListRoute
 import dev.gridiron.feature.projections.ProjectionsRoute
@@ -225,6 +226,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
         if (deps.live != null && deps.league != null) add(MoreItem("Players", "News", "ESPN's latest stories") { backStack.push(NewsKey) })
         add(MoreItem("Players", "Injury report", "ESPN's live list and practice") { backStack.push(InjuriesKey(season)) })
         add(MoreItem("Players", "Team defense", "Each defense's season") { backStack.push(DefenseKey(season)) })
+        add(MoreItem("Players", "Game lines", "Each game's betting line beside the season so far") { backStack.push(LinesKey) })
         if (deps.league != null) add(MoreItem("League", "ESPN leagues", "Sync, teams and matchups") { backStack.push(LeagueKey) })
         if (deps.waiverTrends != null) add(MoreItem("League", "Waiver trends", "Who ESPN leagues are adding and dropping") { backStack.push(WaiverTrendsKey(season)) })
         if (deps.dynasty != null) add(MoreItem("League", "Dynasty & keepers", "Long-term values and who to keep") { backStack.push(DynastyKey(season)) })
@@ -251,11 +253,12 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
         // The bottom bar below takes the navigation bar's inset: screens above it leave it alone.
         // A long press on a player row anywhere opens his quick look over the screen.
         var peeking by rememberSaveable { mutableStateOf<String?>(null) }
+        var peekCompare by androidx.compose.runtime.remember { mutableStateOf<(() -> Unit)?>(null) }
         peeking?.let { id ->
-            PlayerPeekSheet(id, deps, onOpen = { open -> peeking = null; backStack.push(PlayerKey(open)) }, onDismiss = { peeking = null })
+            PlayerPeekSheet(id, deps, onOpen = { open -> peeking = null; backStack.push(PlayerKey(open)) }, onDismiss = { peeking = null }, onCompare = peekCompare)
         }
         Box(Modifier.weight(1f).consumeWindowInsets(WindowInsets.navigationBars)) {
-          CompositionLocalProvider(LocalPlayerPeek provides { peeking = it }) {
+          CompositionLocalProvider(LocalPlayerPeek provides { id, compare -> peekCompare = compare; peeking = id }) {
             NavDisplay(
                 backStack = backStack,
                 onBack = back,
@@ -497,6 +500,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 year, draft::board, deps.scoring.active,
                                 teams = if (team != null && others.isNotEmpty()) others.size + 1 else 12,
                                 slots = team?.slots, file = File(dir, "draft-$year.txt"), onBack = back,
+                                espnId = { id -> deps.players?.espnId(id) },
                             )
                         }
                     }
@@ -521,6 +525,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                     }
                     entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back, props = deps.props?.status) } }
                     entry<MoreKey> { MoreScreen(more) }
+                    entry<LinesKey> { LinesRoute(deps.projections, onBack = back, dataVersion = deps.stats.dataVersion) }
                     entry<HomeKey> {
                         val league = deps.league
                         if (league != null) {

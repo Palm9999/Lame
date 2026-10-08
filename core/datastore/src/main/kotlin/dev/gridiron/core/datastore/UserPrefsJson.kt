@@ -61,6 +61,8 @@ internal data class UserPrefsDto(
     val gameDayTimes: Map<String, String> = emptyMap(),
     /** Missing in a file from before the look switches: off, the app's own palette. */
     val wallpaperColors: Boolean = false,
+    /** Missing in a file from before the drop alerts: follows [injuryAlerts], like the other alerts. */
+    val dropAlerts: Boolean? = null,
     val trueBlack: Boolean = false,
 )
 
@@ -230,6 +232,7 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
         alerts = AlertSwitches(
             injuryAlerts, newsAlerts ?: injuryAlerts, lineupAlerts ?: injuryAlerts, summaryAlert ?: injuryAlerts, quietAlerts, gameDayRefresh,
             refreshTimes(gameDayTimes),
+            drops = dropAlerts ?: injuryAlerts,
         ),
         look = Look(wallpaperColors, trueBlack),
     )
@@ -320,6 +323,7 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     gameDayTimes = alerts.refreshTimes.takeIf { it != AlertSwitches.DEFAULT_REFRESH_TIMES }
         ?.entries?.associate { (day, time) -> day.name to time.toString() }.orEmpty(),
     wallpaperColors = look.wallpaper,
+    dropAlerts = alerts.drops,
     trueBlack = look.trueBlack,
 )
 

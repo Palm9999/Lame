@@ -189,6 +189,23 @@ class GridironApplication : Application() {
         return NextMatch(week, theirs.teamName, chance)
     }
 
+    internal val dropAlerts by lazy { DropAlertChecker(File(noBackupFilesDir, "drop-alerts.txt")) }
+
+    /** Players dropped in the user's league since the last run who'd lift their rest of season ([DropAlertChecker]). */
+    internal suspend fun leagueDrops(): List<DropAlert> {
+        val season = currentSeason()
+        val mine = league.myTeam.first()?.takeIf { it.season == season } ?: return emptyList()
+        val activity = league.activity(season).takeIf { it.error == null } ?: return emptyList()
+        val rostered = league.rostered.first()?.takeIf { it.season == season }?.playerIds ?: return emptyList()
+        val profile = scoring.active.first()
+        val ros = projectionsRepo.rosAll(season).mapNotNull { p ->
+            val pos = p.position ?: return@mapNotNull null
+            LineupCandidate(p.playerId, pos, projectedScore(p.components, profile, Position.fromCode(pos)))
+        }.associateBy { it.playerId }
+        val roster = mine.players.mapNotNull { it.playerId?.let(ros::get) }
+        return dropAlerts.check(activity.items, activity.myTeamId, rostered, mine.slots, roster, ros)
+    }
+
     /** ESPN stories about rostered players since [InjuryAlertWorker]'s last run. */
     /** Shared by Waiver trends and the two-hourly job's daily roster % snapshot. */
     internal val waiverTrends by lazy { WaiverTrendsRepository(liveDb, UrlConnectionHttpGet(), players) }

@@ -162,6 +162,9 @@ private fun AlertsSection(settings: SettingsRepository) {
             }
         }
     }
+    AlertSwitch("League drops", "A player dropped in your league who would lift your rest of season (checked about every two hours).", now.drops, "drops") { on ->
+        scope.launch { settings.setAlerts { it.copy(drops = on) } }
+    }
     AlertSwitch("Quiet hours", "Holds injury and news alerts from 10 pm to 8 am and sends them after. Lineup checks still come.", now.quiet, "quiet") { on ->
         scope.launch { settings.setAlerts { it.copy(quiet = on) } }
     }

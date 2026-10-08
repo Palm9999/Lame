@@ -41,11 +41,13 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 import kotlinx.coroutines.Dispatchers
@@ -165,7 +167,7 @@ public fun SpreadChart(shares: List<Double>, low: Double, high: Double, floor: D
     }
 }
 
-/** Downloaded images kept for the app's life: a page of headshots is a few hundred KB. */
+/** Images already decoded this run: a page of headshots is a few hundred KB. */
 private val IMAGES = LruCache<String, ImageBitmap>(48)
 
 /**
@@ -174,22 +176,42 @@ private val IMAGES = LruCache<String, ImageBitmap>(48)
  */
 @Composable
 public fun RemoteCircleImage(url: String?, size: Dp, modifier: Modifier = Modifier) {
+    val cache = File(LocalContext.current.cacheDir, "images")
     var image by remember(url) { mutableStateOf(url?.let { IMAGES.get(it) }) }
     LaunchedEffect(url) {
         if (url == null || image != null) return@LaunchedEffect
-        image = withContext(Dispatchers.IO) { download(url) }?.also { IMAGES.put(url, it) }
+        image = withContext(Dispatchers.IO) { cached(url, cache) }?.also { IMAGES.put(url, it) }
     }
     Box(modifier.size(size).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
         image?.let { Image(it, contentDescription = null, Modifier.size(size), contentScale = ContentScale.Crop) }
     }
 }
 
-private fun download(url: String): ImageBitmap? = try {
+/**
+ * The image at [url] from the app's cache folder [dir], downloading it there first when it isn't; null when it can't be
+ * had. Android clears the cache folder when space runs low, so it never needs pruning here.
+ */
+private fun cached(url: String, dir: File): ImageBitmap? {
+    val file = File(dir, url.hashCode().toUInt().toString(16) + ".img")
+    if (!file.isFile) {
+        val bytes = download(url) ?: return null
+        runCatching {
+            dir.mkdirs()
+            val tmp = File(dir, file.name + ".tmp")
+            tmp.writeBytes(bytes)
+            tmp.renameTo(file)
+        }
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap()
+    }
+    return BitmapFactory.decodeFile(file.path)?.asImageBitmap()
+}
+
+private fun download(url: String): ByteArray? = try {
     val connection = URL(url).openConnection() as HttpURLConnection
     connection.connectTimeout = 5_000
     connection.readTimeout = 5_000
     try {
-        if (connection.responseCode != 200) null else connection.inputStream.use { BitmapFactory.decodeStream(it) }?.asImageBitmap()
+        if (connection.responseCode != 200) null else connection.inputStream.use { it.readBytes() }
     } finally {
         connection.disconnect()
     }
@@ -209,12 +231,15 @@ public fun espnImageUrl(playerId: String, espnId: String?): String? {
 /** nflverse codes ESPN spells differently in its logo paths. */
 private val LOGO_CODES = mapOf("la" to "lar", "was" to "wsh")
 
-/** Opens the quick-look sheet for a player id; null where nothing provides one (tests, previews). */
-public val LocalPlayerPeek: ProvidableCompositionLocal<((String) -> Unit)?> = staticCompositionLocalOf { null }
+/**
+ * Opens the quick-look sheet for a player id, with what its Add to Compare does when the screen has its own (the Grid
+ * adds over its weeks; null adds his season); null where nothing provides one (tests, previews).
+ */
+public val LocalPlayerPeek: ProvidableCompositionLocal<((playerId: String, onCompare: (() -> Unit)?) -> Unit)?> = staticCompositionLocalOf { null }
 
 /** A player row's taps: a tap opens his page through [onPlayer], a long press the quick look ([LocalPlayerPeek]). */
 @OptIn(ExperimentalFoundationApi::class)
 public fun Modifier.playerClick(playerId: String, onPlayer: (String) -> Unit): Modifier = composed {
     val peek = LocalPlayerPeek.current
-    combinedClickable(onLongClickLabel = peek?.let { "Quick look" }, onLongClick = peek?.let { { it(playerId) } }) { onPlayer(playerId) }
+    combinedClickable(onLongClickLabel = peek?.let { "Quick look" }, onLongClick = peek?.let { { it(playerId, null) } }) { onPlayer(playerId) }
 }

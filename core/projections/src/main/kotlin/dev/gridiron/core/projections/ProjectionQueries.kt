@@ -149,6 +149,12 @@ public object ProjectionQueries {
         listOf(Bind.Integer(season.toLong()), Bind.Integer(week.toLong()), Bind.Text(team), Bind.Text(team)),
     )
 
+    /** Every regular-season game of [season] with its score (null until played) and line (null until posted). */
+    public fun seasonGames(season: Int): SqlQuery = SqlQuery(
+        "SELECT week, home_team, away_team, home_score, away_score, spread_line, total_line FROM game WHERE season = ? AND game_type = 'REG'",
+        listOf(Bind.Integer(season.toLong())),
+    )
+
     /** Every regular-season game of [season]: week and the two teams, for bye weeks. */
     public fun regularGames(season: Int): SqlQuery = SqlQuery(
         "SELECT week, home_team, away_team FROM game WHERE season = ? AND game_type = 'REG'",

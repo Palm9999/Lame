@@ -86,56 +86,69 @@ suspend fun loadPeek(playerId: String, deps: Deps): PlayerPeek {
 /** A long-pressed player at a glance, over whatever screen is open: his page and Compare one tap away. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlayerPeekSheet(playerId: String, deps: Deps, onOpen: (String) -> Unit, onDismiss: () -> Unit) {
+fun PlayerPeekSheet(
+    playerId: String,
+    deps: Deps,
+    onOpen: (String) -> Unit,
+    onDismiss: () -> Unit,
+    /** The screen's own Add to Compare (the Grid's, over its weeks); null adds his whole season. */
+    onCompare: (() -> Unit)? = null,
+) {
     var peek by remember(playerId) { mutableStateOf<PlayerPeek?>(null) }
     var note by remember(playerId) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(playerId) { peek = loadPeek(playerId, deps) }
     ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("peek")) {
         val p = peek
-        if (p == null) {
-            LoadingRows(rows = 3)
-            return@ModalBottomSheet
-        }
         Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                RemoteCircleImage(p.imageUrl, 56.dp)
-                Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                    Text(p.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        p.position?.let(Position::label)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
-                        p.team?.let { TeamChip(it) }
-                        p.status?.let { StatusBadge(it) }
+            // The buttons need only the id, so they show while the rest loads.
+            if (p == null) {
+                LoadingRows(rows = 3)
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RemoteCircleImage(p.imageUrl, 56.dp)
+                    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                        Text(p.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            p.position?.let(Position::label)?.let { Text(it, style = MaterialTheme.typography.bodyMedium) }
+                            p.team?.let { TeamChip(it) }
+                            p.status?.let { StatusBadge(it) }
+                        }
                     }
                 }
-            }
-            val card = p.card
-            if (card != null && !card.bye && !card.notThisWeek && !card.out) {
-                Text(
-                    "Week ${card.week}${card.matchup?.let { " $it" }.orEmpty()}: ${one(card.points)} pts · ${one(card.floor)}–${one(card.ceiling)}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                card.spread?.let { SpreadChart(it.shares, it.low, it.high, card.floor, card.points, card.ceiling) }
-                    ?: RangeBar(card.floor, card.points, card.ceiling, card.ceiling * 1.15)
-            } else if (card != null) {
-                Text(if (card.bye) "Bye this week" else if (card.out) "Out this week" else "Not projected this week", style = MaterialTheme.typography.titleMedium)
-            }
-            card?.rosPoints?.let { Text("Rest of season ${one(it)} pts", style = MaterialTheme.typography.bodyMedium) }
-            for (n in p.news) {
-                Text(n.headline, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                val card = p.card
+                if (card != null && !card.bye && !card.notThisWeek && !card.out) {
+                    Text(
+                        "Week ${card.week}${card.matchup?.let { " $it" }.orEmpty()}: ${one(card.points)} pts · ${one(card.floor)}–${one(card.ceiling)}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    card.spread?.let { SpreadChart(it.shares, it.low, it.high, card.floor, card.points, card.ceiling) }
+                        ?: RangeBar(card.floor, card.points, card.ceiling, card.ceiling * 1.15)
+                } else if (card != null) {
+                    Text(if (card.bye) "Bye this week" else if (card.out) "Out this week" else "Not projected this week", style = MaterialTheme.typography.titleMedium)
+                }
+                card?.rosPoints?.let { Text("Rest of season ${one(it)} pts", style = MaterialTheme.typography.bodyMedium) }
+                for (n in p.news) {
+                    Text(n.headline, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                }
             }
             note?.let { Text(it, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = { onOpen(playerId) }, modifier = Modifier.testTag("peek:open")) { Text("Open page") }
                 OutlinedButton(
                     onClick = {
-                        scope.launch {
-                            val season = currentSeason()
-                            note = when (deps.tray.add(CompareSlot(playerId, season, WeekRange(1, WeekRange.lastRegularSeasonWeek(season))))) {
-                                CompareTrayRepository.AddResult.ADDED -> "Added to Compare"
-                                CompareTrayRepository.AddResult.ALREADY_THERE -> "Already in Compare"
-                                CompareTrayRepository.AddResult.FULL -> "Compare is full"
+                        if (onCompare != null) {
+                            onCompare()
+                            onDismiss()
+                        } else {
+                            scope.launch {
+                                val season = currentSeason()
+                                note = when (deps.tray.add(CompareSlot(playerId, season, WeekRange(1, WeekRange.lastRegularSeasonWeek(season))))) {
+                                    CompareTrayRepository.AddResult.ADDED -> "Added to Compare"
+                                    CompareTrayRepository.AddResult.ALREADY_THERE -> "Already in Compare"
+                                    CompareTrayRepository.AddResult.FULL -> "Compare is full"
+                                }
                             }
                         }
                     },
