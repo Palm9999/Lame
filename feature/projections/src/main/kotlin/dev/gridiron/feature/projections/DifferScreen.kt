@@ -44,6 +44,7 @@ import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.designsystem.EmptyState
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.ListedProjection
@@ -205,7 +206,7 @@ public fun DifferScreen(
                     LazyColumn(Modifier.fillMaxSize()) {
                         items(rows, key = { (r, _) -> r.playerId }) { (r, owner) ->
                             Row(
-                                Modifier.fillMaxWidth().clickable { onPlayer(r.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp),
+                                Modifier.fillMaxWidth().playerClick(r.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 8.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column(Modifier.weight(1f)) {

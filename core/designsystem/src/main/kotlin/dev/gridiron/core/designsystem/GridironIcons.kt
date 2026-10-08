@@ -61,6 +61,15 @@ public object GridironIcons {
         }
     }
 
+    /** A house: Home. */
+    public val Home: ImageVector by lazy {
+        outline("Home") {
+            moveTo(4f, 11f); lineTo(12f, 4f); lineTo(20f, 11f)
+            moveTo(6f, 9.5f); lineTo(6f, 20f); lineTo(18f, 20f); lineTo(18f, 9.5f)
+            moveTo(10f, 20f); lineTo(10f, 14f); lineTo(14f, 14f); lineTo(14f, 20f)
+        }
+    }
+
     /** An arrow pointing left: back. */
     public val Back: ImageVector by lazy {
         outline("Back") {

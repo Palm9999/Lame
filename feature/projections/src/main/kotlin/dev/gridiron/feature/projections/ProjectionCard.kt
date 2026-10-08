@@ -13,19 +13,22 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.live.DEFAULT_PLAYOFF_WEEKS
+import dev.gridiron.core.designsystem.SpreadChart
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.GameLine
+import dev.gridiron.core.projections.ProjectedSpread
 import dev.gridiron.core.projections.ProjectionsRequest
 import dev.gridiron.core.projections.RosProjectionsRequest
 import dev.gridiron.core.projections.anytimeTd
 import dev.gridiron.core.projections.projectPoints
 import dev.gridiron.core.projections.projectedScore
+import dev.gridiron.core.projections.projectedSpread
+import java.util.Locale
+import kotlin.math.abs
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.util.Locale
-import kotlin.math.abs
 
 /** What the Player page's "This week" card shows. */
 public data class ProjectionCard(
@@ -56,6 +59,8 @@ public data class ProjectionCard(
     val tdChance: Double? = null,
     /** "Out" or "Doubtful" (nflverse, this week): [rosPoints] counts each coming game times his chance of being back. */
     val rosDiscount: String? = null,
+    /** How this week's outcomes spread, for the chart under the range; null without a projection (or out). */
+    val spread: ProjectedSpread? = null,
 )
 
 private val OUT_ABBRS = setOf("O", "IR")
@@ -120,6 +125,7 @@ public suspend fun loadProjectionCard(
     }
     val out = injuryAbbr in OUT_ABBRS
     val simulated = withContext(compute) { projectPoints(final, profile, position) }
+    val spread = if (out) null else withContext(compute) { projectedSpread(final, profile, position) }
     val td = if (out || position == Position.K || position == Position.DST) null else anytimeTd(final)
     // A Questionable player confirmed active (see confirmedActive) loses his discount, as he does in Projections.
     val q = repository.questionable(season, week)[playerId]?.takeIf { it > 0.0 && injuryAbbr !in SIT_ABBRS && team != null }
@@ -149,6 +155,7 @@ public suspend fun loadProjectionCard(
         playoffWeeks = playoffWeeks,
         tdChance = if (lift) td?.let { liftedTd(it, q) } else td,
         rosDiscount = rosDiscount,
+        spread = spread?.let { it.copy(low = it.low * k, high = it.high * k) },
     )
 }
 
@@ -197,6 +204,14 @@ public fun ThisWeekCard(card: ProjectionCard, onOpen: () -> Unit, modifier: Modi
                 Modifier.testTag("card:range"),
                 style = MaterialTheme.typography.bodySmall,
             )
+            card.spread?.let { s ->
+                SpreadChart(s.shares, s.low, s.high, card.floor, card.points, card.ceiling, Modifier.padding(top = 6.dp).testTag("card:spread"))
+                Text(
+                    "Each bar: how often the simulation lands there. Lines: floor, projection, ceiling.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
         card.rosPoints?.let { ros ->
             val perGame = card.rosPerGame?.let { " (${onePlace(it)} per game)" }.orEmpty()

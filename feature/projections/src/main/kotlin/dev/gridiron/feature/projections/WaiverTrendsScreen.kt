@@ -43,6 +43,7 @@ import dev.gridiron.core.data.live.WaiverTrendsResult
 import dev.gridiron.core.data.live.leagueTrends
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import java.util.Locale
@@ -161,7 +162,7 @@ public fun WaiverTrendsScreen(
                         LazyColumn(Modifier.fillMaxSize()) {
                             items(moves, key = { "league:${it.espnId}" }) { t ->
                                 Row(
-                                    Modifier.fillMaxWidth().then(t.playerId?.let { id -> Modifier.clickable { onPlayer(id) } } ?: Modifier)
+                                    Modifier.fillMaxWidth().then(t.playerId?.let { id -> Modifier.playerClick(id, onPlayer) } ?: Modifier)
                                         .padding(horizontal = 16.dp, vertical = 8.dp).testTag("leagueTrend:${t.espnId}"),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
@@ -195,7 +196,7 @@ private fun TrendListRow(row: TrendRow, weekly: Boolean, week: Int?, owner: Owne
     val id = t.playerId
     Row(
         Modifier.fillMaxWidth()
-            .then(if (id != null) Modifier.clickable { onPlayer(id) } else Modifier)
+            .then(if (id != null) Modifier.playerClick(id, onPlayer) else Modifier)
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .testTag("trend:${t.espnId}"),
         verticalAlignment = Alignment.CenterVertically,

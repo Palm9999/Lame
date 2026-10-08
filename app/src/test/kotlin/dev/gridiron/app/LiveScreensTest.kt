@@ -15,6 +15,7 @@ import dev.gridiron.core.data.live.NewsItem
 import dev.gridiron.core.data.live.NewsPlayer
 import dev.gridiron.core.designsystem.GridironTheme
 import dev.gridiron.feature.projections.ProjectionCard
+import java.time.Instant
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -22,7 +23,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
-import java.time.Instant
 
 /** The live screens fed plain data: Robolectric can't open live.db itself. */
 @RunWith(RobolectricTestRunner::class)
@@ -77,7 +77,8 @@ class LiveScreensTest {
         compose.setContent { GridironTheme { PlayerScreen("P1", page, liveAvailable = true, onBack = {}, onOpen = {}) } }
 
         compose.onNodeWithTag("playerName").assertTextEquals("Saquon Barkley")
-        compose.onNodeWithText("RB · PHI").assertExists()
+        compose.onNodeWithText("RB").assertExists()
+        compose.onNodeWithText("PHI").assertExists()
         compose.onNodeWithText("Questionable").assertExists()
         compose.onNodeWithText("Barkley (neck) was limited.").assertExists()
         compose.onNodeWithText("Barkley to play").assertExists()
@@ -123,7 +124,8 @@ class LiveScreensTest {
         val page = PlayerPage(PlayerHeader("DST_KC", "Kansas City D/ST", "DST", "KC"), null, emptyList(), emptyList(), null)
         compose.setContent { GridironTheme { PlayerScreen("DST_KC", page, liveAvailable = true, onBack = {}, onOpen = {}) } }
 
-        compose.onNodeWithText("D/ST · KC").assertExists()
+        compose.onNodeWithText("D/ST").assertExists()
+        compose.onNodeWithText("KC").assertExists()
     }
 
     @Test

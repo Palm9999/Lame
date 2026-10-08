@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.designsystem.SectionHeader
+import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.projections.LineupCandidate
 import dev.gridiron.core.projections.Lineups
 import java.util.Locale
@@ -129,7 +130,7 @@ internal fun PlannerView(
         if (streamers.isEmpty()) item { Note("No free-agent D/ST or kicker projected in the next $STREAM_WEEKS weeks.") }
         itemsIndexed(streamers, key = { _, s -> "stream:${s.week}:${s.position}" }) { _, s ->
             Column(
-                Modifier.fillMaxWidth().clickable { onPlayer(s.pick.playerId) }.padding(horizontal = 16.dp, vertical = 6.dp)
+                Modifier.fillMaxWidth().playerClick(s.pick.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 6.dp)
                     .testTag("stream:${s.week}:${s.position}"),
             ) {
                 Text(

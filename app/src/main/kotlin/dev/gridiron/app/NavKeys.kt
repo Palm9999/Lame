@@ -8,7 +8,8 @@ import kotlinx.serialization.Serializable
 @Serializable data object ScoringListKey : NavKey
 @Serializable data class ScoringEditKey(val profileId: String) : NavKey
 @Serializable data class ProjectionsKey(val playerId: String, val season: Int, val week: Int) : NavKey
-@Serializable data class ProjectionListKey(val season: Int) : NavKey
+/** [lineup] opens on My lineup (from Home) rather than the week's list. */
+@Serializable data class ProjectionListKey(val season: Int, val lineup: Boolean = false) : NavKey
 @Serializable data class OpportunitiesKey(val season: Int) : NavKey
 @Serializable data class BreakoutsKey(val season: Int) : NavKey
 @Serializable data class WaiverTrendsKey(val season: Int) : NavKey
@@ -30,3 +31,4 @@ import kotlinx.serialization.Serializable
 @Serializable data class GameKey(val season: Int, val week: Int, val home: String, val away: String) : NavKey
 @Serializable data class PlayerKey(val playerId: String) : NavKey
 @Serializable data object MoreKey : NavKey
+@Serializable data object HomeKey : NavKey

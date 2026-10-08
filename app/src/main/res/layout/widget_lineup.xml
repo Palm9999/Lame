@@ -3,18 +3,50 @@
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:drawable/dialog_holo_dark_frame"
+    android:background="@drawable/widget_background"
     android:orientation="vertical"
-    android:padding="12dp">
+    android:padding="14dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="GRIDIRON"
+        android:letterSpacing="0.12"
+        android:textColor="#FF8BD7A7"
+        android:textSize="11sp"
+        android:textStyle="bold" />
 
     <TextView
         android:id="@+id/widget_lineup"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
         android:maxLines="2"
         android:textColor="#FFFFFFFF"
-        android:textSize="14sp"
+        android:textSize="15sp"
         android:textStyle="bold" />
+
+    <ProgressBar
+        android:id="@+id/widget_chance"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="6dp"
+        android:layout_marginTop="8dp"
+        android:max="100"
+        android:progressTint="#FF8BD7A7"
+        android:progressBackgroundTint="#FF3A403C"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/widget_watch"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:textColor="#FFFFB960"
+        android:textSize="12sp"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/widget_alert"

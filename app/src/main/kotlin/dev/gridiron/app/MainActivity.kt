@@ -7,8 +7,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
+import dev.gridiron.core.datastore.Look
 import dev.gridiron.core.designsystem.GridironTheme
 import kotlinx.coroutines.launch
 
@@ -38,7 +41,8 @@ class MainActivity : ComponentActivity() {
             }
         }
         setContent {
-            GridironTheme {
+            val look by app.settings.look.collectAsState(initial = Look())
+            GridironTheme(wallpaper = look.wallpaper, trueBlack = look.trueBlack) {
                 GridironNavHost(app.deps)
             }
         }

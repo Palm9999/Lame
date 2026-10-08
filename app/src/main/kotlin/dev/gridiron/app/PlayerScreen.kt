@@ -1,6 +1,8 @@
 package dev.gridiron.app
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -29,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
@@ -62,8 +65,14 @@ import dev.gridiron.core.data.live.NewsItem
 import dev.gridiron.core.data.tdRegressionLine
 import dev.gridiron.core.designsystem.ColumnChart
 import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.RangeBar
+import dev.gridiron.core.designsystem.RemoteCircleImage
 import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.designsystem.StatusBadge
+import dev.gridiron.core.designsystem.TeamChip
+import dev.gridiron.core.designsystem.TeamColors
+import dev.gridiron.core.designsystem.espnImageUrl
+import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.Roster
@@ -105,6 +114,8 @@ data class PlayerPage(
     val dynasty: String? = null,
     /** His touchdowns against expected (`tdRegressionLine`); null when he isn't on the TD regression board. */
     val tdRegression: String? = null,
+    /** His ESPN headshot (a D/ST's team logo); null when there is none. */
+    val imageUrl: String? = null,
 )
 
 private val NO_CHANGES: StateFlow<Long> = MutableStateFlow(0L)
@@ -216,6 +227,7 @@ fun PlayerRoute(
             comps = similar,
             dynasty = dynasty,
             tdRegression = tds,
+            imageUrl = espnImageUrl(playerId, players?.espnId(playerId)),
         )
     }
     var season by remember(playerId) { mutableStateOf<Int?>(null) }
@@ -282,20 +294,7 @@ fun PlayerScreen(
                 }
             }
             LazyColumn(Modifier.testTag("playerPage")) {
-                item {
-                    Column(Modifier.padding(horizontal = 16.dp)) {
-                        Text(
-                            page.header?.name ?: playerId,
-                            Modifier.testTag("playerName"),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        val detail = listOfNotNull(page.header?.position?.let(Position::label), page.header?.team)
-                        if (detail.isNotEmpty()) {
-                            Text(detail.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
-                }
+                item { PlayerHero(page, playerId) }
                 page.projection?.let { card ->
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -320,7 +319,7 @@ fun PlayerScreen(
                 if (page.comps.isNotEmpty()) {
                     item { SectionTitle("Similar seasons") }
                     items(page.comps, key = { "comp:${it.playerId}:${it.season}" }) { c ->
-                        Column(Modifier.fillMaxWidth().clickable { onPlayer(c.playerId) }.padding(horizontal = 16.dp, vertical = 4.dp).testTag("comp:${c.playerId}")) {
+                        Column(Modifier.fillMaxWidth().playerClick(c.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 4.dp).testTag("comp:${c.playerId}")) {
                             Text("${c.name} · ${c.season}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             Text(compLine(page.header?.position, c), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
@@ -487,3 +486,50 @@ private val COMP_LABELS = mapOf(
     "rushing_yards" to "RUSH YDS", "rushing_tds" to "RUSH TD", "targets" to "TGT", "receptions" to "REC", "receiving_yards" to "REC YDS",
     "fg_att" to "FGA", "fg_made" to "FGM", "fg_made_50" to "50+", "points_allowed" to "PA", "yards_allowed" to "YA", "dst_sacks" to "SACK",
 )
+
+/**
+ * The page's top: a wash of his team's color behind his headshot, name, position and team, ESPN's designation, and this
+ * week's projection in large type over its range.
+ */
+@Composable
+private fun PlayerHero(page: PlayerPage, playerId: String) {
+    val team = page.header?.team
+    val wash = (TeamColors.of(team) ?: MaterialTheme.colorScheme.primary).copy(alpha = 0.22f)
+    Column(
+        Modifier.fillMaxWidth()
+            .background(Brush.verticalGradient(listOf(wash, Color.Transparent)))
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            RemoteCircleImage(page.imageUrl, 72.dp, Modifier.testTag("headshot"))
+            Column(Modifier.weight(1f).padding(start = 14.dp)) {
+                Text(
+                    page.header?.name ?: playerId,
+                    Modifier.testTag("playerName"),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    page.header?.position?.let(Position::label)?.let {
+                        Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    team?.let { TeamChip(it) }
+                    page.status?.abbr?.takeIf { it != "A" }?.let { StatusBadge(it) }
+                }
+            }
+        }
+        val card = page.projection
+        if (card != null && !card.bye && !card.notThisWeek && !card.out) {
+            Row(Modifier.padding(top = 12.dp), verticalAlignment = Alignment.Bottom) {
+                Text(String.format(Locale.US, "%.1f", card.points), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+                Text(
+                    " pts · week ${card.week}${card.matchup?.let { " $it" }.orEmpty()}",
+                    Modifier.padding(bottom = 6.dp),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            RangeBar(card.floor, card.points, card.ceiling, maxOf(card.ceiling * 1.15, 1.0), Modifier.padding(top = 4.dp))
+        }
+    }
+}

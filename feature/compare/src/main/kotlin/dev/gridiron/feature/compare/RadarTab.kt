@@ -1,6 +1,7 @@
 package dev.gridiron.feature.compare
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,14 +12,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.charts.RadarChart
 import dev.gridiron.core.charts.RadarSeries
@@ -47,21 +52,29 @@ internal fun RadarTab(
             return@Column
         }
 
+        // With three or four players, all of them at once, or a pair picked to read closely.
+        var all by rememberSaveable { mutableStateOf(false) }
         if (charted.size > 2) {
-            RadarSelector(page, charted, radarPair, onRadarPairChanged)
+            FilterChip(
+                selected = all,
+                onClick = { all = !all },
+                label = { Text("All ${charted.size} players") },
+                modifier = Modifier.padding(bottom = 4.dp).testTag("radar:all"),
+            )
+            if (!all) RadarSelector(page, charted, radarPair, onRadarPairChanged)
         }
 
         val a = radarPair.first
         val b = radarPair.second
-        val shown = listOf(a, b).distinct().filter { it in charted }
+        val shown = if (all && charted.size > 2) charted else listOf(a, b).distinct().filter { it in charted }
         val names = page.slots.map { it.name }
         RadarChart(
             axes = radar.axes,
             series = shown.map { i -> RadarSeries(names[i], radar.values[i], SlotColors.color(i)) }.toImmutableList(),
-            contentDescription = if (shown.size == 2) {
-                radarSummary(radar, names, a, b)
-            } else {
-                "Radar: ${names[shown.single()]}, against the position"
+            contentDescription = when (shown.size) {
+                2 -> radarSummary(radar, names, a, b)
+                1 -> "Radar: ${names[shown.single()]}, against the position"
+                else -> "Radar: ${shown.joinToString { names[it] }}, against the position"
             },
             modifier = Modifier.fillMaxWidth(),
         )

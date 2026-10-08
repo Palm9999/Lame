@@ -66,8 +66,11 @@ import dev.gridiron.core.designsystem.RangeBar
 import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.designsystem.SectionHeader
 import dev.gridiron.core.designsystem.SlotTag
+import dev.gridiron.core.designsystem.Sparkline
 import dev.gridiron.core.designsystem.StatusBadge
 import dev.gridiron.core.designsystem.SummaryCard
+import dev.gridiron.core.designsystem.TeamStripe
+import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.Lineups
@@ -123,6 +126,10 @@ public fun ProjectionListRoute(
     dynastyValues: suspend (profile: ScoringProfile) -> Map<String, Int> = { emptyMap() },
     /** Touchdowns above expected by player id (the TD regression board), asked when Trade opens. */
     tdGaps: suspend (season: Int) -> Map<String, Double> = { emptyMap() },
+    /** Fantasy points in the weeks up to one, for My lineup's trend lines (`StatsRepository.recentPoints`). */
+    recentPoints: suspend (season: Int, lastWeek: Int, playerIds: Set<String>, profile: ScoringProfile) -> Map<String, List<Double?>> = { _, _, _, _ -> emptyMap() },
+    /** Opens on My lineup (when there's a team) rather than the week's list. */
+    startOnLineup: Boolean = false,
 ) {
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
@@ -155,6 +162,20 @@ public fun ProjectionListRoute(
     // The week list, Start/sit and My lineup all lift a confirmed-active Questionable player's discount.
     val loadedWeek = (state as? ProjectionListState.Loaded)?.week
     LaunchedEffect(season, loadedWeek) { loadedWeek?.let { readKickoffs(it) } }
+    var trends by remember { mutableStateOf<Map<String, List<Double?>>>(emptyMap()) }
+    LaunchedEffect(season, loadedWeek, team, profile, version) {
+        val ids = team?.players?.mapNotNull { it.playerId }?.toSet().orEmpty()
+        val active = profile
+        if (loadedWeek == null || active == null || ids.isEmpty()) return@LaunchedEffect
+        // A bonus: the lineup shows without its trend lines.
+        trends = try {
+            recentPoints(season, loadedWeek - 1, ids, active)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
     ProjectionListScreen(
         state, injuries, onPlayer, onBack, team?.takeIf { it.season == season }, rival,
         rostered = taken?.takeIf { it.season == season }?.playerIds,
@@ -172,6 +193,8 @@ public fun ProjectionListRoute(
         offers = pending,
         dynasty = dynasty,
         tdGaps = gaps,
+        trends = trends,
+        startOnLineup = startOnLineup,
         onTradeOpened = {
             // Like dynasty values, a bonus.
             scope.launch {
@@ -341,9 +364,12 @@ public fun ProjectionListScreen(
     dynasty: Map<String, Int> = emptyMap(),
     /** Touchdowns above expected by player id, shown in Trade. */
     tdGaps: Map<String, Double> = emptyMap(),
+    /** My lineup's players' recent fantasy points, oldest first, for their trend lines. */
+    trends: Map<String, List<Double?>> = emptyMap(),
+    startOnLineup: Boolean = false,
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
-    var chosen by rememberSaveable { mutableStateOf(ListMode.WEEK) }
+    var chosen by rememberSaveable { mutableStateOf(if (startOnLineup) ListMode.LINEUP else ListMode.WEEK) }
     val canTrade = myTeam != null && partners.isNotEmpty()
     val mode = when {
         (chosen == ListMode.LINEUP || chosen == ListMode.REVIEW || chosen == ListMode.PLANNER) && myTeam == null -> ListMode.WEEK
@@ -467,7 +493,7 @@ public fun ProjectionListScreen(
                         }
                         LineupList(
                             mine, rival, opponent, pickups, badges, onPlayer, stashes, lineupCheck(myTeam, mine, weekRows, badges), faabText(myTeam),
-                            cuffs, ownersKnown = owners != null, live = live, gameDay = day, claims = plan,
+                            cuffs, ownersKnown = owners != null, live = live, gameDay = day, claims = plan, trends = trends,
                         )
                     } else {
                         Row(
@@ -531,6 +557,7 @@ private fun LineupList(
     gameDay: GameDay? = null,
     /** The week's ordered FAAB claims; null when the league doesn't bid or what's left isn't known. */
     claims: ClaimPlan? = null,
+    trends: Map<String, List<Double?>> = emptyMap(),
 ) {
     // One scale for every range bar in the lineup, so rows compare at a glance.
     val rangeMax = (view.starters.mapNotNull { it.row } + view.bench).maxOfOrNull { it.ceiling } ?: 0.0
@@ -612,7 +639,7 @@ private fun LineupList(
         }
         itemsIndexed(view.starters, key = { i, line -> "s:$i:${line.slot}" }) { _, line ->
             if (line.row != null) {
-                ProjectionListRow(if (line.locked) "${line.slot} 🔒" else line.slot, line.row, badges[line.row.playerId], onPlayer, LeadWidth, rangeMax = rangeMax)
+                ProjectionListRow(if (line.locked) "${line.slot} 🔒" else line.slot, line.row, badges[line.row.playerId], onPlayer, LeadWidth, rangeMax = rangeMax, trend = trends[line.row.playerId])
             } else {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     SlotTag(line.slot, width = LeadWidth)
@@ -623,7 +650,7 @@ private fun LineupList(
         if (view.bench.isNotEmpty()) {
             item { SectionLabel("Bench") }
             itemsIndexed(view.bench, key = { _, row -> "b:${row.playerId}" }) { _, row ->
-                ProjectionListRow("BE", row, badges[row.playerId], onPlayer, LeadWidth, rangeMax = rangeMax)
+                ProjectionListRow("BE", row, badges[row.playerId], onPlayer, LeadWidth, rangeMax = rangeMax, trend = trends[row.playerId])
             }
         }
         gameDay?.let { day ->
@@ -723,7 +750,7 @@ private fun LineupList(
                 itemsIndexed(claims.claims, key = { _, c -> "claim:${c.line.add.playerId}" }) { _, c ->
                     Text(
                         claimText(c),
-                        Modifier.fillMaxWidth().clickable { onPlayer(c.line.add.playerId) }.padding(horizontal = 16.dp, vertical = 6.dp).testTag("claim:${c.priority}"),
+                        Modifier.fillMaxWidth().playerClick(c.line.add.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 6.dp).testTag("claim:${c.priority}"),
                         style = MaterialTheme.typography.bodyMedium,
                     )
                 }
@@ -733,7 +760,7 @@ private fun LineupList(
             item { SectionLabel("Handcuffs") }
             itemsIndexed(handcuffs, key = { _, h -> "h:${h.starter.playerId}" }) { _, h ->
                 Row(
-                    Modifier.fillMaxWidth().clickable { onPlayer(h.backup.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp)
+                    Modifier.fillMaxWidth().playerClick(h.backup.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 8.dp)
                         .testTag("handcuff:${h.starter.playerId}"),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -777,7 +804,7 @@ private fun LineupList(
 @Composable
 private fun PickupRow(pick: PickupLine, onPlayer: (String) -> Unit, tagPrefix: String = "") {
     Row(
-        Modifier.fillMaxWidth().clickable { onPlayer(pick.add.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp)
+        Modifier.fillMaxWidth().playerClick(pick.add.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 8.dp)
             .testTag("${tagPrefix}pickup:${pick.add.playerId}"),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -823,11 +850,14 @@ private fun ProjectionListRow(
     note: String? = null,
     /** The scale's top for a range bar under the row; null shows none. */
     rangeMax: Double? = null,
+    /** His recent weeks' points, oldest first, drawn as a trend line by the points; null draws none. */
+    trend: List<Double?>? = null,
 ) {
     Row(
-        Modifier.fillMaxWidth().clickable { onPlayer(row.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp),
+        Modifier.fillMaxWidth().playerClick(row.playerId, onPlayer).padding(start = 10.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        TeamStripe(row.team, Modifier.padding(end = 6.dp))
         // A slot reads as a tag; a rank as a plain number.
         if (leadWidth > 32.dp) {
             SlotTag(lead, width = leadWidth)
@@ -848,6 +878,7 @@ private fun ProjectionListRow(
                 RangeBar(row.floor, row.points, row.ceiling, rangeMax, Modifier.padding(top = 4.dp, end = 24.dp))
             }
         }
+        trend?.let { Sparkline(it, Modifier.padding(horizontal = 8.dp).testTag("trend:${row.playerId}"), description = "Last ${it.size} weeks") }
         Column(horizontalAlignment = Alignment.End) {
             Text(if (row.out) "Out" else points(row.points), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
             if (!row.out) {

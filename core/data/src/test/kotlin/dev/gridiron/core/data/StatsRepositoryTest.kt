@@ -14,6 +14,7 @@ import dev.gridiron.core.statquery.StatQueryBuilder
 import dev.gridiron.core.statquery.StatQuerySpec
 import dev.gridiron.core.testing.JdbcQueryExecutor
 import dev.gridiron.core.testing.StatsDb
+import java.util.Locale
 import kotlinx.coroutines.test.runTest
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -24,7 +25,6 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
-import java.util.Locale
 
 /** The repository against the real ETL-built database. */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -326,4 +326,20 @@ class StatsRepositoryTest {
                 listOf(Bind.Text(playerId), Bind.Integer(week.toLong()), Bind.Text(metric)),
             ),
         ) { it.double(0) }.singleOrNull()
+
+    @Test
+    fun `recent points are each week's single-week Grid value, null for a week without a row`() = runTest {
+        val season = catalog.season(2025)
+        val page = repo.grid(GridRequest(season, WeekRange(1, 10), StatPack.FANTASY, positions = PositionFilter.FLEX), catalog)
+        val ids = page.rows.take(5).map { it.playerId }.toSet()
+        val trends = repo.recentPoints(2025, 10, ids, ScoringPresets.PPR)
+        assertEquals(ids, trends.keys)
+        for (id in ids) {
+            val line = trends.getValue(id)
+            assertEquals(6, line.size)
+            val week10 = repo.grid(GridRequest(season, WeekRange(10, 10), StatPack.FANTASY, positions = PositionFilter.ALL, scoring = ScoringPresets.PPR), catalog)
+                .rows.firstOrNull { it.playerId == id }
+            assertEquals(week10 == null, line.last() == null, "$id: $line")
+        }
+    }
 }

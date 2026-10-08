@@ -1,17 +1,21 @@
 package dev.gridiron.core.designsystem
 
+import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.dynamicDarkColorScheme
+import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// A fixed, team-neutral palette. Not dynamic color: a data app should look the
-// same whatever the wallpaper, and the heat scale is tuned against these surfaces.
+// A fixed, team-neutral palette by default: a data app should look the same whatever the wallpaper, and the heat
+// scale is tuned against these surfaces. Wallpaper colors are the user's choice (Settings → Look).
 private val Light = lightColorScheme(
     primary = Color(0xFF1E6B45),
     onPrimary = Color.White,
@@ -54,8 +58,34 @@ private val Dark = darkColorScheme(
 )
 
 @Composable
-public fun GridironTheme(darkTheme: Boolean = isSystemInDarkTheme(), content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = if (darkTheme) Dark else Light, content = content)
+public fun GridironTheme(
+    darkTheme: Boolean = isSystemInDarkTheme(),
+    /** Android's colors from the wallpaper (Android 12 and later; the app's own palette before). */
+    wallpaper: Boolean = false,
+    /** Black surfaces in dark mode, for OLED screens. */
+    trueBlack: Boolean = false,
+    content: @Composable () -> Unit,
+) {
+    val context = LocalContext.current
+    val base = when {
+        wallpaper && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+        darkTheme -> Dark
+        else -> Light
+    }
+    val scheme = if (darkTheme && trueBlack) {
+        base.copy(
+            surface = Color.Black,
+            background = Color.Black,
+            surfaceContainerLowest = Color.Black,
+            surfaceContainerLow = Color(0xFF0B0B0B),
+            surfaceContainer = Color(0xFF121212),
+            surfaceContainerHigh = Color(0xFF1B1B1B),
+            surfaceContainerHighest = Color(0xFF242424),
+        )
+    } else {
+        base
+    }
+    MaterialTheme(colorScheme = scheme, content = content)
 }
 
 /** Numbers in tables: tabular figures so digits line up column-wise. */

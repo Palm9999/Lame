@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Redrawn whenever My lineup or a lineup check writes; the periodic update only re-reads the file. -->
+<!-- Redrawn whenever Home, My lineup or a lineup check writes; the periodic update only re-reads the file. -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:initialLayout="@layout/widget_lineup"
     android:minWidth="250dp"
-    android:minHeight="60dp"
+    android:minHeight="110dp"
     android:resizeMode="horizontal|vertical"
     android:targetCellWidth="4"
-    android:targetCellHeight="1"
+    android:targetCellHeight="2"
     android:updatePeriodMillis="1800000"
     android:widgetCategory="home_screen" />

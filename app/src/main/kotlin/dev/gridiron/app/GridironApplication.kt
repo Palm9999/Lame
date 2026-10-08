@@ -5,13 +5,12 @@ import dev.gridiron.core.data.AccuracyRepository
 import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
+import dev.gridiron.core.data.CompsRepository
 import dev.gridiron.core.data.DraftRepository
+import dev.gridiron.core.data.DynastyRepository
 import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.InjuryReturnRepository
-import dev.gridiron.core.data.DynastyRepository
-import dev.gridiron.core.data.CompsRepository
-import dev.gridiron.core.data.TdRegressionRepository
 import dev.gridiron.core.data.OpportunitiesRepository
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerStatsRepository
@@ -22,21 +21,26 @@ import dev.gridiron.core.data.ScoresWeek
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.TdRegressionRepository
 import dev.gridiron.core.data.TeamsRepository
+import dev.gridiron.core.data.kickoffs
 import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.InjuryAlertChecker
+import dev.gridiron.core.data.live.LastResult
 import dev.gridiron.core.data.live.LineupAlert
-import dev.gridiron.core.data.kickoffs
 import dev.gridiron.core.data.live.LineupAlerts
-import dev.gridiron.core.data.live.liftQuestionable
 import dev.gridiron.core.data.live.LiveDb
 import dev.gridiron.core.data.live.LiveRepository
+import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.NewsAlertChecker
+import dev.gridiron.core.data.live.NextMatch
 import dev.gridiron.core.data.live.PropsRepository
 import dev.gridiron.core.data.live.UrlConnectionHttpClient
 import dev.gridiron.core.data.live.UrlConnectionHttpGet
 import dev.gridiron.core.data.live.WaiverTrendsRepository
 import dev.gridiron.core.data.live.WeekPlayer
+import dev.gridiron.core.data.live.WeeklySummary
+import dev.gridiron.core.data.live.liftQuestionable
 import dev.gridiron.core.data.live.starterIds
 import dev.gridiron.core.database.ReopenableQueryExecutor
 import dev.gridiron.core.database.SqliteQueryExecutor
@@ -45,22 +49,18 @@ import dev.gridiron.core.ingest.HttpFetcher
 import dev.gridiron.core.ingest.IngestPipeline
 import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.core.model.Position
+import dev.gridiron.core.model.ScoringProfile
+import dev.gridiron.core.projections.LineupCandidate
+import dev.gridiron.core.projections.projectPoints
 import dev.gridiron.core.projections.projectedScore
+import java.io.File
+import java.time.DayOfWeek
+import java.time.Instant
+import java.time.ZonedDateTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
-import java.io.File
-import java.time.DayOfWeek
-import java.time.ZonedDateTime
-import dev.gridiron.core.data.live.LastResult
-import dev.gridiron.core.data.live.MyTeam
-import dev.gridiron.core.data.live.NextMatch
-import dev.gridiron.core.data.live.WeeklySummary
-import dev.gridiron.core.model.ScoringProfile
-import dev.gridiron.core.projections.LineupCandidate
-import dev.gridiron.core.projections.projectPoints
-import java.time.Instant
 
 /**
  * The app's object graph, by hand. Stats are built on the phone into
@@ -247,6 +247,8 @@ class GridironApplication : Application() {
             scores = scores,
             league = league,
             onLineupSummary = { widget.lineup(it) },
+            onHome = { summary, chance, watch -> widget.home(summary, chance, watch) },
+            winLine = WinLineStore(java.io.File(noBackupFilesDir, "winline.txt")),
             draft = DraftRepository(executor, UrlConnectionHttpGet()),
             draftDir = noBackupFilesDir,
             opportunities = OpportunitiesRepository(executor, projectionsRepo, { live.injuries() }),

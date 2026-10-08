@@ -40,6 +40,7 @@ import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.designsystem.EmptyState
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.playerClick
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
@@ -127,7 +128,7 @@ public fun TdRegressionScreen(
                         .take(SHOWN)
                     LazyColumn(Modifier.fillMaxSize()) {
                         items(rows, key = { (row, _) -> row.playerId }) { (row, owner) ->
-                            Column(Modifier.fillMaxWidth().clickable { onPlayer(row.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp).testTag("td:${row.playerId}")) {
+                            Column(Modifier.fillMaxWidth().playerClick(row.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 8.dp).testTag("td:${row.playerId}")) {
                                 Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                                 Text(
                                     listOfNotNull(

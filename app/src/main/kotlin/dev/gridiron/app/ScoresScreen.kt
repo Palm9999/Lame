@@ -43,6 +43,7 @@ import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.PullToRefresh
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.model.Position
 import java.time.Instant
 import java.time.ZoneId
@@ -302,7 +303,7 @@ private fun androidx.compose.foundation.lazy.LazyListScope.teamSection(
         }
     }
     items(players, key = { "$team:${it.playerId}" }) { p ->
-        Row(Modifier.fillMaxWidth().clickable { onPlayer(p.playerId) }.padding(horizontal = 16.dp, vertical = 8.dp)) {
+        Row(Modifier.fillMaxWidth().playerClick(p.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 8.dp)) {
             Column(Modifier.weight(1f)) {
                 Text(p.name, fontWeight = FontWeight.Bold)
                 Text(p.position?.let(Position::label) ?: "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)

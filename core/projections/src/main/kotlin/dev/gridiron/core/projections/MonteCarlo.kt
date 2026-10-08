@@ -43,6 +43,23 @@ public fun simulate(
     draws: Int = 10_000,
     seed: Long = 42L,
 ): SimulationResult {
+    val samples = drawPoints(distributions, profile, position, draws, seed)
+
+    fun percentile(p: Double): Double {
+        val idx = (p * (samples.size - 1)).toInt().coerceIn(0, samples.size - 1)
+        return samples[idx]
+    }
+    return SimulationResult(percentile(0.10), percentile(0.25), percentile(0.50), percentile(0.90))
+}
+
+/** Every draw's points from [simulate]'s simulation, lowest first. */
+public fun drawPoints(
+    distributions: List<DistributionSpec>,
+    profile: ScoringProfile,
+    position: Position?,
+    draws: Int = 10_000,
+    seed: Long = 42L,
+): DoubleArray {
     val rng = SplittableRandom(seed)
     val samples = DoubleArray(draws)
     val componentMap = HashMap<Component, Double>(distributions.size)
@@ -73,12 +90,7 @@ public fun simulate(
         samples[i] = points
     }
     samples.sort()
-
-    fun percentile(p: Double): Double {
-        val idx = (p * (samples.size - 1)).toInt().coerceIn(0, samples.size - 1)
-        return samples[idx]
-    }
-    return SimulationResult(percentile(0.10), percentile(0.25), percentile(0.50), percentile(0.90))
+    return samples
 }
 
 private fun drawOne(spec: DistributionSpec, rng: SplittableRandom): Double {

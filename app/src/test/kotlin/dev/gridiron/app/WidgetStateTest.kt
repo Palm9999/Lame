@@ -1,9 +1,9 @@
 package dev.gridiron.app
 
-import org.junit.Assert.assertEquals
-import org.junit.Test
 import java.time.Instant
 import java.time.ZoneOffset
+import org.junit.Assert.assertEquals
+import org.junit.Test
 
 class WidgetStateTest {
     @Test
@@ -20,5 +20,14 @@ class WidgetStateTest {
     fun `an empty or missing file reads as nothing yet`() {
         assertEquals(WidgetState.EMPTY, WidgetState.decode(""))
         assertEquals("Open My lineup to see your week here" to "No lineup problems found", LineupWidget.lines(WidgetState.EMPTY))
+    }
+
+    @Test
+    fun `Home's chance and watch list round trip, and My lineup's summary drops the chance`() {
+        val at = Instant.parse("2026-10-11T16:30:00Z")
+        val state = WidgetState("Wk 6 · 61.2–40.0 live vs Rivals · 72% to win", at, null, null, 0.72, "Iffy Q")
+        assertEquals(state, WidgetState.decode(state.encode()))
+        // A file written before these lines existed.
+        assertEquals(WidgetState("Wk 6", at, null, null), WidgetState.decode("Wk 6\n${at.toEpochMilli()}\n\n"))
     }
 }
