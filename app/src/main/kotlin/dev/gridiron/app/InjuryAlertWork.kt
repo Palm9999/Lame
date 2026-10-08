@@ -21,10 +21,10 @@ import androidx.work.WorkerParameters
 import dev.gridiron.core.data.live.InjuryAlert
 import dev.gridiron.core.data.live.NewsAlert
 import dev.gridiron.core.ingest.currentSeason
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.first
 import java.time.LocalTime
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.first
 
 /**
  * Every two hours, with a network: ESPN's injury list against the last one seen, a notification per rostered change;
@@ -50,6 +50,14 @@ class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
             throw e
         } catch (e: Exception) {
             // Not sent, so the next run tries again.
+        }
+        // A drop in the user's league worth picking up; quiet hours hold it like news.
+        try {
+            if (!quiet && alerts.drops) notifyDrops(applicationContext, app.leagueDrops())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Next run tries again; the drops it missed stay unseen.
         }
         // Waiver trends' daily roster % snapshot, so its weekly change doesn't need the screen opened every day.
         try {
@@ -109,6 +117,32 @@ class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
                 .setAutoCancel(true)
                 .build()
             NotificationManagerCompat.from(context).notify("summary".hashCode(), notification)
+        }
+
+        private const val DROPS_CHANNEL = "drops"
+
+        /** One notification per worthwhile drop; a tap opens the app. */
+        private fun notifyDrops(context: Context, alerts: List<DropAlert>) {
+            if (alerts.isEmpty()) return
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+            val manager = context.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(NotificationChannel(DROPS_CHANNEL, "League drops", NotificationManager.IMPORTANCE_DEFAULT))
+            val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+            val compat = NotificationManagerCompat.from(context)
+            for (alert in alerts) {
+                val p = alert.pickup
+                val text = "Free agent now: +${String.format(java.util.Locale.US, "%.1f", p.gain)} rest-of-season points at ${p.slot}" +
+                    (p.drop?.let { ", dropping your lowest bench player" } ?: "") + "."
+                val notification = NotificationCompat.Builder(context, DROPS_CHANNEL)
+                    .setSmallIcon(R.drawable.ic_stat_injury)
+                    .setContentTitle("${alert.name} was dropped in your league")
+                    .setContentText(text)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                    .setContentIntent(open)
+                    .setAutoCancel(true)
+                    .build()
+                compat.notify(("drop:" + p.add.playerId).hashCode(), notification)
+            }
         }
 
         /** One notification per story; a tap opens it in the browser. */

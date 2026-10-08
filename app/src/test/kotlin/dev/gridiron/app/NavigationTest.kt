@@ -111,9 +111,14 @@ class NavigationTest {
         compose.setContent { GridironTheme { GridironNavHost(deps) } }
         settle()
 
+        // A long press opens the quick look; its Add to Compare adds over the Grid's weeks and closes it.
         compose.onNodeWithContentDescription(first, substring = true).performTouchInput { longClick() }
         compose.waitForIdle()
+        compose.onNodeWithTag("peek:compare").performClick()
+        compose.waitForIdle()
         compose.onNodeWithContentDescription(second, substring = true).performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("peek:compare").performClick()
         compose.waitForIdle()
 
         // A real touch, straight after the second long-press: nothing (such as

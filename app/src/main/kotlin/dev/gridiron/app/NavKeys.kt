@@ -32,3 +32,4 @@ import kotlinx.serialization.Serializable
 @Serializable data class PlayerKey(val playerId: String) : NavKey
 @Serializable data object MoreKey : NavKey
 @Serializable data object HomeKey : NavKey
+@Serializable data object LinesKey : NavKey

@@ -163,6 +163,15 @@ public class ProjectionsRepository(private val executor: QueryExecutor) {
             GameLine(team, if (team == home) away else home, team == home, row.doubleOrNull(2), row.doubleOrNull(3))
         }.firstOrNull()
 
+    /** Every regular-season game of [season], scores and lines included. */
+    public suspend fun seasonGames(season: Int): List<SeasonGame> =
+        executor.query(ProjectionQueries.seasonGames(season)) { r ->
+            SeasonGame(
+                r.long(0).toInt(), r.text(1), r.text(2),
+                r.doubleOrNull(3)?.toInt(), r.doubleOrNull(4)?.toInt(), r.doubleOrNull(5), r.doubleOrNull(6),
+            )
+        }
+
     public suspend fun remainingGames(season: Int, fromWeek: Int, team: String): Int =
         executor.query(ProjectionQueries.remainingGames(season, fromWeek, team)) { it.long(0).toInt() }.single()
 
@@ -178,3 +187,14 @@ public class ProjectionsRepository(private val executor: QueryExecutor) {
         }
     }
 }
+
+/** One regular-season game: its scores (null until played) and nflverse's line (the home spread and the total; null until posted). */
+public data class SeasonGame(
+    val week: Int,
+    val home: String,
+    val away: String,
+    val homeScore: Int?,
+    val awayScore: Int?,
+    val spread: Double?,
+    val total: Double?,
+)

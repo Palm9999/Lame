@@ -83,9 +83,11 @@ public data class AlertSwitches(
     val refresh: Boolean = true,
     /** When each game-day refresh runs, local time: [DEFAULT_REFRESH_TIMES] unless the user picked others. */
     val refreshTimes: Map<DayOfWeek, LocalTime> = DEFAULT_REFRESH_TIMES,
+    /** A player dropped in the user's league who would lift their rest of season; on unless turned off. */
+    val drops: Boolean = true,
 ) {
     /** True while any alert needs the two-hourly check. */
-    public val any: Boolean get() = injury || news || lineup || summary
+    public val any: Boolean get() = injury || news || lineup || summary || drops
 
     /** True when quiet hours hold alerts at this local hour (0-23). */
     public fun quietAt(hour: Int): Boolean = quiet && (hour >= 22 || hour < 8)

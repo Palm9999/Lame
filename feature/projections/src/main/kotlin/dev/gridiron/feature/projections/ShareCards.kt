@@ -1,13 +1,17 @@
 package dev.gridiron.feature.projections
 
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.live.Grade
 import dev.gridiron.core.data.live.ReportCard
 import dev.gridiron.core.data.live.WeekRecap
 import dev.gridiron.core.data.live.WeekReview
+import dev.gridiron.core.designsystem.Meter
 import dev.gridiron.core.projections.TradeOutcome
 import java.util.Locale
 import kotlin.math.roundToInt
@@ -78,4 +82,23 @@ public fun TradeShareCard(partner: String, give: List<String>, get: List<String>
     CardLine("You send: ${give.joinToString().ifEmpty { "nobody" }}")
     CardLine("You get: ${get.joinToString().ifEmpty { "nobody" }}")
     CardLine("You ${gainText(outcome.myGain)} · $partner ${gainText(outcome.theirGain)} rest of season", strong = true)
+}
+
+/** The user's week from Home: the score (live or projected) against the rival, the win chance and who to watch. */
+@Composable
+internal fun HomeShareCard(home: HomeState) {
+    CardTitle("${home.teamName} · week ${home.week}")
+    val live = home.live
+    val mine = live?.myScore ?: home.myTotal
+    val theirs = live?.theirScore ?: home.rivalTotal
+    CardLine(
+        (if (live != null) "Live: " else "Projected: ") + one(mine) + (theirs?.let { " – ${one(it)}" } ?: "") +
+            (home.rivalName?.let { " vs $it" } ?: ""),
+        strong = true,
+    )
+    (live?.chance ?: home.chance)?.let { c ->
+        Meter(c, winLine(c), Modifier.padding(vertical = 4.dp))
+        CardLine(winLine(c))
+    }
+    if (home.hurt.isNotEmpty()) CardLine("Watching: " + home.hurt.joinToString { "${it.name} (${it.abbr})" })
 }

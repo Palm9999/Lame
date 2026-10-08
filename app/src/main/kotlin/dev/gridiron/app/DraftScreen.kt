@@ -2,6 +2,7 @@ package dev.gridiron.app
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -12,7 +13,9 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,7 +35,12 @@ import dev.gridiron.core.data.BoardPlayer
 import dev.gridiron.core.data.DraftAdvice
 import dev.gridiron.core.data.DraftBoardResult
 import dev.gridiron.core.data.MockDraft
+import dev.gridiron.core.designsystem.RemoteCircleImage
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.SummaryCard
+import dev.gridiron.core.designsystem.TeamChip
+import dev.gridiron.core.designsystem.TeamStripe
+import dev.gridiron.core.designsystem.espnImageUrl
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.Lineups
 import java.io.File
@@ -73,6 +81,8 @@ fun DraftScreen(
     file: File,
     onBack: () -> Unit,
     rounds: Int = 15,
+    /** A player's ESPN id by app id, for the best-available card's headshot; null shows none. */
+    espnId: suspend (String) -> String? = { null },
 ) {
     val profile by profiles.collectAsState(initial = null)
     var board by remember { mutableStateOf<DraftBoardResult?>(null) }
@@ -106,6 +116,9 @@ fun DraftScreen(
                             "$teams teams · round $round · ADP from ${b.players.size} players (${b.matched} matched to last season). " +
                                 "Tap a player when someone takes him; long-press when you do.",
                         )
+                    }
+                    suggested.firstOrNull()?.let { top ->
+                        item(key = "best") { BestAvailable(top, espnId, onTaken = { save(picks.toggleTaken(top.key)) }, onMine = { save(picks.toggleMine(top.key)) }) }
                     }
                     item { Label("Suggested") }
                     items(suggested, key = { "s:${it.key}" }) { p -> DraftRow(p, "s", onTap = { save(picks.toggleTaken(p.key)) }, onLong = { save(picks.toggleMine(p.key)) }) }
@@ -159,6 +172,7 @@ private fun MockDraftView(players: List<BoardPlayer>, teams: Int, rounds: Int, s
             TextButton(onClick = { picks = null }, modifier = Modifier.padding(horizontal = 8.dp).testTag("mock:restart")) { Text("Restart") }
         }
         if (!done) {
+            suggested.firstOrNull()?.let { top -> item(key = "best") { BestAvailable(top, { null }, onTaken = null, onMine = { draft(top) }) } }
             item { Label("Taken since your last pick (${since.size})") }
             items(since, key = { "t:$it" }) { n -> byKey[p[n]]?.let { MockRow(it, "${MockDraft.label(n, teams)} · ${draftLine(it)}", "t", null) } }
             item { Label("Suggested") }
@@ -175,12 +189,16 @@ private fun MockDraftView(players: List<BoardPlayer>, teams: Int, rounds: Int, s
 
 @Composable
 private fun MockRow(p: BoardPlayer, line: String, section: String, onTap: (() -> Unit)?) {
-    Column(
+    Row(
         Modifier.fillMaxWidth().then(if (onTap != null) Modifier.clickable(onClick = onTap) else Modifier)
-            .padding(horizontal = 16.dp, vertical = 6.dp).testTag("mock:$section:${p.key}"),
+            .padding(horizontal = 12.dp, vertical = 6.dp).testTag("mock:$section:${p.key}"),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(p.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-        Text(line, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TeamStripe(p.team, Modifier.padding(end = 8.dp))
+        Column {
+            Text(p.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(line, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
@@ -195,12 +213,41 @@ internal fun draftLine(p: BoardPlayer): String = listOfNotNull(
 
 @Composable
 private fun DraftRow(p: BoardPlayer, section: String, onTap: () -> Unit, onLong: () -> Unit) {
-    Column(
-        Modifier.fillMaxWidth().combinedClickable(onClick = onTap, onLongClick = onLong).padding(horizontal = 16.dp, vertical = 6.dp)
+    Row(
+        Modifier.fillMaxWidth().combinedClickable(onClick = onTap, onLongClick = onLong).padding(horizontal = 12.dp, vertical = 6.dp)
             .testTag("draft:$section:${p.key}"),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(p.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-        Text(draftLine(p), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TeamStripe(p.team, Modifier.padding(end = 8.dp))
+        Column {
+            Text(p.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+            Text(draftLine(p), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** The first suggestion as a card: headshot, name, team, ADP, and a button for each way he leaves the board. */
+@Composable
+private fun BestAvailable(p: BoardPlayer, espnId: suspend (String) -> String?, onTaken: (() -> Unit)?, onMine: () -> Unit) {
+    var url by remember(p.key) { mutableStateOf<String?>(null) }
+    LaunchedEffect(p.key) { url = p.playerId?.let { id -> espnImageUrl(id, runCatching { espnId(id) }.getOrNull()) } }
+    SummaryCard(Modifier.testTag("draft:best")) {
+        Text("Best available", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(Modifier.padding(top = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            RemoteCircleImage(url, 56.dp)
+            Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                Text(p.name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(p.position.let { if (it == "DST") "D/ST" else it }, style = MaterialTheme.typography.bodyMedium)
+                    p.team?.let { TeamChip(it) }
+                    Text("ADP ${String.format(Locale.US, "%.1f", p.adp)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onMine, modifier = Modifier.testTag("draft:best:mine")) { Text(if (onTaken == null) "Draft him" else "I took him") }
+            if (onTaken != null) OutlinedButton(onClick = onTaken) { Text("Someone took him") }
+        }
     }
 }
 

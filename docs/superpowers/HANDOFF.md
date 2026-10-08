@@ -29,6 +29,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - **NGS:** numbers the Super Bowl one week after play-by-play; publishes only weeks with 15+ attempts, 10+ carries or 5+ targets; the rushing file has no QB rows, the receiving file is WR/TE only.
 
 **Tried and rejected** (PPR MAE change on the frozen sample, ± 2 SE; don't retry without a new angle):
+- D/ST interceptions with the opponent's interception factor shrunk toward 1 (2026-10-08, the lead from the row below): half the factor +0.0005 ±0.0065, none of it +0.0025 ±0.013 on 2,046 counted D/ST weeks (2022-2025, `tune.db` reforecast); two points an interception is too little to move points either way
+- Ranges widened in high over/under games (2026-10-08): coverage by the game's total in terciles (under 42, 42-46, 46 and up) on 16,451 counted player-weeks: 79.8%, 80.1%, 81.3% (high − low +1.6 ±1.5, the wrong way for widening); no position differs beyond noise. Misses split evenly above and below in both
 - Pass rate with past game script taken out (2026-10-08): a team's usual pass rate raised by `PASS_RATE_PER_POINT` × its EWMA favored-by, on a `tune.db` reforecast, PPR MAE on 13,396 counted player-weeks: full weight +0.0005 ±0.0003, half +0.0003 ±0.0001 (RB worst). The residual check had shown a signal (t 4.0 on team pass rate), but the ESPN blend already prices it
 - Team pace from the last two games (2026-10-08): residual of team plays on (last two games − season average) slope −0.013 ±0.043; the 4-game half-life already covers it
 - D/ST interceptions from the opposing QB's FTN interception-worthy rate (2026-10-08): residual slope −2.4 ±1.4 per unit rate, the wrong sign. The opposing QB's actual INT rate has slope −8.3 ±2.1: the model already over-reacts to it, a lead for stronger shrinkage of the opponent's interception factor
@@ -52,7 +54,17 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** the 2026-10-08 design round (all ten picked) is built (below). Nothing is pending: offer the next round as a short pick-list.
+**Next:** the 2026-10-08 sixth round (2-10 picked; 1, the phone checks, waits on the user) is built or tested (below). Nothing is pending: offer the next round as a short pick-list.
+
+**Just built (sixth round, 2026-10-08):**
+- **Quick look in the Grid**: the Grid's long press opens the quick look when the app provides one, its Add to Compare adding over the Grid's weeks (`LocalPlayerPeek` takes the screen's own compare action); without one (tests) it adds straight away as before.
+- **Headshots on disk**: `RemoteCircleImage` keeps each image in `cacheDir/images` (hashed URL), so a restart reads them back without the network.
+- **Home share card** (`HomeShareCard`, Home's Share): team, week, live or projected score, win chance meter, players to watch.
+- **Game lines** (More → Players, `LinesScreen.kt`): each upcoming game's line split into implied points ((total ± spread) / 2) beside the season so far's (a side's points scored over the other side's points allowed, times the league average: the forecast's own matchup step, which it can't show because a posted line replaces it), biggest gaps first, 3+ points called a lean. `ProjectionsRepository.seasonGames`.
+- **League drop alerts** (Settings → Alerts → League drops, prefs `dropAlerts`, on): the two-hourly job reads League activity; a player another team dropped, still a free agent, who would lift your rest of season by 8+ points (`Lineups.pickups` on rest-of-season totals) gets one notification (`DropAlertChecker`, `noBackupFilesDir/drop-alerts.txt`; the first check only remembers).
+- **Draft room**: team stripes on every row and a Best available card (headshot, team chip, ADP, I took him / Someone took him; in the mock, Draft him).
+- **Accuracy**: interception shrinkage and total-dependent ranges tested and rejected (Tried and rejected).
+- **Clean-up**: older "Just built" notes folded into one list of facts; deferred items fixed since dropped.
 
 **Just built (design round, 2026-10-08):**
 - **Home tab** (`HomeScreen.kt`, `HomeKey`): with a league (`deps.league`), the app opens on Home and the Grid becomes a tab over it; without one (and in tests) the Grid stays first. Cards: matchup (projected or live score, win chance `Meter`, the week's win-chance line), next kickoff (`gameDay`'s first window), your players to watch (O, D, Q, IR, SUSP), best pickup (`waiverPickups`' first), news on your players. "My lineup" opens Projections on My lineup (`ProjectionListKey(season, lineup = true)`). News moves from the bottom bar into More when Home is there (five tabs).
@@ -99,51 +111,15 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 **Third round (2026-10-07), for reference:** game-day refresh Thursday and Monday too, with a finish notification; refresh under WorkManager (`RefreshWorker`, `stats.db.refreshing`); TD regression on the Player page and Trade; Charted by week; FTN screen, RPO, no-huddle, motion and box; the accuracy page's in-memory backtest cache; Where we differ's Model alone (`FORECAST_VERSION` 19); D/ST blocked kicks (prefs `formatVersion` 5); the return curve by status and body part (`FORECAST_VERSION` 20, rest-of-season MAE −0.27 ±0.22 on the proxy).
 
-**Just built: Usage by week** (Player page, under Points by week): a column chart per share, 0-100% scale, from the game log's weekly query (`PlayerStatSets.usageColumns`: QB snap share; RB snap, carry, target share; WR/TE snap, target, air yards share; none for K or D/ST).
-
-**Just built: Mock draft** (☰ → Draft → Mock): a snake draft against bots on the same FFC board, the user's slot chosen first; each bot takes one of `DraftAdvice`'s top three for its own roster, weighted 0.6/0.25/0.15 (`MockDraft.BOT_WEIGHTS`, judgment). Nothing saved; the real draft's picks are untouched.
-
-**Just built: Similar seasons** (Player page): the five nearest player-seasons by other players at his position, per-game counting stats standardized within the position, every season in `stats.db`.
-
-**Just built: TD regression** (More → Players, or ☰): touchdowns against ffopportunity's expected touchdowns through its last processed week, Running hot and Running cold, 25 each, by position.
-
-**Just built: Game-day refresh** (Settings → Alerts, on by default, prefs `gameDayRefresh`): `GameDayRefreshWorker` (WorkManager, needs a network) runs `RefreshCoordinator.refreshAndWait` Saturday 10 pm and Sunday 9 am local, then appends the next run; a run Android kills is retried by WorkManager. Pure `nextGameDayRefresh` is tested.
-
-**Just built: Rest-of-season injury discount** (`FORECAST_VERSION` 18): a player nflverse lists Out or Doubtful this week keeps rest of season from the healthy roster, each coming game times the chance such a player has played by then (`returnCurve` in `:core:forecast`, every past listing in the database, 8 games deep, pooled statuses and positions). Proxy backtest on 2022-2025 (no past rest-of-season rows are stored): his next four games' PPR points, missed ones zero, against season average × games: MAE 23.8 → 11.0 (−12.8 ±1.5, 553 listings, leave-one-season-out curve), bias +22.3 → +0.8. Checked on the real 2026 build with a simulated Out listing: Puka Nacua's weekly receiving yards 95 → 27, 49, 67, 70, then about 80. A Tuesday build has no week's listings yet, so it changes nothing until Wednesday-Friday.
-
-**Fixed: schedule download** (2026-10-07): nflverse dropped `schedules/games.csv` (404) and serves only `games.csv.gz`; every refresh had ended "no schedule" with no projections. `Sources` and the kept copy now use the gzip name (the Python ETL never reads the schedule).
-
-**Just built: Quiet hours** (Settings → Alerts, off by default, prefs `quietAlerts`): 10 pm–8 am local the injury and news checks wait, so the first run after 8 sends what changed overnight; lineup checks and the summary still come.
-
-**Just built: Daily waiver snapshot**: the two-hourly alert job calls `WaiverTrendsRepository.snapshotDaily` (one fetch a UTC day, skipped once today has rows), so Waiver trends' weekly change no longer needs the screen opened daily.
-
-**Just built: Return outlook on the Injury report**: each Out, Doubtful or IR row gets the Player page's "Played again by" line, filled in after the list shows.
-
-**Just built: Dynasty values in Trade and on the Player page**: FantasyCalc's value (league format, active profile) beside each Trade player, the trade's send/get totals under the verdict, and a "Dynasty value" section on the Player page (value, place overall and at position, redraft value). Shown in every league, not only dynasty ones.
-
-**Just built: Grid and Compare share cards**: View & filters → Share image (top 10, first four columns) and Compare's Share (first 12 stats, a column per player), both through `StatTableCard`; `SharePreview`, `ImageShare` and `ShareCardFrame` moved to `core/ui/.../ShareImage.kt`.
-
-**Just built: Claim plan** (My lineup, bottom): up to five FAAB claims in priority order with bids that never overspend what could all win, shared drops marked conditional, and where your FAAB ranks in the league.
-
-**Just built: Alert switches** (Settings → Alerts): injury changes, roster news, lineup checks and the Tuesday summary each switch on their own; the two-hourly worker runs while any is on; prefs `alerts` (`AlertSwitches`), an older file's single `injuryAlerts` value sets all four.
-
-**Just built: Tuesday summary** (rides the injury-alert switch): one "Your week" notification on Tuesdays from 9 local.
-
-**Just built: Where we differ** (More → Players, or ☰): the app's final projection against ESPN's stored weekly projection, both under the active profile, top 15 gaps each way.
-
-**Just built: Trade partners** (Projections → Trade, bottom: Best partners). Fit is the plain gain of each position's best bench player over the weakest starter he'd replace, both ways; the design's "need against the league's typical starter" was dropped as it changed nothing on the cases tried. Placed after Suggested trades so the existing Trade layout doesn't shift.
-
-**Just built: League activity** (More → League, or ☰): every executed add, drop and trade this season from `mTransactions2` (shape unverified), a trade graded by each side's rest-of-season points in less out.
-
-**Just built: Shareable cards**: Share on Review's recap and report card, the Player page's This week and a graded trade; a preview, then a PNG to the share sheet (no upload).
-
-**Just built: League history** (More → League, or ☰): Seasons, All-time, Head-to-head, Records. Every ESPN shape it reads is from memory and unverified (`status.previousSeasons`, `primaryOwner`, `rankCalculatedFinal`, `playoffSeed`, `schedule[].winner`/`playoffTierType`, the pre-2018 `leagueHistory` array); a wrong guess shows as missing seasons or no champions. Finished seasons are cached once as files; delete them (clear app storage) to refetch after a fix.
-
-**Just built: Report card** (Projections → Review, under the recap; the user approved the five categories with Luck counted in the overall). Places read "3rd of 12" (the places ruling); a tie shares the better place; overall is the average place, ties by all-play. It adds one `mDraftDetail` read per Review open; without a draft, Draft and Moves are left out and the section says why.
-
-**Just built: Dynasty & keepers** (More → League, or ☰). The user chose market values (FantasyCalc) over an app age-curve model, and keepers priced by the round drafted. FantasyCalc: about 420 players plus 24 rookie picks (dropped), 27 players without an `espnId` (shown, not linked), `overallRank` counts the picks (so ranks are recounted). A rostered player's cost is his own pick whoever made it (a traded player keeps his round). ESPN's `mDraftDetail` shape (`draftDetail.picks[]`: `playerId`, `roundId`, `teamId`, `keeper`) is from memory: unverified until the user's keeper league is synced.
-
-**Just built: Waiver trends** (More → League, or ☰). ESPN's `kona_player_info` on `leaguedefaults/3` with a filter for the 1,000 most rostered and one stat line each (without it the list is about 20 MB; with it about 600 KB compressed; `view=players_wl` is 35 KB but has no `percentChange`); the 1,000th player is at 0.0%, so the list covers everyone rostered. Each fetch saves the day's roster % in `live.db` (`roster_pct`); a 7-10-day-old snapshot turns on the weekly change (the user chose snapshots over ESPN's figure alone). ESPN's `percentChange` window is unknown: on a Monday its biggest riser was +1.7, so it looks daily, not weekly. A player with no NFL team has `proTeamId` 0 (no team shown).
+**Older features, facts still worth having** (descriptions: `docs/ARCHITECTURE.md`; full notes in git history):
+- **Rest-of-season injury discount** (`FORECAST_VERSION` 18): proxy backtest on 2022-2025, a listed player's next four games' PPR points (missed ones zero) against season average × games: MAE 23.8 → 11.0 (−12.8 ±1.5, 553 listings), bias +22.3 → +0.8. A Tuesday build has no week's listings yet.
+- **Schedule download**: nflverse serves only `schedules/games.csv.gz` (the plain csv 404s since 2026-10-07).
+- **Mock draft** bots take one of `DraftAdvice`'s top three, weighted 0.6/0.25/0.15 (`MockDraft.BOT_WEIGHTS`, judgment).
+- **Trade partners**: the design's "need against the league's typical starter" was dropped; it changed nothing on the cases tried.
+- **League history**: every ESPN shape it reads is from memory (`status.previousSeasons`, `primaryOwner`, `rankCalculatedFinal`, `playoffSeed`, `schedule[].winner`/`playoffTierType`, pre-2018 `leagueHistory`); finished seasons are cached as files (clear app storage to refetch after a fix).
+- **Report card**: the user approved the five categories with Luck in the overall; a tie shares the better place; overall is the average place, ties by all-play.
+- **Dynasty & keepers**: the user chose FantasyCalc's market values over an age-curve model, and keepers priced by the round drafted. FantasyCalc lists about 420 players plus 24 rookie picks (dropped; ranks recounted). ESPN's `mDraftDetail` (`draftDetail.picks[]`: `playerId`, `roundId`, `teamId`, `keeper`) is from memory.
+- **Waiver trends**: `kona_player_info` on `leaguedefaults/3`, filtered to the 1,000 most rostered (about 600 KB compressed, 20 MB unfiltered; `players_wl` has no `percentChange`); the user chose day snapshots (`live.db` `roster_pct`, a 7-10-day-old one turns on the weekly change) over ESPN's figure, whose window looks daily.
 
 ## Rulings that still bind
 
@@ -161,19 +137,21 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 **Deferred minors (fourth-round FTN):** first-read rate counts CHK, DES and SD as charted reads that aren't the first (their meaning is FTN's, unverified); shotgun excludes pistol; none of the three is in Compare's metric sets or the Player page's Charted by week.
 
-**Deferred minors (design round):** Home appears only with a league configured (not just synced: with no team picked it says so); its win-chance line keeps one point per change, not per minute, and starts again each week; a new install with a league lands on Home, so the Grid's first-open message moved one tap away; headshots are fetched on every app start (memory cache only) and need ESPN's CDN; team colors are primaries only (no secondary, dark-mode contrast unchecked for navy teams on dark surfaces); the Grid's sparkline reads six extra queries per page; the spread chart's bins ignore the Questionable lift's effect on shape (it scales the axis only); the quick look isn't on the Grid; wallpaper colors also recolor the heat scale's surroundings (the heat colors themselves are fixed); the widget's bar shows only after Home has been opened.
+**Deferred minors (sixth round):** Game lines' season numbers ignore home field and injuries and start from week 1 with no prior; drop alerts value rest of season only (not this week), use season totals rather than weekly (byes ignored) and name no drop; the draft's best-available card shows no headshot in the mock; the image cache has no size cap of its own.
+
+**Deferred minors (design round):** Home appears only with a league configured (not just synced: with no team picked it says so); its win-chance line keeps one point per change, not per minute, and starts again each week; a new install with a league lands on Home, so the Grid's first-open message moved one tap away; headshots need ESPN's CDN once (then the app's cache folder, which Android may clear); team colors are primaries only (no secondary, dark-mode contrast unchecked for navy teams on dark surfaces); the Grid's sparkline reads six extra queries per page; the spread chart's bins ignore the Questionable lift's effect on shape (it scales the axis only); the quick look's Add to Compare outside the Grid adds the whole current season; wallpaper colors also recolor the heat scale's surroundings (the heat colors themselves are fixed); the widget's bar shows only after Home has been opened.
 
 **Deferred minors (UI round):** pull to refresh on Scores and Matchups doesn't hold its spinner (the week reloads to its skeleton or stays until replaced); the Grid's pull starts a full stats rebuild, so an accidental pull at the table's top starts one (the refresh bar shows it, and a second is refused); folded sections don't remember being opened across app restarts; the Grid's first-open spinner, the accuracy page's and Compare's stay spinners; the Player page's bar has no title (the page's header names him); Robolectric doesn't check the share card's pixel size.
 
-**Deferred minors (similar seasons):** per-game stats only, no age, team context, efficiency or shares (rates aren't averaged); the pool is whatever seasons the phone built (2-3), so comps rarely reach far back; metrics weigh equally; the same player's own other seasons are left out; K and D/ST get none; the pool is re-read on every page open.
+**Deferred minors (similar seasons):** no team context; the pool is whatever seasons the phone built (2-3), so comps rarely reach far back; metrics weigh equally; the same player's own other seasons are left out; the pool is re-read on every page open.
 
-**Deferred minors (TD regression):** the 2-touchdown floor is a judgment; it isn't wired to the Player page or Trade; passing touchdowns count with rushing and receiving for a QB, so a QB's gap is mostly passing.
+**Deferred minors (TD regression):** the 2-touchdown floor is a judgment; passing touchdowns count with rushing and receiving for a QB, so a QB's gap is mostly passing.
 
 **Deferred minors (game-day refresh):** the four days are fixed (only their times change; a day can't be turned off); the offseason is calendar months, not the schedule (a late-February game or an early-September Thursday is missed); it lives under Alerts though it isn't one; the time picker is the platform dialog, untested by Robolectric (the scheduling and the prefs are tested).
 
 **Deferred minors (claim plan):** claims are ordered by each add's gain alone, then valued on top of those above (a better order could exist); two adds on open spots both count as winnable even with one open spot; bids use the same judgment curve as before; a drop needed for roster room on an open spot counts as distinct; the section is folded by default.
 
-**Deferred minors (Tuesday summary):** it shares the injury alerts' switch (no own toggle); the report card place reads every finished week from ESPN (one request a week, plus the draft) once a Tuesday; win chance uses each roster's best lineup, not the lineup set in ESPN; a phone off all Tuesday skips the week.
+**Deferred minors (Tuesday summary):** the report card place reads every finished week from ESPN (one request a week, plus the draft) once a Tuesday; win chance uses each roster's best lineup, not the lineup set in ESPN; a phone off all Tuesday skips the week.
 
 **Deferred minors (where we differ):** a Questionable discount sits in the app's number, not ESPN's; ESPN's D/ST blocked kicks aren't mapped (code unverified), so the app's D/ST carries a little the ESPN number doesn't; a finished season copied from an older build has no ESPN K or D/ST rows (only the upcoming week is shown, so it doesn't matter yet).
 
@@ -189,7 +167,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 **Deferred minors (dynasty & keepers):** the draft is read every time the screen opens (no cache); keeper costs ignore how many years a player was kept; a negative-surplus player is still marked Keep when he is in the top N; the 6-hour value cache is a judgment; K and D/ST have no worth; a pick ESPN makes for a player later released and re-added still prices at that pick; the Grid's dynasty column lists only players with stats in the range (a rookie who hasn't played is missing), is fetched with each query that needs it (the 6-hour cache saves the network) and says nothing when FantasyCalc fails (blank column); Trade and the Player page show them in every league (no dynasty-league check) and Trade's totals add values without FantasyCalc's package adjustment.
 
-**Deferred minors (waiver trends):** the background snapshot runs only while an alert is on (it rides the alert job); days are UTC; the 25-row cut and the 15-minute memory cache are judgments; a player `player_xref` can't match isn't tappable and has no points; the snapshot is ESPN's public leagues, not the user's league; ESPN's `percentChange` is shown as is.
+**Deferred minors (waiver trends):** the background snapshot runs only while an alert is on (it rides the alert job); days are UTC; the 25-row cut and the 15-minute memory cache are judgments; a player `player_xref` can't match isn't tappable and has no points; the snapshot is ESPN's public leagues (the My league chip reads the user's league's moves instead); ESPN's `percentChange` is shown as is.
 
 **Deferred minors (lineup alerts, Questionable):** before inactives post, a Questionable starter still projects at his discount (ESPN's badge can't tell an active Q from an undecided one), so an early-Sunday My lineup may suggest sitting him; the pre-game lineup alert itself doesn't lift the discount; Projections reads kickoffs when it loads and when My lineup opens, so a week list or Start/sit left open across the cutoff lifts only after reopening; the Player page card reads them each time the page loads; the waterfall and the Grid's projection columns read the stored final, so they keep the discount (a confirmed-active player's card can read above the waterfall it opens). Review's last week is the later of the stats build's and ESPN's.
 
@@ -227,7 +205,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 **Deferred minors (presets):** a double-tap on Save can ask to replace the preset just saved; Undo does nothing when its name or last free slot was taken meanwhile, and says nothing; a "last N weeks" view applied in week 8 doesn't move forward when a refresh brings week 9 (until applied again); at 30 presets Save is disabled, so a preset can't be replaced by saving under its name; the `two saves at 29 end at 30` test runs the saves in turn, not at once.
 
-**Deferred minors (FTN):** the Grid's CSV export header credits nflverse only; `FtnRealDatabaseTest` needs the FTN and play-by-play files in the Python download cache, so CI's Kotlin-only job skips it; the FTN screen, RPO, motion, no-huddle and box-count flags aren't stored; the pipeline's coverage warning names no weeks; a brief 404 of a known season's FTN file rebuilds it without FTN and says "no FTN charting yet" (as snaps and injuries do); Kotlin reads the flags case-sensitively ("TRUE") where Python upper-cases, and Python casts play id and `n_blitzers` text straight to an integer where Kotlin goes through a double; per-game FTN totals (DRP, CRT) divide by play-by-play games, so an uncharted week understates them; the FTN index is held through the rest of `crunch`; a renamed-column FTN warning shows once (the version is still recorded).
+**Deferred minors (FTN):** the Grid's CSV export header credits nflverse only; `FtnRealDatabaseTest` needs the FTN and play-by-play files in the Python download cache, so CI's Kotlin-only job skips it; the pipeline's coverage warning names no weeks; a brief 404 of a known season's FTN file rebuilds it without FTN and says "no FTN charting yet" (as snaps and injuries do); Kotlin reads the flags case-sensitively ("TRUE") where Python upper-cases, and Python casts play id and `n_blitzers` text straight to an integer where Kotlin goes through a double; per-game FTN totals (DRP, CRT) divide by play-by-play games, so an uncharted week understates them; the FTN index is held through the rest of `crunch`; a renamed-column FTN warning shows once (the version is still recorded).
 
 **Deferred minors (NGS):** an average missing or dropped still leaves its weight in the denominator (2 rows in 2025); "no NGS rows published yet" also fires for 2012-2015; `loadNgs` drops a group silently on a 404; NGS facts carry NGS team codes ("LAR", not "LA"); all seasons' NGS rows stay in memory for a build and the three files are re-downloaded when any season is rebuilt and NGS is unchanged; the Python twin drops all NGS if one file fails; `NgsRealDatabaseTest` needs the Python download cache, so CI's Kotlin-only job skips it; no `predicts` text on the ten metrics.
 
@@ -235,6 +213,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 ## Open checks on the phone
 
+- **Sixth round:** long-press a Grid row and the quick look opens (Add to Compare adds over the Grid's weeks); headshots show offline after one view; Home → Share; More → Game lines lists the week's games with leans; a drop alert arrives after another team drops a useful player; Draft shows a Best available card.
 - **Design round:** with a league set, the app opens on Home showing your matchup, win chance and players to watch; during a game the chance updates each minute and a line grows; a Player page shows a headshot on a team-colored band; Grid rows show a team stripe and a small trend line; the This week card shows a bar chart of outcomes; long-press a player in Projections, My lineup or another list (not the Grid) and a sheet opens; Settings → Look switches wallpaper colors and true black; the widget shows a win-chance bar after Home opens.
 - **UI round:** every screen has a back arrow at the top left, except Projections, Scores, News and More opened from the bottom bar; open a Player page from Projections and no tab is lit; pull down on News or the Injury report and it reloads; pull down on the Grid and the refresh bar appears; Waiver trends opening shows grey placeholder rows first; My lineup's Claim plan and Trade's Best partners open on a tap; a shared card looks sharp when zoomed.
 

@@ -54,6 +54,7 @@ import dev.gridiron.core.designsystem.SummaryCard
 import dev.gridiron.core.designsystem.TeamStripe
 import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.model.ScoringProfile
+import dev.gridiron.core.ui.SharePreview
 import java.time.Instant
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
@@ -250,8 +251,10 @@ internal fun HomeScreen(
 
 @Composable
 private fun HomeCards(home: HomeState, onPlayer: (String) -> Unit, onLineup: () -> Unit, onMatchups: () -> Unit) {
+    var sharing by remember { mutableStateOf(false) }
+    if (sharing) SharePreview("gridiron-week.png", onDismiss = { sharing = false }) { HomeShareCard(home) }
     LazyColumn(Modifier.fillMaxSize().testTag("home")) {
-        item { MatchupCard(home, onLineup, onMatchups) }
+        item { MatchupCard(home, onLineup, onMatchups, onShare = { sharing = true }) }
         home.nextKickoff?.let { text ->
             item {
                 SummaryCard {
@@ -305,7 +308,7 @@ private fun HomeCards(home: HomeState, onPlayer: (String) -> Unit, onLineup: () 
 }
 
 @Composable
-private fun MatchupCard(home: HomeState, onLineup: () -> Unit, onMatchups: () -> Unit) {
+private fun MatchupCard(home: HomeState, onLineup: () -> Unit, onMatchups: () -> Unit, onShare: () -> Unit) {
     SummaryCard(Modifier.testTag("home:matchup")) {
         Text(home.teamName, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val live = home.live
@@ -338,6 +341,7 @@ private fun MatchupCard(home: HomeState, onLineup: () -> Unit, onMatchups: () ->
         Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(onClick = onLineup, modifier = Modifier.testTag("home:lineup")) { Text("My lineup") }
             if (home.rivalName != null) TextButton(onClick = onMatchups) { Text("Matchups") }
+            TextButton(onClick = onShare, modifier = Modifier.testTag("share:home")) { Text("Share") }
         }
     }
 }

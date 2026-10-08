@@ -77,6 +77,7 @@ import dev.gridiron.core.datastore.RowDensity
 import dev.gridiron.core.designsystem.EmptyState
 import dev.gridiron.core.designsystem.HeaderStyle
 import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.LocalPlayerPeek
 import dev.gridiron.core.designsystem.NumberStyle
 import dev.gridiron.core.designsystem.PullToRefresh
 import dev.gridiron.core.designsystem.Sparkline
@@ -210,6 +211,7 @@ private fun GridContent(
     var showFilters by remember { mutableStateOf(false) }
     var info by remember { mutableStateOf<MetricInfo?>(null) }
     val haptics = LocalHapticFeedback.current
+    val peek = LocalPlayerPeek.current
     val snackbar = remember { SnackbarHostState() }
 
     val chromeHide = with(LocalDensity.current) { 24.dp.toPx() }
@@ -283,7 +285,10 @@ private fun GridContent(
                             onInfo = { info = it.info },
                             onRowLongClick = { row ->
                                 haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                onEvent(GridEvent.AddToCompare(row.playerId, row.name))
+                                // With a quick look on hand the long press opens it, its Add to Compare adding over
+                                // the Grid's weeks; without one (tests) it adds straight away, as it always did.
+                                val add = { onEvent(GridEvent.AddToCompare(row.playerId, row.name)) }
+                                peek?.invoke(row.playerId, add) ?: add()
                             },
                             // Tap opens the player's page (status, news and this week's projection).
                             onRowClick = { row -> onPlayer(row.playerId, r.season.season, r.season.lastWeek + 1) },

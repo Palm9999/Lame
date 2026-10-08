@@ -86,7 +86,14 @@ suspend fun loadPeek(playerId: String, deps: Deps): PlayerPeek {
 /** A long-pressed player at a glance, over whatever screen is open: his page and Compare one tap away. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PlayerPeekSheet(playerId: String, deps: Deps, onOpen: (String) -> Unit, onDismiss: () -> Unit) {
+fun PlayerPeekSheet(
+    playerId: String,
+    deps: Deps,
+    onOpen: (String) -> Unit,
+    onDismiss: () -> Unit,
+    /** The screen's own Add to Compare (the Grid's, over its weeks); null adds his whole season. */
+    onCompare: (() -> Unit)? = null,
+) {
     var peek by remember(playerId) { mutableStateOf<PlayerPeek?>(null) }
     var note by remember(playerId) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -130,12 +137,17 @@ fun PlayerPeekSheet(playerId: String, deps: Deps, onOpen: (String) -> Unit, onDi
                 Button(onClick = { onOpen(playerId) }, modifier = Modifier.testTag("peek:open")) { Text("Open page") }
                 OutlinedButton(
                     onClick = {
-                        scope.launch {
-                            val season = currentSeason()
-                            note = when (deps.tray.add(CompareSlot(playerId, season, WeekRange(1, WeekRange.lastRegularSeasonWeek(season))))) {
-                                CompareTrayRepository.AddResult.ADDED -> "Added to Compare"
-                                CompareTrayRepository.AddResult.ALREADY_THERE -> "Already in Compare"
-                                CompareTrayRepository.AddResult.FULL -> "Compare is full"
+                        if (onCompare != null) {
+                            onCompare()
+                            onDismiss()
+                        } else {
+                            scope.launch {
+                                val season = currentSeason()
+                                note = when (deps.tray.add(CompareSlot(playerId, season, WeekRange(1, WeekRange.lastRegularSeasonWeek(season))))) {
+                                    CompareTrayRepository.AddResult.ADDED -> "Added to Compare"
+                                    CompareTrayRepository.AddResult.ALREADY_THERE -> "Already in Compare"
+                                    CompareTrayRepository.AddResult.FULL -> "Compare is full"
+                                }
                             }
                         }
                     },
