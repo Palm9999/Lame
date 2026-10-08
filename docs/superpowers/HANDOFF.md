@@ -52,7 +52,19 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** the 2026-10-08 fifth round: the user picked 1-10 minus 3 (win chance with stacks); all are built or tested and logged (below). Nothing is pending: offer the next round as a short pick-list.
+**Next:** the 2026-10-08 UI round (all ten picked) is built (below). Nothing is pending: offer the next round as a short pick-list.
+
+**Just built (UI round, 2026-10-08):** in `Components.kt` unless named.
+- **`ScreenBar`** on every screen (back arrow from `GridironIcons.Back`, title, actions), replacing each "← Back" button; tests click tag `back`. Matchups' open lineup goes back with the same arrow (title "Matchup").
+- **Bottom bar:** a tab straight over the Grid has no back arrow (`tabBack` in `GridironNavHost`; Projections, Scores and News take a nullable `onBack`); only the top screen lights its tab, so a Player page lights none.
+- **`LoadingRows`** (pulsing placeholder rows) replace the centered spinner on list screens. The Grid's first open, the accuracy page and Compare keep theirs: they say what they're doing.
+- **`EmptyState`** (icon, message, optional Try again): app's `Message` now wraps it; Grid "No players match", every `Unavailable` state, TD regression. Try again on Scores, Matchups, News and Injury report.
+- **`PullToRefresh`** (material3 `PullToRefreshBox`): Grid (starts a stats refresh, shown in the refresh bar), News and Injury report (`live.refresh()`), Scores and Matchups (their reload).
+- **Grid:** `GridironIcons.Search` instead of the emoji; the table header casts a shadow once rows scroll under it (`StatTable`). Row heights already scale with font (sp), so nothing changed there.
+- **Charts:** "Tap a bar for detail" hint until a bar is picked; the pick survives new values (dropped if its bar empties); bars grow in and `Meter` animates its fill.
+- **`FoldHeader`:** Claim plan moved up after the adds, Best partners above Suggested trades, both folded closed by default so nothing under them moves.
+- **Motion:** screens slide in a tenth of the width with a fade (`NAV_MS` 220), reversed on back.
+- **Share cards** lay out at 360 dp on a density that makes them 1080 px (`FitWidth` in `ShareImage.kt` shrinks the preview), so the PNG is drawn at full size, not upscaled.
 
 **Just built (fifth round, 2026-10-08):**
 - **Pre-game lineup check lifts the Questionable discount** (`liftQuestionable`): once a starter's team has posted inactives and ESPN doesn't list him Out, IR, Doubtful or suspended, the check ranks him at full value.
@@ -137,7 +149,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 **Deferred minors (fourth-round FTN):** first-read rate counts CHK, DES and SD as charted reads that aren't the first (their meaning is FTN's, unverified); shotgun excludes pistol; none of the three is in Compare's metric sets or the Player page's Charted by week.
 
-**Deferred minors (chart tap):** the selection resets when the chart's values change; nothing tells the user bars are tappable.
+**Deferred minors (UI round):** pull to refresh on Scores and Matchups doesn't hold its spinner (the week reloads to its skeleton or stays until replaced); the Grid's pull starts a full stats rebuild, so an accidental pull at the table's top starts one (the refresh bar shows it, and a second is refused); folded sections don't remember being opened across app restarts; the Grid's first-open spinner, the accuracy page's and Compare's stay spinners; the Player page's bar has no title (the page's header names him); Robolectric doesn't check the share card's pixel size.
 
 **Deferred minors (similar seasons):** per-game stats only, no age, team context, efficiency or shares (rates aren't averaged); the pool is whatever seasons the phone built (2-3), so comps rarely reach far back; metrics weigh equally; the same player's own other seasons are left out; K and D/ST get none; the pool is re-read on every page open.
 
@@ -145,17 +157,17 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 **Deferred minors (game-day refresh):** the four days are fixed (only their times change; a day can't be turned off); the offseason is calendar months, not the schedule (a late-February game or an early-September Thursday is missed); it lives under Alerts though it isn't one; the time picker is the platform dialog, untested by Robolectric (the scheduling and the prefs are tested).
 
-**Deferred minors (claim plan):** claims are ordered by each add's gain alone, then valued on top of those above (a better order could exist); two adds on open spots both count as winnable even with one open spot; bids use the same judgment curve as before; a drop needed for roster room on an open spot counts as distinct; the section sits at the very bottom of My lineup.
+**Deferred minors (claim plan):** claims are ordered by each add's gain alone, then valued on top of those above (a better order could exist); two adds on open spots both count as winnable even with one open spot; bids use the same judgment curve as before; a drop needed for roster room on an open spot counts as distinct; the section is folded by default.
 
 **Deferred minors (Tuesday summary):** it shares the injury alerts' switch (no own toggle); the report card place reads every finished week from ESPN (one request a week, plus the draft) once a Tuesday; win chance uses each roster's best lineup, not the lineup set in ESPN; a phone off all Tuesday skips the week.
 
 **Deferred minors (where we differ):** a Questionable discount sits in the app's number, not ESPN's; ESPN's D/ST blocked kicks aren't mapped (code unverified), so the app's D/ST carries a little the ESPN number doesn't; a finished season copied from an older build has no ESPN K or D/ST rows (only the upcoming week is shown, so it doesn't matter yet).
 
-**Deferred minors (trade partners):** season totals, not weekly (byes ignored); K and D/ST left out; a one-way fit (you sell only) ranks with two-way ones; the section sits at the bottom of a long list.
+**Deferred minors (trade partners):** a one-way fit (you sell only) ranks with two-way ones; the section is folded by default.
 
 **Deferred minors (league activity):** a trade is graded with today's projections, not the rosters or projections at the time; every week is read on each open past the 15-minute hold (one request a week); lineup moves and failed claims are hidden; a player `player_xref` can't match shows as "a player".
 
-**Deferred minors (shareable cards):** the 1080-pixel card is scaled from the screen capture, so a low-density phone's card is upscaled (soft); the preview still shows in the phone's dialog colors around the light card; Robolectric doesn't test the capture itself (the PNG writer and each card's text are tested).
+**Deferred minors (shareable cards):** the preview still shows in the phone's dialog colors around the light card; Robolectric doesn't test the capture itself (the PNG writer and each card's text are tested).
 
 **Deferred minors (league history):** no league chip of its own (switch on Projections or Matchups and it reloads); seasons are read one after another on first open (one request each); a cached season with a wrong guess stays cached until the files are deleted; co-owners count under the primary owner only; consolation games are dropped entirely.
 
@@ -173,7 +185,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 **Deferred minors (look):** the Grid itself wasn't restyled (its heat cells are the visual); Trade, Playoff odds, Review and Planner rows themselves are unchanged (headers, the verdict card and the odds meter are new); the Charted by week table has no tap-for-detail (it's a table).
 
-**Deferred minors (bottom bar):** tab screens keep their own "← Back" (to the Grid); a tab always opens the current season, so a past season's screens are reached from the Grid's ☰; the selected tab is the screen just above the Grid, so a Player page opened from Projections still lights Projections.
+**Deferred minors (bottom bar):** a tab always opens the current season, so a past season's screens are reached from the Grid's ☰.
 
 **Deferred minors (game day):** a pivot must fit the Questionable starter's own slot (a FLEX reshuffle that frees a slot isn't found); a bye or a team ESPN gives no kickoff is left out; kickoffs are read when My lineup opens, so a window that starts while it is open stays until it reloads; times show in the phone's zone.
 
@@ -197,7 +209,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 **Deferred minors (rollups):** early in a season every L window equals `S` and stores the same sums again; `S` uses the newest `g` row, so a season with only playoff weeks has no window; the Python and Kotlin builders each carry their own 17/18-week rule.
 
-**Deferred minors (Grid layout):** the bar's second row scrolls sideways for pack and positions when they don't fit (More can sit half off-screen on a 412 dp phone); the search icon is an emoji; at 200% font Android's nonlinear scaling gives 54 dp rows, so the two-line player cell may be tight; the hide threshold (24 dp) and row counts are estimates; Roborazzi images are build outputs, not committed.
+**Deferred minors (Grid layout):** the bar's second row scrolls sideways for pack and positions when they don't fit (More can sit half off-screen on a 412 dp phone); at 200% font Android's nonlinear scaling gives 54 dp rows, so the two-line player cell may be tight; the hide threshold (24 dp) and row counts are estimates; Roborazzi images are build outputs, not committed.
 
 **Deferred minors (presets):** a double-tap on Save can ask to replace the preset just saved; Undo does nothing when its name or last free slot was taken meanwhile, and says nothing; a "last N weeks" view applied in week 8 doesn't move forward when a refresh brings week 9 (until applied again); at 30 presets Save is disabled, so a preset can't be replaced by saving under its name; the `two saves at 29 end at 30` test runs the saves in turn, not at once.
 
@@ -208,6 +220,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 **Deferred minors (yards work):** the 0–800 `yards_allowed` range check hard-fails a build on one out-of-range game (observed 75–647); no dedicated `BacktestTest` case for yards; the matchup note reads "scores 24.1 pts, 331 yards".
 
 ## Open checks on the phone
+
+- **UI round:** every screen has a back arrow at the top left, except Projections, Scores, News and More opened from the bottom bar; open a Player page from Projections and no tab is lit; pull down on News or the Injury report and it reloads; pull down on the Grid and the refresh bar appears; Waiver trends opening shows grey placeholder rows first; My lineup's Claim plan and Trade's Best partners open on a tap; a shared card looks sharp when zoomed.
 
 - **Fifth round:** a Questionable starter whose team posted inactives gets no "Lineup:" alert for being Questionable; Waiver trends shows a My league chip with a synced league; League activity's trades read "when first seen"; Trade's Best partners can name a team for a kicker or D/ST; a Player page's Similar seasons line starts "Age N"; League history → Records shows "Playoff odds, checked".
 

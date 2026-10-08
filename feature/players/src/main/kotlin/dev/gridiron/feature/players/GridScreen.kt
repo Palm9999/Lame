@@ -1,7 +1,6 @@
 package dev.gridiron.feature.players
 
-import dev.gridiron.core.ui.SharePreview
-import dev.gridiron.core.ui.StatTableCard
+import android.content.Context
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -33,8 +32,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
-import androidx.compose.material3.Text
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -42,15 +41,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalDensity
-import android.content.Context
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -73,21 +71,28 @@ import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.StatPack
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.describeFilter
-import dev.gridiron.core.data.weeksLabel
 import dev.gridiron.core.data.live.LeagueRostered
-import dev.gridiron.core.model.ScoringProfile
+import dev.gridiron.core.data.weeksLabel
 import dev.gridiron.core.datastore.RowDensity
+import dev.gridiron.core.designsystem.EmptyState
 import dev.gridiron.core.designsystem.HeaderStyle
+import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.NumberStyle
+import dev.gridiron.core.designsystem.PullToRefresh
 import dev.gridiron.core.designsystem.heatColor
 import dev.gridiron.core.model.Roster
+import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.statquery.Direction
 import dev.gridiron.core.table.StatTable
 import dev.gridiron.core.table.TableColumn
 import dev.gridiron.core.ui.MetricSheet
 import dev.gridiron.core.ui.ProfileChip
 import dev.gridiron.core.ui.SeasonWeeksSheet
+import dev.gridiron.core.ui.SharePreview
+import dev.gridiron.core.ui.StatTableCard
 import dev.gridiron.core.ui.WeeksSheet
+import java.text.DateFormat
+import java.util.Date
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.ImmutableSet
@@ -97,8 +102,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.text.DateFormat
-import java.util.Date
 
 @Composable
 fun GridRoute(
@@ -117,10 +120,12 @@ fun GridRoute(
     display: GridDisplayRepository? = null,
     leagueRostered: Flow<LeagueRostered?> = flowOf(null),
     dynasty: (suspend (ScoringProfile) -> Map<String, Double>)? = null,
+    /** Rebuilds stats when the table is pulled down; null: no pull to refresh. */
+    onRefresh: (() -> Unit)? = null,
 ) {
     val vm: GridViewModel = viewModel(factory = GridViewModel.factory(repository, scoring, tray, badges, rosters, presets, display, leagueRostered, dynasty))
     val state by vm.state.collectAsStateWithLifecycle()
-    GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu, recovery)
+    GridScreen(state, vm::onEvent, modifier, onCompare, onEditProfiles, onPlayer, menu, recovery, onRefresh = onRefresh)
 }
 
 @Composable
@@ -136,6 +141,7 @@ fun GridScreen(
     recovery: List<Pair<String, () -> Unit>> = emptyList(),
     /** Hands the exported CSV to the share sheet; a seam so tests needn't declare a FileProvider. */
     share: suspend (Context, fileName: String, csv: String) -> Boolean = CsvShare::share,
+    onRefresh: (() -> Unit)? = null,
 ) {
     // A Surface, not a Box with a background: it also sets the content color
     // that every Text inherits. Without it, text defaults to black, which is
@@ -158,7 +164,7 @@ fun GridScreen(
                 Text(state.message, color = MaterialTheme.colorScheme.error)
                 recovery.forEach { (label, action) -> TextButton(onClick = action) { Text(label) } }
             }
-            is GridUiState.Ready -> GridContent(state, onEvent, onCompare, onEditProfiles, onPlayer, menu, share)
+            is GridUiState.Ready -> GridContent(state, onEvent, onCompare, onEditProfiles, onPlayer, menu, share, onRefresh)
         }
       }
     }
@@ -173,6 +179,7 @@ private fun GridContent(
     onPlayer: (playerId: String, season: Int, week: Int) -> Unit,
     menu: List<Pair<String, (season: Int) -> Unit>>,
     share: suspend (Context, fileName: String, csv: String) -> Boolean,
+    onRefresh: (() -> Unit)?,
 ) {
     val r = state.request
     var showWeeks by remember { mutableStateOf(false) }
@@ -235,28 +242,29 @@ private fun GridContent(
             Box(Modifier.weight(1f)) {
                 val page = state.page
                 when {
-                    page == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                    page.rows.isEmpty() -> Text(
+                    page == null -> LoadingRows()
+                    page.rows.isEmpty() -> EmptyState(
                         if (page.request.onlyPlayers?.isEmpty() == true) "This roster is empty. Add players from their player page." else "No players match.",
-                        Modifier.fillMaxWidth().padding(32.dp),
-                        style = MaterialTheme.typography.bodyMedium,
                     )
-                    else -> PlayerTable(
-                        page,
-                        state.heat,
-                        state.density,
-                        state.badges,
-                        state.rostered,
-                        chrome,
-                        onSort = { onEvent(GridEvent.SortBy(it.column)) },
-                        onInfo = { info = it.info },
-                        onRowLongClick = { row ->
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onEvent(GridEvent.AddToCompare(row.playerId, row.name))
-                        },
-                        // Tap opens the player's page (status, news and this week's projection).
-                        onRowClick = { row -> onPlayer(row.playerId, r.season.season, r.season.lastWeek + 1) },
-                    )
+                    // The rebuild shows in the refresh bar, so the pull's spinner needn't stay.
+                    else -> PullToRefresh(refreshing = false, onRefresh ?: {}) {
+                        PlayerTable(
+                            page,
+                            state.heat,
+                            state.density,
+                            state.badges,
+                            state.rostered,
+                            chrome,
+                            onSort = { onEvent(GridEvent.SortBy(it.column)) },
+                            onInfo = { info = it.info },
+                            onRowLongClick = { row ->
+                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onEvent(GridEvent.AddToCompare(row.playerId, row.name))
+                            },
+                            // Tap opens the player's page (status, news and this week's projection).
+                            onRowClick = { row -> onPlayer(row.playerId, r.season.season, r.season.lastWeek + 1) },
+                        )
+                    }
                 }
             }
 

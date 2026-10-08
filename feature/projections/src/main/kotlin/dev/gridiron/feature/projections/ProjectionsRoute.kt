@@ -22,6 +22,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.model.Position
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -54,7 +55,7 @@ public fun ProjectionsRoute(
 
     Surface(modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Box(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            TextButton(onClick = onBack, modifier = Modifier.padding(top = 8.dp)) { Text("← Back") }
+            ScreenBar(null, onBack)
             when (val s = state) {
                 ProjectionsUiState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()

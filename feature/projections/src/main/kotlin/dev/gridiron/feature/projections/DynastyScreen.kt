@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,11 +42,13 @@ import dev.gridiron.core.data.live.FantasyLeague
 import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.datastore.KeeperRule
+import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.model.ScoringProfile
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 /** More → Dynasty & keepers: FantasyCalc's dynasty values, and which of your players to keep by draft-round cost. */
 @Composable
@@ -104,16 +105,13 @@ public fun DynastyScreen(
     var keepersTab by rememberSaveable { mutableStateOf(false) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("Dynasty & keepers", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("Dynasty & keepers", onBack)
             Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = !keepersTab, onClick = { keepersTab = false }, label = { Text("Dynasty") }, modifier = Modifier.testTag("tab:dynasty"))
                 FilterChip(selected = keepersTab, onClick = { keepersTab = true }, label = { Text("Keepers") }, modifier = Modifier.testTag("tab:keepers"))
             }
             when (state) {
-                DynastyState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+                DynastyState.Loading -> LoadingRows()
                 is DynastyState.Loaded -> if (keepersTab) {
                     KeepersTab(state, team, rule, teams, leagueRounds, onRule, onPlayer)
                 } else {

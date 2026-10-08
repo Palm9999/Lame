@@ -22,8 +22,9 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -53,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.PositionFilter
 import dev.gridiron.core.data.describeFilter
 import dev.gridiron.core.data.weeksLabel
+import dev.gridiron.core.designsystem.GridironIcons
 import dev.gridiron.core.ui.ProfileChip
 import kotlin.math.roundToInt
 
@@ -143,9 +145,9 @@ private fun TitleRow(
         }
         val describe = Modifier.testTag("searchIcon").semantics { contentDescription = "Search players" }
         if (searchActive) {
-            FilledTonalIconButton(onClick = onSearch, modifier = describe) { Text("🔍") }
+            FilledTonalIconButton(onClick = onSearch, modifier = describe) { Icon(GridironIcons.Search, contentDescription = null) }
         } else {
-            IconButton(onClick = onSearch, modifier = describe) { Text("🔍") }
+            IconButton(onClick = onSearch, modifier = describe) { Icon(GridironIcons.Search, contentDescription = null) }
         }
         if (menu.isNotEmpty()) {
             Box {

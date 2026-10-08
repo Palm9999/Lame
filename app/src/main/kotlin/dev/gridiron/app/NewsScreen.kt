@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -29,6 +28,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,21 +40,36 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.NewsItem
+import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.PullToRefresh
+import dev.gridiron.core.designsystem.ScreenBar
 import java.time.Instant
+import kotlinx.coroutines.launch
 
 @Composable
-fun NewsRoute(live: LiveRepository, onBack: () -> Unit, onPlayer: (String) -> Unit) {
+fun NewsRoute(live: LiveRepository, onBack: (() -> Unit)?, onPlayer: (String) -> Unit) {
     val version by live.changes.collectAsState()
     var items by remember { mutableStateOf<List<NewsItem>?>(null) }
     var asOf by remember { mutableStateOf<Instant?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) { error = live.refreshIfStale()?.newsError }
+    val scope = rememberCoroutineScope()
+    var refreshing by remember { mutableStateOf(false) }
     LaunchedEffect(version) {
         items = live.news()
         asOf = live.newsFetchedAt()
     }
     val uri = LocalUriHandler.current
-    NewsScreen(items, asOf, error, onBack, onOpen = { uri.openSafely(it) }, onPlayer = onPlayer)
+    NewsScreen(
+        items, asOf, error, onBack, onOpen = { uri.openSafely(it) }, onPlayer = onPlayer, refreshing = refreshing,
+        onRefresh = {
+            scope.launch {
+                refreshing = true
+                error = live.refresh().newsError
+                refreshing = false
+            }
+        },
+    )
 }
 
 /** ESPN headlines, newest first. [error] is set when the last fetch failed and older news is showing. */
@@ -63,24 +78,26 @@ fun NewsScreen(
     items: List<NewsItem>?,
     asOf: Instant?,
     error: String?,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onOpen: (String) -> Unit,
     onPlayer: (String) -> Unit,
+    refreshing: Boolean = false,
+    /** Fetches ESPN's news again; null: no pull to refresh. */
+    onRefresh: (() -> Unit)? = null,
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("News", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("News", onBack)
             LiveCaption(asOf, error)
             when {
-                items == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                items.isEmpty() -> Message(if (error != null) "Couldn't reach ESPN. Try again later." else "No news yet.")
-                else -> LazyColumn {
-                    items(items, key = { it.id }) { item ->
-                        NewsRow(item, onOpen, onPlayer)
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                items == null -> LoadingRows()
+                items.isEmpty() -> Message(if (error != null) "Couldn't reach ESPN. Try again later." else "No news yet.", onRefresh)
+                else -> PullToRefresh(refreshing, onRefresh ?: {}) {
+                    LazyColumn {
+                        items(items, key = { it.id }) { item ->
+                            NewsRow(item, onOpen, onPlayer)
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        }
                     }
                 }
             }

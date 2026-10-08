@@ -2,6 +2,12 @@ package dev.gridiron.app
 
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.WindowInsets
@@ -41,16 +47,14 @@ import dev.gridiron.core.data.AccuracyRepository
 import dev.gridiron.core.data.BreakoutRepository
 import dev.gridiron.core.data.CompareRepository
 import dev.gridiron.core.data.CompareTrayRepository
+import dev.gridiron.core.data.CompsRepository
 import dev.gridiron.core.data.DraftRepository
+import dev.gridiron.core.data.DynastyRepository
 import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.InjuryReturnRepository
 import dev.gridiron.core.data.Kickoffs
-import dev.gridiron.core.data.DynastyRepository
-import dev.gridiron.core.data.CompsRepository
-import dev.gridiron.core.data.TdRegressionRepository
 import dev.gridiron.core.data.OpportunitiesRepository
-import dev.gridiron.core.data.dynastyFormat
 import dev.gridiron.core.data.OpportunitiesResult
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.PlayerStatsRepository
@@ -60,41 +64,43 @@ import dev.gridiron.core.data.ScoresRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.data.TdRegressionRepository
 import dev.gridiron.core.data.TeamsRepository
+import dev.gridiron.core.data.dynastyFormat
 import dev.gridiron.core.data.kickoffs
 import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.LineupReviewResult
 import dev.gridiron.core.data.live.LiveRepository
-import dev.gridiron.core.data.live.WaiverTrendsRepository
 import dev.gridiron.core.data.live.MyMatchup
 import dev.gridiron.core.data.live.OpponentResult
 import dev.gridiron.core.data.live.PlayoffPictureResult
 import dev.gridiron.core.data.live.PropsRepository
 import dev.gridiron.core.data.live.TradeOffersResult
+import dev.gridiron.core.data.live.WaiverTrendsRepository
 import dev.gridiron.core.designsystem.GridironIcons
 import dev.gridiron.core.ingest.currentSeason
 import dev.gridiron.core.model.Roster
 import dev.gridiron.feature.compare.CompareRoute
 import dev.gridiron.feature.players.GridRoute
 import dev.gridiron.feature.projections.AccuracyRoute
-import dev.gridiron.feature.projections.BreakoutsRoute
-import dev.gridiron.feature.projections.TdRegressionRoute
 import dev.gridiron.feature.projections.ActivityRoute
+import dev.gridiron.feature.projections.BreakoutsRoute
 import dev.gridiron.feature.projections.DifferRoute
 import dev.gridiron.feature.projections.DynastyRoute
 import dev.gridiron.feature.projections.HistoryRoute
 import dev.gridiron.feature.projections.OpportunitiesRoute
-import dev.gridiron.feature.projections.WaiverTrendsRoute
-import dev.gridiron.feature.projections.trendPoints
 import dev.gridiron.feature.projections.ProjectionListRoute
 import dev.gridiron.feature.projections.ProjectionsRoute
+import dev.gridiron.feature.projections.TdRegressionRoute
+import dev.gridiron.feature.projections.WaiverTrendsRoute
+import dev.gridiron.feature.projections.trendPoints
 import dev.gridiron.feature.scoring.ScoringEditRoute
 import dev.gridiron.feature.scoring.ScoringListRoute
+import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import java.io.File
 
 /** What the screens need, built by [GridironApplication] or by a test. */
 data class Deps(
@@ -228,6 +234,8 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
         if (deps.live != null) add(Tab("News", GridironIcons.News, NewsKey))
         add(Tab("More", GridironIcons.More, MoreKey))
     }
+    // A tab open straight over the Grid has no back arrow: the bottom bar is the way around (system back still works).
+    val tabBack: (NavKey) -> (() -> Unit)? = { key -> if (backStack.size == 2 && backStack[1] == key && tabs.any { it.key == key }) null else back }
     Column(Modifier.fillMaxSize()) {
         // The bottom bar below takes the navigation bar's inset: screens above it leave it alone.
         Box(Modifier.weight(1f).consumeWindowInsets(WindowInsets.navigationBars)) {
@@ -237,6 +245,9 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                 // Each destination gets its own saved state and ViewModelStore, so
                 // leaving Compare clears its view model and returning rebuilds it.
                 entryDecorators = listOf(rememberSaveableStateHolderNavEntryDecorator(), rememberViewModelStoreNavEntryDecorator()),
+                // A short fade with a nudge from the side: quick enough not to slow a tap.
+                transitionSpec = { (slideInHorizontally(tween(NAV_MS)) { it / 10 } + fadeIn(tween(NAV_MS))) togetherWith fadeOut(tween(NAV_MS / 2)) },
+                popTransitionSpec = { fadeIn(tween(NAV_MS)) togetherWith (slideOutHorizontally(tween(NAV_MS)) { it / 10 } + fadeOut(tween(NAV_MS / 2))) },
                 entryProvider = entryProvider {
                     entry<GridKey> {
                         GridRoute(
@@ -277,6 +288,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                         .mapNotNull { v -> v.playerId?.let { it to v.value.toDouble() } }.toMap()
                                 }
                             },
+                            onRefresh = refresher?.let { { refresh() } },
                             recovery = buildList {
                                 if (refresher != null) add("Refresh stats" to { refresh() })
                                 if (deps.settings != null) add("Settings" to { backStack.push(SettingsKey) })
@@ -299,7 +311,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                     entry<ProjectionListKey> { key ->
                         ProjectionListRoute(
                             key.season, deps.projections, deps.scoring, deps.live?.badges ?: flowOf(emptyMap()),
-                            onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
+                            onPlayer = { backStack.push(PlayerKey(it)) }, onBack = tabBack(key), dataVersion = deps.stats.dataVersion,
                             myTeam = deps.league?.myTeam ?: flowOf(null),
                             leagueRostered = deps.league?.rostered ?: flowOf(null),
                             leagues = deps.league?.leagues ?: flowOf(emptyList()),
@@ -420,7 +432,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             ScoresRoute(
                                 key.season, scores,
                                 onGame = { week, home, away -> backStack.push(GameKey(key.season, week, home, away)) },
-                                onBack = back, dataVersion = deps.stats.dataVersion,
+                                onBack = tabBack(key), dataVersion = deps.stats.dataVersion,
                             )
                         }
                     }
@@ -432,8 +444,8 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             )
                         }
                     }
-                    entry<NewsKey> {
-                        deps.live?.let { NewsRoute(it, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
+                    entry<NewsKey> { key ->
+                        deps.live?.let { NewsRoute(it, onBack = tabBack(key), onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
                     }
                     entry<PlayerKey> { key ->
                         PlayerRoute(
@@ -494,7 +506,8 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
             )
         }
         (refreshState as? RefreshState.Running)?.let { RefreshBar(it.text) }
-        BottomBar(tabs, selected = tabs.firstOrNull { it.key == backStack.getOrNull(1) } ?: tabs.first()) { tab ->
+        // Only the screen on top lights its tab: a Player page opened from Projections lights none.
+        BottomBar(tabs, selected = tabs.firstOrNull { it.key == backStack.lastOrNull() }) { tab ->
             // A tab opens over the Grid, so Back from any tab returns there; the open tab again goes to its top.
             while (backStack.size > 1) backStack.removeAt(backStack.lastIndex)
             if (tab.key != GridKey) backStack.add(tab.key)
@@ -502,11 +515,13 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
     }
 }
 
+private const val NAV_MS = 220
+
 /** One bottom-bar destination. */
 private data class Tab(val label: String, val icon: ImageVector, val key: NavKey)
 
 @Composable
-private fun BottomBar(tabs: List<Tab>, selected: Tab, onTab: (Tab) -> Unit) {
+private fun BottomBar(tabs: List<Tab>, selected: Tab?, onTab: (Tab) -> Unit) {
     NavigationBar(Modifier.testTag("bottomBar")) {
         for (tab in tabs) {
             NavigationBarItem(

@@ -81,7 +81,7 @@ class MatchupsScreenTest {
         compose.onAllNodesWithText("ESPN").assertCountEquals(2)
         compose.onNodeWithText("19.8").assertExists()
         compose.onNodeWithText("21.3").assertExists()
-        compose.onNodeWithText("← Matchups").performClick()
+        compose.onNodeWithTag("back").performClick()
         compose.onNodeWithTag("matchups-list").assertExists()
     }
 

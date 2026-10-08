@@ -39,14 +39,15 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.live.PropsStatus
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
+import dev.gridiron.core.designsystem.ScreenBar
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 
 /**
  * The Odds API key and how props went, then the seasons the phone builds,
@@ -59,10 +60,7 @@ fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit, props: Flow
     val context = LocalContext.current
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("Settings", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("Settings", onBack)
             AlertsSection(settings)
             PropsSection(settings, props)
             Text(

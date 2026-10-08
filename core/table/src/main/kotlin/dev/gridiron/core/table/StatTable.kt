@@ -108,6 +108,15 @@ public fun <R> StatTable(
         }
     }
 
+    // The header's shadow once rows have scrolled under it; read in draw, like the frozen edge.
+    val scrolledDown by remember(listState) { derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0 } }
+    val headerShadow = Modifier.drawWithContent {
+        drawContent()
+        if (scrolledDown) {
+            drawRect(brush = Brush.verticalGradient(listOf(shadow, Color.Transparent), startY = 0f, endY = 6.dp.toPx()), size = Size(size.width, 6.dp.toPx()))
+        }
+    }
+
     val surface = MaterialTheme.colorScheme.surface
     val zebraColor = MaterialTheme.colorScheme.surfaceContainerLow
     val dividerColor = MaterialTheme.colorScheme.outlineVariant
@@ -121,7 +130,7 @@ public fun <R> StatTable(
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-        LazyColumn(state = listState) {
+        LazyColumn(headerShadow, state = listState) {
             itemsIndexed(rows, key = { _, row -> rowKey(row) }) { index, row ->
                 val background = if (zebra && index % 2 == 1) zebraColor else surface
                 Row(

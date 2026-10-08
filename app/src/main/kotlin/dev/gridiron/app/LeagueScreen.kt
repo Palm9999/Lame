@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.live.FantasyLeague
 import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.LeagueTeam
+import dev.gridiron.core.designsystem.ScreenBar
 import kotlinx.coroutines.launch
 
 /**
@@ -78,10 +79,7 @@ fun LeagueScreen(
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("ESPN leagues", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("ESPN leagues", onBack)
             LazyColumn(Modifier.fillMaxSize()) {
                 item {
                     Column(Modifier.padding(horizontal = 16.dp)) {

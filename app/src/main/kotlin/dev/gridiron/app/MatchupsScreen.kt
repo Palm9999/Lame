@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -45,10 +44,13 @@ import dev.gridiron.core.data.live.LeagueChoice
 import dev.gridiron.core.data.live.LeagueMatchup
 import dev.gridiron.core.data.live.MatchupSide
 import dev.gridiron.core.data.live.MatchupsResult
+import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.PullToRefresh
+import dev.gridiron.core.designsystem.ScreenBar
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 private val STARTER_WEEKS = (1..18).toList()
 
@@ -140,9 +142,7 @@ fun MatchupsScreen(
     val opened = open?.let { result?.matchups?.getOrNull(it) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = { if (opened != null) open = null else onBack() }) { Text(if (opened != null) "← Matchups" else "← Back") }
-                Text("Matchups · $season", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            ScreenBar(if (opened != null) "Matchup" else "Matchups · $season", onBack = { if (opened != null) open = null else onBack() }) {
                 TextButton(onClick = onRefresh) { Text("Refresh") }
             }
             if (leagues.size > 1) {
@@ -163,10 +163,11 @@ fun MatchupsScreen(
             }
             when {
                 week == 0 -> Message("Sync your league first (☰ → ESPN league).")
-                result == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                result.matchups.isEmpty() -> if (result.error == null) Message("No matchups this week.")
+                result == null -> LoadingRows()
+                result.matchups.isEmpty() -> Message(if (result.error == null) "No matchups this week." else "Couldn't load this week.", onRefresh)
                 opened != null -> Lineups(opened, ::name, myTeam, profileName, onPlayer)
-                else -> MatchupList(result.matchups, ::name, myTeam, onOpen = { open = it })
+                // The shown week stays until the new one arrives, so the pull's spinner needn't stay.
+                else -> PullToRefresh(refreshing = false, onRefresh) { MatchupList(result.matchups, ::name, myTeam, onOpen = { open = it }) }
             }
         }
     }

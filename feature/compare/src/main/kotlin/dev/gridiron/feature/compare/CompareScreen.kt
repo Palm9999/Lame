@@ -1,7 +1,5 @@
 package dev.gridiron.feature.compare
 
-import dev.gridiron.core.ui.SharePreview
-import dev.gridiron.core.ui.StatTableCard
 import android.content.res.Configuration
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -12,13 +10,13 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.layout.height
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LinearProgressIndicator
@@ -55,9 +53,12 @@ import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SlotHeader
 import dev.gridiron.core.data.SlotStatus
 import dev.gridiron.core.data.StatsRepository
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.designsystem.SlotColors
 import dev.gridiron.core.model.CompareSlot
 import dev.gridiron.core.ui.ProfileChip
+import dev.gridiron.core.ui.SharePreview
+import dev.gridiron.core.ui.StatTableCard
 import kotlinx.collections.immutable.ImmutableList
 
 @Composable
@@ -104,7 +105,7 @@ internal fun CompareScreen(
 @Composable
 private fun NeedsPlayers(onBack: () -> Unit) {
     Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-        TextButton(onClick = onBack, modifier = Modifier.padding(top = 8.dp)) { Text("← Back") }
+        ScreenBar("Compare", onBack)
         Column(Modifier.fillMaxSize().padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Spacer(Modifier.weight(1f))
             Text(
@@ -213,14 +214,7 @@ private fun TablePane(state: CompareUiState.Ready, onEvent: (CompareEvent) -> Un
 
 @Composable
 private fun TopBar(state: CompareUiState.Ready, onEvent: (CompareEvent) -> Unit, onBack: () -> Unit, onEditProfiles: () -> Unit, onShare: () -> Unit) {
-    Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 12.dp, top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-        TextButton(onClick = onBack) { Text("← Back") }
-        Text(
-            "Compare",
-            Modifier.weight(1f).padding(start = 4.dp),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
+    ScreenBar("Compare", onBack) {
         TextButton(onClick = onShare, modifier = Modifier.testTag("share:compare")) { Text("Share") }
         ProfileChip(
             active = state.page.request.scoring,

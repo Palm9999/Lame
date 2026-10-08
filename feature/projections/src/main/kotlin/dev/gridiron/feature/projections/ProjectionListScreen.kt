@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -59,8 +58,12 @@ import dev.gridiron.core.data.live.PlayoffPictureResult
 import dev.gridiron.core.data.live.TradeOffer
 import dev.gridiron.core.data.live.TradeOffersResult
 import dev.gridiron.core.designsystem.DivergingBar
+import dev.gridiron.core.designsystem.EmptyState
+import dev.gridiron.core.designsystem.FoldHeader
+import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.Meter
 import dev.gridiron.core.designsystem.RangeBar
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.designsystem.SectionHeader
 import dev.gridiron.core.designsystem.SlotTag
 import dev.gridiron.core.designsystem.StatusBadge
@@ -68,12 +71,12 @@ import dev.gridiron.core.designsystem.SummaryCard
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.Lineups
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 /** ☰ → Projections: the upcoming week or rest of season, by position, scored with the active profile. */
 @Composable
@@ -83,7 +86,7 @@ public fun ProjectionListRoute(
     scoring: ScoringRepository,
     badges: Flow<Map<String, String>>,
     onPlayer: (String) -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     /** Bumped when a refresh swaps in new stats: the list loads again. */
     dataVersion: Flow<Long> = flowOf(0L),
     /** The user's ESPN team for "My lineup"; null (or another season's) hides the mode. */
@@ -298,7 +301,7 @@ public fun ProjectionListScreen(
     state: ProjectionListState,
     badges: Map<String, String>,
     onPlayer: (String) -> Unit,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     myTeam: MyTeam? = null,
     opponent: OpponentState = OpponentState.Idle,
     /** My lineup was opened: the route fetches the opponent. */
@@ -370,15 +373,10 @@ public fun ProjectionListScreen(
     }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("Projections", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("Projections", onBack)
             when (state) {
-                ProjectionListState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                is ProjectionListState.Unavailable -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Text(state.message, style = MaterialTheme.typography.bodyMedium)
-                }
+                ProjectionListState.Loading -> LoadingRows()
+                is ProjectionListState.Unavailable -> EmptyState(state.message)
                 is ProjectionListState.Loaded -> {
                     Text(
                         statusLine(state.week, state.builtAt),
@@ -536,6 +534,7 @@ private fun LineupList(
 ) {
     // One scale for every range bar in the lineup, so rows compare at a glance.
     val rangeMax = (view.starters.mapNotNull { it.row } + view.bench).maxOfOrNull { it.ceiling } ?: 0.0
+    var claimsOpen by rememberSaveable { mutableStateOf(false) }
     LazyColumn(Modifier.fillMaxSize().testTag("lineup:list")) {
         item {
             SummaryCard {
@@ -712,6 +711,24 @@ private fun LineupList(
             }
             itemsIndexed(stashes, key = { _, p -> "r:${p.add.playerId}" }) { _, pick -> PickupRow(pick, onPlayer, "ros:") }
         }
+        // Beside the adds it plans, folded so the sections under it stay where they were.
+        if (claims != null && claims.claims.isNotEmpty()) {
+            item(key = "claims") { FoldHeader("Claim plan", claimsOpen, onToggle = { claimsOpen = !claimsOpen }) }
+            if (claimsOpen) {
+                claims.standing?.let { text ->
+                    item {
+                        Text(text, Modifier.padding(horizontal = 16.dp, vertical = 2.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+                itemsIndexed(claims.claims, key = { _, c -> "claim:${c.line.add.playerId}" }) { _, c ->
+                    Text(
+                        claimText(c),
+                        Modifier.fillMaxWidth().clickable { onPlayer(c.line.add.playerId) }.padding(horizontal = 16.dp, vertical = 6.dp).testTag("claim:${c.priority}"),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                }
+            }
+        }
         if (handcuffs.isNotEmpty()) {
             item { SectionLabel("Handcuffs") }
             itemsIndexed(handcuffs, key = { _, h -> "h:${h.starter.playerId}" }) { _, h ->
@@ -751,21 +768,6 @@ private fun LineupList(
                     Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        if (claims != null && claims.claims.isNotEmpty()) {
-            item { SectionLabel("Claim plan") }
-            claims.standing?.let { text ->
-                item {
-                    Text(text, Modifier.padding(horizontal = 16.dp, vertical = 2.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            itemsIndexed(claims.claims, key = { _, c -> "claim:${c.line.add.playerId}" }) { _, c ->
-                Text(
-                    claimText(c),
-                    Modifier.fillMaxWidth().clickable { onPlayer(c.line.add.playerId) }.padding(horizontal = 16.dp, vertical = 6.dp).testTag("claim:${c.priority}"),
-                    style = MaterialTheme.typography.bodyMedium,
                 )
             }
         }

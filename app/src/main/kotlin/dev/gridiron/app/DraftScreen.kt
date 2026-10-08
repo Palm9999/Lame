@@ -32,12 +32,13 @@ import dev.gridiron.core.data.BoardPlayer
 import dev.gridiron.core.data.DraftAdvice
 import dev.gridiron.core.data.DraftBoardResult
 import dev.gridiron.core.data.MockDraft
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.Lineups
-import kotlinx.coroutines.flow.Flow
 import java.io.File
 import java.util.Locale
 import kotlin.random.Random
+import kotlinx.coroutines.flow.Flow
 
 /** The picks made so far, by board key: [mine] the user's, [taken] everyone else's. Saved as "m:key" / "t:key" lines. */
 data class DraftPicks(val mine: List<String> = emptyList(), val taken: Set<String> = emptySet()) {
@@ -90,9 +91,7 @@ fun DraftScreen(
     val suggested = DraftAdvice.suggestions(available, mine, slots ?: Lineups.DEFAULT_SLOTS, round, rounds)
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text(if (mockMode) "Mock draft $year" else "Draft $year", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            ScreenBar(if (mockMode) "Mock draft $year" else "Draft $year", onBack) {
                 TextButton(onClick = { mockMode = !mockMode }, modifier = Modifier.testTag("draft:mock")) { Text(if (mockMode) "Real draft" else "Mock") }
                 if (!mockMode) TextButton(onClick = { save(DraftPicks()) }, modifier = Modifier.testTag("draft:reset")) { Text("Reset") }
             }

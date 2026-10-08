@@ -32,6 +32,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.RosterRepository
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.model.Roster
 import kotlinx.coroutines.launch
 
@@ -53,9 +54,7 @@ fun RostersScreen(repo: RosterRepository, players: PlayerDirectory?, onBack: () 
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("Rosters", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            ScreenBar("Rosters", onBack) {
                 TextButton(onClick = { editing = "" }, Modifier.testTag("roster:new")) { Text("New roster") }
             }
             if (rosters.isEmpty()) {

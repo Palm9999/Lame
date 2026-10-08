@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -42,10 +41,14 @@ import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.live.LeagueRostered
 import dev.gridiron.core.data.live.MyTeam
+import dev.gridiron.core.designsystem.EmptyState
+import dev.gridiron.core.designsystem.LoadingRows
+import dev.gridiron.core.designsystem.ScreenBar
 import dev.gridiron.core.model.Position
 import dev.gridiron.core.model.ScoringProfile
 import dev.gridiron.core.projections.ListedProjection
 import dev.gridiron.core.projections.projectedScore
+import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -53,7 +56,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
-import java.util.Locale
 
 /** One player both the app and ESPN project for the week, scored the same way; [gap] is the app's points less ESPN's. */
 public data class DifferRow(val playerId: String, val name: String, val position: String, val team: String?, val app: Double, val espn: Double) {
@@ -160,13 +162,10 @@ public fun DifferScreen(
     var modelAlone by rememberSaveable { mutableStateOf(false) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onBack) { Text("← Back") }
-                Text("Where we differ", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            }
+            ScreenBar("Where we differ", onBack)
             when (state) {
-                DifferState.Loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-                is DifferState.Unavailable -> Text(state.message, Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)
+                DifferState.Loading -> LoadingRows()
+                is DifferState.Unavailable -> EmptyState(state.message)
                 is DifferState.Loaded -> {
                     if (state.espn.isEmpty()) {
                         Text("No ESPN projections for week ${state.week} in this build. Refresh stats.", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium)

@@ -61,6 +61,35 @@ public object GridironIcons {
         }
     }
 
+    /** An arrow pointing left: back. */
+    public val Back: ImageVector by lazy {
+        outline("Back") {
+            moveTo(20f, 12f); lineTo(4f, 12f)
+            moveTo(10f, 6f); lineTo(4f, 12f); lineTo(10f, 18f)
+        }
+    }
+
+    /** A magnifying glass: search. */
+    public val Search: ImageVector by lazy {
+        outline("Search") {
+            moveTo(17f, 10.5f)
+            arcTo(6.5f, 6.5f, 0f, true, true, 4f, 10.5f)
+            arcTo(6.5f, 6.5f, 0f, true, true, 17f, 10.5f)
+            moveTo(15.5f, 15.5f); lineTo(20f, 20f)
+        }
+    }
+
+    /** A circle with a bang: something went wrong or is missing. */
+    public val Alert: ImageVector by lazy {
+        outline("Alert") {
+            moveTo(21f, 12f)
+            arcTo(9f, 9f, 0f, true, true, 3f, 12f)
+            arcTo(9f, 9f, 0f, true, true, 21f, 12f)
+            moveTo(12f, 7.5f); lineTo(12f, 13f)
+            moveTo(12f, 16.5f); lineTo(12f, 16.6f)
+        }
+    }
+
     private fun outline(name: String, draw: PathBuilder.() -> Unit): ImageVector =
         ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f).path(
             fill = null,

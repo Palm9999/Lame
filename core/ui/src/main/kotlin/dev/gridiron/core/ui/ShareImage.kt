@@ -20,26 +20,34 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.FileProvider
 import dev.gridiron.core.designsystem.GridironTheme
+import java.io.File
+import java.io.IOException
+import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
-import java.io.IOException
 
 /**
  * A card image for the share sheet: written as a PNG under `cache/exports` (beside its final name, then moved into
@@ -93,7 +101,7 @@ public object ImageShare {
 @Composable
 public fun ShareCardFrame(content: @Composable () -> Unit) = GridironTheme(darkTheme = false) {
     Column(
-        Modifier.width(360.dp).background(MaterialTheme.colorScheme.surface).padding(16.dp),
+        Modifier.width(CARD_WIDTH_DP.dp).background(MaterialTheme.colorScheme.surface).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text("Gridiron", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
@@ -116,12 +124,20 @@ public fun SharePreview(fileName: String, onDismiss: () -> Unit, card: @Composab
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = MaterialTheme.shapes.large) {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(8.dp)) {
-                Column(
-                    Modifier.drawWithContent {
-                        layer.record { this@drawWithContent.drawContent() }
-                        drawLayer(layer)
-                    },
-                ) { ShareCardFrame(card) }
+                // The card lays out at its phone width on a density that makes it WIDTH_PX wide, so the PNG is drawn
+                // at full size rather than scaled up from the screen; the preview shows it shrunk to fit.
+                FitWidth {
+                    Column(
+                        Modifier.drawWithContent {
+                            layer.record { this@drawWithContent.drawContent() }
+                            drawLayer(layer)
+                        },
+                    ) {
+                        CompositionLocalProvider(LocalDensity provides Density(ImageShare.WIDTH_PX / CARD_WIDTH_DP, fontScale = 1f)) {
+                            ShareCardFrame(card)
+                        }
+                    }
+                }
                 Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     Button(
@@ -166,3 +182,22 @@ public fun StatTableCard(title: String, subtitle: String?, headers: List<String>
 }
 
 private val STAT_CELL = 52.dp
+
+/** A card's width in dp: a phone's. */
+private const val CARD_WIDTH_DP = 360f
+
+/** [content] at its own size, scaled down to fit the width it's given (never up). */
+@Composable
+private fun FitWidth(content: @Composable () -> Unit) {
+    Layout(content, Modifier.clipToBounds()) { measurables, constraints ->
+        val placeable = measurables.single().measure(Constraints())
+        val scale = if (constraints.hasBoundedWidth && placeable.width > constraints.maxWidth) constraints.maxWidth / placeable.width.toFloat() else 1f
+        layout((placeable.width * scale).roundToInt(), (placeable.height * scale).roundToInt()) {
+            placeable.placeWithLayer(0, 0) {
+                scaleX = scale
+                scaleY = scale
+                transformOrigin = TransformOrigin(0f, 0f)
+            }
+        }
+    }
+}

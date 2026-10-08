@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.gridiron.core.designsystem.ScreenBar
 
 /** One destination on the More tab, under [group]. */
 data class MoreItem(val group: String, val label: String, val detail: String, val open: () -> Unit)
@@ -26,12 +27,7 @@ data class MoreItem(val group: String, val label: String, val detail: String, va
 @Composable
 fun MoreScreen(items: List<MoreItem>) {
     Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-        Text(
-            "More",
-            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.Bold,
-        )
+        ScreenBar("More", onBack = null)
         LazyColumn(Modifier.fillMaxSize().testTag("more")) {
             items.groupBy { it.group }.forEach { (group, rows) ->
                 item(key = "g:$group") {
