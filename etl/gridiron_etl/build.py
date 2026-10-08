@@ -54,6 +54,7 @@ def build_players(players_csv: Path) -> pl.DataFrame:
         position=pl.col(pos_col) if pos_col else pl.lit(None, dtype=pl.String),
         team=pl.col(team_col) if team_col else pl.lit(None, dtype=pl.String),
         pfr_player_id=pl.col(pfr_col) if pfr_col else pl.lit(None, dtype=pl.String),
+        birth_date=pl.col("birth_date").cast(pl.String) if "birth_date" in cols else pl.lit(None, dtype=pl.String),
     ).filter(
         pl.col("player_id").is_not_null() & pl.col("full_name").is_not_null()
     ).unique(subset=["player_id"], keep="first")

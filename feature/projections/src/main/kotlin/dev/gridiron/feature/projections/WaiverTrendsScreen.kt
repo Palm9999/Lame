@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.runtime.remember
+import dev.gridiron.core.data.live.ActivityResult
+import dev.gridiron.core.data.live.LeagueTrend
+import dev.gridiron.core.data.live.leagueTrends
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.CircularProgressIndicator
@@ -58,7 +62,19 @@ public fun WaiverTrendsRoute(
     /** Everyone on a league team, for the owner tags; null when no league is synced. */
     league: Flow<LeagueRostered?> = flowOf(null),
     myTeam: Flow<MyTeam?> = flowOf(null),
+    /** The synced league's executed moves, for the My league chip; null without a league. */
+    leagueActivity: suspend (Int) -> ActivityResult? = { null },
 ) {
+    var inLeague by remember { mutableStateOf<List<LeagueTrend>>(emptyList()) }
+    LaunchedEffect(season) {
+        inLeague = try {
+            leagueActivity(season)?.items?.let { leagueTrends(it, System.currentTimeMillis() - 7 * 24 * 3_600_000L) }.orEmpty()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList() // a bonus: ESPN's public trends stand alone
+        }
+    }
     val vm: WaiverTrendsViewModel = viewModel(factory = WaiverTrendsViewModel.factory(trends, points))
     val state by vm.state.collectAsStateWithLifecycle()
     val profile by scoring.active.collectAsStateWithLifecycle<ScoringProfile?>(initialValue = null)
@@ -72,6 +88,7 @@ public fun WaiverTrendsRoute(
         team?.takeIf { it.season == season }?.players?.mapNotNull { it.playerId }?.toSet().orEmpty(),
         onPlayer,
         onBack,
+        inLeague,
     )
 }
 
@@ -84,8 +101,11 @@ public fun WaiverTrendsScreen(
     mine: Set<String>,
     onPlayer: (String) -> Unit,
     onBack: () -> Unit,
+    /** Adds and drops in the user's own league over the last week; empty hides the My league chip. */
+    inLeague: List<LeagueTrend> = emptyList(),
 ) {
     var added by rememberSaveable { mutableStateOf(true) }
+    var myLeague by rememberSaveable { mutableStateOf(false) }
     var position by rememberSaveable { mutableStateOf<String?>(null) }
     var freeOnly by rememberSaveable { mutableStateOf(false) }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
@@ -119,6 +139,9 @@ public fun WaiverTrendsScreen(
                     Row(Modifier.padding(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(selected = added, onClick = { added = true }, label = { Text("Most added") }, modifier = Modifier.testTag("chip:added"))
                         FilterChip(selected = !added, onClick = { added = false }, label = { Text("Most dropped") }, modifier = Modifier.testTag("chip:dropped"))
+                        if (inLeague.isNotEmpty()) {
+                            FilterChip(selected = myLeague, onClick = { myLeague = !myLeague }, label = { Text("My league") }, modifier = Modifier.testTag("chip:myLeague"))
+                        }
                         if (league != null) {
                             FilterChip(selected = freeOnly, onClick = { freeOnly = !freeOnly }, label = { Text("Free agents") }, modifier = Modifier.testTag("chip:free"))
                         }
@@ -132,6 +155,24 @@ public fun WaiverTrendsScreen(
                                 modifier = Modifier.testTag("pos:${p ?: "all"}"),
                             )
                         }
+                    }
+                    if (myLeague && inLeague.isNotEmpty()) {
+                        val moves = inLeague.filter { if (added) it.adds > 0 else it.drops > 0 }
+                            .sortedWith(compareByDescending<LeagueTrend> { if (added) it.adds else it.drops }.thenBy { it.name.orEmpty() })
+                        Text("Adds and drops in your league over the last week.", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.labelSmall)
+                        LazyColumn(Modifier.fillMaxSize()) {
+                            items(moves, key = { "league:${it.espnId}" }) { t ->
+                                Row(
+                                    Modifier.fillMaxWidth().then(t.playerId?.let { id -> Modifier.clickable { onPlayer(id) } } ?: Modifier)
+                                        .padding(horizontal = 16.dp, vertical = 8.dp).testTag("leagueTrend:${t.espnId}"),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(t.name ?: "A player", Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                    Text(if (added) "${t.adds} added" else "${t.drops} dropped", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                        return@Column
                     }
                     val rows = trendRows(result, state.points, added, position)
                         .map { it to it.trend.playerId?.let { id -> ownerOf(id, league, mine) } }

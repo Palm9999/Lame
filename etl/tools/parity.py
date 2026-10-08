@@ -15,7 +15,7 @@ import sys
 # table -> (key columns, compared columns)
 TABLES: dict[str, tuple[list[str], list[str]]] = {
     "player_week_stat": (["player_id", "season", "week", "metric_id"], ["team", "value"]),
-    "player": (["player_id"], ["full_name", "search_name", "position", "team", "pfr_player_id"]),
+    "player": (["player_id"], ["full_name", "search_name", "position", "team", "pfr_player_id", "birth_date"]),
     "metric": (["id"], ["name", "abbr", '"group"', "definition", "formula", "positions", "tier",
                         "predicts", "stability", "higher_is_better", "decimals", "hot", "internal",
                         "computed", "dist_family", "zero_inflated"]),

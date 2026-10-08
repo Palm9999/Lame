@@ -219,9 +219,9 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
         transaction {
             connection.execSQL(
                 """CREATE TEMP TABLE all_player (player_id TEXT PRIMARY KEY, full_name TEXT NOT NULL,
-                   search_name TEXT NOT NULL, position TEXT, team TEXT, pfr_player_id TEXT, espn_id TEXT)""",
+                   search_name TEXT NOT NULL, position TEXT, team TEXT, pfr_player_id TEXT, espn_id TEXT, birth_date TEXT)""",
             )
-            connection.prepare("INSERT OR IGNORE INTO all_player VALUES (?, ?, ?, ?, ?, ?, ?)").use { st ->
+            connection.prepare("INSERT OR IGNORE INTO all_player VALUES (?, ?, ?, ?, ?, ?, ?, ?)").use { st ->
                 for (p in players + defenseTeams().map(::dstPlayer)) {
                     st.bindText(1, p.playerId)
                     st.bindText(2, p.fullName)
@@ -230,6 +230,7 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
                     st.bindTextOrNull(5, p.team)
                     st.bindTextOrNull(6, p.pfrPlayerId)
                     st.bindTextOrNull(7, p.espnId)
+                    st.bindTextOrNull(8, p.birthDate)
                     st.step()
                     st.reset()
                 }
@@ -237,8 +238,8 @@ internal class StatsDbWriter private constructor(internal val connection: SQLite
             connection.execSQL("DELETE FROM player_week_stat WHERE player_id NOT IN (SELECT player_id FROM all_player)")
             dropped = connection.prepare("SELECT changes()").use { it.step(); it.getLong(0).toInt() }
             connection.execSQL(
-                """INSERT OR REPLACE INTO player (player_id, full_name, search_name, position, team, pfr_player_id)
-                   SELECT player_id, full_name, search_name, position, team, pfr_player_id FROM all_player
+                """INSERT OR REPLACE INTO player (player_id, full_name, search_name, position, team, pfr_player_id, birth_date)
+                   SELECT player_id, full_name, search_name, position, team, pfr_player_id, birth_date FROM all_player
                    WHERE player_id IN (SELECT player_id FROM player_week_stat)""",
             )
             connection.execSQL(

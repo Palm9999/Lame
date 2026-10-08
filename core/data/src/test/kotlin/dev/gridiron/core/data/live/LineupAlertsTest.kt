@@ -64,4 +64,12 @@ class LineupAlertsTest {
         assertNull(alone.replacement)
         assertEquals("No one on your bench can take his WR slot.", alone.text)
     }
+
+    @Test
+    fun `a Questionable starter confirmed active loses his discount, one still undecided or listed out keeps it`() {
+        assertEquals(10.0, liftQuestionable(7.8, 0.78, posted = true, status = "Q"), 1e-9)
+        assertEquals(7.8, liftQuestionable(7.8, 0.78, posted = false, status = "Q"), 1e-9)
+        assertEquals(7.8, liftQuestionable(7.8, 0.78, posted = true, status = "O"), 1e-9)
+        assertEquals(7.8, liftQuestionable(7.8, null, posted = true, status = null), 1e-9)
+    }
 }

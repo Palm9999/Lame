@@ -143,6 +143,8 @@ data class Deps(
     val tdRegression: TdRegressionRepository? = null,
     /** Similar seasons on the Player page; null where a test doesn't need them. */
     val comps: CompsRepository? = null,
+    /** Each league trade's grade as first seen; null where a test doesn't need it. */
+    val tradeGrades: dev.gridiron.core.data.live.TradeGradeStore? = null,
 )
 
 /**
@@ -343,6 +345,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
                                 league = deps.league?.rostered ?: flowOf(null),
                                 myTeam = deps.league?.myTeam ?: flowOf(null),
+                                leagueActivity = { s -> deps.league?.activity(s)?.takeIf { it.error == null } },
                             )
                         }
                     }
@@ -371,6 +374,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 ros = { s, p -> trendPoints(deps.projections, s, p).rosPoints },
                                 scoring = deps.scoring,
                                 onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back,
+                                keep = { id, g -> deps.tradeGrades?.keep(id, g) ?: g },
                             )
                         }
                     }

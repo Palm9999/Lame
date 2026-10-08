@@ -14,41 +14,60 @@ public data class PartnerFit(
 )
 
 public object TradePartners {
-    private val POSITIONS = listOf("QB", "RB", "WR", "TE")
+    private val POSITIONS = listOf("QB", "RB", "WR", "TE", "K", "DST")
 
-    /** The teams in [others] with something to trade both ways or one, best [fit] first, at most [limit]. */
+    /**
+     * The teams in [others] with something to trade both ways or one, best [fit] first, at most [limit]. With weekly
+     * points on the candidates, the fit is summed week by week (a bye leaves a hole that week); otherwise season totals.
+     */
     public fun rank(
         slots: Map<String, Int>,
         mine: List<LineupCandidate>,
         others: List<Pair<String, List<LineupCandidate>>>,
         limit: Int = 5,
     ): List<PartnerFit> {
+        val weeks = (mine + others.flatMap { it.second }).flatMap { it.weekly.keys }.toSortedSet()
+        fun week(list: List<LineupCandidate>, w: Int) = list.map { it.copy(points = it.weekly[w] ?: 0.0) }
         val me = Depth.of(slots, mine)
         return others.mapNotNull { (name, roster) ->
-            val them = Depth.of(slots, roster)
-            var fit = 0.0
-            val theyHave = mutableListOf<LineupCandidate>()
-            val youOffer = mutableListOf<LineupCandidate>()
-            val theyNeed = mutableListOf<String>()
-            for (p in POSITIONS) {
-                me.weakest[p]?.let { weak ->
-                    val better = them.bench(p).filter { it.points > weak }
-                    if (better.isNotEmpty()) {
-                        fit += better.first().points - weak
-                        theyHave += better
-                    }
-                }
-                them.weakest[p]?.let { weak ->
-                    val better = me.bench(p).filter { it.points > weak }
-                    if (better.isNotEmpty()) {
-                        fit += better.first().points - weak
-                        youOffer += better
-                        theyNeed += p
-                    }
+            val season = gains(me, Depth.of(slots, roster))
+            val fit = if (weeks.isEmpty()) {
+                season.fit
+            } else {
+                weeks.sumOf { w -> gains(Depth.of(slots, week(mine, w)), Depth.of(slots, week(roster, w))).fit }
+            }
+            if (fit <= 0.0 || season.theyHave.isEmpty() && season.youOffer.isEmpty()) {
+                null
+            } else {
+                PartnerFit(name, fit, season.theyHave, season.theyNeed, season.youOffer)
+            }
+        }.sortedWith(compareByDescending<PartnerFit> { it.fit }.thenBy { it.partner }).take(limit)
+    }
+
+    /** Each position's best bench player over the other side's weakest starter there, both ways. */
+    private fun gains(me: Depth, them: Depth): PartnerFit {
+        var fit = 0.0
+        val theyHave = mutableListOf<LineupCandidate>()
+        val youOffer = mutableListOf<LineupCandidate>()
+        val theyNeed = mutableListOf<String>()
+        for (p in POSITIONS) {
+            me.weakest[p]?.let { weak ->
+                val better = them.bench(p).filter { it.points > weak }
+                if (better.isNotEmpty()) {
+                    fit += better.first().points - weak
+                    theyHave += better
                 }
             }
-            if (fit <= 0.0) null else PartnerFit(name, fit, theyHave, theyNeed, youOffer)
-        }.sortedWith(compareByDescending<PartnerFit> { it.fit }.thenBy { it.partner }).take(limit)
+            them.weakest[p]?.let { weak ->
+                val better = me.bench(p).filter { it.points > weak }
+                if (better.isNotEmpty()) {
+                    fit += better.first().points - weak
+                    youOffer += better
+                    theyNeed += p
+                }
+            }
+        }
+        return PartnerFit("", fit, theyHave, theyNeed, youOffer)
     }
 
     /** A roster's weakest starter by position in its best lineup, and its bench best first. */

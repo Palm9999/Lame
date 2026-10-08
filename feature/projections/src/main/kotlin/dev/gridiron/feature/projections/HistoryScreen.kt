@@ -1,5 +1,6 @@
 package dev.gridiron.feature.projections
 
+import dev.gridiron.core.data.live.playoffOddsCheck
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,7 +56,7 @@ public sealed interface HistoryState {
 }
 
 public fun historyState(result: HistoryResult): HistoryState.Loaded = HistoryState.Loaded(
-    tables = if (result.seasons.isEmpty()) null else LeagueHistory.of(result.seasons, result.me),
+    tables = if (result.seasons.isEmpty()) null else LeagueHistory.of(result.seasons, result.me).copy(oddsChecks = playoffOddsCheck(result.seasons)),
     me = result.me,
     skipped = result.skipped,
     error = result.error,
@@ -189,6 +190,24 @@ private fun androidx.compose.foundation.lazy.LazyListScope.headToHead(tables: Hi
 }
 
 private fun androidx.compose.foundation.lazy.LazyListScope.records(tables: HistoryTables) {
+    if (tables.oddsChecks.isNotEmpty()) {
+        item(key = "odds") {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).testTag("oddsCheck")) {
+                Text("Playoff odds, checked", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                for (c in tables.oddsChecks) {
+                    Text(
+                        String.format(Locale.US, "From week %d: Brier %.3f against %.3f by chance (%d seasons)", c.week, c.brier, c.chanceBrier, c.seasons),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
+                Text(
+                    "Each team's scores so far stand in for projections; lower is better.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
     items(tables.records, key = { it.label }) { r ->
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
             Text("${r.label}: ${recordValue(r)}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)

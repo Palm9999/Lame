@@ -13,7 +13,7 @@ def _db(path, value: float, team: str = "AAA"):
         CREATE TABLE player_week_stat (player_id TEXT, season INTEGER, week INTEGER, team TEXT,
                                        metric_id TEXT, value REAL);
         CREATE TABLE player (player_id TEXT, full_name TEXT, search_name TEXT, position TEXT,
-                             team TEXT, pfr_player_id TEXT);
+                             team TEXT, pfr_player_id TEXT, birth_date TEXT);
         CREATE TABLE metric (id TEXT, name TEXT, abbr TEXT, "group" TEXT, definition TEXT,
                              formula TEXT, positions TEXT, tier TEXT, predicts TEXT, stability REAL,
                              higher_is_better INTEGER, decimals INTEGER, hot INTEGER, internal INTEGER,
@@ -28,7 +28,7 @@ def _db(path, value: float, team: str = "AAA"):
                                          value REAL);
         CREATE TABLE window_def (season INTEGER, window TEXT, first_week INTEGER, last_week INTEGER);
         INSERT INTO schema_meta VALUES ('seasons', '2025');
-        INSERT INTO player VALUES ('p1', 'P One', 'p one', 'WR', 'AAA', NULL);
+        INSERT INTO player VALUES ('p1', 'P One', 'p one', 'WR', 'AAA', NULL, NULL);
         """
     )
     conn.execute("INSERT INTO player_week_stat VALUES ('p1', 2025, 1, ?, 'target_share', ?)", (team, value))

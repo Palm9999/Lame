@@ -121,9 +121,10 @@ def dst_players(teams_: list[str]) -> pl.DataFrame:
             "position": ["DST"] * len(teams_),
             "team": list(teams_),
             "pfr_player_id": [None] * len(teams_),
+            "birth_date": [None] * len(teams_),
         },
         schema={"player_id": pl.String, "full_name": pl.String, "position": pl.String,
-                "team": pl.String, "pfr_player_id": pl.String},
+                "team": pl.String, "pfr_player_id": pl.String, "birth_date": pl.String},
     )
 
 

@@ -29,6 +29,9 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - **NGS:** numbers the Super Bowl one week after play-by-play; publishes only weeks with 15+ attempts, 10+ carries or 5+ targets; the rushing file has no QB rows, the receiving file is WR/TE only.
 
 **Tried and rejected** (PPR MAE change on the frozen sample, ± 2 SE; don't retry without a new angle):
+- Pass rate with past game script taken out (2026-10-08): a team's usual pass rate raised by `PASS_RATE_PER_POINT` × its EWMA favored-by, on a `tune.db` reforecast, PPR MAE on 13,396 counted player-weeks: full weight +0.0005 ±0.0003, half +0.0003 ±0.0001 (RB worst). The residual check had shown a signal (t 4.0 on team pass rate), but the ESPN blend already prices it
+- Team pace from the last two games (2026-10-08): residual of team plays on (last two games − season average) slope −0.013 ±0.043; the 4-game half-life already covers it
+- D/ST interceptions from the opposing QB's FTN interception-worthy rate (2026-10-08): residual slope −2.4 ±1.4 per unit rate, the wrong sign. The opposing QB's actual INT rate has slope −8.3 ±2.1: the model already over-reacts to it, a lead for stronger shrinkage of the opponent's interception factor
 - ESPN-only Out discount (2026-10-07): can't be backtested. No ESPN injury status is stored historically, and ESPN's all-zero rows aren't stored, so an ESPN-only Out looks like a player ESPN doesn't rank; the nearest proxy (projected earlier, no row this week) is already rejected below. Not built
 - Teammates' rest of season sharing a listed Out/Doubtful player's games (2026-10-07, proxy on `tune.db` 2022-2025, each teammate's next four games, missed ones zero, leave-one-season-out status curve): today's healthy-roster baseline against the mixture (1 − back-by-then) × absent-roster share + back-by-then × healthy: +0.008 ±0.043 (915 events), lifted teammates +0.114 ±0.046; against the absent-roster share it would have helped (−0.33 ±0.05), which is why rest of season already starts from the healthy roster. A stash ESPN projects back (3+ points) shrinking his teammates 0.87 of the way to their healthy share: −0.001 ±0.130 (551 events). Not built
 - ESPN's QB rushing TDs scaled 0.9 or 1.1 (2026-10-07): QB +0.001 ±0.004 and −0.000 ±0.004
@@ -49,7 +52,15 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 - Win-max lineup (start riskier players as the underdog, safer as the favorite, on each player's range): in simulated 12-team leagues from 2022-2025's counted player-weeks it changed the lineup in 6 of 1,764 matchups (0.3%), for +0.02 points of win chance; not built
 - Props weight: kept at 0.5 (`MARKET_VARIANCE_RATIO`); the blend cut the model's prop-stat error 1.5-12%, implying 0.51-0.57, too small to move a judgment
 
-**Next:** the 2026-10-07 fourth round: the user picked 1-10 of the list plus three UI upgrades of my choosing; everything is built or tested and logged (below). Nothing is pending: offer the next round as a short pick-list. GitHub's MCP server failed to connect this session, so the round's commits are pushed but no PR was opened.
+**Next:** the 2026-10-08 fifth round: the user picked 1-10 minus 3 (win chance with stacks); all are built or tested and logged (below). Nothing is pending: offer the next round as a short pick-list.
+
+**Just built (fifth round, 2026-10-08):**
+- **Pre-game lineup check lifts the Questionable discount** (`liftQuestionable`): once a starter's team has posted inactives and ESPN doesn't list him Out, IR, Doubtful or suspended, the check ranks him at full value.
+- **Waiver trends: My league** chip: adds and drops in your league over the last 7 days, from League activity's `mTransactions2` reads (`leagueTrends`). A move with no processing time is left out.
+- **League activity keeps each trade's first grade** (`TradeGradeStore`, `noBackupFilesDir/trade-grades.txt`, per scoring profile). A trade from before the app first opened the screen is graded when first seen, not when made, so it still carries some hindsight.
+- **Trade partners by week**: the fit is summed week by week (a bye leaves a hole), with K and D/ST included. The suggested players still come from season totals.
+- **Similar seasons**: rates (QB yards and TDs per attempt; RB yards per carry, carry and target share; WR/TE yards per target, target and air-yards share; K FG%) and age on September 1 join the per-game stats. K and D/ST get comps. `player.birth_date` is new in both builds (schema 13 / Python 8), parity 0 differences on 2025, 651 of 683 players have one.
+- **Playoff odds, checked** (League history → Records): the simulator replays each finished season from weeks 6, 9 and 12, with each team's scores so far standing in for projections, and is scored by Brier against ESPN's seeds, beside a chance baseline. It checks the simulation, not the app's projections, which aren't stored for past league seasons.
 
 **Just built (fourth round, 2026-10-07):**
 - **Where we differ: K and D/ST** against ESPN's own (a second ESPN request, `Input.ESPN_KICKERS_DEFENSE`, slots 16/17, about 90 players, codes per "Facts to keep"; stored in `espn_projection`, never blended; D/ST ids through `EspnTeams` in `:core:model`, moved out of `FantasyLeague.kt`). Under Model alone they keep the app's number (it is the model alone).
@@ -197,6 +208,8 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 **Deferred minors (yards work):** the 0–800 `yards_allowed` range check hard-fails a build on one out-of-range game (observed 75–647); no dedicated `BacktestTest` case for yards; the matchup note reads "scores 24.1 pts, 331 yards".
 
 ## Open checks on the phone
+
+- **Fifth round:** a Questionable starter whose team posted inactives gets no "Lineup:" alert for being Questionable; Waiver trends shows a My league chip with a synced league; League activity's trades read "when first seen"; Trade's Best partners can name a team for a kicker or D/ST; a Player page's Similar seasons line starts "Age N"; League history → Records shows "Playoff odds, checked".
 
 - **Third round:** Thursday 3 pm a "Stats refreshed" notification arrives; a Player page shows "Touchdowns vs expected" for a TD regression player and "Charted by week" for a WR; Trade rows show "TDs ±N vs exp"; the Grid's FTN Rushing pack lists box counts; Where we differ's Model alone chip shows "Model N · ESPN N"; a D/ST's Grid row has a BLK column and Settings → Scoring lists Blocked kick at 2; the accuracy page reopens instantly.
 

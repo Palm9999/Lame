@@ -13,6 +13,8 @@ internal data class PlayerInfo(
     val team: String?,
     val pfrPlayerId: String?,
     val espnId: String?,
+    /** "1997-05-14", for ages; null when nflverse has none. */
+    val birthDate: String? = null,
 )
 
 // nflverse has renamed these over time; probe rather than assume.
@@ -22,10 +24,11 @@ private val POSITION_COLUMNS = listOf("position", "position_group")
 private val TEAM_COLUMNS = listOf("latest_team", "team_abbr", "team")
 private val PFR_COLUMNS = listOf("pfr_id", "pfr_player_id")
 private const val ESPN_COLUMN = "espn_id"
+private const val BIRTH_COLUMN = "birth_date"
 
 /** nflverse's player list: one row per gsis id, the first one when a file repeats an id. */
 internal fun readPlayers(input: InputStream, source: String): List<PlayerInfo> {
-    val all = (ID_COLUMNS + NAME_COLUMNS + POSITION_COLUMNS + TEAM_COLUMNS + PFR_COLUMNS + ESPN_COLUMN).distinct()
+    val all = (ID_COLUMNS + NAME_COLUMNS + POSITION_COLUMNS + TEAM_COLUMNS + PFR_COLUMNS + ESPN_COLUMN + BIRTH_COLUMN).distinct()
     val players = LinkedHashMap<String, PlayerInfo>()
     var columns: List<String?>? = null
     readCsv(input, source, all, required = emptyList()) { row ->
@@ -46,6 +49,7 @@ internal fun readPlayers(input: InputStream, source: String): List<PlayerInfo> {
             team = teamCol?.let(row::text),
             pfrPlayerId = pfrCol?.let(row::text),
             espnId = row.text(ESPN_COLUMN)?.let(::integerText),
+            birthDate = row.text(BIRTH_COLUMN),
         )
     }
     return players.values.toList()

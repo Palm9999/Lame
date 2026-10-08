@@ -26,7 +26,9 @@ import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.live.FantasyLeagueRepository
 import dev.gridiron.core.data.live.InjuryAlertChecker
 import dev.gridiron.core.data.live.LineupAlert
+import dev.gridiron.core.data.kickoffs
 import dev.gridiron.core.data.live.LineupAlerts
+import dev.gridiron.core.data.live.liftQuestionable
 import dev.gridiron.core.data.live.LiveDb
 import dev.gridiron.core.data.live.LiveRepository
 import dev.gridiron.core.data.live.NewsAlertChecker
@@ -123,14 +125,17 @@ class GridironApplication : Application() {
         } else {
             emptyMap()
         }
+        if (live.refresh().injuriesError != null) return emptyList()
+        val status = live.injuries().mapNotNull { i -> i.playerId?.let { it to i.abbr } }.toMap()
+        // The check runs after inactives post: a Questionable player still listed is playing, so his discount is lifted.
+        val posted = week.kickoffs(Instant.now()).inactivesPosted
+        val questionable = projectionsRepo.questionable(week.season, week.week)
         val players = ids.mapNotNull { id ->
             val h = this.players.header(id) ?: return@mapNotNull null
             val pos = h.position ?: return@mapNotNull null
             val points = projected[id]?.let { projectedScore(it.components, profile, Position.fromCode(pos)) } ?: later[id] ?: 0.0
-            WeekPlayer(id, h.name, pos, h.team, points)
+            WeekPlayer(id, h.name, pos, h.team, liftQuestionable(points, questionable[id], h.team in posted, status[id]))
         }.associateBy { it.playerId }
-        if (live.refresh().injuriesError != null) return emptyList()
-        val status = live.injuries().mapNotNull { i -> i.playerId?.let { it to i.abbr } }.toMap()
         return LineupAlerts.check(team, players, status, week, window)
     }
 
@@ -251,6 +256,7 @@ class GridironApplication : Application() {
             dynasty = DynastyRepository(UrlConnectionHttpGet(), players),
             tdRegression = TdRegressionRepository(executor),
             comps = CompsRepository(executor),
+            tradeGrades = dev.gridiron.core.data.live.TradeGradeStore(File(noBackupFilesDir, "trade-grades.txt")),
         )
     }
 
