@@ -114,10 +114,12 @@ class NavigationTest {
         // A long press opens the quick look; its Add to Compare adds over the Grid's weeks and closes it.
         compose.onNodeWithContentDescription(first, substring = true).performTouchInput { longClick() }
         compose.waitForIdle()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("peek:compare").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("peek:compare").performClick()
         compose.waitForIdle()
         compose.onNodeWithContentDescription(second, substring = true).performTouchInput { longClick() }
         compose.waitForIdle()
+        compose.waitUntil(10_000) { compose.onAllNodesWithTag("peek:compare").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithTag("peek:compare").performClick()
         compose.waitForIdle()
 
