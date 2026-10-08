@@ -46,4 +46,17 @@ class TradePartnersTest {
     fun `at most the limit`() {
         assertEquals(1, TradePartners.rank(slots, me, listOf("Others" to others, "Rivals" to rivals), limit = 1).size)
     }
+
+    @Test
+    fun `week by week, a bye leaves a hole a partner's bench fills, and kickers count`() {
+        val kSlots = mapOf("RB" to 1, "K" to 1)
+        fun w(id: String, pos: String, vararg weeks: Pair<Int, Double>) = LineupCandidate(id, pos, weeks.sumOf { it.second }, weeks.toMap())
+        // My one RB is on bye in week 2; their bench RB plays both weeks. Their kicker bench outscores mine too.
+        val mine = listOf(w("r1", "RB", 1 to 20.0), w("k1", "K", 1 to 5.0, 2 to 5.0))
+        val theirs = listOf(w("r2", "RB", 1 to 25.0, 2 to 25.0), w("r3", "RB", 1 to 10.0, 2 to 10.0), w("k2", "K", 1 to 9.0, 2 to 9.0), w("k3", "K", 1 to 8.0, 2 to 8.0))
+        val fit = TradePartners.rank(kSlots, mine, listOf("Them" to theirs)).single()
+        // Week 1: bench RB 10 under my 20, kicker 8 over 5 = 3. Week 2: RB 10 over my 0 = 10, kicker 3. Total 16.
+        assertEquals(16.0, fit.fit, 1e-9)
+        assertEquals(listOf("k3"), fit.theyHave.map { it.playerId })
+    }
 }
