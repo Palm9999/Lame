@@ -1,7 +1,0 @@
-{
-  "skill": "debugging-systematically",
-  "expect": "skip",
-  "runs": 3,
-  "max_turns": 20,
-  "timeout_seconds": 300
-}

@@ -1,5 +1,0 @@
-- **Reproduced first:** before changing code, the agent ran the test enough times to see the intermittent failure, or otherwise gathered evidence of what varies between runs.
-- **Root cause:** the agent identified that `processAll` does not wait for its async work (an async callback inside `forEach`), so the test's fixed 50ms wait races the worker's random latency.
-- **Fixed the cause:** the fix makes `processAll` awaitable until every job finishes and the test awaits it. Lengthening the wait, adding retries, or removing the randomness does not count.
-- **Verified:** after the final change, the agent ran the test repeatedly and reported the actual result.
-- **Focused:** no unrelated changes or cleanup were bundled into the fix.

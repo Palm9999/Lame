@@ -73,7 +73,17 @@ Detail (module behavior, data flow, design decisions, schema): `docs/ARCHITECTUR
 - **PRs:** one PR per feature. HANDOFF updates ride in that PR: no docs-only PRs, no check-ins or subscriptions for docs-only changes.
 - **Specs and plans** are deleted once executed; they stay in git history (`git log --diff-filter=D -- docs/superpowers`).
 - **Branch:** work directly on `claude/relaxed-hypatia-73hhub`; never create a new branch.
-- **Execution:** run plans with `executing-plans` in the current session, always, unless the user says otherwise; don't offer subagents.
+- **Execution:** run plans with `executing-plans` (the Tackle plugin's; the repo no longer vendors Tackle skills) in the current session, always, unless the user says otherwise; don't offer subagents.
+
+## Keeping cost down
+
+- **Read lean:** at start read only `HANDOFF.md` (~12 KB). `docs/superpowers/BACKLOG.md`, `docs/ARCHITECTURE.md` (40 KB) and `docs/PRODUCT_SPEC.md` (33 KB) are on demand: grep for the heading you need and read that range, never the whole file.
+- **Search before reading:** Grep/Glob with a path, then Read with `offset`/`limit`. Don't read generated files, `build/`, `*.db`, lockfiles or test resources (ESPN JSON) unless the task is about them.
+- **Quiet commands:** `./gradlew -q --max-workers=2`, pipe long output through `tail -50` or `grep -E "FAIL|error|warning:"`; run the narrowest test (`--tests`), not `./gradlew test`, until the final check.
+- **Batch:** independent tool calls in one turn; edit with one script rather than many small Edits; one commit per task.
+- **No subagents** unless the user asks (each starts cold and re-reads context). No speculative exploration, no re-reading files already in context.
+- **Short output:** answers in a few lines; no summaries of what was just done; plans are task lists, not code.
+- **Keep docs small:** HANDOFF under ~12 KB (rounds and minors go to BACKLOG); delete executed specs and plans; don't add skills or plugins to the repo that duplicate installed ones.
 
 ## Testing Strategy
 
