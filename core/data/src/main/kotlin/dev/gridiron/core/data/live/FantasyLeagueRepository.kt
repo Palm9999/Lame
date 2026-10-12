@@ -304,6 +304,7 @@ public class FantasyLeagueRepository(
             reportCards = cards,
             myTeamId = cfg.teamId,
             draftMessage = if (picks != null) null else draft?.error ?: "no draft found",
+            season = cfg.teamId?.let { SeasonRecaps.of(it, all) },
         )
     }
 

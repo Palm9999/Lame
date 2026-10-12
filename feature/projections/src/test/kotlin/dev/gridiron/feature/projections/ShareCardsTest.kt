@@ -107,4 +107,33 @@ class ShareCardsTest {
         assertEquals(1080, out.width)
         assertEquals(600, out.height)
     }
+
+    @Test
+    fun `the season card reads the record, best week, top starters, places and bench left`() {
+        val result = dev.gridiron.core.data.live.LineupReviewResult(
+            listOf(WeekReview(2, 120.0, 130.0, emptyList(), emptyList()), WeekReview(1, 100.0, 100.0, emptyList(), emptyList())),
+            null,
+            recap = dev.gridiron.core.data.live.LeagueRecap(null, listOf(dev.gridiron.core.data.live.TeamLuck(2, "Mine", 2.0, 2, 1.25))),
+            reportCards = listOf(
+                dev.gridiron.core.data.live.ReportCard(1, "Ace", null, 0.8, 0.0, null, null, emptyMap(), 1.0, 1),
+                dev.gridiron.core.data.live.ReportCard(2, "Mine", null, 0.6, 0.75, null, null, emptyMap(), 2.0, 2),
+            ),
+            myTeamId = 2,
+            season = dev.gridiron.core.data.live.SeasonRecap(2, 0, 0, 220.0, 2, 2 to 120.0, 1 to 100.0, listOf("Star" to 60.0)),
+        )
+        assertEquals(
+            listOf(
+                "2-0 · 220.0 points (110.0 a week)",
+                "Best week: 120.0 in week 2 · worst 100.0 in week 1",
+                "Top starters: Star 60.0",
+                "Report card: 2nd of 2",
+                "Luck: +0.8 wins against the all-play record",
+                "Bench points left: 10.0",
+            ),
+            seasonLines(result),
+        )
+        show { ShareCardFrame { SeasonShareCard(result, "Mine") } }
+        compose.onNodeWithText("Mine · 2 weeks in").assertIsDisplayed()
+        compose.onNodeWithText("Top starters: Star 60.0").assertIsDisplayed()
+    }
 }

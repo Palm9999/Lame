@@ -478,7 +478,7 @@ public fun ProjectionListScreen(
                     } else if (mode == ListMode.PLANNER && myTeam != null) {
                         PlannerView(myTeam, state, rostered, onPlayer)
                     } else if (mode == ListMode.REVIEW) {
-                        ReviewView(review)
+                        ReviewView(review, myTeam?.teamName)
                     } else if (mode == ListMode.PLAYOFFS) {
                         PlayoffsView(playoffs, state.rosRows, state.rosWeekly)
                     } else if (mode == ListMode.TRADE && myTeam != null) {

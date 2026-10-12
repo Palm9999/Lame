@@ -9,6 +9,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.live.Grade
 import dev.gridiron.core.data.live.ReportCard
+import dev.gridiron.core.data.live.LineupReviewResult
 import dev.gridiron.core.data.live.WeekRecap
 import dev.gridiron.core.data.live.WeekReview
 import dev.gridiron.core.designsystem.Meter
@@ -101,4 +102,30 @@ internal fun HomeShareCard(home: HomeState) {
         CardLine(winLine(c))
     }
     if (home.hurt.isNotEmpty()) CardLine("Watching: " + home.hurt.joinToString { "${it.name} (${it.abbr})" })
+}
+
+/**
+ * The user's season in lines, for Review and its share card: record and points, best and worst weeks, top starters,
+ * the report card's place and luck, and bench points left. Null without a season.
+ */
+internal fun seasonLines(result: LineupReviewResult): List<String>? {
+    val s = result.season ?: return null
+    val card = result.reportCards.firstOrNull { it.teamId == result.myTeamId }
+    val luck = result.recap?.luck?.firstOrNull { it.teamId == result.myTeamId }
+    return listOfNotNull(
+        "${s.wins}-${s.losses}" + (if (s.ties > 0) "-${s.ties}" else "") + " · ${one(s.pointsFor)} points (${one(s.pointsFor / s.weeks)} a week)",
+        s.bestWeek?.let { (w, p) -> "Best week: ${one(p)} in week $w" + (s.worstWeek?.let { (lw, lp) -> " · worst ${one(lp)} in week $lw" } ?: "") },
+        s.topStarters.takeIf { it.isNotEmpty() }?.let { top -> "Top starters: " + top.joinToString { (n, p) -> "$n ${one(p)}" } },
+        card?.let { "Report card: ${placeText(it.overall)} of ${result.reportCards.size}" },
+        luck?.let { "Luck: ${if (it.luck >= 0) "+" else "−"}${one(kotlin.math.abs(it.luck))} wins against the all-play record" },
+        result.weeks.takeIf { it.isNotEmpty() }?.let { w -> "Bench points left: ${one(w.sumOf { it.left })}" },
+    )
+}
+
+/** The user's season so far, from [seasonLines]. */
+@Composable
+public fun SeasonShareCard(result: LineupReviewResult, teamName: String?) {
+    val season = result.season ?: return
+    CardTitle("${teamName ?: "Your team"} · ${season.weeks} week${if (season.weeks == 1) "" else "s"} in")
+    seasonLines(result)?.forEachIndexed { i, line -> CardLine(line, strong = i == 0) }
 }

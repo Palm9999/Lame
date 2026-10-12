@@ -38,4 +38,21 @@ class LeagueRecapTest {
         assertEquals(-2.0 / 3, luck.getValue("Bee").luck, 1e-9)
         assertEquals(1.0 - 1.0 / 3, luck.getValue("Cee").luck, 1e-9)
     }
+
+    @Test
+    fun `a season recap counts the record, points and best starters, bench left out`() {
+        val weeks = mapOf(
+            1 to listOf(LeagueMatchup(1, side(1, 100.0, "Star" to 40.0, "Mid" to 20.0), side(2, 90.0))),
+            2 to listOf(LeagueMatchup(2, side(3, 130.0), side(1, 120.0, "Star" to 30.0, "Low" to 10.0))),
+            3 to listOf(LeagueMatchup(3, side(1, 80.0, "Mid" to 35.0), side(4, 80.0))),
+        )
+        val season = SeasonRecaps.of(1, weeks)!!
+        assertEquals(Triple(1, 1, 1), Triple(season.wins, season.losses, season.ties))
+        assertEquals(300.0, season.pointsFor, 1e-9)
+        assertEquals(3, season.weeks)
+        assertEquals(2 to 120.0, season.bestWeek)
+        assertEquals(3 to 80.0, season.worstWeek)
+        assertEquals(listOf("Star" to 70.0, "Mid" to 55.0, "Low" to 10.0), season.topStarters)
+        assertEquals(null, SeasonRecaps.of(9, weeks))
+    }
 }

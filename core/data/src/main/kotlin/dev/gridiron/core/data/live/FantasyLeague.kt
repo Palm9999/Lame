@@ -100,6 +100,8 @@ public data class LineupReviewResult(
     val myTeamId: Int? = null,
     /** Why the cards have no draft or moves grades ("no draft found"); null when they have them. */
     val draftMessage: String? = null,
+    /** The user's season so far; null with no finished week or no team chosen. */
+    val season: SeasonRecap? = null,
 )
 
 /** [picture], or null with [message] saying why. */
