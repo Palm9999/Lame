@@ -32,6 +32,16 @@ Read on demand only (not at session start). `HANDOFF.md` is the entry point. Edi
 
 ## Build notes by round
 
+**Eighth round (2026-10-12):**
+- **Trade, offer and waiver alerts** (Settings → Alerts → League trades and waivers, prefs `tradeAlerts`, follows `dropAlerts` then `injuryAlerts` in an older file): the two-hourly job's `LeagueMoveChecker` (`noBackupFilesDir/league-moves.txt`, the first check only remembers): each executed trade with both sides' rest-of-season net (`tradeNet`), each pending offer to you (players' rest-of-season points in less out, not a lineup grade), and one alert per waiver run (yours first, then by bid).
+- **Waiver results and FAAB market**: `ActivityItem.waiver` (ESPN type WAIVER), `ActivityMove.position`, `ActivityResult.faabBudget`; League activity's Waivers chip with a FAAB market card (`faabMarket`: winning claims by position, median and top bid, % of budget; a claim with no bid counts $0).
+- **Players across leagues**: Rosters → "Across your leagues" (`exposure`): players on two or more of your league teams, with the leagues and ESPN's badge.
+- **Scout** (Home's matchup card → Scout, `ScoutKey`, `ScoutScreen.kt`): record and rank, last three weeks' ESPN scores against the league average (`recentScores`), FAAB left, their best lineup under your scoring, their hurt players, the three biggest slot edges each way (`matchupPreview`) and their latest five moves.
+- **Injury replacement plan** (Home, under Your players to watch): for each starter by ESPN slot listed O, D, Q, IR or SUSP, who replaces him in the best lineup and the best add with him out (`replacementPlans`); Out, Doubtful and IR also show the return outlook (`chancesText`).
+- **K and D/ST streams** (Home): free agents beating your best K or D/ST this week, two each, only where the league starts one; next week's projection beside (`streams`).
+- **Season recap** (Projections → Review → Your season, Share): record, points, best and worst week, top three starters by points while starting, report card place, luck and bench points left (`SeasonRecaps.of`, `seasonLines`, `SeasonShareCard`).
+- **Notes on Trade rows and Trade for**: Trade's rows show your note; Buy low / sell high rows on another league team have Trade for, opening Trade (`ProjectionListKey.tradeFor`) with that team picked and the player ticked.
+
 **Seventh round (2026-10-12):**
 - **Watchlist**: a roster with id `watchlist` (`RosterRepository.setWatched`), starred from the Player page's bar or the quick look; alerts, the Grid's roster chip and Rosters come free; Home's Watchlist card (`watchLines`).
 - **Notes**: prefs `notes` (no format bump; missing reads none), Player page "Your note" field, quick look line.
@@ -105,6 +115,8 @@ Read on demand only (not at session start). `HANDOFF.md` is the entry point. Edi
 - **Waiver trends**: `kona_player_info` on `leaguedefaults/3`, filtered to the 1,000 most rostered (about 600 KB compressed, 20 MB unfiltered; `players_wl` has no `percentChange`); the user chose day snapshots (`live.db` `roster_pct`, a 7-10-day-old one turns on the weekly change) over ESPN's figure, whose window looks daily.
 
 ## Deferred minors
+
+**Deferred minors (eighth round):** a trade offer's alert grades players' rest-of-season points, not both lineups (Trade does that); failed waiver claims aren't read (ESPN's failure statuses are from memory), so a waiver alert lists winners only; the FAAB market counts the whole season, not recent weeks; Scout's recent scores cost three ESPN reads each open (no cache); streams ignore bye weeks beyond next week's projection and have no Tuesday notification; the season recap counts ESPN's points, not the app's.
 
 **Deferred minors (seventh round):** notes aren't shown on Trade rows, and Buy low / sell high has no "Trade for" button (a row opens the Player page); the watchlist alerts only injuries and news (not role changes); Home's Watchlist card needs a league (Home itself does) and leaves out players with no projection this week; scoring plays read ESPN's league points, so a few quick catches can add up to 5 and alert, and a stat correction can't; checks run every 5 minutes only while WorkManager allows (Doze can delay them); a restore doesn't re-sync the league or clear files under `noBackupFilesDir`; the points board's minus sign is ASCII where the touchdown line's is "−".
 
@@ -186,6 +198,7 @@ Read on demand only (not at session start). `HANDOFF.md` is the entry point. Edi
 
 ## Open checks on the phone
 
+- **Eighth round:** a trade in your league, an offer to you and a waiver run each send one notification within about two hours; League activity → Waivers shows the FAAB market and your claims; Rosters lists players on two or more of your leagues' teams; Home → Scout shows your opponent's record, recent scores, lineup and moves; a Questionable starter on Home shows "If he sits: start … · or add …" and an Out one "Played by: wk N …"; Home lists K/D/ST streams when a free one beats yours; Review → Your season → Share; Buy low → Trade for opens Trade with him ticked, and a noted player's Trade row shows the note.
 - **Seventh round:** star a player on his page: Home shows him under Watchlist, the Grid's Roster chip lists Watchlist, and an injury change of his alerts; write a note, then long-press him elsewhere and the quick look shows it; More → Buy low / sell high → Points lists per-game gaps; during a game, a starter's touchdown sends "Name +6.0 pts" with your score and win chance within about 5 minutes; Settings → Backup → Save backup, then Restore from that file brings everything back.
 - **Sixth round:** long-press a Grid row and the quick look opens (Add to Compare adds over the Grid's weeks); headshots show offline after one view; Home → Share; More → Game lines lists the week's games with leans; a drop alert arrives after another team drops a useful player; Draft shows a Best available card.
 - **Design round:** with a league set, the app opens on Home showing your matchup, win chance and players to watch; during a game the chance updates each minute and a line grows; a Player page shows a headshot on a team-colored band; Grid rows show a team stripe and a small trend line; the This week card shows a bar chart of outcomes; long-press a player in Projections, My lineup or another list (not the Grid) and a sheet opens; Settings → Look switches wallpaper colors and true black; the widget shows a win-chance bar after Home opens.

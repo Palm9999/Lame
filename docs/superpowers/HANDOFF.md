@@ -9,7 +9,7 @@
 
 ## Where things stand
 
-Everything planned is built and pushed: the projection engine (K and D/ST included) with the ESPN blend, props, the Questionable discount and returning players; the accuracy page; NGS and FTN; the Grid, presets and rollups; the Player page; ESPN leagues with My lineup, Trade, Playoff odds, Review, Planner, Value, Start/sit and Draft; Opportunities; Rising roles; Scores; injury, lineup and news alerts; the home-screen widget; the Player page's injury return outlook; My lineup's game day; a bottom bar; shared UI pieces and small charts (`Components.kt`); the watchlist, player notes, Buy low / sell high, scoring-play alerts and backup (seventh round). `INGEST_VERSION` 10, schema 12, `FORECAST_VERSION` 20, prefs `formatVersion` 5, 169 metrics.
+Everything planned is built and pushed: the projection engine (K and D/ST included) with the ESPN blend, props, the Questionable discount and returning players; the accuracy page; NGS and FTN; the Grid, presets and rollups; the Player page; ESPN leagues with My lineup, Trade, Playoff odds, Review, Planner, Value, Start/sit and Draft; Opportunities; Rising roles; Scores; injury, lineup and news alerts; the home-screen widget; the Player page's injury return outlook; My lineup's game day; a bottom bar; shared UI pieces and small charts (`Components.kt`); the watchlist, player notes, Buy low / sell high, scoring-play alerts and backup (seventh round); trade, offer and waiver alerts, the FAAB market, players across leagues, Scout, injury replacement plans, K/D/ST streams, the season recap and Trade for (eighth round). `INGEST_VERSION` 10, schema 12, `FORECAST_VERSION` 20, prefs `formatVersion` 5, 169 metrics.
 
 **Facts to keep:**
 - **Accuracy method:** test on a build with a prior season (`tune.db`, 2021-2025) against a frozen sample of the current model's counted player-weeks (PPR, paired, 2 SE), never the CI gate's 2024 numbers (a 2024-2025 build makes 2024 a cold start). Count missed games as zero when judging availability changes. Harness: "Container notes".
@@ -31,7 +31,7 @@ Everything planned is built and pushed: the projection engine (K and D/ST includ
 
 **Reference, read only when the task needs it:** `docs/superpowers/BACKLOG.md` (tried-and-rejected accuracy ideas: check before any accuracy round; per-round build notes; deferred minors: check before touching a feature; open phone checks).
 
-**Next:** the 2026-10-12 seventh round (watchlist, buy low / sell high, scoring-play alerts, backup and restore, notes) is built (`BACKLOG.md`, Build notes); its phone checks wait on the user. Nothing else is pending: offer the next round as a short pick-list.
+**Next:** the 2026-10-12 eighth round (the user's picks 1-8: trade alerts, waiver results + FAAB market, players across leagues, Scout, injury replacement plan, K/D/ST streams, season recap card, notes on Trade + Trade for) is built (`BACKLOG.md`, Build notes); its phone checks and the seventh round's wait on the user. Nothing else is pending: offer the next round as a short pick-list.
 
 ## Rulings that still bind
 
