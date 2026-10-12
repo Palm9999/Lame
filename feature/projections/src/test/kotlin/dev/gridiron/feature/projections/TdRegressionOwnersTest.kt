@@ -5,6 +5,8 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import dev.gridiron.core.data.PointsGapBoard
+import dev.gridiron.core.data.PointsGapRow
 import dev.gridiron.core.data.TdRegressionBoard
 import dev.gridiron.core.data.TdRegressionRow
 import dev.gridiron.core.data.live.LeagueRostered
@@ -38,5 +40,22 @@ class TdRegressionOwnersTest {
         compose.onNodeWithText("Charlie").assertExists()
         compose.onNodeWithText("Alpha").assertDoesNotExist()
         compose.onNodeWithText("Bravo").assertDoesNotExist()
+    }
+
+    @Test
+    fun pointsModeRanksPerGameGapsAndBuyLowListsTheColdest() {
+        val board = TdRegressionBoard(5, listOf(TdRegressionRow("a", "Alpha", "WR", "KC", 6.0, 2.0)))
+        val points = PointsGapBoard(
+            5,
+            listOf(PointsGapRow("h", "Hot", "WR", "KC", 5, 90.0, 60.0), PointsGapRow("c", "Cold", "RB", "BUF", 4, 40.0, 60.0)),
+        )
+        compose.setContent { GridironTheme { TdRegressionScreen(Result.success(board), {}, {}, points = Result.success(points)) } }
+
+        compose.onNodeWithTag("td:points").performScrollTo().performClick()
+        compose.onNodeWithText("WR · KC · 18.0 pts a game on 12.0 expected (+6.0)").assertExists()
+        compose.onNodeWithText("Cold").assertDoesNotExist()
+        compose.onNodeWithTag("td:cold").performScrollTo().performClick()
+        compose.onNodeWithText("RB · BUF · 10.0 pts a game on 15.0 expected (-5.0)").assertExists()
+        compose.onNodeWithText("Hot").assertDoesNotExist()
     }
 }

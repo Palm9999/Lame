@@ -21,6 +21,7 @@ import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Assertions.assertEquals
 import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
+import org.junit.jupiter.api.Assertions.assertThrows
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -127,14 +128,14 @@ class UserPrefsStoreTest {
     @Test
     fun `each alert has its own switch, and an older file's one switch sets them all`() {
         file.writeText("""{"formatVersion":4,"injuryAlerts":false}""")
-        assertEquals(AlertSwitches(false, false, false, false, drops = false), withStore { it.prefs.first() }.alerts)
+        assertEquals(AlertSwitches(false, false, false, false, drops = false, scoring = false), withStore { it.prefs.first() }.alerts)
         file.writeText("""{"formatVersion":4}""")
         assertEquals(AlertSwitches(), withStore { it.prefs.first() }.alerts)
         val mixed = AlertSwitches(injury = true, news = false, lineup = true, summary = false)
         withStore { store -> store.update { it.copy(alerts = mixed) } }
         assertEquals(mixed, withStore { it.prefs.first() }.alerts)
         assertEquals(true, mixed.any)
-        assertEquals(false, AlertSwitches(false, false, false, false, drops = false).any)
+        assertEquals(false, AlertSwitches(false, false, false, false, drops = false, scoring = false).any)
     }
 
     @Test
@@ -455,5 +456,33 @@ class UserPrefsStoreTest {
         }
         file.writeText("""{"formatVersion":3,"gridPresets":[${json("a", "One")},${json("a", "Two")}]}""")
         assertEquals(listOf("One"), withStore { it.prefs.first() }.gridPresets.map { it.name })
+    }
+
+    @Test
+    fun `notes survive a reopen, an older file has none, and a blank stored note is dropped`() {
+        assertEquals(emptyMap<String, String>(), withStore { it.prefs.first() }.notes)
+        withStore { store -> store.update { it.copy(notes = mapOf("p1" to "Sell after bye")) } }
+        assertEquals(mapOf("p1" to "Sell after bye"), withStore { it.prefs.first() }.notes)
+        file.writeText("""{"formatVersion":5,"notes":{"p1":" ","p2":"Stash"}}""")
+        assertEquals(mapOf("p2" to "Stash"), withStore { it.prefs.first() }.notes)
+    }
+
+    @Test
+    fun `a backup restores everything but the reset notice, and anything else is refused`() {
+        val prefs = UserPrefs.DEFAULT.copy(
+            profiles = listOf(espnLeague),
+            activeProfileId = "u1",
+            rosters = listOf(Roster("r1", "Home", listOf("p1"))),
+            oddsApiKey = "k",
+            espnLeagues = listOf(EspnLeagueEntry("123", 4)),
+            espnLogin = EspnLogin("s2", "{swid}"),
+            alerts = AlertSwitches(news = false, scoring = false),
+            notes = mapOf("p1" to "note"),
+            resetNotice = true,
+        )
+        assertEquals(prefs.copy(resetNotice = false, espnActive = "123"), restorePrefs(prefs.backupJson()))
+        for (bad in listOf("{}", "[]", "not json", """{"profiles":[]}""")) {
+            assertThrows(IllegalArgumentException::class.java) { restorePrefs(bad) }
+        }
     }
 }

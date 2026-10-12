@@ -42,4 +42,16 @@ class RosterRepositoryTest {
         repo.add("gone", "p1")
         assertEquals(listOf(Roster("r1", "Home", emptyList())), repo.rosters.first())
     }
+
+    @Test
+    fun `the first star creates the watchlist roster, a star re-adds last, and unstarring leaves it`() = runTest {
+        repo.setWatched("p1", false)
+        assertEquals(emptyList<Roster>(), repo.rosters.first())
+        repo.setWatched("p1", true)
+        repo.setWatched("p2", true)
+        repo.setWatched("p1", true)
+        assertEquals(listOf("p2", "p1"), repo.watchlist.first())
+        repo.setWatched("p2", false)
+        assertEquals(listOf(Roster(RosterRepository.WATCHLIST_ID, "Watchlist", listOf("p1"))), repo.rosters.first())
+    }
 }

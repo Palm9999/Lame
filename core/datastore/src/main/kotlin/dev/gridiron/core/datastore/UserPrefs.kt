@@ -22,6 +22,7 @@ import java.time.LocalTime
  * @property espnActive The id of the league every screen follows; a missing or unknown id reads as the first league.
  * @property espnLogin The one pair of ESPN cookies every league shares. They are sent only to ESPN.
  * @property alerts Which notifications are on (all unless turned off).
+ * @property notes The user's own note on a player, by player id; a blank note is never stored.
  */
 public data class UserPrefs(
     val profiles: List<ScoringProfile>,
@@ -38,6 +39,7 @@ public data class UserPrefs(
     val espnLogin: EspnLogin? = null,
     val alerts: AlertSwitches = AlertSwitches(),
     val look: Look = Look(),
+    val notes: Map<String, String> = emptyMap(),
 ) {
     /** The active league with the shared cookies; null when no league is set. */
     public val espnLeague: EspnLeagueConfig?
@@ -85,9 +87,11 @@ public data class AlertSwitches(
     val refreshTimes: Map<DayOfWeek, LocalTime> = DEFAULT_REFRESH_TIMES,
     /** A player dropped in the user's league who would lift their rest of season; on unless turned off. */
     val drops: Boolean = true,
+    /** A starter in the user's ESPN lineup scores a big play (checked every few minutes while his game is on); on unless turned off. */
+    val scoring: Boolean = true,
 ) {
-    /** True while any alert needs the two-hourly check. */
-    public val any: Boolean get() = injury || news || lineup || summary || drops
+    /** True while any alert needs the two-hourly check (scoring alerts are scheduled from it, with the week's kickoffs). */
+    public val any: Boolean get() = injury || news || lineup || summary || drops || scoring
 
     /** True when quiet hours hold alerts at this local hour (0-23). */
     public fun quietAt(hour: Int): Boolean = quiet && (hour >= 22 || hour < 8)

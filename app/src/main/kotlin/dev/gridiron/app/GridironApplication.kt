@@ -8,6 +8,7 @@ import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.CompsRepository
 import dev.gridiron.core.data.DraftRepository
 import dev.gridiron.core.data.DynastyRepository
+import dev.gridiron.core.data.GameState
 import dev.gridiron.core.data.GridDisplayRepository
 import dev.gridiron.core.data.GridPresetRepository
 import dev.gridiron.core.data.InjuryReturnRepository
@@ -30,7 +31,9 @@ import dev.gridiron.core.data.live.LastResult
 import dev.gridiron.core.data.live.LineupAlert
 import dev.gridiron.core.data.live.LineupAlerts
 import dev.gridiron.core.data.live.LiveDb
+import dev.gridiron.core.data.live.LivePlayer
 import dev.gridiron.core.data.live.LiveRepository
+import dev.gridiron.core.data.live.LiveWin
 import dev.gridiron.core.data.live.MyTeam
 import dev.gridiron.core.data.live.NewsAlertChecker
 import dev.gridiron.core.data.live.NextMatch
@@ -187,6 +190,35 @@ class GridironApplication : Application() {
             WeeklySummary.strength(mine.slots, roster(theirs), sd),
         )
         return NextMatch(week, theirs.teamName, chance)
+    }
+
+    private val scoringChecker by lazy { ScoringPlayChecker(File(noBackupFilesDir, "scoring-plays.txt")) }
+
+    /**
+     * [ScoringAlertWorker]'s check: the big plays in the user's ESPN lineup since the last check, the live score and
+     * win chance ([LiveWin], from this week's projections under the active profile); null without a league or week.
+     */
+    internal suspend fun scoringPlays(): ScoringAlertWorker.Check? {
+        val week = upcomingWeek() ?: return null
+        if (week.games.none { it.state == GameState.LIVE }) return ScoringAlertWorker.Check(emptyList(), null, live = false)
+        val profile = scoring.active.first()
+        val m = league.myMatchup(week.season, week.week, profile)
+        // A game is on, so a missing matchup is ESPN failing: the worker tries again.
+        val mine = m.mine ?: throw java.io.IOException(m.message ?: "no matchup")
+        val plays = scoringChecker.check("${week.season}-${week.week}-${mine.teamId}", mine)
+        val theirs = m.theirs
+        val score = theirs?.let { t ->
+            val ids = (mine.lineup + t.lineup).mapNotNullTo(HashSet()) { it.playerId }
+            val players = projectionsRepo.weekAll(week.season, week.week).filter { it.playerId in ids }.mapNotNull { p ->
+                val pos = p.position ?: return@mapNotNull null
+                val pts = projectPoints(p.components, profile, Position.fromCode(pos), draws = 1_000)
+                p.playerId to LivePlayer(p.team, pts.points, maxOf(0.0, pts.ceiling - pts.floor) / (2 * 1.2816))
+            }.toMap()
+            val chance = runCatching { LiveWin.estimate(mine, t, week, players).chance }.getOrNull()
+            String.format(java.util.Locale.US, "You %.1f–%.1f", mine.espnTotal, t.espnTotal) +
+                (chance?.let { String.format(java.util.Locale.US, " · %.0f%% to win", it * 100) } ?: "")
+        }
+        return ScoringAlertWorker.Check(plays, score, live = true)
     }
 
     internal val dropAlerts by lazy { DropAlertChecker(File(noBackupFilesDir, "drop-alerts.txt")) }

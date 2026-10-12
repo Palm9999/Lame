@@ -7,12 +7,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -26,6 +29,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.CompareTrayRepository
 import dev.gridiron.core.data.live.NewsItem
+import dev.gridiron.core.designsystem.GridironIcons
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.RangeBar
 import dev.gridiron.core.designsystem.RemoteCircleImage
@@ -42,6 +46,7 @@ import dev.gridiron.feature.projections.loadProjectionCard
 import java.util.Locale
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /** What the quick look shows: the Player page's top, this week and his latest news. */
@@ -53,6 +58,8 @@ data class PlayerPeek(
     val imageUrl: String?,
     val card: ProjectionCard?,
     val news: List<NewsItem>,
+    /** The user's own note on him; null for none. */
+    val note: String? = null,
 )
 
 /** Reads [PlayerPeek] for [playerId] from what the Player page reads; any part that fails is left out. */
@@ -80,6 +87,7 @@ suspend fun loadPeek(playerId: String, deps: Deps): PlayerPeek {
         imageUrl = espnImageUrl(playerId, soft { deps.players?.espnId(playerId) }),
         card = card,
         news = soft { deps.live?.playerNews(playerId) }.orEmpty().take(2),
+        note = soft { deps.settings?.notes?.first()?.get(playerId) },
     )
 }
 
@@ -98,6 +106,7 @@ fun PlayerPeekSheet(
     var note by remember(playerId) { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     LaunchedEffect(playerId) { peek = loadPeek(playerId, deps) }
+    val watchlist by remember(deps.rosters) { deps.rosters?.watchlist ?: flowOf(null) }.collectAsState(initial = null)
     ModalBottomSheet(onDismissRequest = onDismiss, modifier = Modifier.testTag("peek")) {
         val p = peek
         Column(Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -129,6 +138,7 @@ fun PlayerPeekSheet(
                     Text(if (card.bye) "Bye this week" else if (card.out) "Out this week" else "Not projected this week", style = MaterialTheme.typography.titleMedium)
                 }
                 card?.rosPoints?.let { Text("Rest of season ${one(it)} pts", style = MaterialTheme.typography.bodyMedium) }
+                p.note?.let { Text("Your note: $it", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.testTag("peek:note")) }
                 for (n in p.news) {
                     Text(n.headline, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
@@ -154,6 +164,16 @@ fun PlayerPeekSheet(
                     },
                     modifier = Modifier.testTag("peek:compare"),
                 ) { Text("Add to Compare") }
+                watchlist?.let { list ->
+                    val on = playerId in list
+                    IconButton(onClick = { scope.launch { deps.rosters?.setWatched(playerId, !on) } }, modifier = Modifier.testTag("peek:watch")) {
+                        Icon(
+                            GridironIcons.Star,
+                            contentDescription = if (on) "On your watchlist: remove" else "Add to your watchlist",
+                            tint = if (on) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
             }
         }
     }
