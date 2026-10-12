@@ -150,16 +150,21 @@ internal fun TradeView(
     dynasty: Map<String, Int> = emptyMap(),
     /** Touchdowns above expected by player id; a player off the TD regression board shows none. */
     tdGaps: Map<String, Double> = emptyMap(),
+    /** The user's note on each player, by id, shown under his row. */
+    notes: Map<String, String> = emptyMap(),
+    /** A player to trade for (Buy low's Trade for): his team is picked and he is ticked to receive. */
+    target: String? = null,
 ) {
     val byId = remember(rosRows) { rosRows.associateBy { it.playerId } }
     val mine = remember(myTeam, byId, rosWeekly) { tradePlayers(myTeam, byId, rosWeekly) }
     val others = remember(partners, byId, rosWeekly) { partners.associate { it.teamName to tradePlayers(it, byId, rosWeekly) } }
     val playoffs = myTeam.playoffWeeks
-    var partnerName by rememberSaveable { mutableStateOf(partners.firstOrNull()?.teamName) }
+    val targetTeam = target?.let { t -> partners.firstOrNull { p -> p.players.any { it.playerId == t } } }
+    var partnerName by rememberSaveable { mutableStateOf((targetTeam ?: partners.firstOrNull())?.teamName) }
     var fitsOpen by rememberSaveable { mutableStateOf(false) }
     val partner = partners.firstOrNull { it.teamName == partnerName } ?: partners.first()
     var give by rememberSaveable { mutableStateOf(listOf<String>()) }
-    var get by rememberSaveable { mutableStateOf(listOf<String>()) }
+    var get by rememberSaveable { mutableStateOf(if (targetTeam != null) listOf(target) else listOf()) }
     // Whom the user would rather cut when the trade brings in more players than it sends; else the lowest go.
     var cuts by rememberSaveable { mutableStateOf(listOf<String>()) }
     val theirs = others.getValue(partner.teamName)
@@ -355,11 +360,11 @@ internal fun TradeView(
         searchMillis?.let { ms -> item { Note("Searched every team in ${String.format(Locale.US, "%.1f", ms / 1000.0)} s.") } }
         item { SectionHeader("You send") }
         itemsIndexed(mine, key = { _, p -> "give:${p.playerId}" }) { _, p ->
-            PickRow(p, p.playerId in give, "give", playoffs, dynasty[p.playerId], tdGaps[p.playerId]) { on -> give = if (on) give + p.playerId else give - p.playerId }
+            PickRow(p, p.playerId in give, "give", playoffs, dynasty[p.playerId], tdGaps[p.playerId], notes[p.playerId]) { on -> give = if (on) give + p.playerId else give - p.playerId }
         }
         item { SectionHeader("You receive from ${partner.teamName}") }
         itemsIndexed(theirs, key = { _, p -> "get:${p.playerId}" }) { _, p ->
-            PickRow(p, p.playerId in get, "get", playoffs, dynasty[p.playerId], tdGaps[p.playerId]) { on -> get = if (on) get + p.playerId else get - p.playerId }
+            PickRow(p, p.playerId in get, "get", playoffs, dynasty[p.playerId], tdGaps[p.playerId], notes[p.playerId]) { on -> get = if (on) get + p.playerId else get - p.playerId }
         }
         item {
             Note(
@@ -377,7 +382,7 @@ internal fun TradeView(
 }
 
 @Composable
-private fun PickRow(p: TradePlayer, checked: Boolean, side: String, playoffs: List<Int>, dynasty: Int?, tdGap: Double?, onCheck: (Boolean) -> Unit) {
+private fun PickRow(p: TradePlayer, checked: Boolean, side: String, playoffs: List<Int>, dynasty: Int?, tdGap: Double?, note: String?, onCheck: (Boolean) -> Unit) {
     Row(
         Modifier.fillMaxWidth().toggleable(checked, role = Role.Checkbox, onValueChange = onCheck)
             .padding(start = 4.dp, end = 16.dp).testTag("$side:${p.playerId}"),
@@ -398,6 +403,9 @@ private fun PickRow(p: TradePlayer, checked: Boolean, side: String, playoffs: Li
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            note?.let {
+                Text("Note: $it", Modifier.testTag("note:${p.playerId}"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary, maxLines = 2)
+            }
         }
         Text(if (p.points > 0.0) pts(p.points) else "—", style = MaterialTheme.typography.bodyMedium)
     }

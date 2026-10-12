@@ -2,6 +2,7 @@ package dev.gridiron.feature.projections
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
@@ -344,6 +345,24 @@ class ProjectionListScreenTest {
         compose.onNodeWithTag("idea:0").performClick()
         compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("trade:mine"))
         compose.onNodeWithTag("trade:mine").assertTextEquals("Your lineup +82.0 (424.0 → 506.0)")
+    }
+
+    @Test
+    fun `trade for opens on Trade with his team picked, him ticked, and notes on the rows`() {
+        compose.setContent {
+            GridironTheme {
+                ProjectionListScreen(
+                    tradeState, emptyMap(), onPlayer = {}, onBack = {},
+                    myTeam = roster("Mine", "q1", "r1", "r2", "w1"),
+                    partners = listOf(roster("Others", "r3"), roster("Rivals", "q2", "w2", "w3")),
+                    notes = mapOf("w3" to "Buy before his bye"),
+                    tradeFor = "w3",
+                )
+            }
+        }
+        compose.onNodeWithTag("trade").performScrollToNode(hasTestTag("get:w3"))
+        compose.onNodeWithTag("get:w3").assertIsOn()
+        compose.onNodeWithTag("note:w3", useUnmergedTree = true).assertTextEquals("Note: Buy before his bye")
     }
 
     @Test

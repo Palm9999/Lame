@@ -130,7 +130,12 @@ public fun ProjectionListRoute(
     recentPoints: suspend (season: Int, lastWeek: Int, playerIds: Set<String>, profile: ScoringProfile) -> Map<String, List<Double?>> = { _, _, _, _ -> emptyMap() },
     /** Opens on My lineup (when there's a team) rather than the week's list. */
     startOnLineup: Boolean = false,
+    /** The user's notes by player id, shown on Trade's rows. */
+    notes: Flow<Map<String, String>> = flowOf(emptyMap()),
+    /** Opens on Trade with this player ticked to receive (Buy low's Trade for). */
+    tradeFor: String? = null,
 ) {
+    val noted by notes.collectAsStateWithLifecycle(initialValue = emptyMap())
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
     val profile by scoring.active.collectAsStateWithLifecycle<ScoringProfile?>(initialValue = null)
@@ -195,6 +200,8 @@ public fun ProjectionListRoute(
         tdGaps = gaps,
         trends = trends,
         startOnLineup = startOnLineup,
+        notes = noted,
+        tradeFor = tradeFor,
         onTradeOpened = {
             // Like dynasty values, a bonus.
             scope.launch {
@@ -367,9 +374,11 @@ public fun ProjectionListScreen(
     /** My lineup's players' recent fantasy points, oldest first, for their trend lines. */
     trends: Map<String, List<Double?>> = emptyMap(),
     startOnLineup: Boolean = false,
+    notes: Map<String, String> = emptyMap(),
+    tradeFor: String? = null,
 ) {
     var tab by rememberSaveable { mutableStateOf(PositionTab.FLEX) }
-    var chosen by rememberSaveable { mutableStateOf(if (startOnLineup) ListMode.LINEUP else ListMode.WEEK) }
+    var chosen by rememberSaveable { mutableStateOf(if (tradeFor != null) ListMode.TRADE else if (startOnLineup) ListMode.LINEUP else ListMode.WEEK) }
     val canTrade = myTeam != null && partners.isNotEmpty()
     val mode = when {
         (chosen == ListMode.LINEUP || chosen == ListMode.REVIEW || chosen == ListMode.PLANNER) && myTeam == null -> ListMode.WEEK
@@ -473,7 +482,7 @@ public fun ProjectionListScreen(
                     } else if (mode == ListMode.PLAYOFFS) {
                         PlayoffsView(playoffs, state.rosRows, state.rosWeekly)
                     } else if (mode == ListMode.TRADE && myTeam != null) {
-                        TradeView(myTeam, partners, state.rosRows, state.rosWeekly, offers, dynasty, tdGaps)
+                        TradeView(myTeam, partners, state.rosRows, state.rosWeekly, offers, dynasty, tdGaps, notes, tradeFor)
                     } else if (mode == ListMode.LINEUP && myTeam != null) {
                         val rival = (opponent as? OpponentState.Loaded)?.let { lineupView(it.team, state.week, weekRows, badges, started) }
                         val pickups = if (rostered == null) null else remember(myTeam, weekRows, badges, rostered, starterOut, started) { waiverPickups(myTeam, weekRows, badges, rostered, starterOut, started) }

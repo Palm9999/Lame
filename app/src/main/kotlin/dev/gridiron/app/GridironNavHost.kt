@@ -356,6 +356,8 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             tdGaps = { s -> deps.tdRegression?.board(s)?.gaps.orEmpty() },
                             recentPoints = { s, w, ids, p -> deps.stats.recentPoints(s, w, ids, p) },
                             startOnLineup = key.lineup,
+                            notes = deps.settings?.notes ?: flowOf(emptyMap()),
+                            tradeFor = key.tradeFor,
                         )
                     }
                     entry<OpportunitiesKey> { key ->
@@ -390,6 +392,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 league = deps.league?.rostered ?: flowOf(null),
                                 myTeam = deps.league?.myTeam ?: flowOf(null),
                                 profile = deps.scoring.active,
+                                onTradeFor = if (deps.league != null) ({ id -> backStack.push(ProjectionListKey(key.season, tradeFor = id)) }) else null,
                             )
                         }
                     }

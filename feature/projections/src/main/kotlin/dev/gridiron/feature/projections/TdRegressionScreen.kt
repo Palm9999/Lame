@@ -72,6 +72,8 @@ public fun TdRegressionRoute(
     league: Flow<LeagueRostered?> = flowOf(null),
     myTeam: Flow<MyTeam?> = flowOf(null),
     profile: Flow<ScoringProfile?> = flowOf(null),
+    /** Opens Trade with a player on another league team ticked; null hides Trade for. */
+    onTradeFor: ((String) -> Unit)? = null,
 ) {
     val version by dataVersion.collectAsStateWithLifecycle(initialValue = 0L)
     val taken by league.collectAsStateWithLifecycle(initialValue = null)
@@ -88,6 +90,7 @@ public fun TdRegressionRoute(
         taken?.takeIf { it.season == season },
         team?.takeIf { it.season == season }?.players?.mapNotNull { it.playerId }?.toSet().orEmpty(),
         points = points,
+        onTradeFor = onTradeFor,
     )
 }
 
@@ -110,6 +113,8 @@ public fun TdRegressionScreen(
     mine: Set<String> = emptySet(),
     /** The points board; null hides the Points chip. */
     points: Result<PointsGapBoard>? = null,
+    /** A row on another league team offers Trade for, which opens Trade with him ticked; null hides it. */
+    onTradeFor: ((String) -> Unit)? = null,
 ) {
     var cold by rememberSaveable { mutableStateOf(false) }
     var byPoints by rememberSaveable { mutableStateOf(false) }
@@ -159,21 +164,26 @@ public fun TdRegressionScreen(
                         .take(SHOWN)
                     LazyColumn(Modifier.fillMaxSize()) {
                         items(rows, key = { (row, _) -> row.playerId }) { (row, owner) ->
-                            Column(Modifier.fillMaxWidth().playerClick(row.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 8.dp).testTag("td:${row.playerId}")) {
-                                Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-                                Text(
-                                    listOfNotNull(
-                                        row.position, row.team, row.text,
-                                        when (owner) {
-                                            Owner.FreeAgent -> "Free agent"
-                                            Owner.Yours -> "Yours"
-                                            is Owner.Other -> "On ${owner.team}"
-                                            null -> null
-                                        },
-                                    ).joinToString(" · "),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                            Row(Modifier.fillMaxWidth().playerClick(row.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 8.dp).testTag("td:${row.playerId}"), verticalAlignment = Alignment.CenterVertically) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(row.name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        listOfNotNull(
+                                            row.position, row.team, row.text,
+                                            when (owner) {
+                                                Owner.FreeAgent -> "Free agent"
+                                                Owner.Yours -> "Yours"
+                                                is Owner.Other -> "On ${owner.team}"
+                                                null -> null
+                                            },
+                                        ).joinToString(" · "),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                if (owner is Owner.Other && onTradeFor != null) {
+                                    TextButton(onClick = { onTradeFor(row.playerId) }, modifier = Modifier.testTag("tradefor:${row.playerId}")) { Text("Trade for") }
+                                }
                             }
                         }
                     }
