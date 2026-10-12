@@ -170,6 +170,9 @@ private fun AlertsSection(settings: SettingsRepository) {
     AlertSwitch("League drops", "A player dropped in your league who would lift your rest of season (checked about every two hours).", now.drops, "drops") { on ->
         scope.launch { settings.setAlerts { it.copy(drops = on) } }
     }
+    AlertSwitch("League trades and waivers", "Every trade in your league with what it does to each side, offers made to you, and each waiver run's claims.", now.trades, "trades") { on ->
+        scope.launch { settings.setAlerts { it.copy(trades = on) } }
+    }
     AlertSwitch("Scoring plays", "While your starters play: a notification when one scores a touchdown or a big play, with your live score.", now.scoring, "scoring") { on ->
         scope.launch { settings.setAlerts { it.copy(scoring = on) } }
     }

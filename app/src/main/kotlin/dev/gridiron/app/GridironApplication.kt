@@ -229,13 +229,30 @@ class GridironApplication : Application() {
         val mine = league.myTeam.first()?.takeIf { it.season == season } ?: return emptyList()
         val activity = league.activity(season).takeIf { it.error == null } ?: return emptyList()
         val rostered = league.rostered.first()?.takeIf { it.season == season }?.playerIds ?: return emptyList()
+        val ros = rosCandidates(season)
+        val roster = mine.players.mapNotNull { it.playerId?.let(ros::get) }
+        return dropAlerts.check(activity.items, activity.myTeamId, rostered, mine.slots, roster, ros)
+    }
+
+    /** Every projected player's rest of season under the active profile, by id. */
+    private suspend fun rosCandidates(season: Int): Map<String, LineupCandidate> {
         val profile = scoring.active.first()
-        val ros = projectionsRepo.rosAll(season).mapNotNull { p ->
+        return projectionsRepo.rosAll(season).mapNotNull { p ->
             val pos = p.position ?: return@mapNotNull null
             LineupCandidate(p.playerId, pos, projectedScore(p.components, profile, Position.fromCode(pos)))
         }.associateBy { it.playerId }
-        val roster = mine.players.mapNotNull { it.playerId?.let(ros::get) }
-        return dropAlerts.check(activity.items, activity.myTeamId, rostered, mine.slots, roster, ros)
+    }
+
+    private val moveAlerts by lazy { LeagueMoveChecker(File(noBackupFilesDir, "league-moves.txt")) }
+
+    /** Trades, trade offers to the user and waiver runs in their league since the last run ([LeagueMoveChecker]). */
+    internal suspend fun leagueMoves(): List<LeagueMoveAlert> {
+        val season = currentSeason()
+        league.myTeam.first()?.takeIf { it.season == season } ?: return emptyList()
+        val activity = league.activity(season).takeIf { it.error == null } ?: return emptyList()
+        val offers = league.tradeOffers(season).takeIf { it.message == null }?.offers.orEmpty()
+        val names = offers.flatMap { it.give + it.get }.distinct().associateWith { players.header(it)?.name ?: it }
+        return moveAlerts.check(activity, offers, rosCandidates(season).mapValues { it.value.points }, names)
     }
 
     /** ESPN stories about rostered players since [InjuryAlertWorker]'s last run. */

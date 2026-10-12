@@ -59,6 +59,14 @@ class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
         } catch (e: Exception) {
             // Next run tries again; the drops it missed stay unseen.
         }
+        // Trades, offers and waiver runs in the user's league; quiet hours hold them like drops.
+        try {
+            if (!quiet && alerts.trades) notifyMoves(applicationContext, app.leagueMoves())
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Next run tries again; what it missed stays unseen.
+        }
         // Waiver trends' daily roster % snapshot, so its weekly change doesn't need the screen opened every day.
         try {
             app.waiverTrends.snapshotDaily(currentSeason())
@@ -147,6 +155,29 @@ class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
                     .setAutoCancel(true)
                     .build()
                 compat.notify(("drop:" + p.add.playerId).hashCode(), notification)
+            }
+        }
+
+        private const val MOVES_CHANNEL = "league-moves"
+
+        /** One notification per trade, offer or waiver run; a tap opens the app. */
+        private fun notifyMoves(context: Context, alerts: List<LeagueMoveAlert>) {
+            if (alerts.isEmpty()) return
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+            val manager = context.getSystemService(NotificationManager::class.java)
+            manager.createNotificationChannel(NotificationChannel(MOVES_CHANNEL, "League trades and waivers", NotificationManager.IMPORTANCE_DEFAULT))
+            val open = PendingIntent.getActivity(context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+            val compat = NotificationManagerCompat.from(context)
+            for (alert in alerts) {
+                val notification = NotificationCompat.Builder(context, MOVES_CHANNEL)
+                    .setSmallIcon(R.drawable.ic_stat_injury)
+                    .setContentTitle(alert.title)
+                    .setContentText(alert.text)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(alert.text))
+                    .setContentIntent(open)
+                    .setAutoCancel(true)
+                    .build()
+                compat.notify(alert.key.hashCode(), notification)
             }
         }
 

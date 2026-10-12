@@ -89,9 +89,11 @@ public data class AlertSwitches(
     val drops: Boolean = true,
     /** A starter in the user's ESPN lineup scores a big play (checked every few minutes while his game is on); on unless turned off. */
     val scoring: Boolean = true,
+    /** A trade in the user's league, a trade offered to them, or a waiver run; on unless turned off. */
+    val trades: Boolean = true,
 ) {
     /** True while any alert needs the two-hourly check (scoring alerts are scheduled from it, with the week's kickoffs). */
-    public val any: Boolean get() = injury || news || lineup || summary || drops || scoring
+    public val any: Boolean get() = injury || news || lineup || summary || drops || scoring || trades
 
     /** True when quiet hours hold alerts at this local hour (0-23). */
     public fun quietAt(hour: Int): Boolean = quiet && (hour >= 22 || hour < 8)

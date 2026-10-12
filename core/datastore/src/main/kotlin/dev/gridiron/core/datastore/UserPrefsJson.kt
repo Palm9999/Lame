@@ -69,6 +69,8 @@ internal data class UserPrefsDto(
     val scoringAlerts: Boolean? = null,
     /** Missing in a file from before notes: none. */
     val notes: Map<String, String> = emptyMap(),
+    /** Missing in a file from before the trade alerts: follows [dropAlerts], then [injuryAlerts]. */
+    val tradeAlerts: Boolean? = null,
 )
 
 @Serializable
@@ -239,6 +241,7 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
             refreshTimes(gameDayTimes),
             drops = dropAlerts ?: injuryAlerts,
             scoring = scoringAlerts ?: injuryAlerts,
+            trades = tradeAlerts ?: dropAlerts ?: injuryAlerts,
         ),
         look = Look(wallpaperColors, trueBlack),
         notes = notes.filterValues { it.isNotBlank() },
@@ -334,6 +337,7 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     trueBlack = look.trueBlack,
     scoringAlerts = alerts.scoring,
     notes = notes,
+    tradeAlerts = alerts.trades,
 )
 
 /** The stored times over the defaults: only the four game days, and only times that parse. */
