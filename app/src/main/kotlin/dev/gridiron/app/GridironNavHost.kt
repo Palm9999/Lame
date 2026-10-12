@@ -510,7 +510,13 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                         }
                     }
                     entry<RostersKey> {
-                        deps.rosters?.let { RostersScreen(it, deps.players, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
+                        deps.rosters?.let {
+                            RostersScreen(
+                                it, deps.players, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) },
+                                leagues = deps.league?.leagues ?: flowOf(emptyList()),
+                                badges = deps.live?.badges ?: flowOf(emptyMap()),
+                            )
+                        }
                     }
                     entry<LeagueKey> {
                         deps.league?.let {

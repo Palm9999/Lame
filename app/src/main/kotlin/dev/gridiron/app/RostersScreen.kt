@@ -32,15 +32,34 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.gridiron.core.data.PlayerDirectory
 import dev.gridiron.core.data.RosterRepository
+import dev.gridiron.core.data.exposure
+import dev.gridiron.core.data.live.FantasyLeagueRepository
+import dev.gridiron.core.data.live.LeagueChoice
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.SectionHeader
+import dev.gridiron.core.designsystem.StatusBadge
 import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.model.Roster
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 /** Create, rename and delete rosters, and remove players from them. Players are added from their player page. */
 @Composable
-fun RostersScreen(repo: RosterRepository, players: PlayerDirectory?, onBack: () -> Unit, onPlayer: (String) -> Unit) {
+fun RostersScreen(
+    repo: RosterRepository,
+    players: PlayerDirectory?,
+    onBack: () -> Unit,
+    onPlayer: (String) -> Unit,
+    /** The user's ESPN leagues, to find players on their teams in several ([exposure]). */
+    leagues: Flow<List<LeagueChoice>> = flowOf(emptyList()),
+    /** ESPN's injury designations by player id. */
+    badges: Flow<Map<String, String>> = flowOf(emptyMap()),
+) {
     val rosters by repo.rosters.collectAsState(initial = emptyList())
+    val choices by leagues.collectAsState(initial = emptyList())
+    val injuries by badges.collectAsState(initial = emptyMap())
+    val shared = remember(rosters, choices) { exposure(rosters, choices.associate { FantasyLeagueRepository.rosterId(it.leagueId) to it.name }) }
     val scope = rememberCoroutineScope()
     var names by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     LaunchedEffect(rosters) {
@@ -66,6 +85,25 @@ fun RostersScreen(repo: RosterRepository, players: PlayerDirectory?, onBack: () 
                 )
             }
             LazyColumn {
+                if (shared.isNotEmpty()) {
+                    item(key = "exposure") { SectionHeader("Across your leagues") }
+                    items(shared, key = { "x:${it.playerId}" }) { x ->
+                        Row(
+                            Modifier.fillMaxWidth().playerClick(x.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 8.dp).testTag("exposure:${x.playerId}"),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(names[x.playerId] ?: x.playerId, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "On ${x.leagues.size} of ${choices.size} teams: ${x.leagues.joinToString()}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            injuries[x.playerId]?.takeIf { it != "A" }?.let { StatusBadge(it) }
+                        }
+                    }
+                }
                 for (roster in rosters) {
                     item(key = "h:${roster.id}") {
                         Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {

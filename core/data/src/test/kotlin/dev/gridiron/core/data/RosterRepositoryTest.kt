@@ -54,4 +54,16 @@ class RosterRepositoryTest {
         repo.setWatched("p2", false)
         assertEquals(listOf(Roster(RosterRepository.WATCHLIST_ID, "Watchlist", listOf("p1"))), repo.rosters.first())
     }
+
+    @Test
+    fun `exposure lists players on two or more league teams, most leagues first`() {
+        val rosters = listOf(
+            Roster("espn-1", "Mine", listOf("a", "b")),
+            Roster("espn-2", "Also mine", listOf("a", "b", "c")),
+            Roster("espn-3", "Third", listOf("a")),
+            Roster("watchlist", "Watchlist", listOf("c")),
+        )
+        val names = mapOf("espn-1" to "Work", "espn-2" to "Family", "espn-3" to "Dynasty")
+        assertEquals(listOf(Exposure("a", listOf("Work", "Family", "Dynasty")), Exposure("b", listOf("Work", "Family"))), exposure(rosters, names))
+    }
 }

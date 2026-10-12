@@ -81,3 +81,18 @@ public class RosterRepository(
         prefs.update { p -> p.copy(rosters = p.rosters.map { if (it.id == id) change(it) else it }) }
     }
 }
+
+/** A player on the user's teams in two or more leagues, and those leagues' names. */
+public data class Exposure(val playerId: String, val leagues: List<String>)
+
+/**
+ * The players on two or more of the user's league teams: [leagueNames] names each league's roster by roster id (the
+ * league rosters the sync keeps); every other roster is left out. Most leagues first, in the order the rosters are kept.
+ */
+public fun exposure(rosters: List<Roster>, leagueNames: Map<String, String>): List<Exposure> =
+    rosters.filter { it.id in leagueNames }
+        .flatMap { r -> r.playerIds.distinct().map { it to leagueNames.getValue(r.id) } }
+        .groupBy({ it.first }, { it.second })
+        .filterValues { it.size >= 2 }
+        .map { (id, leagues) -> Exposure(id, leagues) }
+        .sortedByDescending { it.leagues.size }
