@@ -70,6 +70,13 @@ public object GridironIcons {
         }
     }
 
+    /** A five-pointed star: the watchlist (tinted the primary color when the player is on it). */
+    public val Star: ImageVector by lazy {
+        outline("Star") {
+            moveTo(12.0f, 3.3f); lineTo(14.4f, 9.6f); lineTo(21.0f, 9.9f); lineTo(15.8f, 14.0f); lineTo(17.6f, 20.5f); lineTo(12.0f, 16.8f); lineTo(6.4f, 20.5f); lineTo(8.2f, 14.0f); lineTo(3.0f, 9.9f); lineTo(9.6f, 9.6f); close()
+        }
+    }
+
     /** An arrow pointing left: back. */
     public val Back: ImageVector by lazy {
         outline("Back") {

@@ -17,7 +17,10 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -53,6 +56,7 @@ import dev.gridiron.core.data.ProjectionsRepository
 import dev.gridiron.core.data.ReturnOutlook
 import dev.gridiron.core.data.RosterRepository
 import dev.gridiron.core.data.ScoringRepository
+import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.TdRegressionRepository
 import dev.gridiron.core.data.basisText
 import dev.gridiron.core.data.chancesText
@@ -64,6 +68,7 @@ import dev.gridiron.core.data.live.LiveStatus
 import dev.gridiron.core.data.live.NewsItem
 import dev.gridiron.core.data.tdRegressionLine
 import dev.gridiron.core.designsystem.ColumnChart
+import dev.gridiron.core.designsystem.GridironIcons
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.RangeBar
 import dev.gridiron.core.designsystem.RemoteCircleImage
@@ -149,7 +154,10 @@ fun PlayerRoute(
     onPlayer: (String) -> Unit = {},
     /** Touchdowns against expected this season. */
     tdRegression: TdRegressionRepository? = null,
+    /** The user's notes on players; null hides the note. */
+    settings: SettingsRepository? = null,
 ) {
+    val notes by remember(settings) { settings?.notes ?: flowOf(emptyMap()) }.collectAsState(initial = emptyMap())
     val rosters by remember(rosterRepo) { rosterRepo?.rosters ?: flowOf(emptyList<Roster>()) }.collectAsState(initial = emptyList())
     val scope = rememberCoroutineScope()
     val version by (live?.changes ?: NO_CHANGES).collectAsState()
@@ -260,6 +268,10 @@ fun PlayerRoute(
         onManageRosters = onManageRosters,
         onSeason = { season = it },
         onPlayer = onPlayer,
+        watched = if (rosterRepo != null) rosters.any { it.id == RosterRepository.WATCHLIST_ID && playerId in it.playerIds } else null,
+        onWatch = { on -> rosterRepo?.let { repo -> scope.launch { repo.setWatched(playerId, on) } } },
+        note = if (settings != null) notes[playerId].orEmpty() else null,
+        onNote = { text -> settings?.let { s -> scope.launch { s.setNote(playerId, text) } } },
     )
 }
 
@@ -277,10 +289,26 @@ fun PlayerScreen(
     onRosterToggle: (rosterId: String, on: Boolean) -> Unit = { _, _ -> },
     onManageRosters: () -> Unit = {},
     onPlayer: (String) -> Unit = {},
+    /** On the watchlist; null hides the star. */
+    watched: Boolean? = null,
+    onWatch: (Boolean) -> Unit = {},
+    /** The user's note on him ("" for none); null hides the note. */
+    note: String? = null,
+    onNote: (String) -> Unit = {},
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
-            ScreenBar(null, onBack)
+            ScreenBar(null, onBack) {
+                if (watched != null) {
+                    IconButton(onClick = { onWatch(!watched) }, modifier = Modifier.testTag("watch")) {
+                        Icon(
+                            GridironIcons.Star,
+                            contentDescription = if (watched) "On your watchlist: remove" else "Add to your watchlist",
+                            tint = if (watched) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
             if (page == null) {
                 LoadingRows()
                 return@Column
@@ -295,6 +323,7 @@ fun PlayerScreen(
             }
             LazyColumn(Modifier.testTag("playerPage")) {
                 item { PlayerHero(page, playerId) }
+                if (note != null) item { NoteField(playerId, note, onNote) }
                 page.projection?.let { card ->
                     item {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -325,7 +354,9 @@ fun PlayerScreen(
                         }
                     }
                 }
-                rosters?.let { list ->
+                rosters?.let { all ->
+                    // The watchlist is the star at the top.
+                    val list = all.filter { it.id != RosterRepository.WATCHLIST_ID }
                     item { SectionTitle("Rosters") }
                     item { RosterToggles(playerId, list, onRosterToggle, onManageRosters) }
                 }
@@ -392,6 +423,24 @@ fun PlayerScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+/** The user's own note on him: edited in place, saved with Save (a blank note removes it). */
+@Composable
+private fun NoteField(playerId: String, note: String, onSave: (String) -> Unit) {
+    var draft by remember(playerId, note) { mutableStateOf(note) }
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            modifier = Modifier.weight(1f).testTag("note"),
+            label = { Text("Your note") },
+            maxLines = 4,
+        )
+        if (draft.trim() != note) {
+            TextButton(onClick = { onSave(draft) }, modifier = Modifier.testTag("note:save")) { Text("Save") }
         }
     }
 }

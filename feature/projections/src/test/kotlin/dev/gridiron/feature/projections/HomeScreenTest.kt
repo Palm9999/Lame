@@ -37,6 +37,12 @@ class HomeScreenTest {
     }
 
     @Test
+    fun theWatchlistKeepsStarredOrderSkipsUnprojectedPlayersAndDropsTheActiveBadge() {
+        val lines = watchLines(listOf("b", "gone", "a"), listOf(row("a", "Alpha"), row("b", "Bravo")), mapOf("a" to "A", "b" to "Q"))
+        assertEquals(listOf(WatchLine("b", "Bravo", "KC", 12.0, "Q"), WatchLine("a", "Alpha", "KC", 12.0, null)), lines)
+    }
+
+    @Test
     fun liveScoresLeadAndTheDaysLineShows() {
         var lineup = 0
         val home = HomeState(

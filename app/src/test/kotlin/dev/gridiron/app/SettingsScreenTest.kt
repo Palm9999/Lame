@@ -39,6 +39,17 @@ class SettingsScreenTest {
     }
 
     @Test
+    fun scoringAlertsSwitchOffAndBackupOffersSaveAndRestore() {
+        val prefs = FakePrefsSource()
+        show(prefs)
+        compose.onNodeWithTag("alerts:scoring").performScrollTo().performClick()
+        compose.waitForIdle()
+        assertEquals(false, prefs.current.alerts.scoring)
+        compose.onNodeWithTag("backup:save").performScrollTo().assertExists()
+        compose.onNodeWithTag("backup:restore").assertExists()
+    }
+
+    @Test
     fun theDefaultSeasonsAreChecked() {
         show(FakePrefsSource())
         compose.onNodeWithTag("season:2026").assertIsOn()

@@ -32,6 +32,13 @@ Read on demand only (not at session start). `HANDOFF.md` is the entry point. Edi
 
 ## Build notes by round
 
+**Seventh round (2026-10-12):**
+- **Watchlist**: a roster with id `watchlist` (`RosterRepository.setWatched`), starred from the Player page's bar or the quick look; alerts, the Grid's roster chip and Rosters come free; Home's Watchlist card (`watchLines`).
+- **Notes**: prefs `notes` (no format bump; missing reads none), Player page "Your note" field, quick look line.
+- **Buy low / sell high**: the TD regression screen renamed, with a Points chip (`TdRegressionRepository.pointsBoard`, `PointsGapRow`).
+- **Scoring plays**: `ScoringAlertWorker` + `ScoringPlayChecker` (5-point jump between 5-minute checks), prefs `scoringAlerts` (follows `injuryAlerts` in an older file).
+- **Backup**: Settings → Backup, `backupJson` / `restorePrefs`, `SettingsRepository.backup`/`restore`.
+
 **Just built (sixth round, 2026-10-08):**
 - **Quick look in the Grid**: the Grid's long press opens the quick look when the app provides one, its Add to Compare adding over the Grid's weeks (`LocalPlayerPeek` takes the screen's own compare action); without one (tests) it adds straight away as before.
 - **Headshots on disk**: `RemoteCircleImage` keeps each image in `cacheDir/images` (hashed URL), so a restart reads them back without the network.
@@ -98,6 +105,8 @@ Read on demand only (not at session start). `HANDOFF.md` is the entry point. Edi
 - **Waiver trends**: `kona_player_info` on `leaguedefaults/3`, filtered to the 1,000 most rostered (about 600 KB compressed, 20 MB unfiltered; `players_wl` has no `percentChange`); the user chose day snapshots (`live.db` `roster_pct`, a 7-10-day-old one turns on the weekly change) over ESPN's figure, whose window looks daily.
 
 ## Deferred minors
+
+**Deferred minors (seventh round):** notes aren't shown on Trade rows, and Buy low / sell high has no "Trade for" button (a row opens the Player page); the watchlist alerts only injuries and news (not role changes); Home's Watchlist card needs a league (Home itself does) and leaves out players with no projection this week; scoring plays read ESPN's league points, so a few quick catches can add up to 5 and alert, and a stat correction can't; checks run every 5 minutes only while WorkManager allows (Doze can delay them); a restore doesn't re-sync the league or clear files under `noBackupFilesDir`; the points board's minus sign is ASCII where the touchdown line's is "−".
 
 **Deferred minors (fourth-round FTN):** first-read rate counts CHK, DES and SD as charted reads that aren't the first (their meaning is FTN's, unverified); shotgun excludes pistol; none of the three is in Compare's metric sets or the Player page's Charted by week.
 
@@ -177,6 +186,7 @@ Read on demand only (not at session start). `HANDOFF.md` is the entry point. Edi
 
 ## Open checks on the phone
 
+- **Seventh round:** star a player on his page: Home shows him under Watchlist, the Grid's Roster chip lists Watchlist, and an injury change of his alerts; write a note, then long-press him elsewhere and the quick look shows it; More → Buy low / sell high → Points lists per-game gaps; during a game, a starter's touchdown sends "Name +6.0 pts" with your score and win chance within about 5 minutes; Settings → Backup → Save backup, then Restore from that file brings everything back.
 - **Sixth round:** long-press a Grid row and the quick look opens (Add to Compare adds over the Grid's weeks); headshots show offline after one view; Home → Share; More → Game lines lists the week's games with leans; a drop alert arrives after another team drops a useful player; Draft shows a Best available card.
 - **Design round:** with a league set, the app opens on Home showing your matchup, win chance and players to watch; during a game the chance updates each minute and a line grows; a Player page shows a headshot on a team-colored band; Grid rows show a team stripe and a small trend line; the This week card shows a bar chart of outcomes; long-press a player in Projections, My lineup or another list (not the Grid) and a sheet opens; Settings → Look switches wallpaper colors and true black; the widget shows a win-chance bar after Home opens.
 - **UI round:** every screen has a back arrow at the top left, except Projections, Scores, News and More opened from the bottom bar; open a Player page from Projections and no tab is lit; pull down on News or the Injury report and it reloads; pull down on the Grid and the refresh bar appears; Waiver trends opening shows grey placeholder rows first; My lineup's Claim plan and Trade's Best partners open on a tap; a shared card looks sharp when zoomed.

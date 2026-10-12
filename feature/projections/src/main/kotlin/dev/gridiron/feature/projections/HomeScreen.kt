@@ -83,7 +83,18 @@ internal data class HomeState(
     val news: List<NewsItem> = emptyList(),
     /** "Sun 1:00 PM · Start Name (QB), …": the next kickoff with players of the user's in it. */
     val nextKickoff: String? = null,
+    /** The user's watchlist with this week's projections, in the order starred. */
+    val watched: List<WatchLine> = emptyList(),
 )
+
+/** A watchlist player this week: his projection and ESPN designation ([abbr], null when healthy). */
+internal data class WatchLine(val playerId: String, val name: String, val team: String?, val points: Double, val abbr: String?)
+
+/** The starred players with a projection this week, in the order starred. */
+internal fun watchLines(ids: List<String>, rows: List<ProjectionRow>, badges: Map<String, String>): List<WatchLine> {
+    val byId = rows.associateBy { it.playerId }
+    return ids.mapNotNull { id -> byId[id]?.let { WatchLine(id, it.name, it.team, it.points, badges[id]?.takeIf { b -> b != "A" }) } }
+}
 
 private val WATCH = setOf("O", "D", "Q", "IR", "SUSP")
 
@@ -118,7 +129,10 @@ public fun HomeRoute(
     dataVersion: Flow<Long> = flowOf(0L),
     /** The home-screen widget's summary, win chance and players to watch, whenever they change. */
     onSummary: (summary: String, chance: Double?, watch: String?) -> Unit = { _, _, _ -> },
+    /** The watchlist's player ids, in the order starred. */
+    watchlist: Flow<List<String>> = flowOf(emptyList()),
 ) {
+    val starred by watchlist.collectAsStateWithLifecycle(initialValue = emptyList())
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
     val state by vm.state.collectAsStateWithLifecycle()
     val profile by scoring.active.collectAsStateWithLifecycle<ScoringProfile?>(initialValue = null)
@@ -193,6 +207,7 @@ public fun HomeRoute(
             nextKickoff = gameDay(view, locked.times, injuries, Instant.now(), locked.inactivesPosted)?.windows?.firstOrNull()?.let {
                 "${kickoffText(it.kickoff)} · ${windowText(it)}"
             },
+            watched = watchLines(starred, loaded!!.weekRows, injuries),
         )
     } else {
         null
@@ -275,6 +290,21 @@ private fun HomeCards(home: HomeState, onPlayer: (String) -> Unit, onLineup: () 
                     Text(h.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     Text(h.slot, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     StatusBadge(h.abbr)
+                }
+            }
+        }
+        if (home.watched.isNotEmpty()) {
+            item { SectionHeader("Watchlist") }
+            items(home.watched, key = { "watched:${it.playerId}" }) { w ->
+                Row(
+                    Modifier.fillMaxWidth().playerClick(w.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 8.dp).testTag("home:watched:${w.playerId}"),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    TeamStripe(w.team, height = 20.dp)
+                    Text(w.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    w.abbr?.let { StatusBadge(it) }
+                    Text("${pts(w.points)} pts", style = MaterialTheme.typography.labelMedium)
                 }
             }
         }

@@ -4,6 +4,8 @@ import android.app.TimePickerDialog
 import android.os.Build
 import android.text.format.DateFormat
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -49,8 +51,10 @@ import java.time.format.DateTimeFormatter
 import java.time.format.FormatStyle
 import java.time.format.TextStyle
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * The Odds API key and how props went, then the seasons the phone builds,
@@ -69,6 +73,7 @@ fun SettingsScreen(settings: SettingsRepository, onBack: () -> Unit, props: Flow
             LookSection(settings)
             AlertsSection(settings)
             PropsSection(settings, props)
+            BackupSection(settings)
             Text(
                 "Seasons",
                 Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
@@ -165,8 +170,57 @@ private fun AlertsSection(settings: SettingsRepository) {
     AlertSwitch("League drops", "A player dropped in your league who would lift your rest of season (checked about every two hours).", now.drops, "drops") { on ->
         scope.launch { settings.setAlerts { it.copy(drops = on) } }
     }
+    AlertSwitch("Scoring plays", "While your starters play: a notification when one scores a touchdown or a big play, with your live score.", now.scoring, "scoring") { on ->
+        scope.launch { settings.setAlerts { it.copy(scoring = on) } }
+    }
     AlertSwitch("Quiet hours", "Holds injury and news alerts from 10 pm to 8 am and sends them after. Lineup checks still come.", now.quiet, "quiet") { on ->
         scope.launch { settings.setAlerts { it.copy(quiet = on) } }
+    }
+}
+
+/**
+ * Save everything set up (scoring profiles, presets, rosters and the watchlist, notes, leagues and their login, the
+ * Odds API key, alerts) to a file the user picks, and restore it, on this phone or a new one. The stats aren't in it:
+ * a refresh rebuilds them.
+ */
+@Composable
+private fun BackupSection(settings: SettingsRepository) {
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    fun toast(text: String) = Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+    val save = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val ok = runCatching {
+                val text = settings.backup()
+                withContext(Dispatchers.IO) { context.contentResolver.openOutputStream(uri, "wt")!!.use { it.write(text.encodeToByteArray()) } }
+            }.isSuccess
+            toast(if (ok) "Backup saved" else "Couldn't save the backup")
+        }
+    }
+    val open = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val result = runCatching {
+                val text = withContext(Dispatchers.IO) { context.contentResolver.openInputStream(uri)!!.use { it.readBytes().decodeToString() } }
+                settings.restore(text)
+            }
+            toast(if (result.isSuccess) "Restored. Refresh stats if the seasons changed." else "That file isn't a Gridiron backup")
+        }
+    }
+    Text("Backup", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+    Text(
+        "Your scoring, presets, rosters, watchlist, notes, leagues (with the ESPN login) and the Odds API key, in one file. " +
+            "Keep it private. Restoring replaces what's set up now.",
+        Modifier.padding(horizontal = 16.dp),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(Modifier.padding(horizontal = 8.dp)) {
+        TextButton(onClick = { save.launch("gridiron-backup.json") }, modifier = Modifier.testTag("backup:save")) { Text("Save backup") }
+        TextButton(onClick = { open.launch(arrayOf("application/json", "text/plain", "application/octet-stream")) }, modifier = Modifier.testTag("backup:restore")) {
+            Text("Restore")
+        }
     }
 }
 

@@ -21,6 +21,29 @@ public class RosterRepository(
     public val rosters: Flow<ImmutableList<Roster>> =
         prefs.prefs.map { it.rosters.toImmutableList() }.distinctUntilChanged()
 
+    /** The watchlist's player ids, starred most recently last; empty before the first star. */
+    public val watchlist: Flow<List<String>> =
+        rosters.map { list -> list.firstOrNull { it.id == WATCHLIST_ID }?.playerIds.orEmpty() }.distinctUntilChanged()
+
+    /**
+     * Stars or unstars [playerId]. The watchlist is a roster like any other (id [WATCHLIST_ID]), so injury and news
+     * alerts, the Grid's roster chip and the Rosters screen cover it; the first star creates it.
+     */
+    public suspend fun setWatched(playerId: String, watched: Boolean) {
+        prefs.update { p ->
+            val list = p.rosters.firstOrNull { it.id == WATCHLIST_ID }
+            when {
+                watched && list == null -> p.copy(rosters = p.rosters + Roster(WATCHLIST_ID, WATCHLIST_NAME, listOf(playerId)))
+                list == null -> p
+                else -> p.copy(
+                    rosters = p.rosters.map { r ->
+                        if (r.id != WATCHLIST_ID) r else r.copy(playerIds = if (watched) (r.playerIds - playerId) + playerId else r.playerIds - playerId)
+                    },
+                )
+            }
+        }
+    }
+
     /** Creates an empty roster named [name] (trimmed) and returns it. */
     public suspend fun create(name: String): Roster {
         val trimmed = name.trim()
@@ -47,6 +70,11 @@ public class RosterRepository(
 
     public suspend fun remove(id: String, playerId: String) {
         edit(id) { it.copy(playerIds = it.playerIds - playerId) }
+    }
+
+    public companion object {
+        public const val WATCHLIST_ID: String = "watchlist"
+        public const val WATCHLIST_NAME: String = "Watchlist"
     }
 
     private suspend fun edit(id: String, change: (Roster) -> Roster) {

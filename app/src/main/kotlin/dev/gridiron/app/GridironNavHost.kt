@@ -222,7 +222,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
         if (deps.opportunities != null) add(MoreItem("Players", "Opportunities", "Who moves up when a starter is hurt") { backStack.push(OpportunitiesKey(season)) })
         if (deps.breakouts != null) add(MoreItem("Players", "Rising roles", "Roles growing over the last four games") { backStack.push(BreakoutsKey(season)) })
         add(MoreItem("Players", "Where we differ", "The app against ESPN this week") { backStack.push(DifferKey(season)) })
-        if (deps.tdRegression != null) add(MoreItem("Players", "TD regression", "Touchdowns above or below expected: sell high, buy low") { backStack.push(TdRegressionKey(season)) })
+        if (deps.tdRegression != null) add(MoreItem("Players", "Buy low / sell high", "Touchdowns and points against expected") { backStack.push(TdRegressionKey(season)) })
         if (deps.live != null && deps.league != null) add(MoreItem("Players", "News", "ESPN's latest stories") { backStack.push(NewsKey) })
         add(MoreItem("Players", "Injury report", "ESPN's live list and practice") { backStack.push(InjuriesKey(season)) })
         add(MoreItem("Players", "Team defense", "Each defense's season") { backStack.push(DefenseKey(season)) })
@@ -280,7 +280,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 if (deps.opportunities != null) add("Opportunities" to { s: Int -> backStack.push(OpportunitiesKey(s)) })
                                 if (deps.breakouts != null) add("Rising roles" to { s: Int -> backStack.push(BreakoutsKey(s)) })
                                 add("Where we differ" to { s: Int -> backStack.push(DifferKey(s)) })
-                                if (deps.tdRegression != null) add("TD regression" to { s: Int -> backStack.push(TdRegressionKey(s)) })
+                                if (deps.tdRegression != null) add("Buy low / sell high" to { s: Int -> backStack.push(TdRegressionKey(s)) })
                                 add("Projection accuracy" to { s: Int -> backStack.push(AccuracyKey(s)) })
                                 if (deps.live != null) add("News" to { _: Int -> backStack.push(NewsKey) })
                                 if (deps.scores != null) add("Scores" to { s: Int -> backStack.push(ScoresKey(s)) })
@@ -389,6 +389,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 key.season, repo, onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
                                 league = deps.league?.rostered ?: flowOf(null),
                                 myTeam = deps.league?.myTeam ?: flowOf(null),
+                                profile = deps.scoring.active,
                             )
                         }
                     }
@@ -486,6 +487,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             comps = deps.comps,
                             onPlayer = { backStack.push(PlayerKey(it)) },
                             tdRegression = deps.tdRegression,
+                            settings = deps.settings,
                         )
                     }
                     entry<DefenseKey> { key -> DefenseScreen(key.season, deps.teams, onBack = back, dataVersion = deps.stats.dataVersion) }
@@ -550,6 +552,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 onLeague = { backStack.push(LeagueKey) },
                                 dataVersion = deps.stats.dataVersion,
                                 onSummary = deps.onHome,
+                                watchlist = deps.rosters?.watchlist ?: flowOf(emptyList()),
                             )
                         }
                     }

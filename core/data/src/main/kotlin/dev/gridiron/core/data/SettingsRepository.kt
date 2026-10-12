@@ -4,8 +4,11 @@ import dev.gridiron.core.datastore.AlertSwitches
 import dev.gridiron.core.datastore.Look
 import dev.gridiron.core.datastore.PrefsSource
 import dev.gridiron.core.datastore.SeasonChoice
+import dev.gridiron.core.datastore.backupJson
+import dev.gridiron.core.datastore.restorePrefs
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 /**
@@ -62,6 +65,24 @@ public class SettingsRepository(
 
     public suspend fun setAlerts(change: (AlertSwitches) -> AlertSwitches) {
         prefs.update { it.copy(alerts = change(it.alerts)) }
+    }
+
+    /** The user's note on each player, by player id. */
+    public val notes: Flow<Map<String, String>> = prefs.prefs.map { it.notes }.distinctUntilChanged()
+
+    /** Saves [text] (trimmed) as the note on [playerId]; a blank one removes it. */
+    public suspend fun setNote(playerId: String, text: String) {
+        val clean = text.trim()
+        prefs.update { p -> p.copy(notes = if (clean.isEmpty()) p.notes - playerId else p.notes + (playerId to clean)) }
+    }
+
+    /** Everything the user set up, as a backup file's text ([backupJson]). */
+    public suspend fun backup(): String = prefs.prefs.first().backupJson()
+
+    /** Replaces everything with a [backup]'s; throws [IllegalArgumentException], changing nothing, when [text] isn't one. */
+    public suspend fun restore(text: String) {
+        val restored = restorePrefs(text)
+        prefs.update { restored }
     }
 
     public companion object {

@@ -6,6 +6,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
 import dev.gridiron.core.data.PlayerHeader
 import dev.gridiron.core.data.ReturnOutlook
 import dev.gridiron.core.data.live.InjuryNote
@@ -82,6 +83,27 @@ class LiveScreensTest {
         compose.onNodeWithText("Questionable").assertExists()
         compose.onNodeWithText("Barkley (neck) was limited.").assertExists()
         compose.onNodeWithText("Barkley to play").assertExists()
+    }
+
+    @Test
+    fun theStarTogglesTheWatchlistAndANoteSavesOnlyWhenChanged() {
+        val page = PlayerPage(PlayerHeader("P1", "Saquon Barkley", "RB", "PHI"), null, emptyList(), emptyList(), null)
+        val watched = mutableListOf<Boolean>()
+        val saved = mutableListOf<String>()
+        compose.setContent {
+            GridironTheme {
+                PlayerScreen(
+                    "P1", page, liveAvailable = true, onBack = {}, onOpen = {},
+                    watched = false, onWatch = { watched += it }, note = "Stash", onNote = { saved += it },
+                )
+            }
+        }
+        compose.onNodeWithContentDescription("Add to your watchlist").performClick()
+        assertEquals(listOf(true), watched)
+        compose.onNodeWithTag("note:save").assertDoesNotExist()
+        compose.onNodeWithTag("note").performTextReplacement("Sell after the bye")
+        compose.onNodeWithTag("note:save").performClick()
+        assertEquals(listOf("Sell after the bye"), saved)
     }
 
     @Test

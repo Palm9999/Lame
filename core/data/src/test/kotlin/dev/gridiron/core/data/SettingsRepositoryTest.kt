@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.assertThrows
 
 class SettingsRepositoryTest {
     private var current = 2026
@@ -83,5 +84,26 @@ class SettingsRepositoryTest {
 
         settings.setOddsApiKey("   ")
         assertNull(settings.oddsApiKey.first())
+    }
+
+    @Test
+    fun `a note is trimmed, and a blank one removes it`() = runTest {
+        val (settings, _) = repo()
+        settings.setNote("p1", "  Sell after the bye ")
+        assertEquals(mapOf("p1" to "Sell after the bye"), settings.notes.first())
+        settings.setNote("p1", " ")
+        assertEquals(emptyMap<String, String>(), settings.notes.first())
+    }
+
+    @Test
+    fun `restore replaces everything with a backup's, and a file that isn't one changes nothing`() = runTest {
+        val (settings, prefs) = repo()
+        settings.setNote("p1", "keep")
+        val backup = settings.backup()
+        settings.setNote("p1", "changed")
+        settings.restore(backup)
+        assertEquals(mapOf("p1" to "keep"), settings.notes.first())
+        assertThrows<IllegalArgumentException> { settings.restore("{}") }
+        assertEquals(mapOf("p1" to "keep"), prefs.prefs.first().notes)
     }
 }

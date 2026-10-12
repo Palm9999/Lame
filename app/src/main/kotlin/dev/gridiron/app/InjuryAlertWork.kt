@@ -69,7 +69,12 @@ class InjuryAlertWorker(context: Context, params: WorkerParameters) : CoroutineW
         }
         // The week's kickoff windows each get a lineup check shortly before; a missing scoreboard just skips them.
         try {
-            if (alerts.lineup) app.upcomingWeek()?.let { LineupAlertWorker.schedule(applicationContext, it) }
+            if (alerts.lineup || alerts.scoring) {
+                app.upcomingWeek()?.let { week ->
+                    if (alerts.lineup) LineupAlertWorker.schedule(applicationContext, week)
+                    if (alerts.scoring) ScoringAlertWorker.schedule(applicationContext, week)
+                }
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

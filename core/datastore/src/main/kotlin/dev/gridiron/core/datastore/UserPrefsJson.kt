@@ -22,6 +22,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 
 /*
  * The stored shape. Deliberately separate from the domain types: names are
@@ -64,6 +65,10 @@ internal data class UserPrefsDto(
     /** Missing in a file from before the drop alerts: follows [injuryAlerts], like the other alerts. */
     val dropAlerts: Boolean? = null,
     val trueBlack: Boolean = false,
+    /** Missing in a file from before the scoring alerts: follows [injuryAlerts], like the other alerts. */
+    val scoringAlerts: Boolean? = null,
+    /** Missing in a file from before notes: none. */
+    val notes: Map<String, String> = emptyMap(),
 )
 
 @Serializable
@@ -233,8 +238,10 @@ internal fun UserPrefsDto.toDomain(): UserPrefs {
             injuryAlerts, newsAlerts ?: injuryAlerts, lineupAlerts ?: injuryAlerts, summaryAlert ?: injuryAlerts, quietAlerts, gameDayRefresh,
             refreshTimes(gameDayTimes),
             drops = dropAlerts ?: injuryAlerts,
+            scoring = scoringAlerts ?: injuryAlerts,
         ),
         look = Look(wallpaperColors, trueBlack),
+        notes = notes.filterValues { it.isNotBlank() },
     )
 }
 
@@ -325,6 +332,8 @@ internal fun UserPrefs.toDto(): UserPrefsDto = UserPrefsDto(
     wallpaperColors = look.wallpaper,
     dropAlerts = alerts.drops,
     trueBlack = look.trueBlack,
+    scoringAlerts = alerts.scoring,
+    notes = notes,
 )
 
 /** The stored times over the defaults: only the four game days, and only times that parse. */
@@ -332,6 +341,22 @@ private fun refreshTimes(stored: Map<String, String>): Map<DayOfWeek, LocalTime>
     AlertSwitches.DEFAULT_REFRESH_TIMES.mapValuesTo(LinkedHashMap()) { (day, default) ->
         stored[day.name]?.let { runCatching { LocalTime.parse(it) }.getOrNull() } ?: default
     }
+
+/** The whole document as the store writes it, for a backup file the user keeps. It holds the ESPN cookies and the Odds API key. */
+public fun UserPrefs.backupJson(): String = json.encodeToString(UserPrefsDto.serializer(), copy(resetNotice = false).toDto())
+
+/**
+ * A [backupJson] file read back, through the same tolerant reader as the store's own file. Throws
+ * [IllegalArgumentException] for anything that isn't a backup (a file without `formatVersion` would otherwise read as
+ * empty prefs and wipe everything).
+ */
+public fun restorePrefs(text: String): UserPrefs = try {
+    val element = json.parseToJsonElement(text)
+    require(element is JsonObject && "formatVersion" in element) { "not a Gridiron backup" }
+    json.decodeFromJsonElement(UserPrefsDto.serializer(), element).toDomain()
+} catch (e: SerializationException) {
+    throw IllegalArgumentException("not a Gridiron backup", e)
+}
 
 internal object UserPrefsSerializer : Serializer<UserPrefs> {
     override val defaultValue: UserPrefs get() = UserPrefs.DEFAULT
