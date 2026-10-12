@@ -39,8 +39,11 @@ import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.live.ActivityItem
 import dev.gridiron.core.data.live.ActivityKind
 import dev.gridiron.core.data.live.ActivityResult
+import dev.gridiron.core.data.live.FaabPrice
+import dev.gridiron.core.data.live.faabMarket
 import dev.gridiron.core.designsystem.LoadingRows
 import dev.gridiron.core.designsystem.ScreenBar
+import dev.gridiron.core.designsystem.SummaryCard
 import dev.gridiron.core.designsystem.playerClick
 import dev.gridiron.core.model.ScoringProfile
 import java.util.Locale
@@ -154,6 +157,7 @@ public fun ActivityRoute(
 private enum class ActivityFilter(val label: String, val tag: String) {
     ALL("All", "all"),
     ADDS("Adds", "adds"),
+    WAIVERS("Waivers", "waivers"),
     TRADES("Trades", "trades"),
     MINE("Mine", "mine"),
 }
@@ -188,11 +192,18 @@ public fun ActivityScreen(
                         when (filter) {
                             ActivityFilter.ALL -> true
                             ActivityFilter.ADDS -> i.kind == ActivityKind.ADD
+                            ActivityFilter.WAIVERS -> i.waiver
                             ActivityFilter.TRADES -> i.kind == ActivityKind.TRADE
                             ActivityFilter.MINE -> r.myTeamId != null && i.moves.any { it.fromTeamId == r.myTeamId || it.toTeamId == r.myTeamId }
                         }
                     }
                     LazyColumn(Modifier.fillMaxSize()) {
+                        if (filter == ActivityFilter.WAIVERS) {
+                            val market = faabMarket(r.items)
+                            val budget = r.faabBudget
+                            if (budget != null && market.isNotEmpty()) item(key = "market") { FaabMarketCard(market, budget) }
+                            if (shown.isEmpty()) item { Text("No waiver claims yet.", Modifier.padding(16.dp), style = MaterialTheme.typography.bodyMedium) }
+                        }
                         for ((week, items) in shown.groupBy { it.week }) {
                             item(key = "w:$week") {
                                 Text("Week $week", Modifier.padding(start = 16.dp, top = 12.dp), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -230,5 +241,19 @@ private fun ActivityRow(item: ActivityItem, result: ActivityResult, ros: Map<Str
                 color = MaterialTheme.colorScheme.primary,
             )
         }
+    }
+}
+
+/** "RB: 9 claims, median $12 (12%), top $41": what each position's winning claims cost against the [budget]. */
+internal fun faabPriceText(p: FaabPrice, budget: Int): String =
+    "${dev.gridiron.core.model.Position.label(p.position)}: ${p.claims} claim${if (p.claims == 1) "" else "s"}, median $${p.median}" +
+        (if (budget > 0) " (${p.median * 100 / budget}%)" else "") + ", top $${p.top}"
+
+@Composable
+private fun FaabMarketCard(market: List<FaabPrice>, budget: Int) {
+    SummaryCard(Modifier.testTag("faab:market")) {
+        Text("FAAB market", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Winning bids this season, of a $$budget budget", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        for (p in market) Text(faabPriceText(p, budget), Modifier.testTag("faab:${p.position}"), style = MaterialTheme.typography.bodyMedium)
     }
 }

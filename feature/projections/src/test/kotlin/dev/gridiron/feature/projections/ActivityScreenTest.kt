@@ -72,6 +72,18 @@ class ActivityScreenTest {
     }
 
     @Test
+    fun `waivers lists the claims under the season's FAAB market`() {
+        val claim = add.copy(waiver = true, moves = add.moves.map { if (it.toTeamId == 2) it.copy(position = "RB") else it })
+        compose.setContent {
+            GridironTheme { ActivityScreen(ActivityState.Loaded(ActivityResult(listOf(trade, claim), 2, teams, null, faabBudget = 100)), ros, {}, onBack = {}) }
+        }
+        compose.onNodeWithTag("filter:waivers").performClick()
+        compose.onNodeWithText("RB: 1 claim, median $12 (12%), top $12").assertIsDisplayed()
+        compose.onNodeWithText("Mine added Waiver Back for $12 and dropped Cut Guy").assertIsDisplayed()
+        compose.onAllNodesWithText("Rivals traded Old Star to Mine for Young Gun").assertCountEquals(0)
+    }
+
+    @Test
     fun `an error with nothing to show says so`() {
         compose.setContent {
             GridironTheme { ActivityScreen(ActivityState.Loaded(ActivityResult(emptyList(), null, emptyMap(), "sync your league first")), emptyMap(), {}, onBack = {}) }

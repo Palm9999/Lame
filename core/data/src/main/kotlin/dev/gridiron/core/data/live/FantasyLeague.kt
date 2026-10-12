@@ -413,6 +413,7 @@ internal object EspnFantasyParser {
                 bid = t.int("bidAmount")?.takeIf { kind == ActivityKind.ADD && it > 0 },
                 processedAtMillis = (t["processDate"] as? JsonPrimitive)?.longOrNull,
                 moves = moves,
+                waiver = t.string("type") == "WAIVER",
             )
         }
     }
