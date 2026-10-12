@@ -33,3 +33,4 @@ import kotlinx.serialization.Serializable
 @Serializable data object MoreKey : NavKey
 @Serializable data object HomeKey : NavKey
 @Serializable data object LinesKey : NavKey
+@Serializable data class ScoutKey(val season: Int) : NavKey

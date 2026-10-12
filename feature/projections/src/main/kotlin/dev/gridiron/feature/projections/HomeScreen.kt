@@ -85,6 +85,12 @@ internal data class HomeState(
     val nextKickoff: String? = null,
     /** The user's watchlist with this week's projections, in the order starred. */
     val watched: List<WatchLine> = emptyList(),
+    /** What to do if each listed starter sits, by player id. */
+    val plans: Map<String, ReplacementPlan> = emptyMap(),
+    /** Each hurt player's chances of having played by his next games ("wk 7 28% · …"), by player id. */
+    val outlooks: Map<String, String> = emptyMap(),
+    /** Free kickers and defenses beating the user's this week. */
+    val streams: List<StreamLine> = emptyList(),
 )
 
 /** A watchlist player this week: his projection and ESPN designation ([abbr], null when healthy). */
@@ -131,6 +137,10 @@ public fun HomeRoute(
     onSummary: (summary: String, chance: Double?, watch: String?) -> Unit = { _, _, _ -> },
     /** The watchlist's player ids, in the order starred. */
     watchlist: Flow<List<String>> = flowOf(emptyList()),
+    /** A hurt player's return outlook ("wk 7 28% · …") from his ESPN designation; null when there is none. */
+    returnOutlook: suspend (playerId: String, abbr: String) -> String? = { _, _ -> null },
+    /** Opens the scouting report on this week's opponent. */
+    onScout: () -> Unit = {},
 ) {
     val starred by watchlist.collectAsStateWithLifecycle(initialValue = emptyList())
     val vm: ProjectionListViewModel = viewModel(factory = ProjectionListViewModel.factory(repository))
@@ -188,6 +198,11 @@ public fun HomeRoute(
             delay(LIVE_REFRESH_MILLIS)
         }
     }
+    val hurtNow = if (view != null) hurtLines(view, injuries) else emptyList()
+    var outlooks by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    LaunchedEffect(hurtNow.map { it.playerId to it.abbr }) {
+        outlooks = hurtNow.filter { it.abbr != "Q" }.mapNotNull { h -> soft { returnOutlook(h.playerId, h.abbr) }?.let { h.playerId to it } }.toMap()
+    }
     val home = if (view != null) {
         val myIds = mine?.players?.mapNotNull { it.playerId }?.toSet().orEmpty()
         HomeState(
@@ -199,7 +214,14 @@ public fun HomeRoute(
             chance = chance,
             live = live,
             line = line,
-            hurt = hurtLines(view, injuries),
+            hurt = hurtNow,
+            plans = remember(mine, loaded, injuries, taken, locked) {
+                replacementPlans(mine!!, loaded!!.week, loaded.weekRows, injuries, taken?.takeIf { it.season == season }?.playerIds, locked.started).associateBy { it.playerId }
+            },
+            outlooks = outlooks,
+            streams = taken?.takeIf { it.season == season }?.let { r ->
+                remember(mine, loaded, injuries, r, locked) { streams(mine!!, loaded!!.week, loaded.weekRows, loaded.rosWeekly, injuries, r.playerIds, locked.started) }
+            }.orEmpty(),
             pickup = taken?.takeIf { it.season == season }?.let { r ->
                 remember(mine, loaded, injuries, r, locked) { waiverPickups(mine!!, loaded!!.weekRows, injuries, r.playerIds, started = locked.started).firstOrNull() }
             },
@@ -230,6 +252,7 @@ public fun HomeRoute(
         onLineup = onLineup,
         onMatchups = onMatchups,
         onLeague = onLeague,
+        onScout = onScout,
     )
 }
 
@@ -250,12 +273,13 @@ internal fun HomeScreen(
     onLineup: () -> Unit,
     onMatchups: () -> Unit,
     onLeague: () -> Unit,
+    onScout: () -> Unit = {},
 ) {
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing)) {
             ScreenBar(home?.let { "Week ${it.week}" } ?: "Home", onBack = null)
             when {
-                home != null -> HomeCards(home, onPlayer, onLineup, onMatchups)
+                home != null -> HomeCards(home, onPlayer, onLineup, onMatchups, onScout)
                 noTeam -> EmptyState("Pick your team in ESPN leagues to see your week here.", onRetry = onLeague)
                 loading -> LoadingRows()
                 else -> EmptyState("No projections for this week yet. Refresh stats.")
@@ -265,11 +289,11 @@ internal fun HomeScreen(
 }
 
 @Composable
-private fun HomeCards(home: HomeState, onPlayer: (String) -> Unit, onLineup: () -> Unit, onMatchups: () -> Unit) {
+private fun HomeCards(home: HomeState, onPlayer: (String) -> Unit, onLineup: () -> Unit, onMatchups: () -> Unit, onScout: () -> Unit) {
     var sharing by remember { mutableStateOf(false) }
     if (sharing) SharePreview("gridiron-week.png", onDismiss = { sharing = false }) { HomeShareCard(home) }
     LazyColumn(Modifier.fillMaxSize().testTag("home")) {
-        item { MatchupCard(home, onLineup, onMatchups, onShare = { sharing = true }) }
+        item { MatchupCard(home, onLineup, onMatchups, onShare = { sharing = true }, onScout = onScout) }
         home.nextKickoff?.let { text ->
             item {
                 SummaryCard {
@@ -290,6 +314,12 @@ private fun HomeCards(home: HomeState, onPlayer: (String) -> Unit, onLineup: () 
                     Text(h.name, Modifier.weight(1f), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                     Text(h.slot, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     StatusBadge(h.abbr)
+                }
+                home.plans[h.playerId]?.let { plan ->
+                    Text(planText(plan), Modifier.padding(start = 32.dp, end = 16.dp).testTag("home:plan:${h.playerId}"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.tertiary)
+                }
+                home.outlooks[h.playerId]?.let { text ->
+                    Text("Played by: $text", Modifier.padding(start = 32.dp, end = 16.dp, bottom = 4.dp).testTag("home:outlook:${h.playerId}"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -321,6 +351,15 @@ private fun HomeCards(home: HomeState, onPlayer: (String) -> Unit, onLineup: () 
                 }
             }
         }
+        if (home.streams.isNotEmpty()) {
+            item { SectionHeader("Kicker and defense streams") }
+            items(home.streams, key = { "stream:${it.row.playerId}" }) { s ->
+                Column(Modifier.fillMaxWidth().playerClick(s.row.playerId, onPlayer).padding(horizontal = 16.dp, vertical = 8.dp).testTag("home:stream:${s.row.playerId}")) {
+                    Text("Add ${s.row.name}", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(streamText(s), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
         if (home.news.isNotEmpty()) {
             item { SectionHeader("News on your players") }
             items(home.news, key = { "news:${it.id}" }) { n ->
@@ -338,7 +377,7 @@ private fun HomeCards(home: HomeState, onPlayer: (String) -> Unit, onLineup: () 
 }
 
 @Composable
-private fun MatchupCard(home: HomeState, onLineup: () -> Unit, onMatchups: () -> Unit, onShare: () -> Unit) {
+private fun MatchupCard(home: HomeState, onLineup: () -> Unit, onMatchups: () -> Unit, onShare: () -> Unit, onScout: () -> Unit) {
     SummaryCard(Modifier.testTag("home:matchup")) {
         Text(home.teamName, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         val live = home.live
@@ -370,6 +409,7 @@ private fun MatchupCard(home: HomeState, onLineup: () -> Unit, onMatchups: () ->
         }
         Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilledTonalButton(onClick = onLineup, modifier = Modifier.testTag("home:lineup")) { Text("My lineup") }
+            if (home.rivalName != null) TextButton(onClick = onScout, modifier = Modifier.testTag("home:scout")) { Text("Scout") }
             if (home.rivalName != null) TextButton(onClick = onMatchups) { Text("Matchups") }
             TextButton(onClick = onShare, modifier = Modifier.testTag("share:home")) { Text("Share") }
         }
