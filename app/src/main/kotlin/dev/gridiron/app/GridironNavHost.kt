@@ -66,6 +66,7 @@ import dev.gridiron.core.data.ScoringRepository
 import dev.gridiron.core.data.SettingsRepository
 import dev.gridiron.core.data.StatsRepository
 import dev.gridiron.core.data.TdRegressionRepository
+import dev.gridiron.core.data.chancesText
 import dev.gridiron.core.data.TeamsRepository
 import dev.gridiron.core.data.dynastyFormat
 import dev.gridiron.core.data.kickoffs
@@ -95,6 +96,7 @@ import dev.gridiron.feature.projections.LinesRoute
 import dev.gridiron.feature.projections.OpportunitiesRoute
 import dev.gridiron.feature.projections.ProjectionListRoute
 import dev.gridiron.feature.projections.ProjectionsRoute
+import dev.gridiron.feature.projections.ScoutRoute
 import dev.gridiron.feature.projections.TdRegressionRoute
 import dev.gridiron.feature.projections.WaiverTrendsRoute
 import dev.gridiron.feature.projections.trendPoints
@@ -103,6 +105,7 @@ import dev.gridiron.feature.scoring.ScoringListRoute
 import java.io.File
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
@@ -356,6 +359,8 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                             tdGaps = { s -> deps.tdRegression?.board(s)?.gaps.orEmpty() },
                             recentPoints = { s, w, ids, p -> deps.stats.recentPoints(s, w, ids, p) },
                             startOnLineup = key.lineup,
+                            notes = deps.settings?.notes ?: flowOf(emptyMap()),
+                            tradeFor = key.tradeFor,
                         )
                     }
                     entry<OpportunitiesKey> { key ->
@@ -390,6 +395,7 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 league = deps.league?.rostered ?: flowOf(null),
                                 myTeam = deps.league?.myTeam ?: flowOf(null),
                                 profile = deps.scoring.active,
+                                onTradeFor = if (deps.league != null) ({ id -> backStack.push(ProjectionListKey(key.season, tradeFor = id)) }) else null,
                             )
                         }
                     }
@@ -507,7 +513,13 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                         }
                     }
                     entry<RostersKey> {
-                        deps.rosters?.let { RostersScreen(it, deps.players, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) }) }
+                        deps.rosters?.let {
+                            RostersScreen(
+                                it, deps.players, onBack = back, onPlayer = { id -> backStack.push(PlayerKey(id)) },
+                                leagues = deps.league?.leagues ?: flowOf(emptyList()),
+                                badges = deps.live?.badges ?: flowOf(emptyMap()),
+                            )
+                        }
                     }
                     entry<LeagueKey> {
                         deps.league?.let {
@@ -527,6 +539,20 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                     }
                     entry<SettingsKey> { deps.settings?.let { SettingsScreen(it, onBack = back, props = deps.props?.status) } }
                     entry<MoreKey> { MoreScreen(more) }
+                    entry<ScoutKey> { key ->
+                        deps.league?.let { league ->
+                            ScoutRoute(
+                                key.season, deps.projections, deps.scoring, deps.live?.badges ?: flowOf(emptyMap()),
+                                myTeam = league.myTeam,
+                                league = league.league,
+                                opponent = { s, w -> league.opponent(s, w) },
+                                matchups = { s, w -> league.matchups(s, w, deps.scoring.active.first()).matchups },
+                                activity = { s -> league.activity(s).takeIf { it.error == null } },
+                                kickoffs = { s, w -> deps.scores?.week(s, w)?.kickoffs(java.time.Instant.now()) ?: Kickoffs(emptySet(), emptySet()) },
+                                onPlayer = { backStack.push(PlayerKey(it)) }, onBack = back, dataVersion = deps.stats.dataVersion,
+                            )
+                        }
+                    }
                     entry<LinesKey> { LinesRoute(deps.projections, onBack = back, dataVersion = deps.stats.dataVersion) }
                     entry<HomeKey> {
                         val league = deps.league
@@ -553,6 +579,8 @@ private fun StatsApp(deps: Deps, refreshState: RefreshState) {
                                 dataVersion = deps.stats.dataVersion,
                                 onSummary = deps.onHome,
                                 watchlist = deps.rosters?.watchlist ?: flowOf(emptyList()),
+                                returnOutlook = { id, abbr -> deps.returns?.outlook(id, season, abbr)?.chancesText() },
+                                onScout = { backStack.push(ScoutKey(season)) },
                             )
                         }
                     }

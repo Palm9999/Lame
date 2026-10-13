@@ -128,14 +128,16 @@ class UserPrefsStoreTest {
     @Test
     fun `each alert has its own switch, and an older file's one switch sets them all`() {
         file.writeText("""{"formatVersion":4,"injuryAlerts":false}""")
-        assertEquals(AlertSwitches(false, false, false, false, drops = false, scoring = false), withStore { it.prefs.first() }.alerts)
+        assertEquals(AlertSwitches(false, false, false, false, drops = false, scoring = false, trades = false), withStore { it.prefs.first() }.alerts)
         file.writeText("""{"formatVersion":4}""")
         assertEquals(AlertSwitches(), withStore { it.prefs.first() }.alerts)
+        file.writeText("""{"formatVersion":5,"dropAlerts":false}""")
+        assertEquals(false, withStore { it.prefs.first() }.alerts.trades)
         val mixed = AlertSwitches(injury = true, news = false, lineup = true, summary = false)
         withStore { store -> store.update { it.copy(alerts = mixed) } }
         assertEquals(mixed, withStore { it.prefs.first() }.alerts)
         assertEquals(true, mixed.any)
-        assertEquals(false, AlertSwitches(false, false, false, false, drops = false, scoring = false).any)
+        assertEquals(false, AlertSwitches(false, false, false, false, drops = false, scoring = false, trades = false).any)
     }
 
     @Test

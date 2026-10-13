@@ -54,7 +54,7 @@ internal fun swapText(review: WeekReview): String? {
 }
 
 @Composable
-internal fun ReviewView(state: ReviewState) {
+internal fun ReviewView(state: ReviewState, teamName: String? = null) {
     var sharing by rememberSaveable { mutableStateOf<String?>(null) }
     (state as? ReviewState.Loaded)?.result?.let { result ->
         when (sharing) {
@@ -62,6 +62,7 @@ internal fun ReviewView(state: ReviewState) {
                 SharePreview("gridiron-week-${w.week}.png", onDismiss = { sharing = null }) { WeeklyRecapShareCard(w, result.weeks.firstOrNull { it.week == w.week }) }
             }
             "report" -> SharePreview("gridiron-report-card.png", onDismiss = { sharing = null }) { ReportShareCard(result.reportCards, result.myTeamId) }
+            "season" -> SharePreview("gridiron-season.png", onDismiss = { sharing = null }) { SeasonShareCard(result, teamName) }
         }
     }
     LazyColumn(Modifier.fillMaxSize().testTag("review")) {
@@ -72,6 +73,14 @@ internal fun ReviewView(state: ReviewState) {
                 if (weeks.isEmpty()) {
                     item { Note("No review: ${state.result.message ?: "no finished weeks yet"}.") }
                 } else {
+                    seasonLines(state.result)?.let { lines ->
+                        item { LabelWithShare("Your season", "share:season") { sharing = "season" } }
+                        item {
+                            Column(Modifier.padding(horizontal = 16.dp, vertical = 4.dp).testTag("season")) {
+                                for (line in lines) Line(line)
+                            }
+                        }
+                    }
                     item {
                         Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                             Text(

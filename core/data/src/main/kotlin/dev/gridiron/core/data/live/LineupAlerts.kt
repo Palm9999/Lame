@@ -172,3 +172,57 @@ public object LeagueRecaps {
         return LeagueRecap(last, luck)
     }
 }
+
+/**
+ * One team's season so far by ESPN's scores: its record, points, best and worst weeks, and its [topStarters] (each
+ * player's points while in its starting lineup, best first).
+ */
+public data class SeasonRecap(
+    val wins: Int,
+    val losses: Int,
+    val ties: Int,
+    val pointsFor: Double,
+    val weeks: Int,
+    val bestWeek: Pair<Int, Double>?,
+    val worstWeek: Pair<Int, Double>?,
+    val topStarters: List<Pair<String, Double>>,
+)
+
+public object SeasonRecaps {
+    private val NOT_STARTING = setOf("BE", "IR")
+
+    /** Team [teamId]'s season from each finished week's matchups ([weeks]); null when it played none of them. */
+    public fun of(teamId: Int, weeks: Map<Int, List<LeagueMatchup>>, starters: Int = 3): SeasonRecap? {
+        var wins = 0
+        var losses = 0
+        var ties = 0
+        val scores = mutableListOf<Pair<Int, Double>>()
+        val started = LinkedHashMap<String, Pair<String, Double>>()
+        for ((week, games) in weeks.toSortedMap()) {
+            val game = games.firstOrNull { it.home.teamId == teamId || it.away?.teamId == teamId } ?: continue
+            val mine = if (game.home.teamId == teamId) game.home else game.away ?: continue
+            val theirs = if (game.home.teamId == teamId) game.away else game.home
+            scores += week to mine.espnTotal
+            if (theirs != null) {
+                when {
+                    mine.espnTotal > theirs.espnTotal -> wins++
+                    mine.espnTotal < theirs.espnTotal -> losses++
+                    else -> ties++
+                }
+            }
+            for (p in mine.lineup.filter { it.slot !in NOT_STARTING }) {
+                val pts = p.espnPoints ?: continue
+                started[p.espnId] = p.name to (started[p.espnId]?.second ?: 0.0) + pts
+            }
+        }
+        if (scores.isEmpty()) return null
+        return SeasonRecap(
+            wins, losses, ties,
+            pointsFor = scores.sumOf { it.second },
+            weeks = scores.size,
+            bestWeek = scores.maxByOrNull { it.second },
+            worstWeek = scores.minByOrNull { it.second },
+            topStarters = started.values.sortedByDescending { it.second }.take(starters),
+        )
+    }
+}

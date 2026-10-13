@@ -43,8 +43,22 @@ class LeagueActivityTest {
         assertEquals(3, waiver.week)
         assertEquals(listOf(ActivityMove("101", null, null, 0, 2), ActivityMove("102", null, null, 2, 0)), waiver.moves)
         assertNull(items[1].bid)
+        assertEquals(listOf(true, false, false), items.map { it.waiver })
         assertEquals(ActivityKind.TRADE, items[2].kind)
         assertEquals(emptyList<ActivityItem>(), EspnFantasyParser.activity("not json", 3))
+    }
+
+    @Test
+    fun `the FAAB market prices winning claims by position, a claim without a bid at zero`() {
+        fun claim(id: String, position: String?, bid: Int?, waiver: Boolean = true) =
+            ActivityItem(id, 3, ActivityKind.ADD, 2, bid, 1L, listOf(ActivityMove(id, "p$id", id, 0, 2, position), ActivityMove("d$id", null, null, 2, 0, "QB")), waiver)
+        val market = faabMarket(
+            listOf(
+                claim("a", "RB", 30), claim("b", "RB", 5), claim("c", "RB", null), claim("d", "WR", 12),
+                claim("e", null, 50), claim("f", "WR", 99, waiver = false),
+            ),
+        )
+        assertEquals(listOf(FaabPrice("RB", 3, 5, 30), FaabPrice("WR", 1, 12, 12)), market)
     }
 
     private fun players(): PlayerDirectory {

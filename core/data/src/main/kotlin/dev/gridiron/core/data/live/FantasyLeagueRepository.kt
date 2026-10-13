@@ -304,6 +304,7 @@ public class FantasyLeagueRepository(
             reportCards = cards,
             myTeamId = cfg.teamId,
             draftMessage = if (picks != null) null else draft?.error ?: "no draft found",
+            season = cfg.teamId?.let { SeasonRecaps.of(it, all) },
         )
     }
 
@@ -437,17 +438,22 @@ public class FantasyLeagueRepository(
         }
         val espnIds = raw.flatMap { i -> i.moves.map { it.espnId } }.distinct()
         val ids = players.playerIds(espnIds.filter { it.toIntOrNull()?.let { n -> n > 0 } == true })
-        val names = HashMap<String, String?>()
-        suspend fun nameOf(playerId: String): String? = names.getOrPut(playerId) { players.header(playerId)?.name }
+        val known = HashMap<String, Pair<String?, String?>>()
+        suspend fun headerOf(playerId: String): Pair<String?, String?> = known.getOrPut(playerId) { players.header(playerId).let { it?.name to it?.position } }
         val items = raw.map { item ->
             item.copy(
                 moves = item.moves.map { m ->
                     val id = ids[m.espnId] ?: EspnFantasyParser.dstPlayerId(m.espnId)
-                    m.copy(playerId = id, name = id?.let { if (it.startsWith("DST_")) "${it.removePrefix("DST_")} D/ST" else nameOf(it) })
+                    val (name, position) = when {
+                        id == null -> null to null
+                        id.startsWith("DST_") -> "${id.removePrefix("DST_")} D/ST" to "DST"
+                        else -> headerOf(id)
+                    }
+                    m.copy(playerId = id, name = name, position = position)
                 },
             )
         }.sortedWith(compareByDescending<ActivityItem> { it.week }.thenByDescending { it.processedAtMillis ?: 0L })
-        val result = ActivityResult(items, cfg.teamId, league.teams.associate { it.id to it.name }, if (items.isEmpty()) error else null)
+        val result = ActivityResult(items, cfg.teamId, league.teams.associate { it.id to it.name }, if (items.isEmpty()) error else null, league.faabBudget)
         if (error == null) activityCache = Triple(key, now, result)
         return result
     }

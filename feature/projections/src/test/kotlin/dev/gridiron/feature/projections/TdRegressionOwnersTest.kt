@@ -58,4 +58,17 @@ class TdRegressionOwnersTest {
         compose.onNodeWithText("RB · BUF · 10.0 pts a game on 15.0 expected (-5.0)").assertExists()
         compose.onNodeWithText("Hot").assertDoesNotExist()
     }
+
+    @Test
+    fun tradeForShowsOnlyOnAnotherTeamsPlayerAndPassesHisId() {
+        val board = TdRegressionBoard(5, listOf(TdRegressionRow("a", "Alpha", "WR", "KC", 2.0, 6.0), TdRegressionRow("b", "Bravo", "RB", "BUF", 1.0, 4.0)))
+        val league = LeagueRostered(setOf("a", "b"), 2026, 1L, mapOf("a" to "Rivals", "b" to "Mine"))
+        var asked: String? = null
+        compose.setContent { GridironTheme { TdRegressionScreen(Result.success(board), {}, {}, league, mine = setOf("b"), onTradeFor = { asked = it }) } }
+
+        compose.onNodeWithTag("td:cold").performScrollTo().performClick()
+        compose.onNodeWithTag("tradefor:b").assertDoesNotExist()
+        compose.onNodeWithTag("tradefor:a").performClick()
+        org.junit.Assert.assertEquals("a", asked)
+    }
 }
